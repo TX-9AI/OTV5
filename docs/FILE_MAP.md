@@ -851,7 +851,7 @@ Change these with the most care; a break here reaches everything downstream.
 
 ### `tests/check_docs_roster.py`
 - **calls:** (none)
-- **called by:** (not imported) — referenced in `docs/BACKLOG.md`, `docs/TRADES.md`
+- **called by:** (not imported) — referenced in `README.md`, `docs/BACKLOG.md`, `docs/TRADES.md`
 
 ### `tests/check_drift_verdict.py`
 - **calls:** (none)

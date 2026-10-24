@@ -1,6 +1,6 @@
 # OTV5 — Autonomous Day Trading Bot with Telegram Notifications and embedded Claude Code agent
 
-**`README.md` v1.0 · 2026-10-24 (OTV5 r0) — what this repo is, how it is laid out, how work lands.**
+**`README.md` v1.1 · 2026-10-25 (OTV5 r3) — what this repo is, how it is laid out, how work lands.**
 
 **What this is.** One box trades one underlying (equity options, or SPX/SPXW for the
 index) on the Tastytrade platform, intraday only, flat by the bell. A candle feed
@@ -23,19 +23,22 @@ it runs is `docs/TRADES.md` §0 (pinned to `config.py` by a check).
 
 ## The trades
 
+The roster as it runs is `docs/TRADES.md` §0, pinned to `config.py` by `tests/check_docs_roster.py`; this table mirrors it as of r3 and defers to it.
+
 | trade | state | plan | strategy | spec |
 |---|---|---|---|---|
 | Runaway (momentum) | ON | `strategy/runaway_plan.py` | `strategy/runaway_continuation.py` | PLAN_SPEC §30 |
 | Breakout | ON | `strategy/breakout_plan.py` | `strategy/breakout.py` (the spec) | TRADES §7 |
 | Liquidity hunt | ON | `strategy/liquidity_hunt.py` | same file | PLAN_SPEC §37 |
-| ORCS (opening range credit spread) | ON, paper only | `strategy/orcs_plan.py` | `strategy/orcs.py` | PLAN_SPEC §41 |
+| ORCS (opening range credit spread) | off (`OT_ORCS=1` restores it, paper) | `strategy/orcs_plan.py` | `strategy/orcs.py` | PLAN_SPEC §41 |
 | GEX pin butterfly | ON | inside `strategy/gex_pin_butterfly.py` | same file | PLAN_SPEC §32 |
+| PARK (a short midday observation, 11:01–11:03) | ON (`OT_PARK=log` records only, `off` stops it) | `strategy/park_plan.py` | `strategy/park.py` | TRADES §9 |
 | ATP butterfly | off (`OT_ATP_BUTTERFLY=1`) | `strategy/atp_butterfly_plan.py` | same file | PLAN_SPEC §39 |
 | VOLT | off (`OT_VOLT=1`) | `strategy/volt_plan.py` | `strategy/volt_strategy.py` | TRADES §8 |
 | ORB break + retest | retired (`OT_ORB_TRADE=1`); the opening-range ENGINE stays | `strategy/orb_plan.py` | `strategy/orb_strategy.py` | PLAN_SPEC §29 |
 | Sweep credit spread | retired (`OT_SWEEP_CS=1`) | `strategy/sweep_plan.py` | `strategy/sweep_credit_spread.py` | PLAN_SPEC §31 |
 | Trend credit spread | retired (`OT_TCS_ACTIVE=1`) | `strategy/tcs_plan.py` | `strategy/trend_credit_spread.py` | PLAN_SPEC §34 |
-| Condor (a management plan, not an entry) | moot while both credit entries are retired | `strategy/iron_condor_strategy.py::manage` + `strategy/condor_roll.py` | | PLAN_SPEC §35 |
+| Condor (a management plan, not an entry) | moot while the three credit entries (ORCS, sweep, trend) are off | `strategy/iron_condor_strategy.py::manage` + `strategy/condor_roll.py` | | PLAN_SPEC §35 |
 
 Two primitives the plans share: **the rejection fact** (`derived/levels.py` emits
 WICKED / REJECTED / ACCEPTED on closed 1m bars for every live level, the 1h tines
@@ -103,5 +106,7 @@ a market fact.
 ---
 
 ## Changelog
+
+**v1.1 — 2026-10-25 — OTV5 r3.** The trade table matches TRADES §0: ORCS is off by default (`OT_ORCS=1` restores it), PARK is listed, and the table says it defers to §0.
 
 **v1.0 — 2026-10-24 — OTV5 r0.** First version.
