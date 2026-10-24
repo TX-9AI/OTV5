@@ -1851,7 +1851,7 @@ Change these with the most care; a break here reaches everything downstream.
 
 ### `tools/capture_guard.py`
 - **calls:** (none)
-- **called by:** (not imported) — referenced in `README.md`, `configure.sh`
+- **called by:** (not imported) — referenced in `README.md`, `configure.sh`, `docs/BACKLOG.md`, `docs/FIRST_BOOT.md`
 
 ### `tools/check_land_discipline.py`
 - **calls:** (none)
@@ -1899,7 +1899,7 @@ Change these with the most care; a break here reaches everything downstream.
 
 ### `tools/prime_ramp.py`
 - **calls:** `utils/__init__.py`, `utils/instrument.py`, `utils/market_calendar.py`, `utils/paths.py`, `warehouse/retention_purge.py`
-- **called by:** (not imported) — referenced in `README.md`, `configure.sh`, `docs/ENV.md`, `setup_ec2.sh`
+- **called by:** (not imported) — referenced in `README.md`, `configure.sh`, `docs/ENV.md`, `docs/FIRST_BOOT.md` +1
 
 ### `tools/probe_aux_streams.py`
 - **calls:** `config.py`, `data/tasty_client.py`
