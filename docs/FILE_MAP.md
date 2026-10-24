@@ -739,7 +739,7 @@ Change these with the most care; a break here reaches everything downstream.
 
 ### `tests/check_clean_deploy.py`
 - **calls:** `utils/instrument.py`
-- **called by:** (not imported) — referenced in `configure.sh`, `deploy/install_services.sh`, `docs/ENV.md`, `setup_ec2.sh`
+- **called by:** (not imported) — referenced in `configure.sh`, `deploy/install_services.sh`, `docs/BACKLOG.md`, `docs/ENV.md` +1
 
 ### `tests/check_commitment.py`
 - **calls:** `analysis/__init__.py`, `analysis/commitment.py`, `config.py`, `main.py`, `risk/risk_manager.py`, `strategy/base_strategy.py`

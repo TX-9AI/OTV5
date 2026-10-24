@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """
-tests/check_clean_deploy.py  v1.0
+tests/check_clean_deploy.py  v1.1
+v1.1  2026-10-25  OTV5 r4 (GATE.5) — C17 imports utils.instrument with ROOT on sys.path EXPLICITLY. Under the boot
+      sweep (OT_INSTRUMENT set) s3_push.own_symbol returns before the branch that put ROOT on the path, so C17 was
+      RED under the sweep and GREEN bare (QQQ-TEST MSG-QQQ-1024-47). Control: OT_INSTRUMENT=QQQ python3 tests/check_clean_deploy.py.
 v1.0  2026-10-24  CD.1 — AN INSTALL STARTS NOTHING AND PUSHES NOTHING; configure.sh's FIRST DONE STARTS EVERYTHING,
       IN ORDER; MANAGED IS GUARDED. Behaviour, not source text (WA §21): deploy/install_services.sh's functions and
       configure.sh's functions are RUN under a harness whose sudo / systemctl / python / data_capture are stubs that
@@ -45,6 +48,7 @@ from datetime import date
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, "tests"))
 sys.path.insert(0, os.path.join(ROOT, "tools"))
+sys.path.insert(0, ROOT)                       # v1.1: utils.* imports must not depend on another module's side effect
 CONFIGURE = os.path.join(ROOT, "configure.sh")
 SERVICES = os.path.join(ROOT, "deploy", "install_services.sh")
 FAILED, RAN = [], []

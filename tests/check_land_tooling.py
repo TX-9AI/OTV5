@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """
-tests/check_land_tooling.py  v1.7
+tests/check_land_tooling.py  v1.8
+v1.8  2026-10-25  OTV5 r4 (GATE.6) — T6 also requires OT_HEARTBEAT_FILE under $_scratch on every CHECK line (the watchdog's
+      liveness signal; born red on land.sh v1.22).
 v1.7  2026-10-24  OTV5 r0 — ONE LEDGER. T4 requires docs/GENESIS.md to carry this tree's own r0 row (the seed) and T5
       requires that no second ledger (docs/GENESIS-TEST.md) exists: the lander's LEDGER default IS this tree's ledger, so a
       spec needs no LEDGER line and a spec that names another file is wrong.
@@ -124,7 +126,8 @@ def main():
              'OT_LOG_FILE="$_scratch/', 'OT_COUNTERFACTUAL_DIR="$_scratch/',    # r194, r287
              'OT_FEED_DB="$_scratch/', 'OT_RESTING_STOP_STATE="$_scratch/',
              'OT_WAREHOUSE_STATE="$_scratch/',                                  # r292 (GATE.1)
-             'OT_PLAN_STATES_FILE="$_scratch/')                                 # r307 (GATE.4)
+             'OT_PLAN_STATES_FILE="$_scratch/',                                 # r307 (GATE.4)
+             'OT_HEARTBEAT_FILE="$_scratch/')                                   # OTV5 r4 (GATE.6)
     _bad = [ln.strip()[:90] for ln in _runs if not all(n in ln for n in _need)]
     check("T6 every CHECK invocation isolates the trades, derived, resting stores, the journal, the log, the counterfactual logs, the feed store, the resting-stop state, the warehouse state and the plan states",
           bool(_runs) and not _bad,

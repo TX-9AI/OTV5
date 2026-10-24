@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
-# tools/land.sh — v1.22
+# tools/land.sh — v1.23
+# v1.23 (2026-10-25) — OTV5 r4 (GATE.6). OT_HEARTBEAT_FILE UNDER $_scratch on every CHECK: position_manager's mark
+#   fallback touches utils.heartbeat (data/BOT_HEARTBEAT unless moved), and tools/emergency_watchdog.py reads that file's
+#   mtime as the bot's liveness, so a checker run by a land refreshed the watchdog's signal (QQQ-TEST MSG-QQQ-1024-47,
+#   found in the boot sweep, the same gap here). check_land_tooling T6.
 # v1.22 (2026-10-24) — OTV5 r1 (LAND.2). THE RESOLVER NAMES EVERY CHECKOUT THAT CARRIES THE MARKERS AND REFUSES
 #   AN AMBIGUOUS ONE. It took the FIRST `$HOME/*/` checkout carrying all REPO markers, in glob order, so a second
 #   checkout with the same files (this tree beside the one it was seeded from, or beside the mainline tree on
@@ -592,7 +596,7 @@ land_one() {
     # with the trades and derived stores pointed at scratch files, whatever it does.
     # r109 — AND THE RESTING-ORDER STORE, the third one r13 missed (v1.15 above).
     _scratch="$(mktemp -d /tmp/land-check.XXXXXX)"
-    if ( cd "$repo" && env -u LAND_ARCHIVE -u LAND_STAGE OT_TRADES_DB="$_scratch/trades.db" OT_DERIVED_DB="$_scratch/derived_store.db" OT_RESTING_DB="$_scratch/resting_orders.db" OT_SIGNAL_JOURNAL_DIR="$_scratch/signal_journal" OT_LOG_FILE="$_scratch/bot.log" OT_COUNTERFACTUAL_DIR="$_scratch/counterfactual" OT_FEED_DB="$_scratch/feed_store.db" OT_RESTING_STOP_STATE="$_scratch/resting_stop_state.json" OT_WAREHOUSE_STATE="$_scratch/warehouse_state" OT_PLAN_STATES_FILE="$_scratch/plan_states.json" OT_INSTRUMENT="${OT_INSTRUMENT:-QQQ}" python3 "$chk" ) >/dev/null 2>&1; then
+    if ( cd "$repo" && env -u LAND_ARCHIVE -u LAND_STAGE OT_TRADES_DB="$_scratch/trades.db" OT_DERIVED_DB="$_scratch/derived_store.db" OT_RESTING_DB="$_scratch/resting_orders.db" OT_SIGNAL_JOURNAL_DIR="$_scratch/signal_journal" OT_LOG_FILE="$_scratch/bot.log" OT_COUNTERFACTUAL_DIR="$_scratch/counterfactual" OT_FEED_DB="$_scratch/feed_store.db" OT_RESTING_STOP_STATE="$_scratch/resting_stop_state.json" OT_WAREHOUSE_STATE="$_scratch/warehouse_state" OT_PLAN_STATES_FILE="$_scratch/plan_states.json" OT_HEARTBEAT_FILE="$_scratch/BOT_HEARTBEAT" OT_INSTRUMENT="${OT_INSTRUMENT:-QQQ}" python3 "$chk" ) >/dev/null 2>&1; then
       pb_clear
       echo "  check: $chk PASS"
     else

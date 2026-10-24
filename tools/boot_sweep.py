@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
-"""tools/boot_sweep.py — v1.8
+"""tools/boot_sweep.py — v1.9
+v1.9 (2026-10-25) — OTV5 r4 (GATE.6). OT_HEARTBEAT_FILE IS SCRATCH. position_manager's mark fallback touches
+utils.heartbeat (data/BOT_HEARTBEAT unless OT_HEARTBEAT_FILE), and tools/emergency_watchdog.py reads that file's mtime as the
+bot's liveness; a sweep that drove it refreshed the watchdog's signal from a checker (QQQ-TEST MSG-QQQ-1024-47: the
+10-24 sweep wrote "<epoch> mark fallback" into the live file). check_boot_sweep B3/B3b.
+
 v1.8 (2026-10-20) — OTV4TEST r307 (GATE.4). OT_PLAN_STATES_FILE IS SCRATCH: r303's plans panel reads data/plan_states.json
 (the bot writes it at start; VOLT is dormant in it), so check_foreign_symbol_board F7's stale-VOLT control row vanished
 and the 10-20 08:00 sweep went RED on QQQ-TEST and SPX-TEST alike - green in every worktree, which has no such file. A
@@ -154,6 +159,7 @@ def run_one(name: str) -> bool:
     env["OT_RESTING_STOP_STATE"] = os.path.join(d, "resting_stop_state.json")   # r292: a rest survives a restart
     env["OT_WAREHOUSE_STATE"] = os.path.join(d, "warehouse_state")    # r292: the push/purge ledgers
     env["OT_PLAN_STATES_FILE"] = os.path.join(d, "plan_states.json")  # r307 (GATE.4): the live bot's plan states
+    env["OT_HEARTBEAT_FILE"] = os.path.join(d, "BOT_HEARTBEAT")        # OTV5 r4 (GATE.6): the watchdog's liveness signal
     env["OT_SWEEP_NESTED"] = "1"     # r257: a checker that drives this tool gets a refusal, not a sweep
     env.setdefault("OT_INSTRUMENT", "QQQ")   # r146: an EXPLICIT fixture symbol; config no longer guesses one
     try:
