@@ -6,7 +6,7 @@ the canary fails on drift (WORKING_AGREEMENT 33).
 
 488 Python modules across 12 local packages.
 
-**Reached by:** 134 imported · 27 declared entry points · 219 referenced from a script, unit or doc but never imported · **108 by nothing here**.
+**Reached by:** 134 imported · 27 declared entry points · 220 referenced from a script, unit or doc but never imported · **107 by nothing here**.
 
 ⚠️ The last group is a REVIEW LIST, not a delete list. A
 `land.spec CHECK` line ships inside a tarball and is never
@@ -1047,7 +1047,7 @@ Change these with the most care; a break here reaches everything downstream.
 
 ### `tests/check_land_spec_parse.py`
 - **calls:** (none)
-- **called by:** (nothing — no importer and no mention in any script, unit or doc here)
+- **called by:** (not imported) — referenced in `docs/BACKLOG.md`, `tools/land.sh`
 
 ### `tests/check_land_tooling.py`
 - **calls:** (none)
@@ -1307,7 +1307,7 @@ Change these with the most care; a break here reaches everything downstream.
 
 ### `tests/check_origin.py`
 - **calls:** (none)
-- **called by:** (not imported) — referenced in `README.md`, `bootstrap.example.sh`, `deploy/install.sh`
+- **called by:** (not imported) — referenced in `README.md`, `bootstrap.example.sh`, `deploy/install.sh`, `docs/BACKLOG.md`
 
 ### `tests/check_pairing_table.py`
 - **calls:** (none)

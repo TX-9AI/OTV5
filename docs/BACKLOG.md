@@ -1,4 +1,4 @@
-# BACKLOG.md — OTV5 — v1.0
+# BACKLOG.md — OTV5 — v1.1
 
 **This tree's backlog.** Same rules as `WORKING_AGREEMENT.md` §18: ships in every
 archive, one row per item, a title bump and a PART 3 entry per delivery. States (the
@@ -353,8 +353,12 @@ watching the plan ledger daily.
 
 | id | item | closed |
 |---|---|---|
+| **SEED.4** | ✅ **CLOSED r1** — THE PULL-ONLY AGENT BRIEF DESCRIBED A REMOTE THAT DOES NOT EXIST. `deploy/claude-user-settings-pull-only.json` told the box's agent its checkout had an `upstream` remote (another repository's URL) beside `origin`; `setup_ec2.sh` adds only `origin`, so the brief named a remote no install creates. Found by QQQ-TEST's review of the seed (MSG-QQQ-1024-44). The three clauses are gone; `install_claude.sh` renders the file, `check_origin` O4/O5 and `check_boot_brief` B8 read it. | ✅ CLOSED r1 |
+| **LAND.2** | ✅ **CLOSED r1** — THE LANDER TOOK THE FIRST CHECKOUT THAT CARRIED THE MARKERS. `tools/land.sh` resolved a half to the first `$HOME/*/` checkout carrying every REPO marker, in glob order; this tree beside the tree it was seeded from, or beside the mainline tree on control, would have captured the other's land silently. v1.22 collects every match, refuses two or more by name, and the spec directive `ORIGIN <owner/repo>` picks the checkout whose git origin ends in it (a lone match disagreeing with a declared ORIGIN is refused). `check_land_spec_parse` v1.1 L6-L8, born red on v1.21 at L6/L7. r0's ledger row claimed this rule for this tree before the lander carried it; r1 makes it true. | ✅ CLOSED r1 |
 | **HYG.3** | ✅ **CLOSED r0** — `tests/check_ledger_parity.py` v1.6 reads `docs/GENESIS.md`, which IS this tree's one ledger (the fork's two-ledger arrangement, where the gate read a frozen file, does not exist here); its allow-lists of another ledger's row-less numbers are empty and cross-repo citations are stripped before L3. ORIGINAL ROW (OTV4TEST): `tests/check_ledger_parity.py` READS THE FROZEN LEDGER - it opened the inherited `docs/GENESIS.md` while the live ledger was `docs/GENESIS-TEST.md`. | ✅ CLOSED r0 |
 
 ## PART 3 — CHANGELOG
+
+**v1.1 — 2026-10-24 — r1 — THE AGENT BRIEF NAMES ONLY THE REMOTE THAT EXISTS, AND THE LANDER REFUSES TO GUESS BETWEEN TWO CHECKOUTS.** `claude-user-settings-pull-only.json` drops the `upstream` clauses (QQQ-TEST's seed review); `tools/land.sh` v1.22 carries the ORIGIN rule r0's row claimed early. [[SEED.4]] [[LAND.2]]
 
 **v1.0 — 2026-10-24 — r0 — THE SEED.** One ledger from r0; README v1.0; `deploy/origin.conf` names TX-9AI/OTV5; services ship stopped and the push off; the ramp primer, the capture guard and the first-start sequence in `configure.sh`; every derived reader judges rows by market time; the gap measured from the store and classified. PART 1 is the inherited open and unproven work, citations prefixed. [[HYG.3]] closed.

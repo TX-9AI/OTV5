@@ -1,5 +1,17 @@
 #!/usr/bin/env python3
-"""tests/check_land_spec_parse.py — v1.0
+"""tests/check_land_spec_parse.py — v1.1
+TWO CHECKOUTS WITH THE SAME MARKERS ARE REFUSED; ORIGIN SAYS WHICH (LAND.2).
+
+v1.1  2026-10-24  OTV5 r1 — L6-L8 drive the v1.22 resolver: the scratch HOME gains a SECOND marker-carrying
+      checkout (`twin`, cloned from its own bare origin2.git). L6 no ORIGIN -> AMBIGUOUS refusal naming both,
+      HEAD untouched; L7 `ORIGIN origin2` resolves the land into the twin (the repo: line names it); L8 an ORIGIN
+      that matches neither is refused. L9 a LONE checkout whose origin disagrees with a declared ORIGIN is refused (a
+      resolver that refuses only on 0 or 2+ matches survives L6-L8). L10 _origin_matches on the suffix boundary: the
+      declared owner/repo matches the https, https-with-.git and ssh spellings and NOT a longer owner or repo name
+      (kills a bare endswith and a missing .git strip). L11 the bookkeeping checker is THE TARGET TREE'S OWN
+      tools/check_land_discipline.py when it carries one: a stub at $HOME/day_trader_pro that always fails must not be
+      the one consulted (QQQ-TEST MSG-QQQ-1024-45). Born red on v1.21 at L6, L7, L8, L9 and L11 (it landed into the first
+      match, never read ORIGIN, and asked day_trader_pro's checker first).
 A `NEG` THAT CANNOT BE EVALUATED IS REFUSED, NOT PASSED (LAND.3).
 
 v1.0  2026-09-19  OTV4TEST r65 — every directive in `land.spec` was parsed by
@@ -55,7 +67,7 @@ def _git(cwd, *a):
                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
-def _world(spec_body, payload=("payload.txt", "NEWCONTENT\n")):
+def _world(spec_body, payload=("payload.txt", "NEWCONTENT\n"), twin=False, checkers=False):
     """A throwaway HOME containing one uniquely-marked repo, plus a stage."""
     root = tempfile.mkdtemp(prefix="landgate-")
     home = os.path.join(root, "home")
@@ -73,8 +85,36 @@ def _world(spec_body, payload=("payload.txt", "NEWCONTENT\n")):
     _git(repo, "commit", "-qm", "base")
     _git(repo, "push", "-q", "origin", "HEAD:refs/heads/master")
     _git(repo, "branch", "--set-upstream-to=origin/master")
+    if checkers:                               # v1.1 / L11 — the tree's OWN checker, and a hostile stub beside it
+        own = os.path.join(repo, "tools")
+        os.makedirs(own)
+        open(os.path.join(own, "check_land_discipline.py"), "w").write(
+            "import sys\nprint('OWN-CHECKER consulted', sys.argv[1:])\nsys.exit(0)\n")
+        os.makedirs(os.path.join(repo, "docs"))             # the lander appends the ledger BEFORE it asks the checker
+        open(os.path.join(repo, "docs", "GENESIS.md"), "w").write("# ledger\n\n| rev | what |\n|---|---|\n")
+        _git(repo, "add", "-A")
+        _git(repo, "commit", "-qm", "own checker")
+        _git(repo, "push", "-q", "origin", "HEAD:refs/heads/master")
+        stub = os.path.join(home, "day_trader_pro", "tools")
+        os.makedirs(stub)
+        open(os.path.join(stub, "check_land_discipline.py"), "w").write(
+            "import sys\nprint('STUB-DTP consulted')\nsys.exit(1)\n")
     sha = subprocess.run(["git", "rev-parse", "HEAD"], cwd=repo,
                          capture_output=True, text=True).stdout.strip()
+    if twin:                                   # v1.1 — a SECOND checkout carrying the same markers
+        bare2 = os.path.join(root, "origin2.git")
+        subprocess.run(["git", "init", "--bare", "-q", bare2], check=True)
+        repo2 = os.path.join(home, "twin")
+        subprocess.run(["git", "clone", "-q", bare2, repo2], check=True)
+        _git(repo2, "config", "user.email", "gate@local")
+        _git(repo2, "config", "user.name", "gate")
+        for m in (".landgate_a", ".landgate_b"):
+            open(os.path.join(repo2, m), "w").write("marker\n")
+        open(os.path.join(repo2, "tracked.txt"), "w").write("OLDCONTENT\n")
+        _git(repo2, "add", "-A")
+        _git(repo2, "commit", "-qm", "base")
+        _git(repo2, "push", "-q", "origin", "HEAD:refs/heads/master")
+        _git(repo2, "branch", "--set-upstream-to=origin/master")
     stage = os.path.join(root, "stage")
     half = os.path.join(stage, "half")
     os.makedirs(half)
@@ -146,6 +186,47 @@ check("L4 a POS naming a MISSING file is refused", rc2 != 0, "")
 
 check("L5 a refused land leaves HEAD untouched", sha == head,
       f"{sha[:8]} -> {head[:8]}")
+
+# ── L6-L8 (v1.1 / LAND.2) — two checkouts carry the markers ────────────────
+rc, out, sha, head = _land(BASE_SPEC.format(extra="POS    payload.txt|NEWCONTENT"), twin=True)
+_both = "AMBIGUOUS" in out and "/target" in out and "/twin" in out
+check("L6 two marker-carrying checkouts and no ORIGIN -> refused as AMBIGUOUS, both named, HEAD untouched",
+      rc != 0 and _both and sha == head,
+      f"rc={rc} named={_both} {sha[:8]}->{head[:8]}")
+
+rc, out, sha, head = _land(BASE_SPEC.format(extra="ORIGIN origin2\nPOS    payload.txt|NEWCONTENT"), twin=True)
+_res = [l.split("repo:")[1].strip() for l in out.splitlines() if "repo:" in l]
+check("L7 ORIGIN naming the twin's origin resolves the land INTO the twin",
+      bool(_res) and _res[0].endswith("/twin") and "AMBIGUOUS" not in out,
+      _res[0] if _res else "no repo line")
+
+rc, out, sha, head = _land(BASE_SPEC.format(extra="ORIGIN nowhere/else\nPOS    payload.txt|NEWCONTENT"), twin=True)
+check("L8 an ORIGIN that matches no checkout is refused", rc != 0 and "ORIGIN nowhere/else matches 0" in out, "")
+
+# ── L9 — ONE checkout, ORIGIN disagrees -> refused (no twin) ───────────────
+rc, out, sha, head = _land(BASE_SPEC.format(extra="ORIGIN nowhere/else\nPOS    payload.txt|NEWCONTENT"))
+check("L9 a LONE checkout whose origin disagrees with the declared ORIGIN is refused, HEAD untouched",
+      rc != 0 and "ORIGIN nowhere/else matches 0 of the 1" in out and sha == head,
+      f"rc={rc} {sha[:8]}->{head[:8]}")
+
+# ── L10 — the suffix boundary of _origin_matches, called as bash does ──────
+_fn = subprocess.run(["sed", "-n", "/^_origin_matches()/,/^}/p", os.path.join(_root, "tools", "land.sh")],
+                     capture_output=True, text=True).stdout
+def _m(want, url):
+    r = subprocess.run(["bash", "-c", _fn + '\n_origin_matches "$1" "$2"', "_", want, url])
+    return r.returncode == 0
+_yes = ["https://github.com/TX-9AI/OTV5.git", "https://github.com/TX-9AI/OTV5", "git@github.com:TX-9AI/OTV5.git"]
+_no = ["https://github.com/TX-9AI/XOTV5.git", "https://github.com/ATX-9AI/OTV5.git", "https://github.com/TX-9AI/OTV5x.git"]
+_bad = [u for u in _yes if not _m("TX-9AI/OTV5", u)] + [u for u in _no if _m("TX-9AI/OTV5", u)]
+check("L10 ORIGIN TX-9AI/OTV5 matches the https / .git / ssh spellings and no longer owner or repo name",
+      bool(_fn) and not _bad, "" if (_fn and not _bad) else (f"wrong on: {_bad}" if _fn else "no _origin_matches in land.sh"))
+
+# ── L11 — the bookkeeping checker is the target tree's own ─────────────────
+rc, out, sha, head = _land(BASE_SPEC.format(extra="POS    payload.txt|NEWCONTENT"), checkers=True)
+check("L11 the discipline checker consulted is the target tree's own tools/check_land_discipline.py, not $HOME/day_trader_pro's",
+      "OWN-CHECKER consulted" in out and "STUB-DTP" not in out,
+      "" if ("OWN-CHECKER consulted" in out and "STUB-DTP" not in out) else
+      ("stub consulted" if "STUB-DTP" in out else "own checker never ran"))
 
 print()
 if FAILED:

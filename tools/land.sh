@@ -1,5 +1,17 @@
 #!/usr/bin/env bash
-# tools/land.sh — v1.21
+# tools/land.sh — v1.22
+# v1.22 (2026-10-24) — OTV5 r1 (LAND.2). THE RESOLVER NAMES EVERY CHECKOUT THAT CARRIES THE MARKERS AND REFUSES
+#   AN AMBIGUOUS ONE. It took the FIRST `$HOME/*/` checkout carrying all REPO markers, in glob order, so a second
+#   checkout with the same files (this tree beside the one it was seeded from, or beside the mainline tree on
+#   control) would silently capture a land meant for the other. Every match is collected; two or more are
+#   REFUSED with both named; the optional spec directive `ORIGIN <owner/repo>` picks the one whose `git remote
+#   get-url origin` ends in it, and a lone checkout whose origin disagrees with a declared ORIGIN is refused too.
+#   A spec with no ORIGIN and one match lands exactly as before. The same rule as day_trader_pro's lander v1.18
+#   (otv4 r502 / OPS.19). ALSO: the bookkeeping checker consulted is the TARGET TREE'S OWN
+#   tools/check_land_discipline.py when it carries one; the old lookup asked $HOME/day_trader_pro first, so on control
+#   this tree was judged by another lineage's checker. Gate: tests/check_land_spec_parse.py L6-L11, born red on v1.21
+#   at L6-L9 and L11. OTV5 r0's ledger row claimed the ORIGIN rule for this tree before it was here; this revision
+#   makes the claim true.
 # v1.21 (2026-10-20) — OTV4TEST r307 (GATE.4). OT_PLAN_STATES_FILE UNDER $_scratch on every CHECK: r303's plans panel
 #   (query.show_decisions) reads data/plan_states.json, which the bot writes at start, so a checker's verdict depended on
 #   the live bot's plan states (check_foreign_symbol_board F7 RED at the 10-20 08:00 sweep on both boxes). check_land_tooling T6.
@@ -252,6 +264,16 @@
 # following whitespace, so the COLUMN-ALIGNED form documented below parses
 # identically to the single-space form. Before this the two disagreed and the
 # documentation was the losing side.
+_origin_matches() {
+  # v1.22 — does remote url $2 name repository $1 (owner/repo, or any path suffix)? Scheme, user@, ':' and a
+  # trailing .git are ignored; the match is on a whole path component boundary.
+  local want="${1%/}" url="$2"
+  want="${want%.git}"
+  url="${url%/}"; url="${url%.git}"
+  url="${url#*://}"; url="${url#*@}"; url="${url//:/\/}"
+  case "/$url" in */"$want") return 0 ;; esac
+  return 1
+}
 _spec_val() {                       # $1 = whole line, $2 = directive token
   local v="${1#"$2"}"               # drop the token
   v="${v#"${v%%[![:space:]]*}"}"    # drop every leading space/tab
@@ -260,6 +282,8 @@ _spec_val() {                       # $1 = whole line, $2 = directive token
 
 # Spec format (one directive per line, `|` separates fields):
 #   REPO   <marker-file> <marker-file>     files that identify the target repo
+#   ORIGIN <owner/repo>                    (v1.22) the repository those files belong to; required when two
+#                                           checkouts under $HOME carry the markers, optional otherwise
 #   BASE   <sha>                            commit the payload was built against (v1.8)
 #   REV    r207                             revision id, for GENESIS + the gate
 #   DESC   <one line>                       GENESIS row AND commit subject
@@ -399,15 +423,35 @@ land_one() {
   [ -n "$markers" ] || { die "spec carries no REPO markers"; return 1; }
 
   # ── find the repo rather than guess the path (WORKING_AGREEMENT §3) ──────
-  local cand ok
+  # v1.22 / LAND.2 — EVERY match is collected, never the first in glob order.
+  local cand ok origin_declared matches=() url
+  origin_declared="$(_spec_val "$(grep -E '^ORIGIN[[:space:]]' "$spec" | head -1)" ORIGIN)"
   for cand in "$HOME"/*/; do
     [ -d "${cand}.git" ] || continue
     ok=1
     for m in $markers; do [ -f "${cand}${m}" ] || ok=0; done
-    [ "$ok" = "1" ] && { repo="${cand%/}"; break; }
+    [ "$ok" = "1" ] && matches+=("${cand%/}")
   done
-  if [ -z "$repo" ]; then
+  if [ "${#matches[@]}" = "0" ]; then
     die "no checkout under $HOME carries all of: $markers"; return 1
+  fi
+  if [ -n "$origin_declared" ]; then
+    # the spec names its repository: the candidate whose origin ends in it, and only that one
+    local picked=() c
+    for c in "${matches[@]}"; do
+      url="$(git -C "$c" remote get-url origin 2>/dev/null)"
+      _origin_matches "$origin_declared" "$url" && picked+=("$c")
+    done
+    if [ "${#picked[@]}" != "1" ]; then
+      die "ORIGIN $origin_declared matches ${#picked[@]} of the ${#matches[@]} checkout(s) carrying the markers (${matches[*]}) — refusing to guess."
+      return 1
+    fi
+    repo="${picked[0]}"
+  elif [ "${#matches[@]}" != "1" ]; then
+    die "AMBIGUOUS: ${#matches[@]} checkouts under $HOME carry all of [$markers]: ${matches[*]}. Add 'ORIGIN <owner/repo>' to the spec to say which (LAND.2)."
+    return 1
+  else
+    repo="${matches[0]}"
   fi
   echo "  repo: $repo"
   echo "  rev:  $rev"
@@ -626,13 +670,22 @@ land_one() {
   # that title. ⚠️ It proves the BOOKKEEPING, never the edit — the content
   # gate above is what proves that. Citing this one for both would be the
   # laundered green §18 names.
+  # v1.22 / LAND.2 — THE TARGET TREE'S OWN CHECKER FIRST. The loop below asked $HOME/day_trader_pro before
+  # anything else, so on control every landing into THIS tree was judged by another lineage's checker (QQQ-TEST,
+  # MSG-QQQ-1024-45). A tree that ships tools/check_land_discipline.py is checked by it; the loop is only the
+  # fallback for a tree that carries none, and the path consulted is printed either way.
   local ld=""
-  for cand in "$HOME"/day_trader_pro "$HOME"/*/; do
-    [ -f "${cand%/}/tools/check_land_discipline.py" ] && { ld="${cand%/}"; break; }
-  done
+  if [ -f "$repo/tools/check_land_discipline.py" ]; then
+    ld="$repo"
+  else
+    for cand in "$HOME"/day_trader_pro "$HOME"/*/; do
+      [ -f "${cand%/}/tools/check_land_discipline.py" ] && { ld="${cand%/}"; break; }
+    done
+  fi
   if [ -z "$ld" ]; then
     die "check_land_discipline.py NOT FOUND — cannot confirm the bookkeeping."; return 1
   fi
+  echo "  discipline checker: $ld/tools/check_land_discipline.py"
   python3 "$ld/tools/check_land_discipline.py" --repo "$repo" --rev "$rev" \
     --ledger "$ledger" \
     || { die "LAND DISCIPLINE FAILED"; return 1; }
