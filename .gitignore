@@ -1,0 +1,115 @@
+
+!bootstrap.example.sh
+#       from a bad `>>` append; it matched a filename nobody will ever create.
+#       ignored and `trades.db-shm` was only covered by the earlier `*.db-shm`.
+#       on a box would have committed a multi-MB binary SQLite DB.
+#   (1) `*.ziptrades.db-shm` was a MISSING NEWLINE, so `*.zip` was never actually
+#   (2) `orb_range.json echo analysis/orb_range.json` captured a stray `echo`
+#   (3) `data/feed_store.db` was NOT ignored while `trades.db` was — a `git add -A`
+# 2026-08-13 — repaired three defects found while inventorying box artifacts:
+# Archives
+# Candle logger output — generated at runtime (in-project data dir)
+# Database and logs — generated at runtime
+# IDE
+# LIQ.4 output - written every closed bar once the ledger is live.
+# NOT scaffolding to clean up: it is the running record. It must never be
+# OS
+# One-shot deploy bootstrap holding real secrets — never commit. Any bootstrap*.sh
+# Python
+# Secrets — never commit these
+# Shadow observer output — generated at runtime (in-project data dir)
+# committed, and `git add -A` in a deploy line would sweep it in.
+# is ignored EXCEPT the placeholder template, which is the committed reference.
+# options_trader_v3/.gitignore
+*.csv
+*.db
+*.db-shm
+*.db-wal
+*.db.bak
+*.env
+*.key
+*.log
+*.log.*
+*.patch
+*.pem
+*.pyc
+*.pyd
+*.pyo
+*.swo
+*.swp
+*.tar
+*.tar.gz
+*.zip
+.DS_Store
+.idea/
+.venv/
+.vscode/
+MANIFEST.txt
+Thumbs.db
+__pycache__/
+blind_tapes/
+bootstrap*.sh
+bot.log
+cred.txt
+credentials.py
+data/OHLC/
+data/chain_snapshots/
+data/feed_store.db
+data/liquidity_ledger/
+data/shadow/
+data/signal_journal/
+# ── OPERATOR FLAGS (r108) — runtime state in a TRACKED source directory ─────
+# data/ holds real modules (candle_feed.py), so these are ignored by NAME and
+# not by directory. Both are set ONLY by devtools (67 and 68) and read live by
+# the running services; neither is ever committed.
+# ⚠️ FEED_MAINTENANCE has worked untracked since 2026-08-15 by luck rather than
+# intent — nothing on a box runs `git add`. Written down now so a future
+# `git add -A` on a control-side checkout cannot capture an operator flag and
+# ship someone else's maintenance window to the fleet.
+data/FEED_MAINTENANCE
+data/REHEARSAL_OFF
+# 🔴 r68 — THREE MORE SENTINELS THAT WERE NEVER LISTED, AND THE COMMENT ABOVE
+# PREDICTED EXACTLY THIS. `NO_MIDNIGHT_HALT` (r21) and `DRILL_DISK` have been
+# untracked by the same luck since they were introduced, and r67 added
+# `SHUTDOWN_CAUSE` as a third — found because it showed up in `git status`
+# right after that bake. `AGENT_STATUS` is r68's own and is listed with them
+# rather than becoming a fourth instance of the same gap.
+data/NO_MIDNIGHT_HALT
+data/DRILL_DISK
+# r171 (AGT.1/AGT.2) - the agent watcher's event record and its observe-only
+# trading verdicts. Runtime records, never committed; never purged.
+data/AGENT_EVENTS.jsonl
+data/AGENT_VERDICTS.jsonl
+data/SHUTDOWN_CAUSE
+data/CAP_PAGED
+data/CAP_PAGED.tmp
+data/AGENT_STATUS
+env/
+ohlc/
+orb_range.json
+orb_state.json
+reports/
+trades.db
+trades.db-shm
+trades.db-wal
+venv/
+
+# retention_purge.py flock sentinel — runtime state, never committed
+data/retention_purge.lock
+
+# ── r132 — THE BOOTSTRAP TEMPLATE IS TRACKED AGAIN ──────────────────────────
+# 🔴 THE `!bootstrap.example.sh` AT THE TOP OF THIS FILE HAS NOT WORKED SINCE
+# THE FILE WAS SORTED. gitignore is LAST MATCH WINS, and the sort floated the
+# `!` line above `bootstrap*.sh`, so the rule it was meant to override re-ignored
+# it — the template silently left the repo and a fresh box had nothing to copy.
+# Re-included HERE, after every pattern that could match it. Keep it last.
+# ⚠️ ONLY THE .example IS INCLUDED; every other bootstrap*.sh holds real secrets.
+!bootstrap.example.sh
+# Claude Code's per-checkout overrides — machine-local by design (the shared,
+# committed permissions are .claude/settings.json).
+.claude/settings.local.json
+# r168 - the emergency watchdog: the bot heartbeat and the watchdog episode state, runtime only
+data/BOT_HEARTBEAT
+data/emergency_watchdog.json
+data/emergency_watchdog.json.tmp
+cap_counterfactual.jsonl

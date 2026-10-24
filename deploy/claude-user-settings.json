@@ -1,0 +1,45 @@
+{
+  "autoMode": {
+    "environment": [
+      "### Box",
+      "**What this is**: an OTV4TEST trading box provisioned by bootstrap.sh -> deploy/install.sh -> setup_ec2.sh (r132). Paper trading by default; the operator switches modes only through configure.sh.",
+      "**Cloud provider**: AWS EC2, Ubuntu; the 169.254.169.254 instance-metadata endpoint belongs to the hosting layer, and its iam/security-credentials path is never read.",
+      "**Repository**: `/home/ubuntu/options-trader`, origin https://github.com/{{ORIGIN_REPO}} (PUBLIC - the operator confirmed 2026-09-24 that the permission files may be public; secrets never enter git). Default branch main.",
+      "**Secrets**: live only in root-owned systemd units (chmod 600), ~/.claude/.credentials.json and ~/.git-credentials; bootstrap.sh is shredded after install. None are ever printed.",
+      "**Warehouse**: S3 vertigo-warehouse-tx9ai is READ-ONLY from this box; s3-push stays masked because the mainline QQQ box owns that prefix.",
+      "**Sensitive data**: trades.db, data/derived_store.db, data/resting_orders.db (the live trading record).",
+      "### User-specific",
+      "**Primary use of Claude Code**: operating and verifying the OTV4TEST paper-trading bot; the operator's rules are docs/WORKING_AGREEMENT.md section 38."
+    ],
+    "allow": [
+      "$defaults",
+      "Bash(sqlite3:*) read-only queries against this project's local db files under ~/options-trader — routine, high frequency (36×)",
+      "Bash(journalctl -u optionsbot:*) and Bash(systemctl status optionsbot) — routine service inspection, no mutation",
+      "Bash(sudo systemctl restart optionsbot), Bash(sudo systemctl restart candle-feed), Bash(sudo systemctl stop optionsbot), Bash(sudo systemctl start optionsbot) — the bake on this box; operator granted, WORKING_AGREEMENT 38.2",
+      "WORKING_AGREEMENT 38.1 FREE: read any file at any revision; run any report, study, checker (tests/check_*.py, tools/boot_sweep.py) or read-only menu item; query the ledgers, data stores and logs read-only; write freely to scratch (/tmp/claude-1000/**), git worktrees under ~/wt-*, and ~/parked_*; build delivery packages (tar czf) and run their gates",
+      "WORKING_AGREEMENT 38.1 FREE: read the S3 warehouse vertigo-warehouse-tx9ai READ-ONLY (list/get objects via boto3 or tests/warehouse_source.py) with this box's instance role",
+      "WORKING_AGREEMENT 38.2 GRANTED: the full bake on this box - sudo systemctl stop/start/restart optionsbot and candle-feed, sudo systemctl daemon-reload, purging __pycache__ under ~/options-trader, git pull --ff-only in ~/options-trader",
+      "WORKING_AGREEMENT 38.2 GRANTED: landing an OPERATOR-APPROVED delivery through the project lander - copying the archive to ~/*.tar.gz, extracting it to /tmp/fork_land, and running LAND_ARCHIVE=... bash /tmp/fork_land/land.sh <half>, which commits and pushes to origin OTV4TEST main by design",
+      "WORKING_AGREEMENT 38.2 GRANTED: adding new checkers under tests/, and asking the mainline control agent for reads and checks via ListAgents/SendMessage"
+    ],
+    "soft_deny": [
+      "$defaults",
+      "WORKING_AGREEMENT 38.3 RESERVED: any git commit or push NOT made by the project lander for an operator-approved delivery",
+      "WORKING_AGREEMENT 38.3 RESERVED: installing, enabling, disabling, masking or editing systemd units or timers (anything under /etc/systemd), and disk/storage changes (resize, swap, partitions, space reclaims, deleting evidence)",
+      "WORKING_AGREEMENT 38.3 RESERVED: DELETE/UPDATE/DROP/ALTER against trades.db, derived_store.db or resting_orders.db under ~/options-trader (the live trading record) without the operator's explicit yes"
+    ],
+    "hard_deny": [
+      "$defaults",
+      "WORKING_AGREEMENT 38.4 REFUSED: bypassing tools/land.sh or its gates - git commit/push with --no-verify or any equivalent skip flag",
+      "WORKING_AGREEMENT 18a / 38.7: printing credentials - unfiltered systemctl show -p Environment, systemctl cat, env, printenv, /proc/*/environ, or the instance-metadata iam/security-credentials path",
+      "WORKING_AGREEMENT 38.3: ANY write to the S3 warehouse (put/copy/delete/sync) or unmasking s3-push.service - this box must never push into sym=QQQ"
+    ]
+  },
+  "remoteControlAtStartup": true,
+  "env": {
+    "DISABLE_AUTOUPDATER": "1"
+  },
+  "theme": "dark",
+  "inputNeededNotifEnabled": true,
+  "agentPushNotifEnabled": true
+}

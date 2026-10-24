@@ -1,0 +1,12 @@
+{
+  "_comment": "r132 check_bootstrap G7: deny rules the committed .claude/settings.json must carry. Data, not commands - kept out of .py so check_no_env_dump reads no quoted command.",
+  "deny": [
+    "Bash(systemctl cat *)",
+    "Bash(printenv*)",
+    "Bash(env)",
+    "Bash(cat /proc/*/environ*)",
+    "Bash(curl *169.254.169.254/latest/meta-data/iam/security-credentials*)",
+    "Bash(sudo systemctl unmask s3-push*)",
+    "Bash(git push --no-verify *)"
+  ]
+}

@@ -1,0 +1,60 @@
+{
+  "permissions": {
+    "allow": [
+      "Read",
+      "Edit(//tmp/claude-1000/**)",
+      "Edit(//home/ubuntu/wt-*/**)",
+      "Edit(//home/ubuntu/parked_*/**)",
+      "Edit(//home/ubuntu/.claude/projects/-home-ubuntu-options-trader/memory/**)",
+      "Bash(python3 tools/boot_sweep.py *)",
+      "Bash(git log *)",
+      "Bash(git status *)",
+      "Bash(git diff *)",
+      "Bash(git show *)",
+      "Bash(git rev-parse *)",
+      "Bash(journalctl -u optionsbot *)",
+      "Bash(journalctl -u candle-feed *)",
+      "Bash(systemctl status *)",
+      "Bash(systemctl is-active *)",
+      "Bash(sudo systemctl stop optionsbot candle-feed)",
+      "Bash(sudo systemctl start candle-feed)",
+      "Bash(sudo systemctl start optionsbot)",
+      "Bash(sudo systemctl restart optionsbot)",
+      "Bash(sudo systemctl restart candle-feed)",
+      "Bash(sudo systemctl daemon-reload)",
+      "Bash(LAND_ARCHIVE=* bash /tmp/fork_land/land.sh *)",
+      "ListAgents",
+      "SendMessage"
+    ],
+    "ask": [
+      "Bash(git commit *)",
+      "Bash(git push *)",
+      "Bash(git reset --hard *)",
+      "Bash(sudo systemctl enable *)",
+      "Bash(sudo systemctl disable *)",
+      "Bash(sudo systemctl mask *)",
+      "Edit(//etc/**)",
+      "Bash(sudo rm *)"
+    ],
+    "deny": [
+      "Bash(git commit --no-verify *)",
+      "Bash(git push --no-verify *)",
+      "Bash(systemctl cat *)",
+      "Bash(sudo systemctl cat *)",
+      "Bash(systemctl show * -p Environment*)",
+      "Bash(sudo systemctl show * -p Environment*)",
+      "Bash(systemctl show *--property=Environment*)",
+      "Bash(sudo systemctl show *--property=Environment*)",
+      "Bash(printenv*)",
+      "Bash(env)",
+      "Bash(cat /proc/*/environ*)",
+      "Bash(curl *169.254.169.254/latest/meta-data/iam/security-credentials*)",
+      "Bash(sudo systemctl unmask s3-push*)",
+      "Bash(aws s3 cp *)",
+      "Bash(aws s3 rm *)",
+      "Bash(aws s3 sync *)",
+      "Bash(aws s3 mv *)"
+    ],
+    "defaultMode": "auto"
+  }
+}

@@ -1,0 +1,251 @@
+feed.info  v1.1
+v1.1  2026-09-22  OTV4TEST r100 — Underlying re-asked on RAW WIRE FRAMES with
+      dxFeed's own field names, plus Series and OptionSale. All declined. The
+      client library is eliminated as a cause; the endpoint hazard is recorded.
+v1.0  2026-09-22  OTV4TEST r100 — WHAT THE BROKER'S FEED ACTUALLY CARRIES,
+      ASKED OF THE SERVER RATHER THAN REMEMBERED FROM THE VENDOR'S DOCS.
+
+═══════════════════════════════════════════════════════════════════════════
+  PROVENANCE — EVERY FIELD BELOW IS THE SERVER'S OWN REPLY
+═══════════════════════════════════════════════════════════════════════════
+
+Nothing here is transcribed from dxFeed documentation. Every event name and
+every field list is what `tasty-openapi-dxlink-md-ws.dxfeed.com` returned to
+this account on 2026-09-22, captured verbatim from the wire.
+
+🔑 THE MECHANISM, AND IT IS THE POINT OF THIS FILE. DXLink negotiates each
+event type before it sends anything. The client opens a channel, then sends:
+
+    FEED_SETUP { channel, acceptDataFormat, acceptEventFields: {Event: [...]} }
+
+...declaring every field it is prepared to receive. The server answers:
+
+    FEED_CONFIG { channel, aggregationPeriod, dataFormat, eventFields: {...} }
+
+...naming the fields it will ACTUALLY deliver. **That reply is the capability
+answer.** The tastytrade SDK has always sent the request and always discarded
+the reply, so the question "what do we carry?" was guesswork for months.
+
+⚠️ AN EVENT THE SERVER DECLINES RETURNS A FEED_CONFIG WITH **NO** eventFields,
+AND NO ERROR FRAME. It is accepted, configured with nothing, and stays silent
+forever. Zero ERROR frames were seen across every probe in this file. A silent
+subscription is indistinguishable from a working one until you read the schema
+— §0.5, in the vendor's own protocol.
+
+═══════════════════════════════════════════════════════════════════════════
+  ENTITLEMENT
+═══════════════════════════════════════════════════════════════════════════
+
+  GET /api-quote-tokens ->
+      level       : api
+      dxlink-url  : wss://tasty-openapi-dxlink-md-ws.dxfeed.com/realtime
+      issued-at   : 2026-09-22T10:09:43Z
+      expires-at  : 2026-09-23T10:09:43Z      (24h; the feed re-tokens daily)
+
+  All events negotiate: aggregationPeriod 0.1s, dataFormat COMPACT.
+
+⚠️ THE TOKEN IS OPAQUE, NOT A JWT. Its middle segment is not base64 UTF-8, so
+it carries no readable entitlement claims. `level: api` is the only self-
+description the broker offers, and it does not enumerate events. The per-event
+table below is therefore the ONLY authoritative capability list we have.
+
+═══════════════════════════════════════════════════════════════════════════
+  WHAT IS CARRIED, BY SYMBOL SPACE
+═══════════════════════════════════════════════════════════════════════════
+
+🔴 THE SYMBOL SPACE IS PART OF THE ANSWER, NOT A DETAIL. The same event is
+carried in one space and declined in the other. Asking the wrong space returns
+exactly what "not entitled" returns: silence. Measured on QQQ (equity space)
+and .QQQ260922C500/505/510 (option space).
+
+  EVENT          EQUITY   OPTION    NOTES
+  ───────────────────────────────────────────────────────────────────────
+  Candle          17       17       both spaces
+  Profile         19       19       both spaces
+  Quote           12       12       both spaces
+  Summary         13       13       both spaces
+  Trade           14       14       both spaces
+  TimeAndSale     21       --       EQUITY ONLY
+  Greeks          --       13       OPTION ONLY
+  TheoPrice       --       12       OPTION ONLY
+  Underlying      --       --       DECLINED IN BOTH SPACES
+
+🔑 TimeAndSale AND Greeks ARE THE MIRROR PAIR THAT PROVES THE MECHANISM.
+TimeAndSale returns 21 fields on the equity symbol and NO SCHEMA on options;
+Greeks returns 13 on options and NO SCHEMA on the equity. Both are fully
+carried. Neither absence is an entitlement gap. Any reasoning that reads "no
+schema" as "not on our plan" is refuted by this row.
+
+─── FIELD LISTS, EXACTLY AS RETURNED ──────────────────────────────────────
+
+Candle          (equity + option)
+    eventSymbol eventTime eventFlags index time sequence count volume vwap
+    bidVolume askVolume impVolatility openInterest open high low close
+
+Profile         (equity + option)
+    eventSymbol eventTime description shortSaleRestriction tradingStatus
+    haltStartTime haltEndTime exDividendDayId statusReason high52WeekPrice
+    low52WeekPrice beta shares highLimitPrice lowLimitPrice earningsPerShare
+    exDividendAmount dividendFrequency freeFloat
+
+Quote           (equity + option)
+    eventSymbol eventTime sequence timeNanoPart bidTime bidExchangeCode
+    askTime askExchangeCode bidPrice askPrice bidSize askSize
+
+Summary         (equity + option)
+    eventSymbol eventTime dayId dayClosePriceType prevDayId
+    prevDayClosePriceType openInterest dayOpenPrice dayHighPrice dayLowPrice
+    dayClosePrice prevDayClosePrice prevDayVolume
+
+Trade           (equity + option)
+    eventSymbol eventTime time timeNanoPart sequence exchangeCode dayId
+    tickDirection extendedTradingHours price change size dayVolume dayTurnover
+
+TimeAndSale     (EQUITY ONLY)
+    eventSymbol eventTime eventFlags index time timeNanoPart sequence
+    exchangeCode price size bidPrice askPrice tradeThroughExempt aggressorSide
+    spreadLeg extendedTradingHours validTick type buyer seller
+    exchangeSaleConditions
+
+Greeks          (OPTION ONLY)
+    eventSymbol eventTime eventFlags index time sequence price volatility
+    delta gamma theta rho vega
+
+TheoPrice       (OPTION ONLY)
+    eventSymbol eventTime eventFlags index time sequence price
+    underlyingPrice delta gamma dividend interest
+
+═══════════════════════════════════════════════════════════════════════════
+  UNDERLYING — THE ONE THAT IS NOT CARRIED, AND WHAT IT IS NOT
+═══════════════════════════════════════════════════════════════════════════
+
+🔴 `Underlying` IS NOT THE UNDERLYING PRICE. The underlying price is fully
+available and is what the bot trades on: `Quote` and `Trade` on the plain
+ticker, measured at 771 and 297 events in a single 150-second RTH window on
+2026-09-22. The price is also carried a SECOND time, inside `TheoPrice`, as its
+`underlyingPrice` field. Nothing about price is missing from this feed.
+
+The dxFeed `Underlying` event is a separate VIX-methodology ANALYTICS product
+computed from the option surface. Its fields, per the SDK model, are:
+
+    volatility          30-day implied vol, VIX methodology
+    front_volatility    front-month implied vol
+    back_volatility     back-month implied vol
+    call_volume         day call volume
+    put_volume          day put volume
+    option_volume       day option volume
+    put_call_ratio      put volume / call volume
+
+WHAT WAS MEASURED, 2026-09-22:
+  · 0 events in 45s and 0 in 150s, RTH, while Trade/Quote/Greeks/TheoPrice all
+    scaled linearly over the same windows.
+  · 0 events across EIGHT symbol forms: QQQ .QQQ ./QQQ QQQ.US SPY .SPY SPX .SPX
+  · NO SCHEMA returned in the equity space AND in the option space.
+  · ZERO ERROR frames. The server never refuses; it configures nothing.
+
+ALSO DECLINED, ASKED FOR ON THE RAW WIRE (the SDK has no class for either):
+  · Series      — the SERIES-level twin of Underlying, carrying the same
+                  VIX-style volatility, forwardPrice and putCallRatio.
+  · OptionSale  — per-sale with underlyingPrice/volatility/delta attached.
+Both returned NO SCHEMA in both symbol spaces. dxFeed groups Greeks, TheoPrice,
+Series and Underlying in ONE product (Options Analytics); we are carried the
+first two and declined the second two, so the broker's tier cuts THROUGH that
+product rather than around it.
+
+🔑 THE SDK IS NOT THE PROBLEM, AND THIS IS THE HYPOTHESIS IT KILLS. The raw
+probe built its own FEED_SETUP by hand, with dxFeed's canonical camelCase wire
+field names rather than the SDK's model schema, on a channel the SDK does not
+own. The server returned NO SCHEMA for Underlying to that frame too. "Our
+client sends the wrong subscription shape" is therefore eliminated, not merely
+doubted.
+
+🔑 THE SESSION DOES NOT MATTER. Schema negotiation returned byte-identical
+results at 15:54 ET (RTH) and after 16:00 ET (closed). Extended-hours access
+changes what TRADES, not what the feed is licensed to compute. There is no hour
+at which Underlying starts negotiating.
+
+WHAT THAT SUPPORTS, STATED AT ITS ACTUAL STRENGTH:
+  ✅ MEASURED — it does not arrive and negotiates no schema: 8 symbol forms,
+     both symbol spaces, 45s and 150s windows, SDK subscribe AND hand-built raw
+     frames, RTH and after-hours, zero ERROR frames throughout.
+  ✅ ELIMINATED — cadence, symbol space, symbol format, subscription shape, and
+     the client library. Each was tested and each is dead.
+  ⚠️ INFERRED, AND NOT PROVEN — that this is an entitlement boundary at
+     `level: api`. Every alternative I can test is eliminated and the vendor
+     documentation is consistent with it, but only the broker can CONFIRM it.
+     Well-evidenced is NOT PROVEN; this file says "declined", not "impossible",
+     and the only thing that closes it is asking TastyTrade directly.
+  📄 DOCUMENTED — tastytrade exposes TWO token endpoints. `/api-quote-tokens`
+     (ours) is the newer one built for API users, with, in the maintainers'
+     words, more limited capabilities as to event types and instruments. The
+     older `/quote-streamer-tokens` carries FEWER event-type restrictions.
+
+🔴 DO NOT SWITCH ENDPOINTS TO GET IT. This is the one actionable-looking idea
+in this file that must not be acted on. TastyTrade's own statement, quoted in
+the SDK's licensing megathread: API users who rely on the
+`/quote-streamer-tokens` endpoint will be FLAGGED AND PUT ON DELAYED QUOTES.
+Delayed quotes would not disable this bot loudly — it would keep trading, on
+stale prices, and every gate in the repo would still read green. Trading three
+volatility analytics for that risk is not a trade worth making.
+
+CONSEQUENCE: `front_volatility`, `back_volatility` and `put_call_ratio` are not
+obtainable from this vendor stream. Anything wanting a volatility TERM
+STRUCTURE must compute it from `Greeks.volatility` across expiries, which we do
+carry per contract.
+
+═══════════════════════════════════════════════════════════════════════════
+  WHAT WE SUBSCRIBE TODAY vs WHAT IS AVAILABLE
+═══════════════════════════════════════════════════════════════════════════
+
+`data/candle_feed.py` v4.14:
+
+  PER CONTRACT (line ~1449, chunked 75/frame):   Greeks, Quote
+  ON THE TICKER (line ~1729):   Trade, TimeAndSale, Summary, Underlying, Quote
+  Candle arrives on its own subscription.
+
+  🔴 Underlying IS SUBSCRIBED AND CANNOT EVER DELIVER. It sits in the ticker
+     block, the server returns no schema for it, and `underlying_series` has
+     been empty since the stream was added 2026-08-22. The subscribe logs
+     "subscribed QQQ Underlying" every connection, which is why this looked
+     healthy for a month.
+
+  🔴 TheoPrice IS CARRIED, DELIVERS 12 FIELDS, AND IS SUBSCRIBED NOWHERE.
+     r116 moved it to the per-contract block where it belongs; r118 REVERTED
+     that on 2026-08-25 after SPX lost its ENTIRE per-contract subscription at
+     13:27 UTC — greeks, quotes, marks and theo frozen at the same instant —
+     and could not evaluate a strategy through the ORB window. QQQ, identical
+     code and a narrower chain, was unaffected. The writer `_on_theo` and the
+     `theo_series` table both remain; only the subscribe was withdrawn.
+
+  ⚠️ THE r118 HAZARD IS WIDTH, NOT ENTITLEMENT, AND IT IS STILL UNMEASURED.
+     SPX is ~500 contracts (7 chunks) against QQQ's ~372 (5). Adding a third
+     event type per chunk was the only change. The per-chunk try/except did NOT
+     contain it. Re-adding TheoPrice must therefore establish the width limit
+     first — smaller chunks, or a separate streamer channel — and must not be
+     tried on SPX during a session.
+
+  NEVER SUBSCRIBED, FULLY CARRIED, AVAILABLE FOR THE ASKING:
+     · Profile (19 fields, both spaces) — halt state, limit-up/limit-down
+       bands, shares, beta, ex-dividend. `tradingStatus` / `haltStartTime` are
+       a live halt detector we do not currently have.
+     · Summary on OPTIONS (13 fields) — per-contract openInterest and prior-day
+       close, which today we source elsewhere.
+     · Candle on OPTIONS (17 fields) — per-contract OHLC with impVolatility
+       and openInterest folded in.
+
+═══════════════════════════════════════════════════════════════════════════
+  HOW TO REGENERATE
+═══════════════════════════════════════════════════════════════════════════
+
+The capture is a read-only handshake: it opens its own streamer, subscribes
+each event type to a symbol, records the FEED_CONFIG replies and exits. It
+writes no table, touches no service, holds no lock, and needs no live tape —
+schema negotiation happens with the market closed.
+
+⚠️ THE GENERATOR IS NOT YET IN THE REPO. This file was produced from a scratch
+probe on 2026-09-22. Until a `tools/feed_capabilities.py` lands, treat the
+table as a dated snapshot: the entitlement can change at the vendor's end and
+nothing here will notice.
+
+⚠️ PROBE, DO NOT EDIT THE LIVE SUBSCRIPTION TO FIND OUT. r118 is the precedent:
+one added event type cost SPX its entire per-contract feed mid-session.

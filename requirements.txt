@@ -1,0 +1,11 @@
+# requirements.txt  v1.0
+# v1.0  2026-09-11  OTV4TEST r14 — the fork predates mainline r323's file; setup_ec2.sh and
+#       deploy/install_tooling.sh have always assumed it exists. Derived from the tree's
+#       third-party imports; the QQQ TEST box's venv (check_imports 113/113) is the
+#       truth for versions — these are floors, not pins.
+tastytrade>=13.2
+pandas>=2.2
+numpy>=1.26
+pytz>=2024.1
+boto3>=1.34
+requests>=2.31

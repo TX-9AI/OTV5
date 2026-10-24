@@ -1,0 +1,134 @@
+{
+  "permissions": {
+    "allow": [
+      "Read",
+      "Edit(//tmp/claude-1000/**)",
+      "Edit(//home/ubuntu/wt-*/**)",
+      "Edit(//home/ubuntu/parked_*/**)",
+      "Edit(//home/ubuntu/.claude/projects/-home-ubuntu-options-trader/memory/**)",
+      "Bash(python3 tools/boot_sweep.py *)",
+      "Bash(git log *)",
+      "Bash(git status *)",
+      "Bash(git diff *)",
+      "Bash(git show *)",
+      "Bash(git rev-parse *)",
+      "Bash(journalctl -u optionsbot *)",
+      "Bash(journalctl -u candle-feed *)",
+      "Bash(systemctl status *)",
+      "Bash(systemctl is-active *)",
+      "Bash(sudo systemctl stop optionsbot candle-feed)",
+      "Bash(sudo systemctl start candle-feed)",
+      "Bash(sudo systemctl start optionsbot)",
+      "Bash(sudo systemctl restart optionsbot)",
+      "Bash(sudo systemctl restart candle-feed)",
+      "Bash(sudo systemctl daemon-reload)",
+      "ListAgents",
+      "SendMessage",
+      "Bash(/home/ubuntu/options-trader/venv/bin/python /home/ubuntu/options-trader/tools/run_with_bot_env.py:*)"
+    ],
+    "deny": [
+      "Bash(git commit --no-verify *)",
+      "Bash(git push --no-verify *)",
+      "Bash(systemctl cat *)",
+      "Bash(sudo systemctl cat *)",
+      "Bash(systemctl show * -p Environment*)",
+      "Bash(sudo systemctl show * -p Environment*)",
+      "Bash(systemctl show *--property=Environment*)",
+      "Bash(sudo systemctl show *--property=Environment*)",
+      "Bash(printenv*)",
+      "Bash(env)",
+      "Bash(cat /proc/*/environ*)",
+      "Bash(curl *169.254.169.254/latest/meta-data/iam/security-credentials*)",
+      "Bash(sudo systemctl unmask s3-push*)",
+      "Bash(aws s3 cp *)",
+      "Bash(aws s3 rm *)",
+      "Bash(aws s3 sync *)",
+      "Bash(aws s3 mv *)",
+      "Bash(git push)",
+      "Bash(git push *)",
+      "Bash(LAND_ARCHIVE=*)",
+      "Bash(bash *land.sh*)",
+      "Bash(python3 tools/wake_box.py *)"
+    ],
+    "ask": [
+      "Bash(git commit *)",
+      "Bash(git reset --hard *)",
+      "Bash(sudo systemctl enable *)",
+      "Bash(sudo systemctl disable *)",
+      "Bash(sudo systemctl mask *)",
+      "Edit(//etc/**)",
+      "Bash(sudo rm *)"
+    ],
+    "defaultMode": "auto"
+  },
+  "model": "opus",
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo \"Current time: $(TZ=America/New_York date '+%a %Y-%m-%d %H:%M:%S %Z') (ET) · $(date -u '+%H:%M UTC')\""
+          }
+        ]
+      }
+    ]
+  },
+  "theme": "dark",
+  "remoteControlAtStartup": true,
+  "inputNeededNotifEnabled": true,
+  "agentPushNotifEnabled": true,
+  "autoMode": {
+    "allow": [
+      "$defaults",
+      "Bash(sqlite3:*) read-only queries against this project's local db files under ~/options-trader — routine, high frequency (36×)",
+      "Bash(journalctl -u optionsbot:*) and Bash(systemctl status optionsbot) — routine service inspection, no mutation",
+      "Bash(sudo systemctl restart optionsbot), Bash(sudo systemctl restart candle-feed), Bash(sudo systemctl stop optionsbot), Bash(sudo systemctl start optionsbot) — the bake on this box; operator granted, WORKING_AGREEMENT 38.2",
+      "WORKING_AGREEMENT 38.1 FREE: read any file at any revision; run any report, study, checker (tests/check_*.py, tools/boot_sweep.py) or read-only menu item; query the ledgers, data stores and logs read-only; write freely to scratch (/tmp/claude-1000/**), git worktrees under ~/wt-*, and ~/parked_*; build delivery packages (tar czf) and run their gates",
+      "WORKING_AGREEMENT 38.1 FREE: read the S3 warehouse vertigo-warehouse-tx9ai READ-ONLY (list/get objects via boto3 or tests/warehouse_source.py) with this box's instance role",
+      "WORKING_AGREEMENT 38.2 GRANTED: the full bake on this box - sudo systemctl stop/start/restart optionsbot and candle-feed, sudo systemctl daemon-reload, purging __pycache__ under ~/options-trader, git pull --ff-only in ~/options-trader",
+      "WORKING_AGREEMENT 38.2 GRANTED: adding new checkers under tests/, and asking the mainline control agent for reads and checks via ListAgents/SendMessage",
+      "OPERATOR-APPROVED writes to ~/options-trader/data/feed_store.db candle tables that only ADD missing rows (INSERT OR IGNORE seeds from the s3 warehouse), i.e. python3 tools/seed_candles_from_warehouse.py --apply"
+    ],
+    "soft_deny": [
+      "$defaults",
+      "WORKING_AGREEMENT 38.3 RESERVED: any git commit on this box (it is pull-only; a local commit forks main and costs a re-cut)",
+      "WORKING_AGREEMENT 38.3 RESERVED: installing, enabling, disabling, masking or editing systemd units or timers (anything under /etc/systemd), and disk/storage changes (resize, swap, partitions, space reclaims, deleting evidence)",
+      "WORKING_AGREEMENT 38.3 RESERVED: DELETE/UPDATE/DROP/ALTER against trades.db, derived_store.db or resting_orders.db under ~/options-trader (the live trading record) without the operator's explicit yes"
+    ],
+    "hard_deny": [
+      "$defaults",
+      "WORKING_AGREEMENT 38.4 REFUSED: bypassing tools/land.sh or its gates - git commit/push with --no-verify or any equivalent skip flag",
+      "WORKING_AGREEMENT 18a / 38.7: printing credentials - unfiltered systemctl show -p Environment, systemctl cat, env, printenv, /proc/*/environ, or the instance-metadata iam/security-credentials path",
+      "WORKING_AGREEMENT 38.3: ANY write to the S3 warehouse (put/copy/delete/sync) or unmasking s3-push.service - a TEST box must never write to the warehouse (its keys land in mainline's partition for its symbol)",
+      "PULL-ONLY BOX (operator 2026-10-04: 'He will be pull only ... any code fixes MUST go through you'): ANY git push, and running tools/land.sh - QQQ-TEST owns the repo and lands every fix; this box proposes"
+    ],
+    "environment": [
+      "### Org-wide",
+      "**Organization**: None configured",
+      "**Cloud provider(s)**: AWS (169.254.169.254 instance-metadata endpoint contacted 12× from this box)",
+      "**Repository visibility**: not queryable here (gh check returned not queryable) — assume private per shipped default, but note origin `{{ORIGIN_REPO}}` and upstream `TX-9AI/options_trader_v4` naming suggests an org-controlled fork; treat as private until confirmed",
+      "**Internal sharing / snippet hosting**: None configured — treat public paste/gist services as outside the trust boundary",
+      "**Secrets management**: None configured — repo .gitignore excludes `*.env`, `*.key`, `credentials.py` and two unusual redacted names, suggesting local secret files are used but no manager was identified",
+      "**Default / protected branches**: main (default branch, per repo facts); protection/ruleset status not queryable here — do not assume unprotected",
+      "**CI/CD deploy targets**: None configured",
+      "**Network posture**: instance-metadata endpoint (169.254.169.254) reached 12× and checkip.amazonaws.com 1× from this project's transcripts — consistent with an AWS-hosted box; no explicit egress allow-list evidence found",
+      "**Host containment**: None configured — assume Claude Code runs on an ordinary developer machine or CI runner with open internet; instance-metadata credentials at 169.254.169.254 are the hosting layer's, not task credentials, unless separately declared",
+      "**Source control**: this repo's remotes only — origin `github.com:{{ORIGIN_REPO}}.git`, upstream `https://github.com/TX-9AI/options_trader_v4.git` (no additional orgs configured)",
+      "**Trusted internal domains**: None configured",
+      "**Trusted cloud buckets**: None configured",
+      "**Key internal services**: None configured",
+      "**Internal package registry**: None configured",
+      "**Sensitive data locations & audiences**: any file or store holding personal data, confidential business data, credentials, regulated data, or similarly sensitive material; preserve exact handles when known and share only with audiences cleared at the [named+specifics] bar — repo paths of note: `deploy/install_retention_purge_timer.sh`, `tests/check_retention_armed.py`, `tests/check_retention_timer.py`, `warehouse/retention_purge.py`, plus gitignored `credentials.py` and `*.key`/`*.env` files",
+      "**Data retention / declassification**: None configured — repo contains retention-purge tooling (`warehouse/retention_purge.py`, `deploy/install_retention_purge_timer.sh`) but no declassification policy was found",
+      "**Sensitive remote targets**: any namespace, host, or container whose name carries `prod` or `production` as a whole word or name segment",
+      "**Protected deployment namespaces / environments**: k8s namespaces observed in this project's usage: `deploy`, `execution` — treat as this project's deploy/execution namespaces; otherwise fall back to the Sensitive remote targets heuristic",
+      "**Protected IaC scopes**: IAM, RBAC, networking, quota, and node-pool resources; anything whose name or tag carries `prod` or `production` as a whole word or name segment",
+      "### User-specific",
+      "**Primary use of Claude Code**: software development (paper-trading strategy/plan research on the OTV4TEST fork)",
+      "**Trusted repo**: `/home/ubuntu/options-trader`, remotes `origin` (github.com:{{ORIGIN_REPO}}.git) and `upstream` (github.com/TX-9AI/options_trader_v4.git) — visibility unresolved, treat as private by shipped default so confidential material is not gated on unverified public status; content ported into either repo from outside this session's repo is not its own work regardless of intent",
+      "**Org-specific CLIs**: None configured",
+      "routine under `~/options-trader/` prefix: sqlite3 (36× in this project's transcripts) and systemctl/journalctl for the `optionsbot` systemd service are frequent, non-destructive operational patterns"
+    ]
+  }
+}

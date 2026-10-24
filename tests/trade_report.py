@@ -1,0 +1,1348 @@
+# tests/trade_report.py — v1.24
+# v1.24 (2026-09-26) — OTV4TEST r160. EXIT REASON — DOLLARS IS RANKED BY NET $, best first (was by N).
+#   Operator: "For Exit Reason - Dollars, can you rank them by net?" The table's rendering moves into
+#   show_exit_dollars() so the order is testable (check_trade_report T13); a reason with no P&L sorts
+#   last, N breaks ties.
+# v1.23 (2026-09-26) — OTV4TEST r159. THE EXIT-REASON TABLE IS IN DOLLARS. The operator: "I don't
+#   know what that share column is for or what I would do with that information. I'd rather see the
+#   dollar amounts of the actual exits. And I would rather see the MFE/MAE in dollar amounts." SESS,
+#   TOP DATE and SHARE are gone; per exit reason the table now shows N, NET $ (total P&L of the trades
+#   that exited that way), AVG $ (mean exit P&L per trade), and MFE $ / MAE $ (mean best / worst OPEN
+#   P&L per trade: (max|min_premium_seen - entry) x contracts x 100). Whole dollars, to fit 76. The
+#   1-DAY flag (>=80% of a reason's trades on one date, n >= --min-n) stays as a tag. Sorted by N.
+# v1.22 (2026-09-26) — OTV4TEST r158. THE EXIT-REASON TABLE GAINS MFE% / MAE%, AND THE "thin" LABELS
+#   GO. The operator, 2026-09-26: "Exit reason does not have any MFE/MAE — I don't need the report
+#   pointing out that a sample size of 1 is 'thin' — no shit." EXIT REASON x SESSION SPREAD now shows,
+#   per exit reason, the MEDIAN MFE% (best premium seen vs entry, `max_premium_seen`) and MAE% (worst,
+#   `min_premium_seen`) over ALL its trades — the same fields and formula EXIT BEHAVIOUR uses, so the
+#   two agree. `<- thin` is removed from that table (r294's reasoning again: at this sample nearly
+#   every row tripped it, so it marked the ordinary case), and the per-row `thin` in the outliers
+#   section goes too; the RULE stays (a bucket under --min-n is kept whole, stated once below the
+#   section), because the flag was display and the rule is a guard. To fit 76 columns the
+#   `<- SINGLE-SESSION` flag is `1-DAY`, defined in the note under the table.
+# v1.21 (2026-09-26) — OTV4TEST r157. ONE MORE EV SECTION: BY SETUP TYPE, OUTLIERS REMOVED, BOTH
+#   TAILS. Operator: "Can you add one more EV section to that report that removes statistical
+#   outliers? Good & bad?" — asked after one +19.63R VOLT trade turned out to carry VOLT's whole
+#   +0.59 EV (without it, -0.14). THE RULE IS FIXED, NOT TUNED: Tukey's fences, 1.5 x IQR beyond the
+#   quartiles of R, computed ONCE over the whole book in the window (a bucket of 4 has no quartiles
+#   of its own), applied to both tails. Each row shows how many trades each tail lost (OUT+ / OUT-),
+#   EV R on all trades, EV R on the rest, and the rest's net. ⚠️ On this book the LOW fence removes
+#   nothing — stops cap losses near -1R to -2R, so no loser is a statistical outlier; the section
+#   says which tails actually lost trades rather than implying symmetry. Sorted by the trimmed EV.
+#   🔑 THIN BUCKETS ARE NOT TRIMMED. Operator: "In thin samples consider them all within the
+#   sample." A bucket under --min-n trades (8) keeps every trade — its EV ex equals its EV R and
+#   the row says `thin` — because cutting one trade from three is not removing an outlier, it is
+#   deleting a third of the evidence. The fence counts in the header cover trimmed buckets only.
+# v1.20 (2026-09-26) — OTV4TEST r156. EVERY LINE FITS THE PHONE: 76 CHARACTERS OR FEWER. The
+#   operator, reading r155 on his phone: "That report spends too many lines. It's too wide. You
+#   need to get it to fit single lines." r155's EV R column took the BY rows to 85 characters and
+#   every one wrapped onto two lines; the R headers (92, 94), the sentiment note (100), the headline's
+#   worst rows (96, 102), the single-session note and r155's own footer (115) wrapped too. The BY
+#   tables keep every column and every decimal: the name column is 21 (the longest name on the
+#   book, `sweep_breach_accepted`, is 21) and the numeric columns are tightened, 75 wide; EV R gets
+#   room for two integer digits (`4835.00+19.64` had run together). The other lines are reworded,
+#   not wrapped. check_trade_report T10 renders every mode and fails on any line over 76.
+# v1.19 (2026-09-26) — OTV4TEST r155. (Numbered v1.19, not v1.1: this file carries dtp's own
+#   v1.1-v1.18 as inherited history below, and a reused number reads as that entry.) AN "EV R" COLUMN IN EVERY BREAKDOWN TABLE, SETUP TYPE
+#   INCLUDED. The operator, 2026-09-26: "Can you express the returns by setup type on EV
+#   multiple and add that to our report 35?" — asked after dollars had made Breakout look
+#   like the book's engine when it deploys ~8x Runaway's capital per trade at the SAME 43%
+#   win rate. EV R = the bucket's EXPECTANCY IN R: the mean, over its trades, of each trade's
+#   P&L as a multiple of the dollars its STOP put at risk (`modified_r`, the report's own
+#   headline R basis), so a bucket is judged per unit risked, not per dollar of size. It is
+#   the MEAN PER TRADE ("what one more trade of this kind is worth, in risk units"), which
+#   is deliberately NOT the header's aggregate R (sum P&L / sum risk), where a few large-risk
+#   trades carry the total. Trades whose risk cannot be priced are left out of the mean and
+#   the value is flagged `~`; none priceable reads `-`. Placed before FEES $ so FEES stays the
+#   last field (check_trade_report T5). NET $ and every existing column are unchanged.
+#   🔑 THE BY TABLES NOW SORT BY EV R, best first (operator: "report 35 does not sort by EV");
+#   NET breaks ties, and the HEADLINE's best/worst still rank by NET — its footer says so.
+#   🔴 AND R ITSELF WAS WRONG FOR MOST TRADES, FOUND BUILDING THIS: `_STOP_PCT_RE` matched ANY
+#   "NN%", so `orb_trail_stop pnl=30%` read as a 30% STOP — a winner's risk became its own profit
+#   and it scored EXACTLY +1.00R (36 of this box's winners since 09-21), and a loser whose reason
+#   carried `pnl=-12%` scored -1.00R. The header R, the per-trade R column and any EV on them were
+#   close to a win/loss count. The pattern is now anchored to a stop token (`stop_N%`; this box's
+#   reasons since 09-01 name stops only as hard_stop_N%, premium_stop_N%, stop_N%); a winner falls
+#   back to its entry-time floor, as the docstring always said it should. Inherited from dtp's
+#   trade_report v1.18 — reported to the mainline agent, not changed there by this tree.
+# v1.0 (2026-09-23) — OTV4TEST r119. MAINLINE'S TRADE REPORT, READING THIS BOX'S
+#   OWN trades.db. The operator, 2026-09-23, comparing our devtools item 35 with
+#   mainline's reports 47/48: "Can we repurpose that code to display our
+#   information like that? Theirs is reading from s3… ours would only need to
+#   read the local disk", then "let's get those reports borrowed, repurposed &
+#   added to our devtools menu. You can retire our current one option 35 — I
+#   hate it." PORTED FROM day_trader_pro/trade_report.py v1.18 (dtp f02af8f),
+#   and PROVEN BEFORE PORTING: that file, unmodified, fed this box's 138 rows as
+#   one bundle, rendered every section. So the port changes WHERE rows come
+#   from and nothing about how they are measured:
+#   · SOURCE: `trades.db` read-only (`--db`, default OT_TRADES_DB or the repo's
+#     trades.db) instead of S3-sourced JSON bundles. trade_id is the table's
+#     key, so the bundle de-duplication has nothing to do and is gone.
+#   · 🔴 VOID ROWS ARE EXCLUDED AND COUNTED, every run: `orb-T1`, a
+#     check_standing_offer fixture the lander wrote to the live DB on 09-10
+#     ("VOID: test fixture ..."), read as a real NVDA ORB trade in the
+#     unmodified report.
+#   · FEES: imports tests/fees.py directly — it sits beside this file, and
+#     mainline's fees_bridge exists only to cross a repo boundary there is not
+#     here (its own docstring says so). Still fails LOUD: n/a, never 0.00.
+#   · `ettime` is not copied: its one use here is the JSON's date stamp.
+#   · The row list's strategy tags gain this box's four (BRK, VOLT, HUNT, ATP).
+#   · SENTIMENT: this box archives no morning report, so the section says that
+#     in one line instead of naming mainline's eod_conductor.
+#   Everything below this entry is mainline's history, kept because it is why
+#   the numbers are computed the way they are.
+# ── day_trader_pro/trade_report.py — v1.18 (mainline history) ──
+# v1.18 (2026-09-07) — dtp r315 / S3.22. ENGINE_EPOCH 2026-08-25 -> 2026-09-01,
+#   epoch 3, after r314 stripped every pre-09-01 trade object. The floor and
+#   the bucket now agree; leaving it would default to a window whose first six
+#   sessions no longer exist.
+# v1.17 (2026-09-07) — dtp r312 / FEE.7. The inlined fee bridge moves to
+#   `fees_bridge.py` so report 46 shares it rather than copying it. No
+#   behaviour change; `bucket_fees` is imported instead of defined.
+# v1.16 (2026-09-07) — dtp r311 / FEE.6. THE `<- thin` MARKER IS REPLACED BY A
+#   FEES COLUMN, in every dimension table at once because `show()` is the one
+#   renderer for all seven. Operator: *"the thin remark is useless. No shit
+#   it's thin — it's a week of trades."* At this sample nearly every bucket
+#   tripped it, so it marked the ORDINARY case and trained the eye past a
+#   column that then said nothing.
+#   🔑 THE MARKER GOES, THE THRESHOLD STAYS. `min_n` still gates `rank()` and
+#   `exit_concentration`; this removes a DISPLAY artifact, not a guard, and
+#   conflating those is how a gate vanishes inside a cosmetic edit.
+#   ⚠️ `NET $` STAYS GROSS DELIBERATELY. It is the number every banked report
+#   and every prior screenshot carries; changing its meaning under the same
+#   header would make this delivery's own before/after incomparable. Fees
+#   render NEGATIVE so the arithmetic is visible without a second column.
+#   🔴 FAILS LOUD: if `fees.py` cannot be imported the column reads `n/a` on
+#   every row and the header says so once — never 0.00, because "no fees" and
+#   "no fee model" are different facts and the second flatters the book.
+#   ⚠️ A trailing `*` marks a bucket holding rows the model could not price.
+# v1.15 (2026-09-05) — dtp r287 / TZ.1 — the naive `today` here asked a UTC box and rolled at 20:00 ET (19:00 in winter), so a report run after that silently asked for TOMORROW and came back empty. It now goes through `ettime`, the one ET/UTC boundary.
+# v1.14  2026-09-04 — dtp r269. MODIFIED R — ON THE STOP THAT ACTUALLY ENDED
+#       THE TRADE. Operator, 2026-09-04: *"as a trader I am aware that a $1,000
+#       position for me carries an actual $250 of risk"*, and compute it on the stop
+#       that ended the trade. The exit reasons already carry the number —
+#       `hard_stop_20%`, `stop_25%`, `hard_stop_18%` — so this is per-trade truth read
+#       off the row, not a rate assumed from the strategy name.
+#       🔴 IT CHANGES THE HEADLINE FROM +0.059 TO ROUGHLY +0.24. Max-loss R answers
+#       "what could I have lost"; it is the WRONG denominator for "what is my return on
+#       risk", and reporting only that made a working book look broken.
+#       ⚠️ THREE-TIER FALLBACK, AND THE ROW SAYS WHICH: x = the stop named in this
+#       trade's own exit reason, s = the entry-time floor (`stop_premium`), m = max
+#       loss because neither was recorded. A winner has no stop percentage and must not
+#       be given one. The roll-up prints the basis MIX, because an aggregate built
+#       mostly on max-loss fallbacks is not the same measurement as one built on real
+#       stops — and printing it without saying so is how the previous line misled.
+#       🔑 AND IT SURFACES SLIPPAGE. A stopped trade whose modified R is worse than
+#       -1.00 had its stop OVERSHOOT: NVDA at $0.06 with a `hard_stop_20%` intended
+#       $228 of risk and cost $475 — -2.08R, because a 2-cent slip on a 6-cent option
+#       IS 33%. Max-loss R showed that same trade as -0.42 and hid it entirely.
+#       ⚠️ Max-loss R is KEPT on a second line as the honest worst case.# v1.13  2026-09-04 — dtp r269. 🔴 MODIFIED R: THE STOP THAT ACTUALLY ENDED
+#       THE TRADE. Operator, 2026-09-04: *"as a trader I am aware that a
+#       $1,000 position for me carries an actual $250 of risk"* — compute R
+#       on that. r268's max-loss denominator answers "what could I have
+#       lost"; it is the wrong denominator for "what is my return on risk",
+#       and reporting it as plain R read as +0.059 when the same book on the
+#       real stop reads +0.235.
+#       🔑 READ OFF THE ROW, NOT ASSUMED. The exit reasons carry the number
+#       — hard_stop_20%, stop_25%, hard_stop_18% — so each trade is measured
+#       against ITS OWN stop. A winner has no percentage and must not be
+#       given one: it falls back to the entry-time floor, then to max loss,
+#       and the basis letter (x/s/m) says which on every row.
+#       ⚠️ AND IT SURFACES SLIPPAGE. A stopped trade below -1.00R means the
+#       stop OVERSHOT: NVDA at $0.06 on a 20% stop came out at -2.08R,
+#       because a two-cent slip on a six-cent option IS 33%. AMD at $3.75
+#       overshot 8%. The overshoot scales with how cheap the option is.
+#       ⚠️ MAX-LOSS R STAYS on a second line as the honest worst case; the
+#       two together say what neither says alone.
+# v1.12  2026-09-04 — dtp r268. R AND CAPITAL AT RISK.
+#       Operator, 2026-09-04: the roll-up wants an R value after median
+#       hold, and the per-trade list wants a DATE (it is routinely run over
+#       five sessions, which made every row's time ambiguous), an R, and
+#       the capital that was at risk.
+#       🔴 THE DENOMINATOR IS THE STRUCTURE'S MAX LOSS, NOT THE STOP'S.
+#       Stops run 15-27%% by strategy and exit reason, so measuring against
+#       them would give a different denominator per row and make the column
+#       incomparable across strategies.
+#       ⚠️ THE ROLL-UP PRINTS TWO NUMBERS. Aggregate R is what the BOOK
+#       returned on committed capital; median R is the typical TRADE. They
+#       diverge when a few large-risk trades carry the total - SPX risked
+#       ~$35k a trade across 21, the runaway a few thousand across 202 -
+#       and reporting one would hide exactly that.
+#       ⚠️ THE DATE COLUMN REVERSES AN EARLIER NOTE that said time only,
+#       because the window is in the header. True of a single session; this
+#       report is routinely asked for five. entry/exit narrow 6->5 and pnl
+#       8->7 to pay for it: line 45 -> 60, still inside the widest table
+#       this report already prints.
+# v1.11 (2026-08-31) — r202. --rows / --rows-only: ONE LINE PER TRADE.
+#   Every report in the suite aggregated and none listed a trade, so "what
+#   did the fleet actually do today" had no answer short of reading the
+#   bundle JSON by hand. 43 chars for Termius on a phone: sym, time,
+#   strategy, contracts, entry, exit, pnl. ⚠️ Exit reason is deliberately
+#   absent — it has its own section, and the operator ruled that symbol and
+#   contracts earn the space instead.
+# v1.10 (2026-08-29) — r190 / dtp r231. THE DEDUP SHIM IS GONE, AND WHAT
+#   REPLACES IT IS A DETECTOR (backlog S3.6).
+#   🔑 IT WAS NEVER A DESIGN FEATURE. Its own v1.1 changelog (2026-07-22)
+#   says so: before consolidate_trades v1.2 added a date filter on 07-28,
+#   harvest scp'd each box's ENTIRE trades.db and consolidate did a bare
+#   SELECT *, so every fleet_trades_<date>.json held that box's FULL HISTORY
+#   and pooling N bundles counted each trade up to N times. The dedup existed
+#   solely to survive those cumulative archives sitting in the glob. r187
+#   moved the default source to reports/warehouse, where every bundle is
+#   built by warehouse_reader.build() from ONE dt= partition and is already
+#   collapsed by latest_per_trade(). There is nothing left to de-duplicate.
+#   🔴 AND KEEPING IT WAS THE ACTUAL DEFECT, NOT MERELY DEAD CODE. TWO
+#   DEDUP RULES RAN ON THE SAME DATA WITH DIFFERENT TIE-BREAKS:
+#   warehouse_reader.latest_per_trade() keeps the newest `pushed_at_utc`;
+#   this file kept the MOST-FILLED row (`_filled()`, a count of non-empty
+#   columns). They have agreed so far because the newest state also happened
+#   to be the most-filled one. **That is luck.** A trade whose final CDC row
+#   nulls a column would have been silently resolved differently by each,
+#   and nothing anywhere compared them — report parity could not catch it,
+#   because parity runs BOTH sides through this same rule.
+#   ⚠️ SO IT IS NOT DELETED, IT IS INVERTED. Silently collapsing a
+#   duplicate now hides the only two conditions that can still produce one:
+#   a legacy CUMULATIVE bundle in an explicit --bundles-dir, or two bundles
+#   for the same date. Both are real problems and both used to be absorbed
+#   without a word. Duplicates are now FIRST-WINS by sorted filename
+#   (deterministic, not arbitrary) and REPORTED BY trade_id AND BY FILE.
+#   ⚠️ `_filled()` is removed entirely rather than left unused. An
+#   orphaned tie-break helper is exactly what gets re-wired by the next
+#   person who needs 'a way to pick between two rows'.
+# v1.9 (2026-08-29) — r187 / dtp r228. THREE CHANGES, backlog S3.5.
+#   (1) THE DEFAULT SOURCE IS THE WAREHOUSE. The old default globbed
+#       reports/fleet_trades_*.json at the repo root — a directory NOTHING
+#       WRITES ANY MORE. eod_analysis v1.2 builds its bundle into
+#       reports/warehouse/, and install_eod_v2.sh disabled dtp-harvest.timer,
+#       so whatever sits at the root is a frozen snapshot of a pipeline that
+#       stopped running (backlog C.12). A default pointing at a folder nobody
+#       fills does not fail — it QUIETLY REPORTS OLD NUMBERS, which is worse.
+#       --bundles-dir still overrides, and report_parity passes both sides
+#       explicitly so it is unaffected.
+#   (2) 🔴 AN ENGINE EPOCH, DEFAULTING TO 2026-08-25. Operator, that day:
+#       "today is day one and anything prior to today was the old engines."
+#       Every bundle in the warehouse reaches back to July, so an unqualified
+#       cross-day run POOLS TWO DIFFERENT TRADING SYSTEMS in one table with
+#       nothing marking the boundary. That has already produced one wrong
+#       conclusion quoted as evidence. The floor is now the default and
+#       --all-history is the explicit override.
+#       ⚠️ IT IS LOUD, NOT SILENT. The count of excluded pre-epoch
+#       trades prints on every run. A filter you cannot see is how you end up
+#       arguing about a number that was never in the sample.
+#   (3) BY SETUP GRADE IS REMOVED. Every v4 write path hardcodes
+#       setup_grade="UNGRADED" (entry_engine:212, main:2135, condor_roll:789,
+#       base_strategy:127) and nothing writes setup_score at all — r152
+#       deleted the scorer because it SELECTED LOSERS (A-grade -$8,244 vs
+#       B-grade +$1,893 over 619 trades). The section had exactly one bucket.
+#       ⚠️ The COLUMN stays (check_conviction_removed S6 pins it) and the
+#       field still rides on every row; only the dimension is gone, replaced
+#       by one line of fact so its absence is stated rather than mysterious.
+# v1.8 (2026-08-16) — --out, so a caller can name the JSON exactly. The parity
+#   tool had been picking the newest trade_report_<stamp>.json by MTIME, which
+#   is a guess: it read a stale full-fleet run instead of the restricted one it
+#   had just produced, and reported 25 sessions against 1 as a warehouse
+#   divergence. Identifying a file by "probably the newest" is not identifying
+#   it.
+# v1.7 (2026-08-16) — a warehouse-sourced run writes trade_report_warehouse_*
+#   and records its source in the payload. v1.6 wrote the same stamped filename
+#   for both sources, so the two were distinguishable only by mtime — and a
+#   comparison you can only make by checking timestamps is one you will get
+#   wrong once.
+# v1.6 (2026-08-16) — --bundles-dir, for WH.11. Lets this report run against
+#   warehouse-sourced bundles in reports/warehouse/ so the OUTPUTS of both
+#   sources can be diffed — bundle-level equivalence does not establish that
+#   the reports agree. Default is unchanged; the local path is byte-identical
+#   to v1.5. ⚠️ Note the glob it depends on: reports/fleet_trades_*.json is
+#   this report's INPUT, so anything written beside those files becomes its
+#   data whether or not that was intended.
+# v1.5 (2026-08-04) — HEADLINE stops printing false sentences. rank() now
+#   returns how many buckets cleared the sample floor, and the printer refuses
+#   the word "worst" when there is only one (it was naming the SAME bucket as
+#   best and worst — day_of_week: Tuesday twice, on a single-session report) and
+#   flags it as LOWEST-not-a-loss when every eligible bucket is positive
+#   (2026-08-04 announced a "worst ... net +1041.50", the
+#   second-best bucket, on a profit). Arithmetically right, semantically false —
+#   and it is the section people skim.
+# v1.4 — 2026-08-03 — EXIT SPREAD + a contaminated verdict fenced off.
+#        (a) by_exit_reason and by_session_date existed as separate marginals,
+#        which cannot answer the question they get asked: is an exit reason a
+#        STANDING pattern or ONE session? The 2026-08-03 cumulative showed
+#        bos_exit/Continuation at n=21 over nine sessions — the same 21 the
+#        single-day run showed, i.e. possibly every one of them on one day,
+#        while every other exit grew 3-6x. Marginals hide that; a cross shows
+#        it. New EXIT REASON x SESSION SPREAD block reports, per exit reason,
+#        how many distinct sessions it fired on and what share landed on its
+#        heaviest one, flagging >=80% as SINGLE-SESSION. exit_x_date is also
+#        written to the JSON in full.
+#        (b) flag_runners_cut_early was computed over EVERY row including the
+#        sub-minute flicker (main.py pre-v5.0: median hold 0.8 min, p25 12
+#        SECONDS — 44 of 88 rows on 2026-08-03 alone). Those exits were a
+#        DEFECT, not exit behaviour, and they drag both medians toward zero, so
+#        a ratio built on them is evidence about a bug rather than about
+#        leashes. Nothing is silently dropped — the ratio is now reported both
+#        ways with the sub-minute count stated, and the "runners cut early"
+#        NOTE is withheld when sub-minute rows exceed 10% of the sample, since
+#        at that point the ratio is measuring the flicker.
+# v1.3 — 2026-08-03 — +SENTIMENT dimension, and the cross that actually answers
+#        the operator's question. Idea: "I didn't think it would be wise to short
+#        into positive tailwinds or fire longs into headwinds." That is a claim
+#        about sentiment x DIRECTION, so `sentiment_x_direction` is the cross that
+#        matters — sentiment x strategy would not test it.
+#        SOURCE: reports/morning_report_<date>.json, archived nightly by
+#        eod_conductor v1.12.0 phase 5c. data/report.json is overwritten every
+#        09:15, so before that phase the day's scores were destroyed before they
+#        could be joined to that day's outcomes. Joined by (session date, symbol),
+#        the same shape gap_pct uses — the score is per SYMBOL PER DAY, so every
+#        trade on a symbol-day inherits one value.
+#        READ THE COVERAGE LINE FIRST. `brief_strength` was a hardcoded 0.30 for
+#        EVERY name every day until the DTP_REPORT_JSON fix landed after the close
+#        on 2026-07-30, and archiving only began 2026-08-03 — so there is almost
+#        no data yet and this dimension will be empty or trivial for weeks. It
+#        prints how many trades actually carried a score rather than silently
+#        ranking a handful. Expect it to become readable around 2026-09-05.
+#        SELECTION TRUNCATES THE RANGE, which is worth remembering when reading
+#        any result: sentiment already chooses which 13 discretionary boxes wake,
+#        so only high-scoring symbols trade at all. The bands below therefore see
+#        the TOP of the distribution, not its spread, and a null here is weaker
+#        evidence than a null on an untruncated variable would be.
+# v1.2 — 2026-07-22 — Machine-readable artifact + new dimensions. Writes
+#        reports/trade_report_<last-session>.json containing every bucket with
+#        full stats plus a FINDINGS block (best/worst strategy, setup,
+#        symbol, hour, weekday, exit reason, and the single
+#        best/worst trade). New display dimensions: by symbol, by hour (ET), by
+#        weekday, by session phase, by session date. Best/worst claims only
+#        consider buckets with n >= --min-n so a 1-trade bucket cannot win.
+# v1.1 — 2026-07-22 — CRITICAL FIX: de-duplicate by trade_id. harvest.py scp's
+#        each box's ENTIRE trades.db and consolidate_trades.py does a bare
+#        SELECT * with no date filter, so every fleet_trades_<date>.json holds
+#        that box's FULL history — pooling N bundles counted each trade up to N
+#        times. Now keyed on trade_id; session dates derived from entry_time.
+#        Also normalises exit_reason (strips ' pnl=...'), matching
+#        excursion_report.norm_reason.
+# v1.0 — 2026-07-22 — NEW. Cross-day trade breakdown ranked by net.
+"""
+Cross-day trade breakdown — what actually made and lost money, ranked.
+
+Read-only. Pools every closed trade from the fleet_trades_<date>.json bundles
+consolidate_trades.py writes, de-duplicates, and ranks across every dimension
+that matters. Prints a summary and writes a data-rich JSON for further analysis
+(or to hand to Claude).
+
+Timestamps in the DB are UTC ISO (ts_for_db); hour-of-day and weekday are
+converted to ET so "the 10 o'clock hour" means the market's 10 o'clock.
+
+Usage:
+    python trade_report.py                     # all banked sessions
+    python trade_report.py --since 2026-07-14
+    python trade_report.py --min-n 10          # thin-bucket threshold (default 8)
+    python trade_report.py --live | --paper
+    python trade_report.py --no-json           # display only
+"""
+
+from __future__ import annotations
+
+import argparse
+import glob
+import json
+import re
+import os
+import re
+import statistics
+import sys
+from collections import defaultdict
+from datetime import datetime, timedelta, timezone
+from typing import Any, Dict, List, Optional, Tuple
+_REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if _REPO not in sys.path:
+    sys.path.insert(0, _REPO)
+
+# r119 — only the optional --json output and the (absent) sentiment archive
+# live here; the trades are read from trades.db.
+REPORTS_DIR = os.path.join(_REPO, "reports")
+# r119 — the LOCAL source. Same resolution as every other store on this box.
+DEFAULT_DB = os.environ.get("OT_TRADES_DB") or os.path.join(_REPO, "trades.db")
+
+
+# 🔴 DAY ONE. Operator, 2026-08-25: "today is day one and anything prior to
+# today was the old engines. Those are not gonna be included in any study that
+# we do." Overridable by env for a deliberate archaeology run, but the DEFAULT
+# must be the honest one — a contaminated pool is the one mistake this report
+# has already been used to make.
+# 🔴 EPOCH 3 — 2026-09-01 (dtp r315). The 08-25 floor was epoch 2, the v4
+# engines' day one. Operator, 2026-09-07, after r314 stripped every pre-09-01
+# trade object from the warehouse: *"I'd like to make 09/01 the start of the
+# 3rd epoch for our all time trades report."* The reason is r208 and its
+# neighbours — the butterfly's searched wing, the removal of relaxation from
+# that strategy, the ORB one-order latch — all of which landed 09-01, so rows
+# before it were taken by code that no longer exists.
+# ⚠️ THE FLOOR AND THE BUCKET NOW AGREE. Leaving this at 08-25 after the strip
+# would default every unqualified run to a window whose first six sessions are
+# gone, which reads as six quiet days rather than as a filter meeting an empty
+# prefix — the exact confusion r297 fixed one layer down.
+ENGINE_EPOCH = os.environ.get("DTP_ENGINE_EPOCH", "2026-09-01")
+
+try:
+    from zoneinfo import ZoneInfo
+    _ET = ZoneInfo("America/New_York")
+except Exception:                                     # no tzdata
+    _ET = None
+
+_DOW = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday",
+        "Saturday", "Sunday"]
+
+
+# ── helpers ──────────────────────────────────────────────────────────────────
+# Fixed bands rather than per-run terciles, so a bucket means the same thing
+# across runs and two reports can be compared. Chosen against the 2026-08-03
+# wake spread (MSFT 1.00 .. XOM 0.30): HIGH ~7 names, MID ~5, LOW ~1.
+SENTIMENT_BANDS = ((0.70, "HIGH >=0.70"), (0.40, "MID 0.40-0.70"))
+SENTIMENT_LOW = "LOW <0.40"
+
+
+def sentiment_band(score) -> str:
+    if score is None:
+        return "no score"
+    for lo, label in SENTIMENT_BANDS:
+        if score >= lo:
+            return label
+    return SENTIMENT_LOW
+
+
+def load_sentiment(reports_dir) -> Dict[str, Dict[str, float]]:
+    """{date: {SYMBOL: strength}} from the archived morning reports.
+
+    Returns {} when nothing has been archived yet, which is the normal state
+    until eod_conductor v1.12.0 phase 5c has run a few times. Callers must treat
+    an empty result as "not measured yet", never as "no relationship".
+    """
+    out: Dict[str, Dict[str, float]] = {}
+    for path in glob.glob(os.path.join(reports_dir, "morning_report_*.json")):
+        m = re.search(r"(20\d\d-\d\d-\d\d)", os.path.basename(path))
+        if not m:
+            continue
+        try:
+            payload = json.load(open(path))
+        except Exception:                                         # noqa: BLE001
+            continue
+        # the brief exposes per-symbol strength under a couple of shapes; take
+        # whichever is present rather than assuming one and silently finding none
+        src = (payload.get("strength_by_sym") or payload.get("strength")
+               or payload.get("scores") or {})
+        if isinstance(src, dict):
+            out[m.group(1)] = {str(k).upper(): _f(v) for k, v in src.items()
+                               if _f(v) is not None}
+    return out
+
+
+def norm_reason(reason) -> str:
+    """exit_reason carries a ' pnl=...' suffix — strip it, or one reason
+    shatters into dozens of thin buckets. Matches excursion_report."""
+    r = (reason or "unknown").strip()
+    if r.startswith("hard_close"):
+        return "hard_close"
+    return r.split(" pnl=")[0].split(":")[0].strip() or "unknown"
+
+
+def _truthy(v) -> bool:
+    if isinstance(v, str):
+        return v.strip().lower() in ("1", "true", "yes", "t", "1.0")
+    return bool(v)
+
+
+def _f(v) -> Optional[float]:
+    try:
+        if v is None or v == "":
+            return None
+        return float(v)
+    except (TypeError, ValueError):
+        return None
+
+
+def _dt(v) -> Optional[datetime]:
+    if not v:
+        return None
+    try:
+        d = datetime.fromisoformat(str(v).replace("Z", "+00:00"))
+        return d if d.tzinfo else d.replace(tzinfo=timezone.utc)
+    except (TypeError, ValueError):
+        return None
+
+
+def to_et(v) -> Optional[datetime]:
+    d = _dt(v)
+    if d is None:
+        return None
+    return d.astimezone(_ET) if _ET else d - timedelta(hours=4)
+
+
+def hold_minutes(row) -> Optional[float]:
+    a, b = _dt(row.get("entry_time")), _dt(row.get("exit_time"))
+    if not a or not b:
+        return None
+    m = (b - a).total_seconds() / 60.0
+    return m if m >= 0 else None
+
+
+def session_phase(et: Optional[datetime]) -> str:
+    if et is None:
+        return "(unknown)"
+    m = et.hour * 60 + et.minute
+    if m < 10 * 60:
+        return "1 open 09:30-10:00"
+    if m < 11 * 60:
+        return "2 morning 10:00-11:00"
+    if m < 14 * 60:
+        return "3 midday 11:00-14:00"
+    if m < 15 * 60 + 30:
+        return "4 afternoon 14:00-15:30"
+    return "5 close 15:30-16:00"
+
+
+# ── loading ──────────────────────────────────────────────────────────────────
+def load_trades(since, mode, db=None):
+    """Closed trades from this box's trades.db (r119; mainline read S3 bundles).
+
+    -> (trades, by_day, raw_rows, voids). `voids` lists the trade_ids of rows
+    whose exit_reason starts "VOID" — fixtures or cancelled records that are
+    not trades. They are EXCLUDED and the caller prints how many, every run.
+    Read-only: the database is opened with mode=ro and never written.
+    """
+    import sqlite3
+    path = db or DEFAULT_DB
+    conn = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
+    conn.row_factory = sqlite3.Row
+    try:
+        rows = [dict(r) for r in conn.execute(
+            "SELECT * FROM trades WHERE status = 'closed' ORDER BY entry_time")]
+    finally:
+        conn.close()
+    if mode == "live":
+        rows = [r for r in rows if not _truthy(r.get("paper_trade"))]
+    elif mode == "paper":
+        rows = [r for r in rows if _truthy(r.get("paper_trade"))]
+    raw = len(rows)
+    voids = [str(r.get("trade_id")) for r in rows
+             if str(r.get("exit_reason") or "").upper().startswith("VOID")]
+    seen = {str(r.get("trade_id")): r for r in rows
+            if not str(r.get("exit_reason") or "").upper().startswith("VOID")}
+
+    trades = list(seen.values())
+    by_day: Dict[str, int] = defaultdict(int)
+    for r in trades:
+        et = to_et(r.get("entry_time"))
+        r["_date"] = et.strftime("%Y-%m-%d") if et else "(no date)"
+        r["_hour_et"] = f"{et.hour:02d}:00 ET" if et else "(unknown)"
+        r["_dow"] = _DOW[et.weekday()] if et else "(unknown)"
+        r["_phase"] = session_phase(et)
+        r["_hold"] = hold_minutes(r)
+        r["_sym"] = str(r.get("symbol") or r.get("box") or "(none)")
+        by_day[r["_date"]] += 1
+    if since:
+        trades = [r for r in trades if r["_date"] >= since]
+        by_day = {d: n for d, n in by_day.items() if d >= since}
+    return trades, sorted(by_day.items()), raw, voids
+
+
+# ── aggregation ──────────────────────────────────────────────────────────────
+def r_fences(trades: List[dict]):
+    """r157 — Tukey fences on modified R over the WHOLE book: (lo, hi) or None if < 4 priced."""
+    rs = [x for x in (modified_r(t) for t in trades) if x is not None]
+    if len(rs) < 4:
+        return None
+    q1, _q2, q3 = statistics.quantiles(rs, n=4, method="inclusive")
+    iqr = q3 - q1
+    return q1 - 1.5 * iqr, q3 + 1.5 * iqr
+
+
+def show_ev_trimmed(trades: List[dict], min_n: int = 8, key: str = "setup_type",
+                    width: int = 21) -> None:
+    """r157 — BY SETUP TYPE, EV R with statistical outliers (both tails) removed; a bucket under
+    min_n keeps every trade (operator: thin samples are all within the sample). <= 76 wide."""
+    fz = r_fences(trades)
+    if fz is None:
+        return
+    lo, hi = fz
+    groups: Dict[str, list] = defaultdict(list)
+    for t in trades:
+        r = modified_r(t)
+        if r is not None:
+            groups[str(t.get(key) or "(none)")].append((r, _f(t.get("pnl_usd")) or 0.0))
+    big = [g for g in groups.values() if len(g) >= min_n]
+    n_hi = sum(1 for g in big for r, _p in g if r > hi)
+    n_lo = sum(1 for g in big for r, _p in g if r < lo)
+    print("\nBY SETUP TYPE — EV R, OUTLIERS REMOVED (both tails)")
+    print(f"  fences R {lo:+.2f} .. {hi:+.2f} (1.5 IQR, whole book): "
+          f"{n_hi} high, {n_lo} low out")
+    print(f"  {'':<{width}}{'N':>4}{'OUT+':>5}{'OUT-':>5}{'EV R':>8}{'EV ex':>8}{'NET ex $':>11}")
+    rows = []
+    for k, g in groups.items():
+        thin = len(g) < min_n
+        kept = g if thin else [(r, p) for r, p in g if lo <= r <= hi]
+        ev_all = sum(r for r, _p in g) / len(g)
+        ev_ex = (sum(r for r, _p in kept) / len(kept)) if kept else None
+        oh = 0 if thin else sum(1 for r, _p in g if r > hi)
+        ol = 0 if thin else sum(1 for r, _p in g if r < lo)
+        rows.append((k, len(g), oh, ol, ev_all, ev_ex, sum(p for _r, p in kept), thin))
+    rows.sort(key=lambda x: (x[5] is None, -(x[5] or 0.0), -x[4]))
+    for k, n, oh, ol, ea, ee, ne, thin in rows:
+        ee_s = f"{'-':>8}" if ee is None else f"{ee:>+8.2f}"
+        print(f"  {k[:width]:<{width}}{n:>4}{oh:>5}{ol:>5}{ea:>+8.2f}{ee_s}{ne:>11.2f}")
+    print(f"  Setups under {min_n} trades are kept whole: nothing trimmed.")
+    if big and n_lo == 0:
+        print("  No LOW outliers: stops cap losses, so only big winners are trimmed.")
+
+
+def bucket(trades: List[dict], key: str) -> Dict[str, dict]:
+    agg: Dict[str, list] = defaultdict(list)
+    for t in trades:
+        if _f(t.get("pnl_usd")) is None:
+            continue
+        if key == "exit_reason":
+            k = norm_reason(t.get("exit_reason"))
+        elif key.startswith("_"):
+            k = t.get(key) or "(none)"
+        else:
+            k = t.get(key) or "(none)"
+        agg[str(k)].append(t)
+    return {k: stats_of(v) for k, v in agg.items()}
+
+
+# ── r311/r312 — THE FEE MODEL, VIA THE ONE BRIDGE ──────────────────────────
+# The path resolution and the None-safe wrapper were inlined here at r311 and
+# moved to `fees_bridge` at r312 when report 46 needed the identical two
+# things. One owner; a second copy of a path resolution is how two callers
+# come to disagree about where a module lives.
+# r119 — tests/fees.py sits beside this file: imported directly, no bridge.
+try:
+    import fees as _fees                                         # noqa: E402
+    FEES_ERR = None
+except Exception as _e:                                          # noqa: BLE001
+    _fees = None
+    FEES_ERR = f"{type(_e).__name__}: {_e}"
+
+
+def bucket_fees(rows: List[dict]):
+    """-> (total_fees_usd, n_unpriced), or (None, len(rows)) without the model.
+    ⚠️ None IS NOT ZERO. Callers render it as `n/a`."""
+    if _fees is None:
+        return None, len(rows)
+    roll = _fees.total_fees_usd(rows)
+    return roll["total_fees"], roll["unpriced"]
+
+
+def stats_of(rows: List[dict]) -> dict:
+    pnls = [_f(r.get("pnl_usd")) for r in rows]
+    pnls = [p for p in pnls if p is not None]
+    holds = [r["_hold"] for r in rows if r.get("_hold") is not None]
+    wins = [p for p in pnls if p > 0]
+    n = len(pnls)
+    return {
+        "n": n,
+        "wins": len(wins),
+        "losses": n - len(wins),
+        "win_rate": round(len(wins) / n, 4) if n else 0.0,
+        "net": round(sum(pnls), 2),
+        "avg": round(sum(pnls) / n, 2) if n else 0.0,
+        "median": round(statistics.median(pnls), 2) if pnls else 0.0,
+        "stdev": round(statistics.stdev(pnls), 2) if len(pnls) > 1 else 0.0,
+        "best": round(max(pnls), 2) if pnls else 0.0,
+        "worst": round(min(pnls), 2) if pnls else 0.0,
+        "gross_win": round(sum(wins), 2),
+        "gross_loss": round(sum(p for p in pnls if p <= 0), 2),
+        "median_hold_min": round(statistics.median(holds), 1) if holds else None,
+        # r294 — the modelled round-trip cost of THIS bucket, and how many of
+        # its rows the model could not price. Both travel together; a total
+        # that hides its unpriced count understates itself.
+        **dict(zip(("fees", "fees_unpriced"), bucket_fees(rows))),
+        # r155 — EXPECTANCY IN R, the mean of each trade's R on the stop it took.
+        **_ev_r(rows),
+    }
+
+
+def _ev_r(rows: List[dict]) -> dict:
+    """r155 — {'ev_r': mean modified R per trade or None, 'ev_r_unpriced': count}."""
+    rs = [modified_r(r) for r in rows if _f(r.get("pnl_usd")) is not None]
+    priced = [x for x in rs if x is not None]
+    return {"ev_r": round(sum(priced) / len(priced), 3) if priced else None,
+            "ev_r_unpriced": len(rs) - len(priced)}
+
+
+def cross(trades: List[dict], k1: str, k2: str) -> Dict[str, dict]:
+    agg: Dict[str, list] = defaultdict(list)
+    for t in trades:
+        if _f(t.get("pnl_usd")) is None:
+            continue
+        a = norm_reason(t.get(k1)) if k1 == "exit_reason" else (t.get(k1) or "(none)")
+        b = norm_reason(t.get(k2)) if k2 == "exit_reason" else (t.get(k2) or "(none)")
+        agg[f"{a} / {b}"].append(t)
+    return {k: stats_of(v) for k, v in agg.items()}
+
+
+def rank(d: Dict[str, dict], min_n: int, worst: bool = False):
+    """Best/worst by NET among buckets meeting the sample floor.
+
+    v1.5 — returns `n_elig` so the caller can refuse to say "worst" when the
+    word would be a lie. On 2026-08-04 only TWO buckets in one dimension cleared
+    the floor and BOTH were positive, so the report announced a
+    `worst ... net +1041.50` — the second-BEST bucket, on a
+    positive number, labelled worst. With one eligible bucket it printed the
+    SAME bucket as both best and worst (day_of_week: Tuesday twice). The ranking
+    was arithmetically correct and the sentence was false, which is the class of
+    output this repo keeps paying for.
+    """
+    elig = {k: v for k, v in d.items() if v["n"] >= min_n}
+    if not elig:
+        return None
+    k = (min if worst else max)(elig, key=lambda x: elig[x]["net"])
+    return {"key": k, "n_elig": len(elig), **elig[k]}
+
+
+def trade_extremes(trades: List[dict]) -> Tuple[Optional[dict], Optional[dict]]:
+    scored = [t for t in trades if _f(t.get("pnl_usd")) is not None]
+    if not scored:
+        return None, None
+    # ⚠️ THE RETIRED CLASSIFIER'S COLUMN IS GONE FROM THIS LIST (r204). otv4
+    # PHYSICALLY DROPPED it in r65, so reading it on a post-r65 row is
+    # not merely empty — the column does not exist, and a SELECT naming it
+    # RAISES. Carrying it here produced a column of Nones at best.
+    keys = ("trade_id", "_date", "_sym", "strategy", "setup_type", "setup_grade",
+            "pnl_usd", "exit_reason", "contracts", "entry_premium",
+            "exit_premium", "entry_time", "exit_time", "_hold")
+    def slim(t):
+        return {k: t.get(k) for k in keys}
+    return (slim(max(scored, key=lambda t: _f(t["pnl_usd"]))),
+            slim(min(scored, key=lambda t: _f(t["pnl_usd"]))))
+
+
+def exit_behaviour(trades: List[dict]) -> dict:
+    wh, lh, mfe, mae = [], [], [], []
+    for t in trades:
+        p = _f(t.get("pnl_usd"))
+        if p is None:
+            continue
+        h, e = t.get("_hold"), _f(t.get("entry_premium"))
+        mx, mn = _f(t.get("max_premium_seen")), _f(t.get("min_premium_seen"))
+        if p > 0:
+            if h is not None:
+                wh.append(h)
+            if e and mx:
+                mfe.append((mx - e) / e)
+        else:
+            if h is not None:
+                lh.append(h)
+            if e and mn:
+                mae.append((mn - e) / e)
+    med = lambda v: round(statistics.median(v), 4) if v else None   # noqa: E731
+    out = {
+        "winner_median_hold_min": round(statistics.median(wh), 1) if wh else None,
+        "loser_median_hold_min": round(statistics.median(lh), 1) if lh else None,
+        "winner_median_mfe_pct": med(mfe),
+        "loser_median_mae_pct": med(mae),
+        "n_winners": len(wh), "n_losers": len(lh),
+    }
+    if wh and lh and statistics.median(lh) > 0:
+        r = statistics.median(wh) / statistics.median(lh)
+        out["winner_loser_hold_ratio"] = round(r, 2)
+        out["flag_runners_cut_early"] = r < 1.2
+    # Sub-minute holds are not exit behaviour. The pre-v5.0 flicker
+    # closed positions in a median 0.8 min (p25 12 seconds); pooling those with
+    # real exits pulls both medians toward zero and makes the ratio a statement
+    # about a defect. Reported alongside, never substituted, never dropped.
+    sub = sum(1 for t in trades
+              if (t.get("_hold") is not None and t["_hold"] < 1.0))
+    n_held = len(wh) + len(lh)
+    out["sub_minute_rows"] = sub
+    out["sub_minute_share"] = round(sub / n_held, 3) if n_held else None
+    wh2 = [h for h in wh if h >= 1.0]
+    lh2 = [h for h in lh if h >= 1.0]
+    if wh2 and lh2 and statistics.median(lh2) > 0:
+        r2 = statistics.median(wh2) / statistics.median(lh2)
+        out["winner_loser_hold_ratio_ex_submin"] = round(r2, 2)
+        out["n_winners_ex_submin"] = len(wh2)
+        out["n_losers_ex_submin"] = len(lh2)
+    return out
+
+
+def exit_concentration(trades: List[dict], min_n: int) -> Dict[str, dict]:
+    """Per exit reason: how many sessions did it fire on, and how much of it
+    landed on its heaviest one? A reason that is 100% one date is a single-day
+    event wearing a cumulative label."""
+    by_reason: Dict[str, Dict[str, int]] = defaultdict(lambda: defaultdict(int))
+    # r158 — per reason, the median MFE / MAE as a fraction of entry premium (EXIT BEHAVIOUR's fields).
+    mfe: Dict[str, list] = defaultdict(list)
+    mae: Dict[str, list] = defaultdict(list)
+    pnl: Dict[str, list] = defaultdict(list)
+    mfe_d: Dict[str, list] = defaultdict(list)
+    mae_d: Dict[str, list] = defaultdict(list)
+    for t in trades:
+        reason = norm_reason(t.get("exit_reason"))
+        by_reason[reason][t.get("_date") or "(none)"] += 1
+        e = _f(t.get("entry_premium"))
+        mx, mn = _f(t.get("max_premium_seen")), _f(t.get("min_premium_seen"))
+        n = _f(t.get("contracts")) or 0
+        p = _f(t.get("pnl_usd"))
+        if p is not None:
+            pnl[reason].append(p)
+        if e and mx:
+            mfe[reason].append((mx - e) / e)
+            if n > 0:
+                mfe_d[reason].append((mx - e) * n * 100.0)     # r159 — dollars of open P&L
+        if e and mn:
+            mae[reason].append((mn - e) / e)
+            if n > 0:
+                mae_d[reason].append((mn - e) * n * 100.0)
+    _mean = lambda v: round(sum(v) / len(v), 2) if v else None          # noqa: E731
+    excursions = {r: {"mfe_med": round(statistics.median(mfe[r]), 4) if mfe[r] else None,
+                      "mae_med": round(statistics.median(mae[r]), 4) if mae[r] else None,
+                      "net": round(sum(pnl[r]), 2) if pnl[r] else None, "avg": _mean(pnl[r]),
+                      "mfe_usd": _mean(mfe_d[r]), "mae_usd": _mean(mae_d[r])}
+                  for r in set(mfe) | set(mae) | set(pnl)}
+    out = {}
+    for reason, dates in by_reason.items():
+        total = sum(dates.values())
+        top_date, top_n = max(dates.items(), key=lambda kv: kv[1])
+        out[reason] = {
+            "n": total, "sessions": len(dates), "top_date": top_date,
+            "top_n": top_n, "top_share": round(top_n / total, 3),
+            "single_session": (top_n / total) >= 0.80 and total >= min_n,
+            **excursions.get(reason, {"mfe_med": None, "mae_med": None, "net": None,
+                                      "avg": None, "mfe_usd": None, "mae_usd": None}),
+        }
+    return out
+
+
+# ── display ──────────────────────────────────────────────────────────────────
+def show_exit_dollars(conc: Dict[str, dict]) -> None:
+    """r159/r160 — EXIT REASON — DOLLARS rows, RANKED BY NET $ (best first; no P&L last; N breaks
+    ties): N, NET $, AVG $ exit P&L, mean MFE $ / MAE $ open P&L per trade. 67 wide + 1-DAY."""
+    print(f"  {'':<21}{'N':>4}{'NET $':>9}{'AVG $':>8}{'MFE $':>8}{'MAE $':>8}")
+    _usd = lambda v, w: f"{'-':>{w}}" if v is None else f"{v:>+{w}.0f}"   # noqa: E731
+    for reason, c in sorted(conc.items(), key=lambda kv: (kv[1].get("net") is None,
+                                                          -(kv[1].get("net") or 0.0), -kv[1]["n"])):
+        flag = "  1-DAY" if c["single_session"] else ""
+        print(f"  {reason[:21]:<21}{c['n']:>4}{_usd(c.get('net'), 9)}{_usd(c.get('avg'), 8)}"
+              f"{_usd(c.get('mfe_usd'), 8)}{_usd(c.get('mae_usd'), 8)}{flag}")
+    print(f"  Ranked by NET $. AVG $ = mean exit P&L per trade; MFE $ / MAE $ =\n"
+          f"  mean best / worst open P&L per trade. 1-DAY = >=80% on one date.")
+
+
+
+def show(title: str, d: Dict[str, dict], min_n: int, width: int = 21) -> None:
+    if not d:
+        return
+    print(f"\n{title}")
+    # r156 — 75 wide (2 + 21 + 4 + 5 + 10 + 9 + 8 + 6 + 9 + 1): the phone shows 76.
+    print(f"  {'':<{width}}{'N':>4}{'WIN%':>5}{'NET $':>10}{'AVG $':>9}{'EV R':>8}"
+          f"{'HOLD':>6}{'FEES $':>9}")
+    # r155 — SORTED BY EV R, best first (operator: "report 35 does not sort by EV"); a bucket with no
+    # priceable R sorts last, and NET breaks ties so the order is stable.
+    for k, a in sorted(d.items(), key=lambda kv: (kv[1].get("ev_r") is None,
+                                                   -(kv[1].get("ev_r") or 0.0), -kv[1]["net"])):
+        h = f"{a['median_hold_min']:>6.1f}" if a["median_hold_min"] is not None else "     -"
+        # 🔴 r294 — THE `<- thin` MARKER IS GONE AND THE FEES COLUMN TAKES ITS
+        # PLACE. Operator, 2026-09-07: *"the thin remark is useless. No shit
+        # it's thin — it's a week of trades."* He is right: at this sample size
+        # nearly every bucket trips it, so it marked the ordinary case and
+        # trained the eye to skip a column that then said nothing.
+        # ⚠️ THE MARKER GOES, THE THRESHOLD STAYS. `min_n` still gates `rank()`
+        # (best/worst refuse to name a bucket too thin to rank) and
+        # `exit_concentration`. Deleting the flag deletes a DISPLAY artifact,
+        # not a guard — those are different edits and conflating them is how a
+        # gate disappears inside a cosmetic change.
+        f = a.get("fees")
+        if f is None:
+            fee_s = f"{'n/a':>9}"
+        else:
+            # NEGATIVE, because it is a deduction. NET $ stays GROSS on
+            # purpose: it is the number every prior screenshot and every
+            # banked report carries, and changing its meaning under the same
+            # header would make this delivery's before/after incomparable.
+            fee_s = f"{-f:>9.2f}"
+        star = "*" if a.get("fees_unpriced") else " "
+        # r155 — EV R: expectancy in R per trade; `~` = some trades' risk unpriced.
+        ev = a.get("ev_r")
+        ev_s = f"{'-':>8}" if ev is None else (f"{ev:>+7.2f}" + ("~" if a.get("ev_r_unpriced") else " "))
+        print(f"  {k[:width]:<{width}}{a['n']:>4}{a['win_rate']:>5.0%}"
+              f"{a['net']:>10.2f}{a['avg']:>9.2f}{ev_s}{h}{fee_s}{star}")
+
+
+# ── r202 — THE TRADES THEMSELVES ──────────────────────────────────────────
+# 🔴 EVERY REPORT IN THIS SUITE AGGREGATES, AND NONE OF THEM LISTS A TRADE.
+# `trade_report` groups by strategy, symbol, setup type, exit reason, phase,
+# hour and weekday; `r_ledger` groups by R bucket; `fit_readiness` groups by
+# setup. On 2026-08-31 the operator asked what the fleet actually did and there
+# was no answer short of reading the bundle JSON by hand.
+# ⚠️ WIDTH IS THE CONSTRAINT, not taste. This is read over Termius on a phone,
+# so the row is 43 characters. Exit reason is deliberately ABSENT — it has its
+# own section below, and the operator ruled that symbol and contracts earn the
+# space instead.
+# 🔑 CONTRACTS IS NOT DECORATION. `SPX 6.95 -> 7.45` reads as a modest winner;
+# `x50` is what makes it $2,500 and what the r201 budget would clip to 7. A
+# per-trade view without size cannot answer the question it gets opened for.
+_STRAT_ABBR = {
+    "ORBStrategy": "ORB", "RunawayContinuation": "RUN",
+    "GEXPinButterfly": "BFLY", "SweepCreditSpread": "SWP",
+    "TrendCreditSpread": "TCS", "IronCondorStrategy": "CNDR",
+    "SweepReversal": "SWPR", "ContinuationStrategy": "CONT",
+    # r119 — this box's strategies, which mainline does not run
+    "Breakout": "BRK", "VOLT": "VOLT", "LiquidityHunt": "HUNT", "ATPButterfly": "ATP",
+}
+
+
+def _abbr(name: str) -> str:
+    """Short strategy tag. ⚠️ An UNKNOWN name is truncated, never dropped — a
+    blank column would silently hide a strategy nobody had added here."""
+    n = str(name or "?")
+    return _STRAT_ABBR.get(n, n[:4].upper())
+
+
+def rows_table(trades) -> None:
+    """One line per trade, entry order. 43 characters."""
+    if not trades:
+        print("\n  (no trades in this window)")
+        return
+    print(f"\nTRADES TAKEN  ({len(trades)})")
+    # ⚠️ dtp-r268 — THE DATE IS BACK, AND THE OLD NOTE WAS RIGHT UNTIL IT WAS
+    # NOT. It read "TIME ONLY, NOT THE DATE — the window is stated in the
+    # header, and a date on every row would spend 11 of the 43 characters
+    # repeating it." True of a single-session run; this report is routinely
+    # asked for five, and then every row's time is ambiguous. MM-DD, not the
+    # full date, spends 5 rather than 11.
+    # ⚠️ ENTRY/EXIT NARROW FROM 6 TO 5 AND PNL FROM 8 TO 7 to pay for it. No
+    # premium in the corpus reaches 100.00 and no trade reaches ±100,000, so
+    # nothing truncates; the line goes 45 -> 62, which still fits the widest
+    # table this report already prints (the exit-reason spread, 58).
+    print(f"  {'date':<5} {'time':<5} {'sym':<4} {'strat':<5} {'n':<3} "
+          f"{'entry':>5} {'exit':>5} {'pnl':>7} {'R':>6} {'risk':>5}")
+    for t in sorted(trades, key=lambda x: str(_dt(x.get("entry_time")) or "")):
+        _e = to_et(t.get("entry_time"))
+        # ⚠️ TIME ONLY, NOT THE DATE. The window is stated in the header, and a
+        # date on every row would spend 11 of the 43 characters repeating it.
+        hhmm = str(_e)[11:16] if _e and len(str(_e)) >= 16 else "  -  "
+        mmdd = str(_e)[5:10] if _e and len(str(_e)) >= 10 else "  -  "
+        _r = modified_r(t)
+        print(f"  {mmdd:<5} {hhmm:<5} {str(t.get('symbol') or '?')[:4]:<4} "
+              f"{_abbr(t.get('strategy')):<5} "
+              f"{int(_f(t.get('contracts')) or 0):<3} "
+              f"{_f(t.get('entry_premium')) or 0:>5.2f} "
+              f"{_f(t.get('exit_premium')) or 0:>5.2f} "
+              f"{_f(t.get('pnl_usd')) or 0:>7.0f} "
+              # ⚠️ THE BASIS LETTER IS NOT DECORATION. x = the stop named in
+              # this trade's own exit reason, s = the entry-time floor, m =
+              # max loss because neither was recorded. An R whose denominator
+              # came from a fallback must not read the same as one measured
+              # off the stop that actually fired.
+              f"{('   -  ' if _r is None else f'{_r:>+5.2f}')}{_r_basis(t)} "
+              f"{_money(risk_taken(t))}")
+
+
+def capital_at_risk(t) -> Optional[float]:
+    """Dollars that could have been lost on this trade, at its structure's max.
+
+    🔴 dtp-r268 — ONE DEFINITION, AND IT IS THE STRUCTURE'S MAX LOSS, NOT THE
+    STOP'S. A debit risks the premium paid; a credit vertical risks
+    `(width - credit)`. The stop is what we INTEND to lose and it is honoured
+    at 15-27% depending on the strategy, so measuring against it would report a
+    different denominator per exit reason and make the column incomparable
+    across strategies — the exact failure r234 fixed in the other direction for
+    the entry gate.
+    ⚠️ AND IT IS PRINTED BESIDE THE R VALUE ON PURPOSE. A ratio whose
+    denominator is not visible is a number nobody can check.
+    ⚠️ None WHEN UNPRICEABLE, never 0.0 — an unknown risk is not a free trade,
+    and a zero would render as an infinite R.
+    """
+    n = _f(t.get("contracts")) or 0
+    prem = _f(t.get("entry_premium"))
+    if n <= 0 or prem is None or prem <= 0:
+        return None
+    width = _f(t.get("spread_width")) or 0.0
+    if width > 0 and width > prem:
+        return (width - prem) * n * 100.0        # credit vertical
+    return prem * n * 100.0                      # debit
+
+
+# r155 — ANCHORED TO A STOP TOKEN. The bare `(\d+)%` also matched `pnl=30%`, so a winner closed as
+# `orb_trail_stop pnl=30%` was read as a 30% STOP: its risk became its own profit and it scored
+# exactly +1.00R (36 of this box's winners since 09-21 did), and a loser with `pnl=-12%` scored -1.00R.
+# The tokens that DO name a stop, measured on this box since 09-01: hard_stop_N%, premium_stop_N%, stop_N%.
+_STOP_PCT_RE = re.compile(r"stop_(\d{1,2}(?:\.\d+)?)\s*%")
+
+
+def stop_pct_from_exit(t) -> Optional[float]:
+    """The stop percentage the EXIT REASON names, e.g. `hard_stop_20%` -> 0.20.
+
+    🔴 dtp-r269 — THE STOP THAT ACTUALLY ENDED THE TRADE. Operator: compute R
+    on that, not on the entry-time floor and not on max loss. The exit reasons
+    already carry it — `hard_stop_20%`, `stop_25%`, `hard_stop_18%` — so this
+    is per-trade truth read off the row rather than a rate assumed from the
+    strategy name, and stops in this corpus run 15% to 27%.
+    ⚠️ ONLY STOPS. `target_hit`, `orb_trail_stop`, `hard_close` and
+    `nickel_close` carry no percentage and must not be given one; those trades
+    fall back to the recorded entry-time floor, which is the risk they were
+    OPENED with and the correct denominator for a winner.
+    """
+    m = _STOP_PCT_RE.search(str(t.get("exit_reason") or ""))
+    if not m:
+        return None
+    try:
+        pct = float(m.group(1)) / 100.0
+    except (TypeError, ValueError):
+        return None
+    return pct if 0 < pct < 1 else None
+
+
+def risk_taken(t) -> Optional[float]:
+    """Dollars the STOP put at risk — the operator's working definition.
+
+    🔴 dtp-r269 — MODIFIED R, AND IT REPLACES max-loss R AS THE HEADLINE.
+    Operator, 2026-09-04: *"as a trader I am aware that a $1,000 position for
+    me carries an actual $250 of risk."* `capital_at_risk` answers "what could
+    I have lost"; this answers "what did I actually put up", and the second is
+    the question a trader asks. The corpus agrees the stop is real: 47 of 60
+    losers land between -0.18 and -0.32 of max loss, which IS the stop firing.
+    ⚠️ THE RECORDED STOP, NOT A RATE. `stop_premium` is trade_logger's
+    "immutable entry-time floor", so it is per-trade truth rather than a
+    percentage assumed from the strategy name — stops run 15-27% and vary by
+    exit reason, and assuming one rate would rebuild the error this replaces.
+    ⚠️ FALLS BACK TO `capital_at_risk`, NOT TO A GUESS, and says so by
+    returning it: a row with no recorded stop reports its MAX LOSS, which is
+    conservative and never flattering. `_r_basis` marks which one was used.
+    """
+    n = _f(t.get("contracts")) or 0
+    entry = _f(t.get("entry_premium"))
+    if n <= 0 or entry is None or entry <= 0:
+        return None
+    # 🔴 FIRST CHOICE: the stop that ACTUALLY ended this trade, named in its own
+    # exit reason. Nothing is assumed and nothing is averaged.
+    pct = stop_pct_from_exit(t)
+    if pct is not None:
+        return entry * pct * n * 100.0
+    stop = _f(t.get("stop_premium"))
+    if stop is None or stop <= 0:
+        return capital_at_risk(t)
+    dist = abs(entry - stop)
+    if dist <= 0:
+        return capital_at_risk(t)
+    return dist * n * 100.0
+
+
+def _r_basis(t) -> str:
+    """Which denominator was used: x=exit stop, s=entry floor, m=max loss."""
+    if stop_pct_from_exit(t) is not None:
+        return "x"
+    stop = _f(t.get("stop_premium"))
+    entry = _f(t.get("entry_premium"))
+    if stop and entry and stop > 0 and abs(entry - stop) > 0:
+        return "s"
+    return "m"
+
+
+def modified_r(t) -> Optional[float]:
+    """P&L as a multiple of the risk the STOP took. The headline R."""
+    rt = risk_taken(t)
+    pnl = _f(t.get("pnl_usd"))
+    if rt is None or rt <= 0 or pnl is None:
+        return None
+    return pnl / rt
+
+
+def r_value(t) -> Optional[float]:
+    """Realised P&L as a multiple of the capital that was at risk."""
+    car = capital_at_risk(t)
+    pnl = _f(t.get("pnl_usd"))
+    if car is None or car <= 0 or pnl is None:
+        return None
+    return pnl / car
+
+
+def _money(v) -> str:
+    """Compact dollars: 675, 7.4k, 34.8k — five characters, always."""
+    if v is None:
+        return "    -"
+    return f"{v/1000:>4.1f}k" if abs(v) >= 1000 else f"{v:>5.0f}"
+
+
+def main(argv: List[str]) -> int:
+    ap = argparse.ArgumentParser(description="cross-day trade breakdown")
+    ap.add_argument("--since", help="only sessions on/after YYYY-MM-DD")
+    ap.add_argument("--min-n", type=int, default=8,
+                    help="thin-bucket flag AND best/worst sample floor (default 8)")
+    ap.add_argument("--no-json", action="store_true", help="display only")
+    ap.add_argument("--rows", action="store_true",
+                    help="list every trade, one line each, before the "
+                         "aggregates (43 chars wide)")
+    ap.add_argument("--rows-only", action="store_true",
+                    help="the trade list and nothing else")
+    ap.add_argument("--out", default=None,
+                    help="write the JSON here instead of the stamped default")
+    ap.add_argument("--db", default=None,
+                    help=f"trades database, read-only (default {DEFAULT_DB})")
+    ap.add_argument("--all-history", action="store_true",
+                    help=f"drop the {ENGINE_EPOCH} engine epoch and pool every "
+                         f"session, INCLUDING pre-v4 records")
+    g = ap.add_mutually_exclusive_group()
+    g.add_argument("--live", action="store_true")
+    g.add_argument("--paper", action="store_true")
+    args = ap.parse_args(argv[1:])
+    mode = "live" if args.live else ("paper" if args.paper else "all")
+
+    src_dir = args.db or DEFAULT_DB
+    # ⚠️ THE FLOOR IS RESOLVED HERE AND PRINTED, NEVER APPLIED QUIETLY.
+    if args.all_history:
+        since, floor_note = args.since, "NO EPOCH FLOOR (--all-history)"
+    elif args.since:
+        since = args.since
+        floor_note = (f"--since {args.since}" +
+                      ("   🔴 EARLIER THAN THE ENGINE EPOCH " + ENGINE_EPOCH +
+                       " — THIS POOL MIXES v3 AND v4 RECORDS"
+                       if args.since < ENGINE_EPOCH else ""))
+    else:
+        since, floor_note = ENGINE_EPOCH, f"engine epoch {ENGINE_EPOCH} (default)"
+
+    if not os.path.exists(src_dir):
+        print(f"SOURCE: {src_dir} — 🔴 PATH DOES NOT EXIST (a tool fault, not an empty book)")
+        return 1
+    trades, used, raw, voids = load_trades(since, None if mode == "all" else mode,
+                                           db=src_dir)
+    # How much the floor removed, so the filter is visible rather than inferred.
+    _all, _allday, _, _ = load_trades(None, None if mode == "all" else mode,
+                                      db=src_dir)
+    dropped = len(_all) - len(trades)
+
+    print(f"SOURCE: {src_dir} (read-only)")
+    print(f"WINDOW: {floor_note}")
+    if dropped:
+        # 🔴 SAY IT EVERY RUN. A filter you cannot see is how you end up
+        # arguing about a number that was never in the sample.
+        print(f"        {dropped} closed trade(s) EXCLUDED as pre-epoch "
+              f"(--all-history adds them)")
+    if not trades:
+        if _all:
+            print(f"No closed trades on/after {since} in {src_dir} — but "
+                  f"{len(_all)} exist before it. Pre-epoch data only.")
+        else:
+            print(f"No closed trades found in {src_dir}")
+        return 2
+
+    print(f"{raw} closed row(s) -> {len(trades)} trade(s)")
+    if voids:
+        # 🔴 SAY IT EVERY RUN (r119): a VOID row is a fixture or a cancelled
+        # record, not a trade, and it read as one before the port excluded it.
+        print(f"        {len(voids)} VOID row(s) EXCLUDED: {', '.join(voids[:6])}"
+              + (" ..." if len(voids) > 6 else ""))
+    print(f"{len(used)} session(s), dated from entry_time:")
+    for d, n in used:
+        print(f"   {d}   {n:>5} closed trades")
+
+    # ── sentiment stamp (v1.3) ──────────────────────────────────────────────
+    sentiment = load_sentiment(REPORTS_DIR)
+    n_scored = 0
+    for t in trades:
+        sc = sentiment.get(t.get("_date") or "", {}).get(str(t.get("_sym", "")).upper())
+        t["_sentiment"] = sentiment_band(sc)
+        t["_sentiment_raw"] = sc
+        if sc is not None:
+            n_scored += 1
+
+    dims = {
+        "by_strategy":      bucket(trades, "strategy"),
+        "by_setup_type":    bucket(trades, "setup_type"),
+        "by_exit_reason":   bucket(trades, "exit_reason"),
+        "by_symbol":        bucket(trades, "_sym"),
+        "by_hour_et":       bucket(trades, "_hour_et"),
+        "by_day_of_week":   bucket(trades, "_dow"),
+        "by_session_phase": bucket(trades, "_phase"),
+        "by_session_date":  bucket(trades, "_date"),
+        "by_sentiment":     bucket(trades, "_sentiment"),
+    }
+    crosses = {
+        "symbol_x_strategy": cross(trades, "_sym", "strategy"),
+        "phase_x_strategy":  cross(trades, "_phase", "strategy"),
+        # THE cross for the operator's question: does a bullish morning help
+        # longs and hurt shorts? sentiment x strategy would not test that.
+        "sentiment_x_direction": cross(trades, "_sentiment", "direction"),
+        # Is an exit reason a standing pattern or one session? Marginals cannot say.
+        "exit_x_date": cross(trades, "exit_reason", "_date"),
+    }
+    overall = stats_of(trades)
+
+    # v1.3 — say how much sentiment data actually exists BEFORE any bucket is
+    # ranked. Archiving began 2026-08-03 and brief_strength was a constant 0.30
+    # before 2026-07-30, so for weeks the honest answer is "not measured yet" and
+    # a ranked table over a handful of trades would read as a finding.
+    if not sentiment:
+        print("\nSENTIMENT: not archived here (no morning reports) — "
+              "absent, not null.")
+    else:
+        pct = 100.0 * n_scored / max(len(trades), 1)
+        print(f"\nSENTIMENT: {len(sentiment)} archived report(s); "
+              f"{n_scored}/{len(trades)} trades carry a score ({pct:.0f}%).")
+        if n_scored < 200:
+            print("  THIN — brief_strength was a constant 0.30 for every name "
+                  "until 2026-07-30 and\n  archiving began 2026-08-03. Expect this "
+                  "to become readable around 2026-09-05.\n  Read sentiment_x_direction "
+                  "as provisional until then.")
+    best_t, worst_t = trade_extremes(trades)
+
+    findings = {"min_n_applied": args.min_n}
+    for label, d in [("strategy", dims["by_strategy"]),
+                     ("setup_type", dims["by_setup_type"]),
+                     ("exit_reason", dims["by_exit_reason"]),
+                     ("symbol", dims["by_symbol"]), ("hour_et", dims["by_hour_et"]),
+                     ("day_of_week", dims["by_day_of_week"]),
+                     ("session_phase", dims["by_session_phase"]),
+                     ("session_date", dims["by_session_date"]),
+                     ("symbol_x_strategy", crosses["symbol_x_strategy"])]:
+        findings[f"best_{label}"] = rank(d, args.min_n)
+        findings[f"worst_{label}"] = rank(d, args.min_n, worst=True)
+    findings["best_trade"] = best_t
+    findings["worst_trade"] = worst_t
+
+    print("\n" + "=" * 74)
+    print(f"TRADE BREAKDOWN — {overall['n']} closed trades [{mode.upper()}]")
+    print("=" * 74)
+    print(f"  net {overall['net']:+.2f}  win {overall['win_rate']:.0%}  "
+          f"avg {overall['avg']:+.2f}  best {overall['best']:+.2f}  "
+          f"worst {overall['worst']:+.2f}")
+    if overall["median_hold_min"] is not None:
+        print(f"  median hold {overall['median_hold_min']} min")
+    # 🔴 dtp-r268 — R IN THE ROLL-UP. Net dollars alone cannot say whether the
+    # book was efficient with the capital it committed: SPX's +12,453 came off
+    # 21 trades that risked ~$35k apiece, and the runaway's +15,721 came off
+    # 202 that risked a few thousand. Same dollars, very different use.
+    # ⚠️ TWO NUMBERS, DELIBERATELY. AGGREGATE R is total P&L over total capital
+    # at risk — what the BOOK returned. MEDIAN R is the typical TRADE. They
+    # diverge when a few large-risk trades carry the total, which is exactly
+    # the case worth seeing, and reporting only one would hide it.
+    # 🔴 dtp-r269 — MODIFIED R LEADS. Operator, 2026-09-04: *"a $1,000 position
+    # for me carries an actual $250 of risk"*, computed on the stop that
+    # ACTUALLY ended the trade. Max-loss R stays on the second line because it
+    # is the honest worst case, and the two together say something neither says
+    # alone: when modified R is far better than max-loss R the stops are doing
+    # their job, and when a STOPPED trade's modified R is worse than -1.00 the
+    # stop OVERSHOT — that gap is slippage, and it is largest on the cheapest
+    # options (NVDA at $0.06 stopped at -2.08).
+    _pnl = sum(_f(t.get("pnl_usd")) or 0 for t in trades)
+    _mrs = [r for r in (modified_r(t) for t in trades) if r is not None]
+    _rt = [x for x in (risk_taken(t) for t in trades) if x]
+    if _mrs and _rt:
+        _bas = {}
+        for _t in trades:
+            _bas[_r_basis(_t)] = _bas.get(_r_basis(_t), 0) + 1
+        print(f"  R {_pnl/sum(_rt):+.3f} on the stop taken · median "
+              f"{statistics.median(_mrs):+.3f} · risked {_money(sum(_rt)).strip()} · n={len(_mrs)}")
+        # ⚠️ THE BASIS MIX IS PART OF THE NUMBER. An aggregate built mostly on
+        # max-loss fallbacks is not the same measurement as one built on real
+        # stops, and printing it without saying so is how the last version of
+        # this line misled.
+        print(f"    basis: {_bas.get('x',0)} exit stop / {_bas.get('s',0)} entry "
+              f"floor / {_bas.get('m',0)} max loss (no stop)")
+    _rs = [r for r in (r_value(t) for t in trades) if r is not None]
+    _car = [c for c in (capital_at_risk(t) for t in trades) if c]
+    if _rs and _car:
+        print(f"  R {_pnl/sum(_car):+.3f} vs MAX LOSS · median "
+              f"{statistics.median(_rs):+.3f} · risked {_money(sum(_car)).strip()} (worst case)")
+
+    # r202 — the rows come FIRST. The aggregates answer "how did the
+    # strategies do"; the list answers "what did it actually take", which is
+    # the question somebody opening this on a phone is usually asking.
+    if args.rows or args.rows_only:
+        rows_table(trades)
+    if args.rows_only:
+        return 0
+
+    show("BY STRATEGY", dims["by_strategy"], args.min_n)
+    show("BY SYMBOL", dims["by_symbol"], args.min_n)
+    show("BY SETUP TYPE", dims["by_setup_type"], args.min_n)
+    show_ev_trimmed(trades, args.min_n)        # r157 — the same setups, outliers removed
+    # v1.9 — the dimension is gone; the FACT is stated once. An absent
+    # section with no explanation reads as an oversight and gets re-added.
+    print("\n  (no BY SETUP GRADE section: every v4 row is UNGRADED by\n   construction — r152 deleted the scorer, which had selected losers.)")
+    show("BY EXIT REASON", dims["by_exit_reason"], args.min_n)
+    show("BY SESSION PHASE (ET)", dims["by_session_phase"], args.min_n)
+    show("BY HOUR (ET)", dims["by_hour_et"], args.min_n)
+    show("BY DAY OF WEEK", dims["by_day_of_week"], args.min_n)
+
+    conc = exit_concentration(trades, args.min_n)
+    print("\nEXIT REASON — DOLLARS")
+    show_exit_dollars(conc)                    # r160 — ranked by NET $
+
+    eb = exit_behaviour(trades)
+    print("\nEXIT BEHAVIOUR")
+    print(f"  winners n={eb['n_winners']:<5} median hold "
+          f"{eb['winner_median_hold_min']} min   MFE {eb['winner_median_mfe_pct']}")
+    print(f"  losers  n={eb['n_losers']:<5} median hold "
+          f"{eb['loser_median_hold_min']} min   MAE {eb['loser_median_mae_pct']}")
+    sub_share = eb.get("sub_minute_share")
+    if sub_share is not None:
+        print(f"  sub-minute holds {eb['sub_minute_rows']} ({sub_share:.0%}) — "
+              f"ratio {eb.get('winner_loser_hold_ratio')} all rows, "
+              f"{eb.get('winner_loser_hold_ratio_ex_submin')} excluding them")
+    if eb.get("flag_runners_cut_early"):
+        if sub_share is not None and sub_share > 0.10:
+            print("  NOTE hold ratio is under 1.2, but sub-minute rows are "
+                  f"{sub_share:.0%} of the sample —")
+            print("       that ratio is measuring those exits, not the leashes. "
+                  "Verdict WITHHELD.")
+        else:
+            print("  NOTE winners are not held meaningfully longer than losers —")
+            print("       exits may be cutting runners as fast as mistakes.")
+
+    print("\nHEADLINE")
+    for lab in ("strategy", "symbol", "session_phase", "day_of_week"):
+        b, w = findings.get(f"best_{lab}"), findings.get(f"worst_{lab}")
+        if b:
+            print(f"  best {lab:<14} {b['key'][:20]:<20}{b['net']:>+10.2f} (n={b['n']})")
+        # v1.5 — "worst" is only a word worth printing when there is something
+        # to be worst THAN, and when it is not simply the lowest of several
+        # winners. One eligible bucket prints itself as both; all-positive
+        # eligibles make "worst" read as a loss that did not happen.
+        if w:
+            n_elig = w.get("n_elig", 2)
+            if n_elig < 2:
+                print(f"  worst {lab:<13} — 1 bucket cleared n>={args.min_n}: same as best")
+            else:
+                lowest = w["net"] < 0
+                tag = "" if lowest else f" of {n_elig}, no loss"
+                print(f"  worst {lab:<13} {w['key'][:20]:<20}"
+                      f"{w['net']:>+10.2f} (n={w['n']}){tag}")
+
+    if not args.no_json:
+        payload = {
+            "generated_utc": datetime.now(timezone.utc).isoformat(),
+            "scope": {"mode": mode, "since": args.since,
+                      "sessions": [d for d, _ in used],
+                      "first_session": used[0][0] if used else None,
+                      "last_session": used[-1][0] if used else None},
+            "rows": {"closed_rows": raw, "trades": len(trades), "void_excluded": voids},
+            "overall": overall,
+            "findings": findings,
+            "dimensions": dims,
+            "crosses": crosses,
+            "exit_behaviour": eb,
+            "exit_concentration": conc,
+        }
+        os.makedirs(REPORTS_DIR, exist_ok=True)
+        stamp = used[-1][0] if used else (datetime.now(_ET).date().isoformat()
+                                          if _ET else datetime.now(timezone.utc).date().isoformat())
+        tag = ""
+        payload["source"] = "trades.db:" + src_dir
+        payload["engine_epoch"] = None if args.all_history else since
+        payload["pre_epoch_excluded"] = dropped
+        out = (args.out if args.out
+               else os.path.join(REPORTS_DIR, f"trade_report_{tag}{stamp}.json"))
+        os.makedirs(os.path.dirname(os.path.abspath(out)), exist_ok=True)
+        tmp = out + ".tmp"
+        with open(tmp, "w") as fh:
+            json.dump(payload, fh, indent=2, default=str)
+        os.replace(tmp, out)
+        print(f"\nwrote {out}")
+
+    print(f"\nBY tables sort by EV R: R per trade on the stop taken (NET breaks ties;"
+          f"\n`~` = some risk unpriced). HEADLINE ranks by NET, ignoring buckets"
+          f"\nunder {args.min_n} trades.")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))
