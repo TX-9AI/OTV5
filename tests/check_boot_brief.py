@@ -1,6 +1,11 @@
 #!/usr/bin/env python3
 """
-tests/check_boot_brief.py  v1.2
+tests/check_boot_brief.py  v1.3
+v1.3  2026-10-25  OTV5 r6 (BOOT.9) — RE-POINTED, NOT DROPPED (WA §38.4): B6/B7 pin the OTV5 daily brief. B6: still symbol
+      agnostic with BOX IDENTITY and the operator's boot order, and now the observe-only role ("NO TRADING DECISIONS",
+      "## WHO OWNS WHAT", 1-REPORTER the custodian) and the push rule as the operator's switch (OT_S3_PUSH=0 named as
+      the standalone guard); the predecessor's "NO TEST BOX PUSHES" and its QQQ-TEST-as-controller lines must be ABSENT.
+      B7: the awake announcement is still the LAST step, and every code fix goes through 1-REPORTER.
 v1.2  2026-10-04  OTV4TEST r233 — B7: the wake announcement is the LAST boot step and every code fix goes through
       QQQ-TEST; B8: deploy/claude-user-settings-pull-only.json denies git push and the lander, and grants nothing
       QQQ-TEST alone holds (the lander, the wake tool), and keeps the hook, the model and the S3 hard deny.
@@ -14,9 +19,11 @@ v1.0  2026-10-03  OTV4TEST r231 (BOOT.7) — A BOX CAN BOOT FROM ITS OWN BRIEF.
   B3  a missing file, a file outside docs/, a non-.md -> HANDOFF.md, said on stderr
   B4  the first-boot marker still wins over OT_BRIEF
   B5  the installer writes OT_BRIEF into the unit only when it is set
-  B6  docs/HANDOFF.md is SYMBOL AGNOSTIC: no "You exist on QQQ-TEST"; it has BOX IDENTITY, the no-push rule, the boot order
-  B7  the boot order ends with the awake announcement, after the sweep / alert watch / box safety; fixes go through QQQ-TEST
+  B6  docs/HANDOFF.md is SYMBOL AGNOSTIC and OBSERVE-ONLY: BOX IDENTITY, WHO OWNS WHAT (1-REPORTER custody, no trading
+      decisions), the push as the operator's switch, the boot order; no predecessor controller or no-push lines
+  B7  the boot order ends with the awake announcement, after the sweep / alert watch / box safety; fixes go through 1-REPORTER
   B8  the pull-only user settings: push and the lander denied, no QQQ-TEST-only grant, hook/model/S3 hard deny kept
+  B9  no action on the box: service control, pulls, configure.sh and broker-credential tools denied, none allowed (OTV5 r6)
 Fresh interpreter per case. Run: python3 tests/check_boot_brief.py
 """
 import json, os, subprocess, sys, tempfile
@@ -62,18 +69,20 @@ def main():
         src = open(os.path.join(_root, "deploy", "install_claude_boot.sh")).read()
         check("B5 the installer carries OT_BRIEF only when set", "${OT_BRIEF:+Environment=OT_BRIEF=$OT_BRIEF}" in src)
         h = open(os.path.join(_root, "docs", "HANDOFF.md")).read()
-        check("B6 HANDOFF.md is symbol agnostic: identity read at boot, no-push rule, his boot order",
-              "You exist on QQQ-TEST" not in h and "## BOX IDENTITY" in h and "NO TEST BOX PUSHES" in h
-              and "OT_S3_PUSH=0" in h and "tell me it's mandate, then notify you that it's awake" in h)
+        check("B6 HANDOFF.md is symbol agnostic and observe-only: identity read at boot, the push switch, the operator's boot order, 1-REPORTER custody",
+              "You exist on QQQ-TEST" not in h and "## BOX IDENTITY" in h and "NO TEST BOX PUSHES" not in h
+              and "OT_S3_PUSH=0" in h and "tell me it's mandate, then notify you that it's awake" in h
+              and "## WHO OWNS WHAT" in h and "NO TRADING DECISIONS" in h and "custodian of OTV5 is 1-REPORTER" in h
+              and "QQQ-TEST is the one box that lands" not in h and "GENESIS-TEST" not in h)
         import re
         steps = re.findall(r"^(\d)\. (.*)$", h.split("## EVERY BOOT", 1)[1].split("FIRST, CATCH UP", 1)[0], re.M)
         last = steps[-1] if steps else ("", "")
         sweep_i = [i for i, (_, t) in enumerate(steps) if "sweep" in t and "alert watch" in t and "box-safety" in t]
-        check("B7 the awake announcement is the LAST boot step, after the sweep/alert watch/box safety; fixes go through QQQ-TEST",
+        check("B7 the awake announcement is the LAST boot step, after the sweep/alert watch/box safety; fixes go through 1-REPORTER",
               "announce that you are awake" in last[1] and "only after steps 1-" in last[1]
               and sweep_i and sweep_i[0] == len(steps) - 2
               and not any("awake" in t for _, t in steps[:-1])
-              and "EVERY code fix MUST go through it" in h, str(steps))
+              and "EVERY code fix MUST go through 1-REPORTER" in h, str(steps))
         sp = os.path.join(_root, "deploy", "claude-user-settings-pull-only.json")
         raw = open(sp).read()
         u = json.loads(raw)
@@ -89,6 +98,20 @@ def main():
               and "UserPromptSubmit" in u.get("hooks", {}) and u.get("model") and u.get("remoteControlAtStartup") is True
               and pm.get("defaultMode") == "auto"
               and not secret.search(raw) and "parked_r110" not in raw)
+        # B9 (v1.3, OTV5 r6) — NO ACTION ON THE BOX: the operator, 2026-10-25, "a trading box under your control will
+        # not be making repo decisions or trading decisions". Nothing that starts, stops or restarts a service, pulls,
+        # runs configure.sh or runs a tool under the bot's broker credentials may be allowed or merely asked; each is DENIED.
+        _deny = set(pm["deny"])
+        _need = {"Bash(sudo systemctl start *)", "Bash(sudo systemctl stop *)", "Bash(sudo systemctl restart *)",
+                 "Bash(sudo systemctl enable *)", "Bash(sudo systemctl disable *)", "Bash(git pull*)",
+                 "Bash(bash configure.sh*)", "Bash(./configure.sh*)", "Bash(*run_with_bot_env.py*)"}
+        _loose = [a for a in pm["allow"] + pm.get("ask", [])
+                  if "systemctl start" in a or "systemctl stop" in a or "systemctl restart" in a or "daemon-reload" in a
+                  or "run_with_bot_env" in a or "git pull" in a or "configure.sh" in a]
+        _am = [a for a in u["autoMode"]["allow"] if "38.2 GRANTED" in a or "the bake on this box" in a]
+        check("B9 no action on the box: service starts/stops/restarts, pulls, configure.sh and broker-credential tools DENIED, none allowed",
+              _need <= _deny and not _loose and not _am and any("NO TRADING DECISIONS" in x for x in u["autoMode"]["hard_deny"]),
+              f"missing deny {sorted(_need - _deny)}; loose {_loose}; auto-allow {[x[:40] for x in _am]}")
     except Exception as exc:  # noqa: BLE001
         check("B0 (did not run)", False, f"{type(exc).__name__}: {exc}")
     if FAILED:

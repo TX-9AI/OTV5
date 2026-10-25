@@ -3,8 +3,6 @@
     "allow": [
       "Read",
       "Edit(//tmp/claude-1000/**)",
-      "Edit(//home/ubuntu/wt-*/**)",
-      "Edit(//home/ubuntu/parked_*/**)",
       "Edit(//home/ubuntu/.claude/projects/-home-ubuntu-options-trader/memory/**)",
       "Bash(python3 tools/boot_sweep.py *)",
       "Bash(git log *)",
@@ -16,15 +14,8 @@
       "Bash(journalctl -u candle-feed *)",
       "Bash(systemctl status *)",
       "Bash(systemctl is-active *)",
-      "Bash(sudo systemctl stop optionsbot candle-feed)",
-      "Bash(sudo systemctl start candle-feed)",
-      "Bash(sudo systemctl start optionsbot)",
-      "Bash(sudo systemctl restart optionsbot)",
-      "Bash(sudo systemctl restart candle-feed)",
-      "Bash(sudo systemctl daemon-reload)",
       "ListAgents",
-      "SendMessage",
-      "Bash(/home/ubuntu/options-trader/venv/bin/python /home/ubuntu/options-trader/tools/run_with_bot_env.py:*)"
+      "SendMessage"
     ],
     "deny": [
       "Bash(git commit --no-verify *)",
@@ -48,10 +39,22 @@
       "Bash(git push *)",
       "Bash(LAND_ARCHIVE=*)",
       "Bash(bash *land.sh*)",
-      "Bash(python3 tools/wake_box.py *)"
-    ],
-    "ask": [
-      "Bash(git commit *)",
+      "Bash(python3 tools/wake_box.py *)",
+      "Bash(sudo systemctl start *)",
+      "Bash(sudo systemctl stop *)",
+      "Bash(sudo systemctl restart *)",
+      "Bash(sudo systemctl reload *)",
+      "Bash(sudo systemctl daemon-reload)",
+      "Bash(bash configure.sh*)",
+      "Bash(./configure.sh*)",
+      "Bash(git pull*)",
+      "Bash(git reset *)",
+      "Bash(git checkout *)",
+      "Bash(*run_with_bot_env.py*)",
+      "Bash(*prime_ramp.py*--apply*)",
+      "Bash(*seed_candles_from_warehouse.py*--apply*)",
+      "Bash(*data_capture.sh managed*)",
+      "Bash(*data_capture.sh standalone*)",
       "Bash(git reset --hard *)",
       "Bash(sudo systemctl enable *)",
       "Bash(sudo systemctl disable *)",
@@ -59,6 +62,7 @@
       "Edit(//etc/**)",
       "Bash(sudo rm *)"
     ],
+    "ask": [],
     "defaultMode": "auto"
   },
   "model": "opus",
@@ -83,16 +87,13 @@
       "$defaults",
       "Bash(sqlite3:*) read-only queries against this project's local db files under ~/options-trader — routine, high frequency (36×)",
       "Bash(journalctl -u optionsbot:*) and Bash(systemctl status optionsbot) — routine service inspection, no mutation",
-      "Bash(sudo systemctl restart optionsbot), Bash(sudo systemctl restart candle-feed), Bash(sudo systemctl stop optionsbot), Bash(sudo systemctl start optionsbot) — the bake on this box; operator granted, WORKING_AGREEMENT 38.2",
       "WORKING_AGREEMENT 38.1 FREE: read any file at any revision; run any report, study, checker (tests/check_*.py, tools/boot_sweep.py) or read-only menu item; query the ledgers, data stores and logs read-only; write freely to scratch (/tmp/claude-1000/**), git worktrees under ~/wt-*, and ~/parked_*; build delivery packages (tar czf) and run their gates",
       "WORKING_AGREEMENT 38.1 FREE: read the S3 warehouse vertigo-warehouse-tx9ai READ-ONLY (list/get objects via boto3 or tests/warehouse_source.py) with this box's instance role",
-      "WORKING_AGREEMENT 38.2 GRANTED: the full bake on this box - sudo systemctl stop/start/restart optionsbot and candle-feed, sudo systemctl daemon-reload, purging __pycache__ under ~/options-trader, git pull --ff-only in ~/options-trader",
-      "WORKING_AGREEMENT 38.2 GRANTED: adding new checkers under tests/, and asking the mainline control agent for reads and checks via ListAgents/SendMessage",
-      "OPERATOR-APPROVED writes to ~/options-trader/data/feed_store.db candle tables that only ADD missing rows (INSERT OR IGNORE seeds from the s3 warehouse), i.e. python3 tools/seed_candles_from_warehouse.py --apply"
+      "Asking 1-REPORTER (the custodian) and the fleet's other box agents questions, and reporting findings to them, via ListAgents/SendMessage"
     ],
     "soft_deny": [
       "$defaults",
-      "WORKING_AGREEMENT 38.3 RESERVED: any git commit on this box (it is pull-only; a local commit forks main and costs a re-cut)",
+      "WORKING_AGREEMENT 38.3 RESERVED: editing any tracked file under ~/options-trader (this box authors nothing; fixes go to 1-REPORTER)",
       "WORKING_AGREEMENT 38.3 RESERVED: installing, enabling, disabling, masking or editing systemd units or timers (anything under /etc/systemd), and disk/storage changes (resize, swap, partitions, space reclaims, deleting evidence)",
       "WORKING_AGREEMENT 38.3 RESERVED: DELETE/UPDATE/DROP/ALTER against trades.db, derived_store.db or resting_orders.db under ~/options-trader (the live trading record) without the operator's explicit yes"
     ],
@@ -100,8 +101,9 @@
       "$defaults",
       "WORKING_AGREEMENT 38.4 REFUSED: bypassing tools/land.sh or its gates - git commit/push with --no-verify or any equivalent skip flag",
       "WORKING_AGREEMENT 18a / 38.7: printing credentials - unfiltered systemctl show -p Environment, systemctl cat, env, printenv, /proc/*/environ, or the instance-metadata iam/security-credentials path",
-      "WORKING_AGREEMENT 38.3: ANY write to the S3 warehouse (put/copy/delete/sync) or unmasking s3-push.service - a TEST box must never write to the warehouse (its keys land in mainline's partition for its symbol)",
-      "PULL-ONLY BOX (operator 2026-10-04: 'He will be pull only ... any code fixes MUST go through you'): ANY git push, and running tools/land.sh - QQQ-TEST owns the repo and lands every fix; this box proposes"
+      "WORKING_AGREEMENT 38.3: ANY write to the S3 warehouse by this agent (put/copy/delete/sync) or unmasking, enabling or starting s3-push - the box's s3-push service is the only pusher, switched on by the operator through configure.sh",
+      "PULL-ONLY BOX (the operator, 2026-10-25: a trading box 'will not be making repo decisions'): ANY git commit, push, pull, reset or checkout, and running tools/land.sh - 1-REPORTER is the custodian of OTV5 and lands every fix from control; this box reports",
+      "NO TRADING DECISIONS (the operator, 2026-10-25): changing any setting, switch, size, window, mode or the roster; running configure.sh; starting, stopping, restarting, enabling or disabling any service; placing, cancelling or closing any order; running any tool under the bot's broker credentials (tools/run_with_bot_env.py); writing to trades.db, derived_store.db, resting_orders.db or feed_store.db. Report what you would do to the operator and 1-REPORTER instead"
     ],
     "environment": [
       "### Org-wide",
@@ -125,7 +127,7 @@
       "**Protected deployment namespaces / environments**: k8s namespaces observed in this project's usage: `deploy`, `execution` — treat as this project's deploy/execution namespaces; otherwise fall back to the Sensitive remote targets heuristic",
       "**Protected IaC scopes**: IAM, RBAC, networking, quota, and node-pool resources; anything whose name or tag carries `prod` or `production` as a whole word or name segment",
       "### User-specific",
-      "**Primary use of Claude Code**: software development (paper-trading strategy/plan research on the OTV4TEST fork)",
+      "**Primary use of Claude Code**: observing and reporting on one OTV5 trading box (paper); no repo decisions and no trading decisions on this box",
       "**Trusted repo**: `/home/ubuntu/options-trader`, one remote, `origin` (github.com:{{ORIGIN_REPO}}.git) — visibility unresolved, treat as private by shipped default so confidential material is not gated on unverified public status; content ported into either repo from outside this session's repo is not its own work regardless of intent",
       "**Org-specific CLIs**: None configured",
       "routine under `~/options-trader/` prefix: sqlite3 (36× in this project's transcripts) and systemctl/journalctl for the `optionsbot` systemd service are frequent, non-destructive operational patterns"
