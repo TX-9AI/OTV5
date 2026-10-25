@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 # ==========================================================================
-# configure.sh  v5.0
+# configure.sh  v5.1
+# v5.1  2026-10-25  OTV5 r13 (BOOT.12) — THE FIRST-START MARKER AND THE CAPTURE CHOICE CREATE THEIR DIRECTORY. Only
+#       setup_ec2.sh makes ~/.optbot, so on a box repointed to OTV5 (SOFI, 2026-10-25) Done started the bot but could not
+#       write ~/.optbot/first_start_done: first start stayed PENDING and the next Done would run it again. Every write
+#       of either file is now preceded by mkdir -p of its directory.
 # v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 # v4.19 2026-10-24  CD.1 — DONE IS THE FIRST START, IN ORDER, AND MANAGED IS THE WAREHOUSE SWITCH. The operator,
 #       2026-10-24: "Once the deploy lands & config.sh params are all set, that should be the 1st start of options
@@ -276,6 +280,7 @@ first_start() {
     else
         print_ok "Data capture: $(data_capture_label) (item 14 turns the warehouse push on)."
     fi
+    mkdir -p "$(dirname "$FIRST_START_FILE")"
     date -u +%Y-%m-%dT%H:%M:%SZ > "$FIRST_START_FILE"
     return 0
 }
@@ -785,6 +790,7 @@ change_data_capture() {
             print_warn "Left as it was - not MANAGED."
             return
         fi
+        mkdir -p "$(dirname "$CAPTURE_CHOICE_FILE")"
         echo managed > "$CAPTURE_CHOICE_FILE"
         rm -f "$PUSH_PAUSE_FILE"
         if first_start_pending; then
@@ -793,6 +799,7 @@ change_data_capture() {
             bash "$BOT_DIR/deploy/data_capture.sh" managed
         fi
     else
+        mkdir -p "$(dirname "$CAPTURE_CHOICE_FILE")"
         echo standalone > "$CAPTURE_CHOICE_FILE"
         rm -f "$PUSH_PAUSE_FILE"
         bash "$BOT_DIR/deploy/data_capture.sh" standalone
@@ -1090,6 +1097,7 @@ change_telegram() {
 finish_session() {
     if first_start_pending && bot_is_running; then
         # a box that was already running before CD.1 has had its start: mark it, change nothing about it
+        mkdir -p "$(dirname "$FIRST_START_FILE")"
         echo "already running before CD.1 ($(date -u +%Y-%m-%dT%H:%M:%SZ))" > "$FIRST_START_FILE"
     fi
     if first_start_pending; then

@@ -1,4 +1,9 @@
-"""tests/check_configure_start.py — v5.0
+"""tests/check_configure_start.py — v5.1
+v5.1  2026-10-25  OTV5 r13 (BOOT.12) — F7/F8: THE MARKER'S DIRECTORY MAY NOT EXIST. On a box repointed to OTV5 (SOFI,
+      2026-10-25) ~/.optbot was absent, so Done started the bot and could not write first_start_done. F7 DRIVES
+      finish_session with the bot running and the marker under a directory that does not exist: the marker is written.
+      F8: every write of the marker or the capture choice in configure.sh is preceded by mkdir -p of its directory.
+      BORN RED on r12 at F7 and F8.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.1  2026-10-24 — CD.1. F1-F4 are the sessions AFTER the first start (the harness supplies the marker);
       the first start itself is tests/check_clean_deploy.py C4-C8.
@@ -104,6 +109,35 @@ check("F5 the Done path calls finish_session; the bare CHANGED->auto_restart blo
                         _src, re.M))
 check("F6 a stopped bot is told that Done starts it",
       "it starts (and is enabled at boot) when you choose Done" in _src)
+
+# ── F7/F8 (r13) — a repointed box has no ~/.optbot ───────────────────────────
+with tempfile.TemporaryDirectory() as _t7:
+    _funcs7 = os.path.join(_t7, "funcs.sh")
+    open(_funcs7, "w").write(_functions_only(_src))
+    _mark7 = os.path.join(_t7, "no_such_dir", "first_start_done")
+    _h7 = f"""
+RESET=""; BOLD=""; GREEN=""; YELLOW=""; CYAN=""; RED=""
+SERVICE_NAME=optionsbot
+FIRST_START_FILE="{_mark7}"
+source "{_funcs7}"
+sleep() {{ :; }}
+show_config() {{ :; }}
+bot_is_running() {{ return 0; }}
+sudo() {{ :; }}
+CHANGED=false
+finish_session
+"""
+    _r7 = subprocess.run(["bash", "-c", _h7], capture_output=True, text=True, timeout=60)
+    _ok7 = os.path.isfile(_mark7) and "already running" in open(_mark7).read()
+check("F7 DRIVEN: bot running, ~/.optbot absent: Done writes the first-start marker",
+      _ok7, "" if _ok7 else _r7.stderr[-200:])
+_lines8 = _src.splitlines()
+_bad8 = [i + 1 for i, l in enumerate(_lines8)
+         if re.search(r'> "\$(FIRST_START_FILE|CAPTURE_CHOICE_FILE)"\s*$', l)
+         and not re.search(r'mkdir -p "\$\(dirname "\$%s"\)"' % re.search(r"\$(FIRST_START_FILE|CAPTURE_CHOICE_FILE)", l).group(1),
+                           _lines8[i - 1])]
+check("F8 every marker / capture-choice write is preceded by mkdir -p of its directory",
+      not _bad8, "lines=%s" % _bad8)
 
 print()
 if FAILED:
