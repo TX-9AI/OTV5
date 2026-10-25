@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_manage_call.py  v1.2
+tests/check_manage_call.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 
 v1.2  2026-09-26  OTV4TEST r149 (EOD.1) — M3 and M4 RE-POINTED; the ORDER REVERSES. The operator:
       "Resting limit orders at 1545, ladder exits at 1550 if they're not the assignment risk type."

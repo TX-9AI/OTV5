@@ -1,5 +1,6 @@
 """
-derived/anchors.py  v1.5
+derived/anchors.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.5  2026-10-24  CD.2 — EVERY ANCHOR READ JUDGES ITS ROW BY MARKET TIME (the operator, 2026-10-24: seeding any table must be
       harmless). charm_at/vanna_at/gex_at: the newest surface row whose quote_ts is within SURFACE_MAX_AGE_S (120 s);
       a row with no quote_ts is never served. gex_between is RETIRED (returns None): surface_series.gex is the chain-wide

@@ -1,5 +1,6 @@
 """
-strategy/condor_roll.py  v4.12
+strategy/condor_roll.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v4.12 2026-10-20  OTV4TEST r309 (B4, MIRROR OF otv4 r495 81cc63c, WA 38.2) — the roll and the tent ask
       order_guard.clear_to_post BEFORE their first leg on LIVE (found by this tree's r495 critique,
       MSG-QQQ-1020-18): both post an OPEN (the rolled vertical; the hedge) and neither passed B2's guard

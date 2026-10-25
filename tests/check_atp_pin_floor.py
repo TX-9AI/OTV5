@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_atp_pin_floor.py  v1.2
+tests/check_atp_pin_floor.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.2  2026-10-19  OTV4TEST r303 (PSTATE.1) — its subject ATPButterfly is DORMANT by default and a dormant plan now
       writes nothing by ruling, so this run switches it ACTIVE (OT_ATP_BUTTERFLY=1); what it pins is unchanged.
 v1.1  2026-10-12  OTV4TEST r273 (BFLY.10) — A9 RE-POINTED: ATPButterfly 13:00-15:00, refused at 12:45, admitted at 13:00. r273 (BFLY.10), by ruling - the operator, 2026-10-12: "reduce the fly window to 1300".

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_probe_live_mark.py  v1.1
+tests/check_probe_live_mark.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.1  2026-10-20  OTV4TEST r310 (F4.2 mirror of otv4 r496) — _get_option_mark now prices through ONE
       get_market_data_by_type(options=[...]) call; the fake broker answers it (as otv4 r496's
       check_live_mark_fallback v1.1 did) and the spy counts it. Every expected value unchanged.

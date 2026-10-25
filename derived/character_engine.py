@@ -1,5 +1,6 @@
 """
-derived/character_engine.py  v4.2
+derived/character_engine.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v4.2  2026-10-24  CD.2 — _hydrate adopts the open row only if it entered on or after TODAY's session start (ET midnight); an
       older open row is closed as stale (exited_ts = now) and not adopted. The docstring said "today's open row"; the
       query had no date filter, so a character from days ago - or a seeded one - became the incumbent with a held_s

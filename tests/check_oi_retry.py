@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""tests/check_oi_retry.py — v1.1
+"""tests/check_oi_retry.py — v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 THE OI WARNING FIRES ONLY WHEN THE RETRY ALSO FAILS (OI.1).
 
 v1.1  2026-10-18  OTV4TEST r294 (OI.2) — the fixture keeps the REAL `tastytrade` package and replaces only

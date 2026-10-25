@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""tests/check_bfly_vwap_band.py  v1.4
+"""tests/check_bfly_vwap_band.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.4  2026-10-13  OTV4TEST r278 - A7 drives derived.indicators' module clock to
       its frame's last minute + VWAP_CLOSE_GRACE_S. Since r274 the fold takes
       only closed minutes, so A7 (frame 12:30-12:59 today) was red at any

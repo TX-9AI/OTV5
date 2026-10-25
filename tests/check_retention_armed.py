@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""check_retention_armed.py — v1.2 (landed r162; R5 re-derived r278)
+"""check_retention_armed.py — v5.0 (landed r162; R5 re-derived r278)
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 
 v1.2  2026-09-14 — OTV4TEST r26 (HYG.9). R2/R3 NO LONGER TAKE THE BOX'S REAL PURGE LOCK.
       `rp.main()` acquires `LOCK_PATH` — `<repo>/data/retention_purge.lock` —

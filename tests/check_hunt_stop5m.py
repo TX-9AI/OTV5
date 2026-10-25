@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_hunt_stop5m.py  v1.3
+tests/check_hunt_stop5m.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.3  2026-10-24  OTV4TEST r316 (BRK.15) — H8b RE-POINTED, NOT DROPPED (section 38.4): BRK.12's re-arm row shows its mode
       only under OT_BRK_REFIRE=extreme (the rollback); under the default rearm the line reads "rearm=brk:superseded".
       H8b now asks both: the old properties with BRK_REFIRE_MODE=extreme, and "superseded" under rearm.

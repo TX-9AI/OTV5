@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_order_guard.py  v1.1
+tests/check_order_guard.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.1  2026-10-05  r473 / F5 — the fake account answers get_balances with ample
       buying power. F5 refuses a live post when balances are unreadable, so a
       fake without the call now refused every post and G2-G4 went red on a

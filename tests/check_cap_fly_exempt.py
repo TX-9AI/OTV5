@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_cap_fly_exempt.py  v1.3
+tests/check_cap_fly_exempt.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.3  2026-10-19  OTV4TEST r303 (PSTATE.1) — its subject ATPButterfly (F6: both flies asked at the cap) is DORMANT by default and a dormant plan now writes
       nothing by ruling, so this run switches it ACTIVE (OT_ATP_BUTTERFLY=1); what it pins is unchanged.
 v1.2  2026-10-18  OTV4TEST r288 (PARK.1) — PARK IS THE THIRD CAP-EXEMPT NAME, by ruling (the operator, 2026-10-17: PARK

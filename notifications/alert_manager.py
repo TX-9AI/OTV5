@@ -1,5 +1,6 @@
 """
-notifications/alert_manager.py  v4.5
+notifications/alert_manager.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v4.5  2026-09-27  OTV4TEST r165 (EXP.1) — send_exercise_footprint_alert: shares in the account
       are what an exercise or assignment leaves. Pages ONCE per episode (a key per symbol and
       share count) - it is a real emergency, WA 17, not a routine line.

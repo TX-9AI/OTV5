@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_env_doc.py  v1.0
+tests/check_env_doc.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.0  2026-10-04  OTV4TEST r250 (DOC.31 item 4) — docs/ENV.md MATCHES THE CODE.
   E1  tests/gen_env_doc.py --check: every OT_* read in the tree is in docs/ENV.md, with its default and file:line, and nothing stale
   E2  the doc names the known core switches (OT_INSTRUMENT, OT_RISK_USD, OT_DAILY_LOSS_LIMIT, OT_ORCS, OT_CONTRACT_SCALE) - a scan that

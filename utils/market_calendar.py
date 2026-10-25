@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-utils/market_calendar.py  v1.3
+utils/market_calendar.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.3  2026-10-11  OTV4TEST r268 (mirror of otv4 r478) / DEP.12 - EARLY CLOSES. EARLY_CLOSES (52 sessions,
 2026-2050, generated from the NYSE rules and identical to dtp's list),
 close_time(), is_half_day(), close_shift_minutes(). Nothing here changes

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_fly_mark_cap.py  v1.2
+tests/check_fly_mark_cap.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.2  2026-10-20  otv4 r495 (B4) — the fake account answers get_live_orders with an empty
       book. B4 posts no live entry until one working-order sweep is clean, so a fake
       without the call refused every fly and C2/C3 went red on a correct path, exactly

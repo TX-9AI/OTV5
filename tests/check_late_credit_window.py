@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""tests/check_late_credit_window.py — v1.1
+"""tests/check_late_credit_window.py — v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.1  2026-09-26 — OTV4TEST r149 (EOD.1) — W4 and W7 RE-POINTED to the operator's end of day
       ("Resting limit orders at 1545, ladder exits at 1550 if they're not the assignment risk
       type"; the cross at 15:55). W4: the vertical hold is 15:45 (EOD resting_at) and sits

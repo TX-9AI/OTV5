@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_seed_candles.py  v1.1
+tests/check_seed_candles.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.1  2026-10-04  OTV4TEST r237 (SEED.2) — C11/C12: partial bars and unreadable push times are refused. Born red on
       seed v1.0, which wrote 4,407 mid-bar warehouse bars into SPX-TEST's feed store.
 v1.0  2026-10-04  OTV4TEST r233 (SEED.1) — the gate for tools/seed_candles_from_warehouse.py.

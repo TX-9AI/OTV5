@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_boot_sweep.py  v1.8
+tests/check_boot_sweep.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.8  2026-10-25  OTV5 r4 (GATE.6) — B3/B3b REQUIRE THE HEARTBEAT FILE IN SCRATCH TOO: tools/emergency_watchdog.py reads its
       mtime as the bot's liveness and a checker driving position_manager's mark fallback touched the live one. Born red on boot_sweep v1.8.
 v1.7  2026-10-20  OTV4TEST r307 (GATE.4) — B3/B3b REQUIRE THE PLAN STATES FILE IN SCRATCH TOO (check_foreign_symbol_board F7

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""tests/check_exit_deadline.py  v1.0
+"""tests/check_exit_deadline.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 F1 — A LIVE CLOSE BLOCKS THE TICK LOOP FOR ~14 s, NOT ~36 s, AND NEVER GOES SILENT TO THE WATCHDOG.
 
 v1.0  2026-10-18  OTV4TEST r295 (LIVE.2) — MAINLINE's tests/check_exit_deadline.py v1.0 (otv4 r474 674e0cc) adapted:

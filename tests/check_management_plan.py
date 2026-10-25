@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_management_plan.py  v1.5  (2026-10-03)
+tests/check_management_plan.py  v5.0  (2026-10-25)
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ... Previous title: tests/check_management_plan.py  v1.5  (2026-10-03)
 v1.5  OTV4TEST r209 (EXIT.4): M1, M2b, M3, M4 read `touch < 101.00 -> out (breach)` - the narration names the
       structure stop a TOUCH (it reads the forming bar and always has; the operator kept it, 2026-10-03).
       Only the four expected strings moved.

@@ -1,5 +1,6 @@
 """
-strategy/runaway_plan.py  v1.8
+strategy/runaway_plan.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.8 2026-10-18  OTV4TEST r289 (RUN.9, mirror of otv4 r492) — passes note= to gamma_leverage_pick and DECLINEs with its
      reason when the first OTM strike of the chain is not a candidate (no nearest-survivor fallback any more).
 v1.7 2026-10-05  OTV4TEST r254 (OBS.1) — THE PLAN ALWAYS LOOKS, THE STRATEGY IS GATED ON THE HOUR: Breakout, Runaway and the Hunt are OBSERVED from their entry end to 15:40 - asked, recorded LOG-ONLY, never executed (the operator, 2026-10-05: "the plan always looks, but the strategies are gated on the hour of the day"; "Have those blocked TRADES just to Log only"). Here: past the cutoff the plan keeps looking only while observed.

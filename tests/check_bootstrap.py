@@ -1,4 +1,5 @@
-"""tests/check_bootstrap.py — v1.12
+"""tests/check_bootstrap.py — v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 
 v1.12 2026-10-24 — OTV5 r0. RE-POINTED, NOT DROPPED (section 38.4): G3's planned git_repo is the deploy/origin.conf
       repository (the same value G2 reads), not a literal of one repository's name; a tree seeded into a new repository

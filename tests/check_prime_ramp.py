@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_prime_ramp.py  v1.0
+tests/check_prime_ramp.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.0  2026-10-24  CD.1 — the gate for tools/prime_ramp.py. No network: warehouse_source's own _FakeS3 and a scratch
       feed store built by the REAL data/candle_feed.FeedStore (the schema is the feed's, WA §0.4). The tool is driven
       through its run(); every expectation is computed here independently of the tool's own aggregation.

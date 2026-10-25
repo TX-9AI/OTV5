@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/chain_feasibility.py  v4.0
+tests/chain_feasibility.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 How big a move must the underlying make for the contract to pay? Does the tape
 deliver it?
 

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_et_offset.py  v1.0
+tests/check_et_offset.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.0  2026-10-03  OTV4TEST r191 (AUD.2) — EASTERN TIME COMES FROM THE TZ DATABASE.
 
   Found by the 10-03 audit: tools/last_session.py, tools/plan_board.py and

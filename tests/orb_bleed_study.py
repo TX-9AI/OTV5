@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/orb_bleed_study.py  v4.0
+tests/orb_bleed_study.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 How fast do ORB winners get there? The third stop, measured rather than chosen.
 
 v4.0  2026-08-20  Built at the OTV4 split.

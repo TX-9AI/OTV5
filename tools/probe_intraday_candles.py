@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""tools/probe_intraday_candles.py — v1.0
+"""tools/probe_intraday_candles.py — v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 PRB.6: HOW FAR BACK WILL TASTYTRADE SERVE INTRADAY CANDLES, AND WHAT ARE THEY?
 
 v1.0 (2026-10-24) — PRB.6. The operator, 2026-10-24 16:04 ET: "14, yes worthwhile" - years of 5m bars, so a

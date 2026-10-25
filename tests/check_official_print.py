@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_official_print.py  v1.0
+tests/check_official_print.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.0  2026-10-03  OTV4TEST r222 (ORP.1) — THE OPENING RANGE HAS AN OFFICIAL PRINT; A BLIND OPEN IS CORRECTED BEFORE ANY BREAK.
 
   Measured 2026-10-03 over 14 sessions: the bot's recorded range equalled the

@@ -1,5 +1,6 @@
 """
-data/derived_store.py  v4.9
+data/derived_store.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v4.9  2026-10-24  CD.2 — A LEVEL EVENT CARRIES ITS MARKET TIME, AND THE READER JUDGES BY IT. level_event's ts_epoch is
       WRITE time, so a row written today about an old bar - a restart replay, or a row seeded from another box - read
       as fresh to every plan and to the exit hand-off. New column bar_close_epoch: the moment the judging bar CLOSED

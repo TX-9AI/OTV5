@@ -1,5 +1,6 @@
 """
-derived/level_book.py  v1.4
+derived/level_book.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.4  2026-10-18  OTV4TEST r300 (LVL.20) — THE RTH BLOCK ENDS AT THE DAY'S BELL. _in_rth, et_blocks and blocks_for carried a
       fixed 16:00; on 2026-11-27 (13:00 close) the 13:00-16:00 bars would have been RTH to the book: session extremes,
       spike detection and the opening-range retirement all read the wrong block. One helper, _bell_minutes(d), reads

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_spxw_only.py  v1.1
+tests/check_spxw_only.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.1  2026-10-04  otv4 r464 — W4 SKIPS where strategy.orcs_plan is absent (ORCS is
       fork-only), as check_zero_bid_refused's Z6 does; nothing else changed.
       OTV4TEST r241's v1.0 (sha 63499c5b) is the source.

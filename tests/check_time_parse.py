@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_time_parse.py  v1.1
+tests/check_time_parse.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.1  2026-10-19  OTV4TEST r303 (PSTATE.1) — its subject ORCS / SweepCreditSpread / TrendCreditSpread (T3) is DORMANT by default and a dormant plan now
       writes nothing by ruling, so this run switches it ACTIVE (OT_ORCS=1, OT_SWEEP_CS=1, OT_TCS_ACTIVE=1); what it pins is unchanged.
 v1.0  2026-10-03  OTV4TEST r220 (TIME.1) — ONE HH:MM PARSER, AND AN UNREADABLE CLOCK IS NO TRADE.

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/stop_spread_report.py  v1.0
+tests/stop_spread_report.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 
 STOP VS SPREAD — how often a credit or fly structure was refused because its stop
 could not survive its own bid-ask, how close the rest came, and whether the rule

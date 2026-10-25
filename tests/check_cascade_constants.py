@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_cascade_constants.py  v1.1
+tests/check_cascade_constants.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.1  2026-09-22  OTV4TEST r92 — MIRRORED 4 -> 8, AND THE SUBSET WAS THE DEFECT. A mirror
       list that is a subset of what it mirrors reports green on everything it
       forgot to name (§23's permissive rot). C2's bar is now len(MIRRORED)

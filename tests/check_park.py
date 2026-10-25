@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_park.py  v1.4
+tests/check_park.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 PARK - THE 11:00 FIRST-HOUR CONTINUATION (PARK.1): THE PLAN, THE STRATEGY, ITS SIZE, ITS EXITS, ITS OWN BUDGET.
 v1.4  2026-10-19  OTV4TEST r302 (GATE.2). K13a ran attempt_new_entry() on the WALL CLOCK, so before 09:35 ET
       session_guard refused it ("opening range still forming") and PARK was never asked: RED at every 08:00 boot

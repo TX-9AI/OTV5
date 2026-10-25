@@ -1,5 +1,6 @@
 """
-derived/notes.py  v4.2
+derived/notes.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v4.2  2026-08-29  r177: tick_id (strategy/plan's begin_tick counter) persisted
       on strategy_note — the vector<->plan_check join is BY KEY before the
       first fit. In-place ALTER for existing stores; pre-r177 rows read 0.

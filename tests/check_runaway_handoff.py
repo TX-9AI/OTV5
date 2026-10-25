@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""check_runaway_handoff.py  v1.2
+"""check_runaway_handoff.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.2  2026-09-08  OTV4TEST r3 — RW9/RW13 read strategy/runaway_plan.py, where the
       direction block and the 50% read now live (one site per module).
 v1.1  2026-08-27  r165: runs the real prepare() instead of exec-ing a source slice. — v1.0

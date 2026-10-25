@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/edge_scan.py  v1.3
+tests/edge_scan.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.3  2026-09-19  OTV4TEST r63 — CRASHED ON THE REAL BOOK WHILE ITS SELFTEST
       PASSED. `scan_features` built `feats` as the UNION of feature keys across
       rows and then indexed `r[k]` per row, so the first row missing a sparse

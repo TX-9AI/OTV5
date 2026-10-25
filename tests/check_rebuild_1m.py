@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_rebuild_1m.py  v1.2
+tests/check_rebuild_1m.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.2  2026-10-11  OTV4TEST r267 (SEED.3, authored on SPX-TEST) — the tool's v1.3: a tick is bucketed by ev_time (the source's
       event time, ms), ts_epoch only when ev_time is missing. The operator, 2026-10-11 09:23 ET (via QQQ-TEST MSG-QQQ-1011-05):
       "1. Yes, 2. B". R14 and R14b are NEW; R1-R13 are unchanged in code. R6's docstring now says its fixture ticks carry

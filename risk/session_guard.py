@@ -1,5 +1,6 @@
 """
-risk/session_guard.py  v4.4
+risk/session_guard.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v4.4  2026-10-03  OTV4TEST r209 (EXIT.4) — THE BUTTERFLY CUTOFF BRANCH IS DELETED. It could never run (no caller has ever
       passed is_butterfly=True) and its 14:00 contradicted the butterflies' own 12:00-15:00 window in
       config.ENTRY_WINDOWS, which is what actually bounds them. The parameter stays, accepted and unused, so

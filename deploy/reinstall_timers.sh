@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# deploy/reinstall_timers.sh  v1.0
+# deploy/reinstall_timers.sh  v5.0
+# v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 # v1.0  2026-09-11  OTV4TEST r14 — after the root cleanup the timers whose ExecStart
 #       pointed at a root path (eod_summary.py, pull_today_ohlc.sh, eod_bot.sh) must be
 #       re-installed once on the box; a BAKE does not rewrite systemd units. Re-runs

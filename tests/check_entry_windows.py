@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""check_entry_windows.py — v1.7
+"""check_entry_windows.py — v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.7  2026-10-12  OTV4TEST r273 (BFLY.10) — W4c: THE BUTTERFLIES OPEN AT 13:00, DRIVEN. The operator,
       2026-10-12 12:26 ET: "For TEST repo, I want to reduce the fly window to 1300 or later starting
       tomorrow". GEXPinButterfly prepare() is dormant on entry_window at 12:59 and records it at 13:00;

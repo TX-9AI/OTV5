@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_exit_pricing.py  v1.2
+tests/check_exit_pricing.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.2  2026-10-18  OTV4TEST r293 (DELTA.2) — P6b drives PositionManager._fetch_current_premium with a quoted contract whose
       delta is None, then 0.0: current_delta must be None and the r209 warning must fire once; 0.45 restores it. The
       production stash stored 0.0 and flagged it readable, so P6's warning never fired in production (audit 10-18 D2).

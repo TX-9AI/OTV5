@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_level_engine_book.py  v1.5
+tests/check_level_engine_book.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.5  2026-10-18  OTV4TEST r296 (LVL.19) — E12: a bar still being built is never judged (audit 10-18 H1: 10 of the 40
       newest REJECTED rows were judged 12-19 s into their bar on a provisional close). E7 RE-POINTED: the hour it judges
       on is judged once it has CLOSED (its old clock stood 60 s into the hour - the same defect on the hourly candle);

@@ -1,5 +1,6 @@
 """
-analysis/entry_snapshot.py  v4.3
+analysis/entry_snapshot.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v4.3  2026-10-23  OTV4TEST r315 (SMA.2) — THE 50 SMA ON EVERY FRAME, IN ATR UNITS, AT EVERY ENTRY. The operator,
       2026-10-23 13:04 ET: "distance from the 50 SMA upon entry and if our success rate correlates to either winning the
       trade or getting the direction right ... Be creative"; the scope he passed on 13:06 ET: "distance to the 50 SMA in

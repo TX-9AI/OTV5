@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-execution/resting_orders.py  v1.5
+execution/resting_orders.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.5  2026-10-04  OTV4TEST r242 (LIVE.1 B0, MIRROR OF otv4 r463 c912ce7, WA 38.2) — every Account call goes through tasty_client.sdk_result: on tastytrade 13.x the Account methods are coroutines and a bare call placed and closed NOTHING live (paper never calls them). Hunks applied verbatim from c912ce7.
 v1.4  2026-10-03  OTV4TEST r218 (PATH.1) — _db_path delegates to utils.paths: it imported config.DATA_DIR, which never existed, and always took a ~/options-trader fallback. Same path on the box.
 v1.3  2026-10-03  OTV4TEST r210 (AUD.9) — note_fill_price IS PUBLIC, for the paper filler. fill_price was 0 on 16 of 16

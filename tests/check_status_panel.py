@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_status_panel.py  v1.1
+tests/check_status_panel.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.1  2026-09-01  r212 — C2 AND C7 RE-DERIVED, exactly as chunk C said they
       would be. C2 required the plan collapse to REMAIN, which was right while
       the writer was unfixed; r212 fixed the writer and disproved the premise

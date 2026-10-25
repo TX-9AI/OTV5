@@ -1,5 +1,6 @@
 """
-execution/order_guard.py  v1.1
+execution/order_guard.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.1  2026-10-20  r495 / B4 — A RESTART CANCELS ITS INSTRUMENT'S LEFTOVER WORKING ORDERS BEFORE IT
       POSTS. The suspects below are in memory, and B1 adopts POSITIONS, not working orders, so a
       restart while an entry was working at the broker forgot it and the next tick could post the

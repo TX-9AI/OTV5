@@ -1,5 +1,6 @@
 """
-derived/indicators.py  v4.5
+derived/indicators.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v4.5  2026-10-12  OTV4TEST r274 (VWAP.2) — THE SESSION VWAP FOLDS ONLY CLOSED 1m BARS. The tick frame's
       last row is the FORMING minute; it was folded the first time it was seen - seconds in - and then
       skipped as already folded, so each minute counted only its first seconds. MEASURED 2026-10-12

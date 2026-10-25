@@ -1,6 +1,7 @@
 # OTV5 — Autonomous Day Trading Bot with Telegram Notifications and embedded Claude Code agent
 
-**`README.md` v1.1 · 2026-10-25 (OTV5 r3) — what this repo is, how it is laid out, how work lands.**
+**`README.md` v5.0 · 2026-10-25 (OTV5 r7) — what this repo is, how it is laid out, how work lands.**
+**v5.0 · 2026-10-25 · OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...**
 
 **What this is.** One box trades one underlying (equity options, or SPX/SPXW for the
 index) on the Tastytrade platform, intraday only, flat by the bell. A candle feed
@@ -106,6 +107,8 @@ a market fact.
 ---
 
 ## Changelog
+
+**v5.0 — 2026-10-25 — OTV5 r7.** Header reset at the lineage split (WORKING_AGREEMENT §41); every file in this tree now starts at v5.0 and counts v5.1, v5.2, ... from here.
 
 **v1.1 — 2026-10-25 — OTV5 r3.** The trade table matches TRADES §0: ORCS is off by default (`OT_ORCS=1` restores it), PARK is listed, and the table says it defers to §0.
 

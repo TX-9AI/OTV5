@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-warehouse/retention_purge.py  v1.12
+warehouse/retention_purge.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.12 2026-10-13  OTV4TEST r279 (SHARED; MIRROR OF otv4 r416 064070b + r419 b9bb9dc) - THE
       DELETES COMMIT AS THEY GO, AND A VACUUM MUST FIT 2.2x ITS LIVE SIZE. Ruled by the
       operator 10-13 for the Saturday fleet repoint (relayed by 1-REPORTER, MSG-1REP-1013-07,

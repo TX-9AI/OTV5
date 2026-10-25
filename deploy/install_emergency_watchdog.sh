@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# deploy/install_emergency_watchdog.sh — v1.0
+# deploy/install_emergency_watchdog.sh — v5.0
+# v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 # v1.0  2026-09-27  OTV4TEST r168 (EXP.1 item 3). Installs the out-of-process
 #       emergency watchdog (tools/emergency_watchdog.py). Operator: "Page, then
 #       close at 15:50"; "No, positions only".
@@ -35,7 +36,7 @@ fi
 mkdir -p "$DIR/logs"
 sudo tee /etc/systemd/system/optbot-emergency-watchdog.service >/dev/null <<UNIT
 [Unit]
-Description=OTV4TEST emergency watchdog - page when the bot is down or stuck with a position open; close at 15:50 (r168)
+Description=OTV5 emergency watchdog - page when the bot is down or stuck with a position open; close at 15:50 (r168)
 After=network-online.target
 
 [Service]
@@ -53,7 +54,7 @@ UNIT
 
 sudo tee /etc/systemd/system/optbot-emergency-watchdog.timer >/dev/null <<UNIT
 [Unit]
-Description=OTV4TEST emergency watchdog, every minute on weekdays 09:00-16:59 ET (r168)
+Description=OTV5 emergency watchdog, every minute on weekdays 09:00-16:59 ET (r168)
 
 [Timer]
 OnCalendar=Mon..Fri *-*-* 09..16:*:00 America/New_York

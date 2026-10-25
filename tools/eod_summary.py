@@ -1,5 +1,6 @@
 """
-tools/eod_summary.py  v4.5
+tools/eod_summary.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v4.5  2026-10-03  OTV4TEST r191 (AUD.2) — THE DAY FILTER READS THE REAL EASTERN OFFSET. Both queries used a
       literal '-4 hours' (EDT) and the fallback clock a fixed UTC-4; query.py fixed the same class at r210 and
       this file kept it. et_offset_sql() gives "-4 hours" in summer and "-5 hours" from 2026-11-01, from the tz

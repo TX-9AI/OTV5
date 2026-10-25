@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""tests/check_vwap_closed_bars.py  v1.0
+"""tests/check_vwap_closed_bars.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.0  2026-10-12  OTV4TEST r274 (VWAP.2) — THE SESSION VWAP FOLDS ONLY CLOSED 1m BARS.
       Measured 2026-10-12 14:52 ET on QQQ-TEST: the bot's VWAP summed 940,524 shares where the
       session's closed 1m bars held 7,138,959 (13%); over 25 sessions its value sat a median

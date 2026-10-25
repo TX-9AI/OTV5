@@ -1,5 +1,6 @@
 """
-execution/entry_engine.py  v4.16
+execution/entry_engine.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v4.16 2026-10-14  OTV4TEST r283 (LIVE.1 F5, MIRROR OF otv4 r473 bfb0991, WA 38.2) — every live entry checks
       buying power before it posts (execution/buying_power.affordable, right after B2's clear_to_post):
       single leg at its limit, the standing ORB offer at its price, the butterfly at its mark cap, each

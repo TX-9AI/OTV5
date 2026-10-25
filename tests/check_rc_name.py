@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_rc_name.py  v1.0
+tests/check_rc_name.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 EVERY CLAUDE RAISE ON THIS REPO USES THE BOX'S OWN REMOTE CONTROL NAME.
 
 v1.0  2026-10-23  OTV4TEST r314 (MENU.2) — born red at r313, where claude_boot.py
@@ -18,8 +19,8 @@ and its launch items run with tmux / claude / id / the venv python stubbed.
 which does not exist: nothing real is purged, killed or raised.
 
   N1  OT_RC_NAME set: that name, unchanged (the boot unit's path)
-  N2  OT_RC_NAME unset: "✨<INSTRUMENT>-TEST" (SPX and QQQ)
-  N3  no instrument, an unsafe one, or the reader unloadable: "✨UNSET-TEST",
+  N2  OT_RC_NAME unset: "✨<INSTRUMENT>" (SPX and QQQ) - OTV5 r7: no -TEST suffix
+  N3  no instrument, an unsafe one, or the reader unloadable: "✨UNSET",
       never a guessed box
   N4  the handoff command claude_boot builds carries rc_name(), not qqq-test
   N5  HAND OFF, RESUME and RESUME [other] raise under the --rc-name answer
@@ -110,8 +111,8 @@ def main():
 
     spx, err1 = _boot("print(cb.rc_name())", OT_INSTRUMENT="SPX", **NO_UNIT)
     qqq, err2 = _boot("print(cb.rc_name())", OT_INSTRUMENT="QQQ", **NO_UNIT)
-    check("N2 unset: ✨<INSTRUMENT>-TEST (SPX, QQQ)",
-          spx == "✨SPX-TEST" and qqq == "✨QQQ-TEST",
+    check("N2 unset: ✨<INSTRUMENT> (SPX, QQQ)",
+          spx == "✨SPX" and qqq == "✨QQQ",
           "%r %r %s %s" % (spx, qqq, err1, err2))
 
     none, e3 = _boot("print(cb.rc_name())", OT_INSTRUMENT="", **NO_UNIT)
@@ -119,23 +120,23 @@ def main():
     # the instrument reader itself unloadable: still a named absence
     gone, e4b = _boot("sys.modules['utils.instrument'] = None;"
                       " print(cb.rc_name())", OT_INSTRUMENT="SPX", **NO_UNIT)
-    check("N3 no / unsafe / unreadable instrument: ✨UNSET-TEST",
-          none == "✨UNSET-TEST" and bad == "✨UNSET-TEST"
-          and gone == "✨UNSET-TEST",
+    check("N3 no / unsafe / unreadable instrument: ✨UNSET",
+          none == "✨UNSET" and bad == "✨UNSET"
+          and gone == "✨UNSET",
           "%r %r %r %s %s %s" % (none, bad, gone, e3, e4, e4b))
 
     cmd, e5 = _boot("print(cb._handoff_cmd('/bin/claude', '/x/brief.md'))",
                     OT_INSTRUMENT="SPX", **NO_UNIT)
     check("N4 the handoff command carries rc_name(), not qqq-test",
-          "--remote-control '✨SPX-TEST'" in cmd and "qqq-test" not in cmd,
+          "--remote-control '✨SPX'" in cmd and "qqq-test" not in cmd,
           cmd or e5)
 
     items = ("mi_claude_handoff", "mi_claude_resume", "mi_claude_resume_pick")
     bad5 = []
     for fn in items:
-        out, calls = _menu(fn, "y\n\n", FAKE_RC="✨SPX-TEST")
+        out, calls = _menu(fn, "y\n\n", FAKE_RC="✨SPX")
         raised = [c for c in calls if c.startswith("tmux new-session")]
-        if not (len(raised) == 1 and "--remote-control '✨SPX-TEST'" in raised[0]
+        if not (len(raised) == 1 and "--remote-control '✨SPX'" in raised[0]
                 and "qqq-test" not in raised[0]):
             bad5.append((fn, raised, out[-200:]))
     check("N5 HAND OFF / RESUME / RESUME [other] raise under the --rc-name name",

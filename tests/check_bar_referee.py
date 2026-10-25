@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""tests/check_bar_referee.py  v1.1
+"""tests/check_bar_referee.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.1  2026-10-12  OTV4TEST r277 (FEED.10b) — R11-R13, from 1-REPORTER's critique (MSG-1REP-1012-12). R11: a
       bar's FINAL live update that lands 10 s after its close, while its last 1m is still partial in the store,
       is TAKEN (r276's 5 s grace refereed it against the short 1m sum and kept the stale bar). R12: an

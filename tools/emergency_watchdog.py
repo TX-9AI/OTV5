@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tools/emergency_watchdog.py  v1.2 — THE OUT-OF-PROCESS EMERGENCY WATCHDOG.
+tools/emergency_watchdog.py  v5.0 — THE OUT-OF-PROCESS EMERGENCY WATCHDOG.
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 
 v1.2  2026-10-11  OTV4TEST r268 (DEP.12, mirror of otv4 r478) — HALF DAYS. WINDOW's end, CLOSE_AT and CLOSE_END move to
       the day's bell through _at() (utils/market_calendar.close_shift_minutes): on a 13:00 close it flattens 12:50-13:00

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_contract_scale.py  v1.2
+tests/check_contract_scale.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.2  2026-10-04  OTV4TEST r236 — AN INTERPRETER THAT CANNOT IMPORT THE REPO IS "NOT RUN", NEVER "FAIL". Under the system
       python3 (no numpy) every case printed FAIL carrying a ModuleNotFoundError - an exit code dressed as a verdict
       (SPX-TEST's agent, 2026-10-04; WA 40.1 / 38.9 criterion 3). Now the first case's import failure prints

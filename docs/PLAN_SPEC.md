@@ -1,5 +1,7 @@
 # PLAN_SPEC.md — every strategy declares its intent BEFORE the trigger
 
+**`PLAN_SPEC.md` v5.0 · 2026-10-25 · OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...**
+
 **v1.41 · 2026-10-24 · OTV4TEST r316 — BRK.15 / HUNT.13 / RENT.3: a Breakout side re-arms on every return to the range (the new-extreme re-fire rule dropped); no Hunt on a side after a losing Breakout on it that day; the 20 s re-entry gate records only (§43).**
 
 **v1.40 · 2026-10-19 · OTV4TEST r303 — PSTATE.1: every plan is ACTIVE, LOG or DORMANT (§42); a dormant plan writes nothing, ORCS's included (§41.13 amended).**

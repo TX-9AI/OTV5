@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-# tests/check_condor_sibling_default.py  v1.0
+# tests/check_condor_sibling_default.py  v5.0
+# v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 # v1.0  2026-10-03  OTV4TEST r190 (AUD.1) — shared with otv4 CND.11. Everything after the closing
 #       docstring is byte-identical with otv4's gate; these lines and the r106 venv bootstrap sit ABOVE
 #       the docstring so the body hash holds and the lander (system python3) can import the modules.

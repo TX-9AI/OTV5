@@ -1,5 +1,6 @@
 """
-derived/levels.py  v6.10
+derived/levels.py  v5.7
+v5.7  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ... (v5.0 was already spent by this file's own history, so the reset lands at v5.7.)
 v6.10  2026-10-24  CD.2 — EVERY PUBLISHED EVENT CARRIES ITS MARKET TIME (level_event.bar_close_epoch = the judging
       bar's start + its span: 60 s for a 1m judgement, 3600 s for "1h"), so latest_event() judges by the bar, not by
       when the row was written. The RAIL path had no market-age check at write: after a restart or with a stalled

@@ -1,5 +1,6 @@
 """
-strategy/liquidity_hunt.py  v1.14
+strategy/liquidity_hunt.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.14 2026-10-24  OTV4TEST r316 (HUNT.13) — NO HUNT ON A SIDE AFTER A LOSING BREAKOUT ON THAT SIDE, FOR THE REST OF THE DAY.
       The operator, 2026-10-24 13:45 ET: "on a losing breakout trade, forbid a liquidity hunt on the same side for the
       day"; 13:56 ET: "if a breakout on one side fails, don't allow a hunt to fire on that side for the rest of the

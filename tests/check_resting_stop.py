@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_resting_stop.py  v1.0
+tests/check_resting_stop.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 A FIRED PREMIUM STOP RESTS AT ITS OWN LEVEL BEFORE IT CHASES (STOP.1, execution/resting_stop.py).
 v1.0  2026-10-10  OTV4TEST r266. The operator, 2026-10-10 13:08 ET: "post a resting order when our stop is hit, wait
       for price to come back to it"; 13:10 ET: "I can live with a 5% emergency stop on failed fills"; 18:28 ET: "120

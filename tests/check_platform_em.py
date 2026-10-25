@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_platform_em.py  v1.0
+tests/check_platform_em.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.0  2026-10-03  OTV4TEST r229 (EM.2) — THE EXPECTED MOVE IS THE TASTYTRADE PLATFORM'S.
 
   The operator, 2026-10-03, with a screenshot of the platform's chain (QQQ 749.53,

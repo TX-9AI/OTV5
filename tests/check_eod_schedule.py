@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""tests/check_eod_schedule.py — v1.3
+"""tests/check_eod_schedule.py — v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 THE OPERATOR'S END OF DAY, DRIVEN THROUGH THE REAL CODE UNDER A FROZEN CLOCK.
 
 v1.3  2026-10-11 — OTV4TEST r268 (DEP.12) — E2b: THE FORK-ONLY eod_close_due ON A HALF DAY. check_half_day (byte-identical

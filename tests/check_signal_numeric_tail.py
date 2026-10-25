@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_signal_numeric_tail.py  v1.3  (2026-09-24)
+tests/check_signal_numeric_tail.py  v5.0  (2026-10-25)
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ... Previous title: tests/check_signal_numeric_tail.py  v1.3  (2026-09-24)
 v1.3  2026-09-24  OTV4TEST r131 — N5 RE-POINTED, NOT DROPPED: the stop_premium read moved into
       main._sizing_stop_premium (VOLT's 1-R curve); the seam must call it and it must
       read through _sig_num. Red in r131's full sweep until re-pointed; mutation-proven.

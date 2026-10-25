@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_plan_heartbeat.py  v1.3
+tests/check_plan_heartbeat.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.3  2026-10-06  OTV4TEST r257 — H4's FROZEN HEARTBEATS ARE WRITTEN UNDER THE PANEL'S OWN INSTRUMENT.
       r252 (BOX.18) made query.show_decisions read plan_heartbeat WHERE symbol=query.INSTRUMENT; this
       fixture wrote the literal "QQQ", so under OT_INSTRUMENT=SPX the panel read nothing and H4 went red

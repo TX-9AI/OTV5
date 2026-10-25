@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_rails_book.py  v1.3
+tests/check_rails_book.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.3  CD.2 (2026-10-24) - the engine's clock follows the fixture's bars (derived.levels.time is shimmed to the
       stepped bar's close + 5 s): the rail path now refuses a bar that closed more than BOOK_FRESH_S ago (levels v6.10),
       and the fixture's bars are dated 2026-09-23. Every expectation is unchanged.

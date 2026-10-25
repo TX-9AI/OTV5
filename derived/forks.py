@@ -1,5 +1,6 @@
 """
-derived/forks.py  v4.6
+derived/forks.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v4.6  2026-10-24  CD.2 — every row carries bar_ts_ms, the start of the last CLOSED bar of the frame the builder was
       handed (its market time). anchors.fork_row() serves a row only while that bar is the frame's latest closed bar
       (one bar of grace), so a dead or seeded fork is never reported as the current one.

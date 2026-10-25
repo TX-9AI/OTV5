@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/gen_write_map.py  v4.6
+tests/gen_write_map.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v4.6  2026-10-13  OTV4TEST r279 - a call to a same-module SQL HELPER inside a constant
       loop resolves through the helper (see _loop_sql). The purge's DELETEs moved into
       `_delete_batched` (mirror of otv4 r416) and the map dropped them; W1/W1c caught it.

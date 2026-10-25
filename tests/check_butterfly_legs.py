@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_butterfly_legs.py  v2.4
+tests/check_butterfly_legs.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v2.4  2026-09-13  OTV4TEST r24 — B2b: the signal generate_signal emits carries the
       operator's 40% floor (was 25%), asserted against the RULED 0.40, not
       against config — reading config back would only prove config agrees

@@ -1,5 +1,6 @@
 """
-data/open_interest.py  v4.4
+data/open_interest.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v4.4  2026-10-18  OTV4TEST r294 (OI.2; MIRROR OF otv4 r493 1c60b69 = its v4.3, function hunk VERBATIM) — the fetch runs
       on tasty_client's shared background loop (run_coroutine_threadsafe, 15 s bound), not under asyncio.run(): the
       throw-away loop bound the Session's one pooled httpx connection and was then closed, so the next SDK call failed

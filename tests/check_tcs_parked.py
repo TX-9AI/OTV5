@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_tcs_parked.py  v1.4
+tests/check_tcs_parked.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.4  2026-09-23  OTV4TEST r112 — the r106 venv bootstrap; red under system python3 on `pytz`.
 v1.3  2026-09-22  OTV4TEST r92 — P0/P1/P5 retargeted to the SHARED credit window. P5's
       PREMISE was superseded, not just its number: "the 14:00 bound is

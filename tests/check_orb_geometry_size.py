@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""tests/check_orb_geometry_size.py  v2.1
+"""tests/check_orb_geometry_size.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v2.1  2026-08-31  r201 — the geometry cases pass an EXPLICIT budget so they
       measure the arithmetic and not the box's risk setting, and G3c is
       rewritten: it pinned the 08-28 cap exemption, which r201 REVERSES.

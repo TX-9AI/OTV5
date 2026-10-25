@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-# tools/check_land_discipline.py — v1.2
+# tools/check_land_discipline.py — v5.0
+# v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 # v1.2 (2026-09-08) — OTV4TEST r1. `--ledger <path>` selects the revision ledger
 #   whose row is verified. Defaults to docs/GENESIS.md, so every existing caller
 #   is unchanged; the fork passes docs/GENESIS-TEST.md.
@@ -490,7 +491,7 @@ def main(argv):
     ap.add_argument("--against", default="HEAD")
     ap.add_argument("--ledger", default="docs/GENESIS.md",
                     help="revision ledger to verify the row in; default "
-                         "%(default)s (OTV4TEST passes docs/GENESIS-TEST.md)")
+                         "%(default)s (the one ledger of this tree)")
     ap.add_argument("--hook", action="store_true",
                     help="pre-commit mode: the revision is unknown, so the "
                          "GENESIS row is reported SKIP instead of failing")

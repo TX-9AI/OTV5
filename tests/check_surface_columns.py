@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_surface_columns.py  v1.1
+tests/check_surface_columns.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.1  2026-10-03  OTV4TEST r215 (DER.3) — U3 RESTATED, U5 ADDED: gamma_flow is the change in a strike's net GEX since the
       engine's previous reading ("Concur, populate it"). U3: the FIRST reading writes NULL. U5: the second
       writes now minus before for a strike in both snapshots, and NULL for one that is not.

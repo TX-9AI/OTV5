@@ -1,5 +1,6 @@
 """
-database/trade_logger.py  v4.23
+database/trade_logger.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v4.23 2026-10-18  OTV4TEST r298 (CAP.4) — today_summary's docstring stops claiming it equals realized_pnl_today(): since r288
       the cap excludes PARK and the displays do not. Docstring only; no code change in this file.
 v4.22 2026-10-18  OTV4TEST r288 (PARK.1) — realized_pnl_today(exclude_strategies=()) - the catastrophic cap passes

@@ -1,5 +1,6 @@
 """
-config.py  v4.72
+config.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v4.72  2026-10-24  CD.1 - RENT.2/RENT.3 SCRAPPED: OT_REENTRY_GATE / REENTRY_GATE_MODE / REENTRY_GATE_ENV_REFUSED removed (the operator,
       2026-10-24: "The 20 seconds is arbitrary ... It has zero value. Scrap it."). analysis/reentry.py is deleted.
 v4.71  2026-10-24  OTV4TEST r316 (BRK.15 + HUNT.13 + RENT.3) - OT_BRK_REFIRE rearm|extreme (UNSET = rearm: a Breakout side

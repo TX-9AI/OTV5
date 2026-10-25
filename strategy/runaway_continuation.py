@@ -1,5 +1,6 @@
 """
-strategy/runaway_continuation.py  v5.4
+strategy/runaway_continuation.py  v5.5
+v5.5  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ... (v5.0 was already spent by this file's own history, so the reset lands at v5.5.)
 v5.4  2026-10-18  OTV4TEST r289 (RUN.9, MIRROR OF otv4 r492 0bd66e9) — THE FALLBACK STRIKE IS THE FIRST OTM OR NOTHING.
       gamma_leverage_pick's "else the first OTM strike" took the nearest SURVIVOR of the filters (mainline UNH
       2026-10-16 09:42: 380P at 0.07, delta 0.02, 16.5 out on a 5.23 run, x161, -$322 in 27 s). The first OTM strike

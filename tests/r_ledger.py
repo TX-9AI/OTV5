@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/r_ledger.py  v1.6
+tests/r_ledger.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.6  2026-09-07  r301 - the --all-history help no longer HARDCODES the epoch
 date. A second copy of a constant in a help string is a copy that goes stale
 silently, which is exactly what the epoch move exposed.

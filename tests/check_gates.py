@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_gates.py  v4.4
+tests/check_gates.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v4.4  2026-10-05  OTV4TEST r254 (OBS.1) — strategy/observe.py is a HELPER, not a strategy: it holds the
       per-tick observe set and declares no gate, so it joins HELPERS beside relaxed.py and structure.py.
 v4.3  2026-09-08  r321 — FULLY PINNED IS NOT OPAQUE. v4.2 taught this file to

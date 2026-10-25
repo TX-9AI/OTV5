@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_tcs_fifty.py  v2.0
+tests/check_tcs_fifty.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v2.0  2026-09-09  OTV4TEST r9 — RETIRED, NOT PATCHED. F1–F3 pinned r238's trigger
       (the ORB's fifty_accepted), the spot anchor and the widest wing. The
       trigger and the anchor are gone with the TCS spec (PLAN_SPEC §34); the

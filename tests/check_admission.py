@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_admission.py  v1.13
+tests/check_admission.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.13 2026-10-18  OTV4TEST r292 (GATE.1) — PARK JOINS `ALL`. v1.12 put it in SPEC but not in the list the B-section iterates -
       the r78 defect this header already records - so the B checks and B8 never asked about it (audit 10-18 B2).
 v1.12 2026-10-18  OTV4TEST r288 (PARK.1) — PARK JOINS THE TABLE: 11:01-11:03, cap 1, ONE try per session, by ruling (the

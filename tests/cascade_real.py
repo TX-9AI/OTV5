@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/cascade_real.py  v1.5
+tests/cascade_real.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.5  2026-10-12  OTV4TEST r273 (BFLY.10) — BUTTERFLY_ENTRY_START_ET (12, 0) -> (13, 0), the config's new fly start
       (the operator, 2026-10-12: "reduce the fly window to 1300"). Caught by the full sweep's check_cascade_constants C1.
 v1.4  2026-09-26  OTV4TEST r149 — EOD.1 moves the copies with config: ORB_NO_ENTRY_AFTER_ET and

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_snapshot_pin.py  v1.3
+tests/check_snapshot_pin.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.3  2026-09-22  OTV4TEST r99 — S7a-e: the VWAP context on the fire
       snapshot. `price_vs_vwap` was NULL on EVERY row ever written because a
       categorical was run through `_f()`. Pins the number, the SIGNED

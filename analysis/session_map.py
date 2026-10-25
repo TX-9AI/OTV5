@@ -1,5 +1,6 @@
 """
-analysis/session_map.py  v1.1
+analysis/session_map.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.1  2026-09-03  r231 — 🔴 GEOMETRY NOW ASKS ROLE-vs-PRICE, NOT ONLY
       ROLE-vs-RANGE. Operator, 2026-09-03: *"an upper tine can only be
       resistance and a lower tine can only be support. Therefore an upper tine

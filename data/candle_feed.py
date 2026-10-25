@@ -1,5 +1,6 @@
 """
-data/candle_feed.py  v4.21
+data/candle_feed.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v4.21 2026-10-12  OTV4TEST r277 (FEED.10b) — THE REFEREE WAITS 60 s, NOT 5, AND AN IDENTICAL REPLAY IS SILENT. From
       1-REPORTER's critique (MSG-1REP-1012-12): the feed writes in flush batches, so a bar's FINAL live update can
       land a few seconds after its close while its last 1m is still partial in the store; r276 (5 s) refereed it

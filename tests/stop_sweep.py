@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/stop_sweep.py  v1.3
+tests/stop_sweep.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.3  2026-09-07  r299 - relaxed rows kept (operator ruling); the dead
 `include_relaxed` assignment goes with the filter it fed.
 v1.2  2026-09-07  r297 - --all-history added: `_r_tool` is shared and now passes it. The default

@@ -1,5 +1,6 @@
 """
-derived/gamma_regime.py  v1.1
+derived/gamma_regime.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.1  2026-10-24  CD.2 — level() and series() judge a surface row by quote_ts (the newest quote behind it - market
       time, surface.py v4.3), not by ts_epoch (write time). The 300 s bound is unchanged in size; it now measures the
       age of the QUOTES. A row with no quote_ts is never served (fail closed). The operator, 2026-10-24: approved.

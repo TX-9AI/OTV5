@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""tests/check_one_window_table.py — v1.4
+"""tests/check_one_window_table.py — v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 ONE ENTRY-WINDOW TABLE, AND NOTHING READS A WINDOW FROM ANYWHERE ELSE.
 
 v1.4  2026-10-12 — OTV4TEST r273 (BFLY.10) — W5 pins UPDATED BY RULING: both fly rows and the three names

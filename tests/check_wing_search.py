@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""check_wing_search.py  v1.4
+"""check_wing_search.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.4  2026-09-24  OTV4TEST r128 — RE-POINTED AT WHERE THE CODE LIVES. Fork r5
       moved the sweep's selection into strategy/sweep_plan.py and fork r9 moved
       TCS's into strategy/tcs_plan.py; strategy/sweep_credit_spread.py and

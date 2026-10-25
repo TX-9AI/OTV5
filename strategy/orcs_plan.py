@@ -1,5 +1,6 @@
 """
-strategy/orcs_plan.py  v1.9
+strategy/orcs_plan.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.9  2026-10-19  OTV4TEST r303 (PSTATE.1) — A READY ORCS THAT WILL NOT TRADE IS NOT A TAKE. The READY row was verdict
       TAKE whether or not the trade was on (strategy/orcs.py returns no signal when ORCS_ENABLED is off), so the
       'off' ORCS wrote TAKE rows all window. Now TAKE only when the plan is ACTIVE, LOG-ONLY when it is switched to

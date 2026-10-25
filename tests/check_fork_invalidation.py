@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_fork_invalidation.py  v1.1
+tests/check_fork_invalidation.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 A FORK LIVES WHILE ITS BUILDER CAN BUILD IT — driven through ForkEngine.run().
 
 v1.1  2026-09-23  OTV4TEST r116 — THE RULE MOVED AND THIS FILE MOVED WITH IT. r115

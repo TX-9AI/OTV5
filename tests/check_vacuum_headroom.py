@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-# options-trader-v4/tests/check_vacuum_headroom.py — v1.0
+# options-trader-v4/tests/check_vacuum_headroom.py — v5.0
+# v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 # v1.0 (2026-09-23) — r419 / OPS.42. A VACUUM THAT CANNOT FIT MUST BE REFUSED
 #   BEFORE IT STARTS, NOT DISCOVERED HALF-WAY.
 #   🔴 THE MEASUREMENT THIS FILE EXISTS FOR, TAKEN ON PLTR 2026-09-22 DURING A

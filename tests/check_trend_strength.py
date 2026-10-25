@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_trend_strength.py  v1.1
+tests/check_trend_strength.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.1  2026-09-03  r229 — T10-T12: the acceptance TRAJECTORY separates a tape
       the mean cannot (efficiency 1.00, closes fading), the FVG component
       counts respected pullbacks and returns None when no gap was tested, and

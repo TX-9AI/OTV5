@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_rehearsal_toggle.py  v1.1
+tests/check_rehearsal_toggle.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.1  2026-10-18  OTV4TEST r301 (LOG.1) — G6a-c: outside RTH a zero-marks chain is INFO once per expiry and the
       rehearsal's chain miss INFO once per day; inside RTH both stay as loud as before (audit 10-18 E3). RED before.
 

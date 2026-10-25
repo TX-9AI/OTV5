@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_scaling_toggle.py  v1.1
+tests/check_scaling_toggle.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.1  2026-10-03  OTV4TEST r228 (CFG.4) — S9 RE-POINTED: the menu carries ONE scaling item, 9 =
       Breakout; no menu line dispatches the ORB or VOLT switch (both trades are off; the operator:
       "Yes to the configure change"). change_scaling itself is still driven for all three keys,

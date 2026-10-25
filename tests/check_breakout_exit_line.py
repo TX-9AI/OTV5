@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_breakout_exit_line.py  v1.0
+tests/check_breakout_exit_line.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 
 A Breakout no longer logs the false "has no exit route ... Add a branch."; its
 routing is unchanged; any OTHER unrouted strategy still warns.

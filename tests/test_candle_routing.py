@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/test_candle_routing.py — one subscription, one route. v1.0
+tests/test_candle_routing.py — one subscription, one route. v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.0 — 2026-08-20 — INITIAL (candle_feed v3.16).
 
 THE DEFECT, stated as what happened rather than as a rule: FEED.2 subscribes

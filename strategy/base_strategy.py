@@ -1,5 +1,6 @@
 """
-strategy/base_strategy.py  v4.6
+strategy/base_strategy.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v4.6  2026-09-22  OTV4TEST r91 — THE OPERATOR'S 1-R, RESTORED. `stop_premium()`
       returns the IMPULSIVE CANDLE'S EXTREME converted through delta for the
       geometry-sized debits (ORB, Breakout) instead of a flat 25% of premium,

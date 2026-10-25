@@ -1,5 +1,6 @@
 """
-analysis/signal_journal.py  v4.4
+analysis/signal_journal.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v4.4  2026-09-25  OTV4TEST r144 — THE JOURNAL DIRECTORY IS OVERRIDABLE: OT_SIGNAL_JOURNAL_DIR.
       2026-09-25: the boot sweep's ORB checkers wrote 126 retest_check fixture events into the LIVE
       data/signal_journal/<date>/QQQ.jsonl on this box every morning, and on SOFI and AAL the pusher

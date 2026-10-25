@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_market_calendar.py  v1.1
+tests/check_market_calendar.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.1  2026-10-11  OTV4TEST r268 (mirror of otv4 r478) / DEP.12 — EARLY CLOSES ARE VERIFIED THE SAME WAY. C6/C7
 regenerate the 13:00 sessions from the NYSE rules (day after Thanksgiving; July 3
 when July 4 is Tue-Fri; Dec 24 Mon-Thu) and diff them both ways; C8 diffs them

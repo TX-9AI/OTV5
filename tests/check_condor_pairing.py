@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_condor_pairing.py  v1.0
+tests/check_condor_pairing.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 PAIRING GATE INVARIANTS: Rules 1 and 3 are enforced by _can_open_credit_spread.
 
 v1.0  2026-08-24  Born RED at HEAD before v4.3. Pins:

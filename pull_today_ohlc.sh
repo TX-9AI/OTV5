@@ -1,5 +1,6 @@
 #!/bin/bash
-# pull_today_ohlc.sh — v1.0 (repo root)
+# pull_today_ohlc.sh — v5.0 (repo root)
+# v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 # v1.0 (2026-10-03) — OTV4TEST r201 (CTL.1). A ROOT SHIM FOR CONTROL. day_trader_pro calls
 #   `bash ~/options-trader/pull_today_ohlc.sh` (fleet.py / eod_backfill.py); r14 moved the script to
 #   deploy/ and nothing was left at the path control uses, so the call would fail on any box

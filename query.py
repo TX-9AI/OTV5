@@ -1,5 +1,6 @@
 """
-query.py  v4.20
+query.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v4.20  2026-10-19  OTV4TEST r303 (PSTATE.1) - THE PLANS PANEL KNOWS A DORMANT PLAN FROM A BROKEN ONE. A dormant plan
       writes no heartbeat (the operator, 2026-10-19: "dormant plans should not write to the ledger"), so the panel
       read its last row as STALE and an absent one as NOT RUNNING. It now reads data/plan_states.json (written by the

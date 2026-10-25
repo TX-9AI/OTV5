@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_oi_shared_loop.py  v1.0
+tests/check_oi_shared_loop.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.0  2026-10-18  OTV4TEST r294 (OI.2) — MAINLINE's tests/check_oi_shared_loop.py v1.0 (otv4 r493 1c60b69, sha256
       fc3c6e46...) VERBATIM below this line: the same gate run in both trees (WA 38.2). RED on 20e660f at O1 O2 O4.
 v1.0  2026-10-18  r493 / OI.2 — THE OI FETCH RUNS ON THE SHARED SDK LOOP.

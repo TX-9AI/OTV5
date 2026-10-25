@@ -1,5 +1,6 @@
 """
-analysis/second_order.py  v4.1
+analysis/second_order.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v4.1  2026-10-03  OTV4TEST r212 (DER.2) — derive_for_symbol also returns WHAT IT DIFFERENCED: iv (the newest clean sample's
       volatility), dt_seconds and d_vol of the pair charm and vanna were measured on. surface_series has
       carried those three columns NULL on every row (1.89M on this box) because nothing handed them over.

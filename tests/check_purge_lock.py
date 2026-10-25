@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""tests/check_purge_lock.py — v1.2
+"""tests/check_purge_lock.py — v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.2  2026-10-13 — OTV4TEST r279 (mirror of otv4 r416). K0 pins `_delete_batched`;
 `_try_delete` is removed (every DELETE now goes through the batched path).
 v1.1  2026-09-14 — OTV4TEST r26 (HYG.9). L1 NO LONGER TAKES THE BOX'S REAL LOCK.

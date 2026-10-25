@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_level_book.py  v1.4
+tests/check_level_book.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 THE LEVEL BOOK, DRIVEN ON HAND-BUILT TAPES.
 
 v1.4  2026-10-18  OTV4TEST r300 (LVL.20) — K15: the RTH block ends at the day's bell (13:00 on the 2026-11-27 half day,

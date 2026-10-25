@@ -1,5 +1,6 @@
 """
-execution/position_manager.py  v5.22
+execution/position_manager.py  v5.23
+v5.23  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ... (v5.0 was already spent by this file's own history, so the reset lands at v5.23.)
 v5.22 2026-10-20  OTV4TEST r310 (LIVE.1 F4.2, MIRROR OF otv4 r496 fcbf104, WA 38.2) — THE LIVE MARK FALLBACK
       SURVIVES THE BROKER'S RATE LIMIT. Measured by r308 tools/probe_live_mark.py (16:05 ET): QQQ priced
       3 of 6, SPX 4 of 6; every answered call priced right, every None with a cause was HTTP 429. A

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_replay_overwrite.py  v1.1  (OTV4TEST r276: byte-identical with otv4 r486 556bc2c but this line)
+tests/check_replay_overwrite.py  v5.0  (OTV4TEST r276: byte-identical with otv4 r486 556bc2c but this line)
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.1  2026-10-12  FEED.9b — A CORRECTION IS TAKEN. v1.0 pinned range as the
   referee, and on its first boot replay the rule refused the vendor's
   correction of CVX's 10-12 daily bar (stored L 211.02 off the tape, 1m low

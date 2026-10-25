@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_brk_delta_floor.py  v1.0
+tests/check_brk_delta_floor.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 BREAKOUT'S DELTA FLOOR (BRK.13).
 v1.0  2026-10-18  OTV4TEST r288. The operator, 2026-10-17 19:12 ET: "A is fine" (to: trade the Breakout delta floor
       on QQQ-TEST with a counterfactual). Rule BF of /var/tmp/sat_1017/bdelta/PREREG_BRK_DELTA.md (sha 0c21a4b1,

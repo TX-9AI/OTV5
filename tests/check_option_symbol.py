@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_option_symbol.py  v1.0
+tests/check_option_symbol.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.0  2026-09-13  OTV4TEST r17 — PRE.1: EVERY ENTRY ROW NAMES ITS OPTION.
       `EntryEngine._record_kwargs` is the ONE LINEAGE factory both the immediate
       and the standing-offer paths build through; it wrote `symbol =

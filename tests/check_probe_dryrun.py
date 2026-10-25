@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_probe_dryrun.py  v1.0
+tests/check_probe_dryrun.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.0  2026-10-04  OTV4TEST r239 (PRB.2) — THE ORDER PROBE CAN ONLY EVER DRY-RUN.
 
   The operator, 2026-10-04: "Yes, to the dry run if you can do it without actually spending money."

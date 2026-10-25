@@ -1,5 +1,6 @@
 #!/bin/bash
-# tools/guarded.sh  v1.0
+# tools/guarded.sh  v5.0
+# v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 # v1.0  2026-10-04  OTV4TEST r250 — MOVED INTO THE REPO from /var/tmp/breakout_exit_wargame/guarded.sh (the operator,
 #       2026-10-04: "finish what you can"), with ONE FIX: the old script ended `wait $P; echo "rc=$?"`, so it
 #       always exited 0 - a study killed by the guard, or one that crashed, looked like a success to its caller.

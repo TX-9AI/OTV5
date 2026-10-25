@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""tests/check_claude_purge.py — v1.2
+"""tests/check_claude_purge.py — v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.2  2026-10-04  OTV4TEST r235 — P11: a purge that archives NOTHING still says so ("scratch purge: archived 0"),
       driven through the real main() with the raiser, the recorder and the purge itself stubbed (nothing real
       is purged or raised). Silent-on-zero hid a run from SPX-TEST's agent (§0.5).

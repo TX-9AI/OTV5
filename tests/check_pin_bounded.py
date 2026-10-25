@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_pin_bounded.py  v1.0
+tests/check_pin_bounded.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.0  2026-09-01  r215 — A PIN IS A CLAIM ABOUT TODAY'S PRICE.
 
 🔴 `pin_strike` WAS A BARE ARGMAX OVER THE WHOLE CHAIN. Nothing bounded it to

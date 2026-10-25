@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_orb_restart.py  v1.3
+tests/check_orb_restart.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.3  2026-09-26  OTV4TEST r149 (EOD.1) — C11 RE-POINTED: the clock is set just past the ORB cutoff
       READ FROM CONFIG (ORB_NO_ENTRY_AFTER_ET, now 15:40 by the operator's all-day debit window)
       instead of a typed 11:30. Same behaviour pinned: past the cutoff a miss EXPIRES.

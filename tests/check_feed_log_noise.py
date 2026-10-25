@@ -1,4 +1,5 @@
-"""tests/check_feed_log_noise.py — v1.1
+"""tests/check_feed_log_noise.py — v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.1  2026-09-26  OTV4TEST r146 — L7 re-pointed to adjacency: main() now opens with the UNSET guard, so basicConfig is no longer the first call; the property - the filter installed on the very next statement, before anything logs - is pinned unchanged.
 THE FEED'S JOURNAL CARRIES THE FEED, NOT THE SDK'S WEBSOCKET FRAMES — AND
 DROPPED DATA STAYS VISIBLE.

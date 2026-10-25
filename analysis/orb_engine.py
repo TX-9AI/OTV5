@@ -1,5 +1,6 @@
 """
-analysis/orb_engine.py  v4.17
+analysis/orb_engine.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v4.17  2026-10-03  OTV4TEST r222 (ORP.1) — correct_range(): THE OFFICIAL PRINT CAN REPLACE A RANGE FROZEN FROM AN INCOMPLETE OPEN.
       On 2026-09-29 the feed was blind at the open and the range was frozen from a partial candle (low
       739.62; the backfilled bars say 737.67), and nothing ever re-read it. The operator, 2026-10-03: "On a

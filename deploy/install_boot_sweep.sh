@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# deploy/install_boot_sweep.sh  v1.1
+# deploy/install_boot_sweep.sh  v5.0
+# v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 #
 # v1.1  2026-09-25  OTV4TEST r138 — NO `Wants=optionsbot.service`. In systemd, Wants=
 #       STARTS the wanted unit, so a boot sweep would pull a deliberately-disabled
@@ -51,7 +52,7 @@ sudo tee /etc/systemd/system/optbot-boot-sweep.service >/dev/null <<UNIT
 # memory guard is what actually protects the bot: boot_sweep reads
 # MemAvailable and SKIPS itself below OT_SWEEP_MIN_FREE_MB rather than
 # competing.
-Description=OTV4TEST full checker sweep (boot only, never during a delivery)
+Description=OTV5 full checker sweep (boot only, never during a delivery)
 After=optionsbot.service candle-feed.service
 
 [Service]

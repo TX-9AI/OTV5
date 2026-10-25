@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tools/seed_candles_from_warehouse.py  v1.1
+tools/seed_candles_from_warehouse.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.1  2026-10-04  OTV4TEST r237 (SEED.2) — A BAR PUSHED BEFORE IT CLOSED IS REFUSED ("partial"). v1.0 kept the
       latest push per bar and never asked whether that push came AFTER the bar's end. Mainline's pusher
       ships the forming bar and never re-sends it (otv4 s3_push.push_candles advances its mark over the

@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# tools/land.sh — v1.24
+# tools/land.sh — v5.0
+# v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 # v1.24 (2026-10-25) — OTV5 r5 (DOC.35). docs/ENV.md IS REGENERATED AT LAND, LIKE THE TWO MAPS. r4 moved lines in
 #   tools/boot_sweep.py and tests/check_clean_deploy.py and shipped without regenerating docs/ENV.md, so check_env_doc E1
 #   went red on the next sweep (QQQ-TEST MSG-QQQ-1025-03) - a generated document that depends on an edit after its

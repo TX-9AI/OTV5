@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""tests/check_breakout_research.py — v1.2
+"""tests/check_breakout_research.py — v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 THE OBSERVER POSTURE IS REAL, IT EXPIRES, AND BREAKOUT IS THE ORB WITHOUT THE RETEST.
 
 v1.2  2026-09-19 — OTV4TEST r59. R12: THE FADE ROUTE WAS DEAD FOR THE WHOLE

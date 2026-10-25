@@ -1,5 +1,6 @@
 """
-execution/entry_ladder.py  v4.3
+execution/entry_ladder.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v4.3  2026-09-27  OTV4TEST r164 — NO ORDER IS EVER PRICED AT $0.00. The operator,
       2026-09-27: "We can NEVER bid or ask $0.00 — this is the one time that we
       may have to cross Mark. On our ladder exit and entries ... if Mark is ever

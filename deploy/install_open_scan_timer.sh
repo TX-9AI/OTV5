@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # ==========================================================================
-# deploy/install_open_scan_timer.sh  v1.0
+# deploy/install_open_scan_timer.sh  v5.0
+# v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 # v1.0  2026-09-24  OTV4TEST r130 — THE DAILY OPEN SCAN, ON TWO TIMERS.
 #       Operator: *"the scan you just ran should be done every trading day"*,
 #       then: *"let's do the early ones at 9:35 and the ones that need a few
@@ -46,7 +47,7 @@ for p in ready live; do
   if [ "$p" = "ready" ]; then AT="09:35:00"; WHAT="feed, engines, level book, forks"; else AT="09:45:00"; WHAT="plan inputs, fires, warnings since 09:30"; fi
   sudo tee "/etc/systemd/system/optbot-open-scan-$p.service" >/dev/null <<UNIT
 [Unit]
-Description=OTV4TEST daily open scan, $p phase ($WHAT) - read-only (r130)
+Description=OTV5 daily open scan, $p phase ($WHAT) - read-only (r130)
 After=optionsbot.service candle-feed.service
 
 [Service]
@@ -62,7 +63,7 @@ StandardError=append:$DIR/logs/open_scan.log
 UNIT
   sudo tee "/etc/systemd/system/optbot-open-scan-$p.timer" >/dev/null <<UNIT
 [Unit]
-Description=OTV4TEST daily open scan, $p phase, $AT ET on weekdays (r130)
+Description=OTV5 daily open scan, $p phase, $AT ET on weekdays (r130)
 
 [Timer]
 OnCalendar=Mon..Fri *-*-* $AT America/New_York

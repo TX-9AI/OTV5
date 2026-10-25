@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_fill_basis.py  v1.4
+tests/check_fill_basis.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.4  2026-09-24  OTV4TEST r128 — F6 AND F6b MOVED, NOT DROPPED (WORKING_AGREEMENT
       38.4). Both grepped the WHOLE of main.py for r220's inline names
       (`_lr.price_for(_lkey`, `_lr.refuse(_lkey`, `_lr.clear(_lkey)`,

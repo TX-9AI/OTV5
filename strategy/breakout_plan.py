@@ -1,5 +1,6 @@
 """
-strategy/breakout_plan.py  v1.18
+strategy/breakout_plan.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.18 2026-10-24  OTV4TEST r316 (BRK.15) — A SIDE RE-ARMS ON EVERY RETURN TO THE RANGE; THE NEW-EXTREME RULE IS DROPPED.
       The operator, 2026-10-24 13:45 ET: "The new session high/low rule needs to be dropped. You established that the
       move was mostly done if we waited for a new extreme"; 13:56 ET: "For now, rearm it on every reentry" ... "Yes,

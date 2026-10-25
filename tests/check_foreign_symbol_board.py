@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_foreign_symbol_board.py  v1.1
+tests/check_foreign_symbol_board.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.1  2026-10-20  OTV4TEST r307 (GATE.4) - F7 PINS ITS OWN PLAN STATES FILE. Since r303 the plans panel skips every plan
       data/plan_states.json names dormant, and F7 read the LIVE file (the bot writes it at start; VOLT is dormant in it),
       so its stale-VOLT control row vanished: RED at the 10-20 08:00 sweep on QQQ-TEST and SPX-TEST (STALE rows: []),

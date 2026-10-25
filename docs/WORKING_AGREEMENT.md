@@ -1,6 +1,7 @@
 # WORKING_AGREEMENT.md — how we operate (read this first, every new thread)
 
-**`WORKING_AGREEMENT.md` v4.29 · 2026-10-24 — §0 through §40, plus §15a, §18a, §36a, §38.9 and §40.1. See the CHANGELOG at the foot.**
+**`WORKING_AGREEMENT.md` v5.0 · 2026-10-25 — §0 through §41, plus §15a, §18a, §36a, §38.9 and §40.1. See the CHANGELOG at the foot.**
+**v5.0 · 2026-10-25 · OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...**
 
 > 🔴 **§0 IS THE FLOOR — AN ATTESTATION, NOT A TIP. Read it first, every thread.**
 > The operator ordered it once before and was told it existed. It did not.
@@ -1389,6 +1390,14 @@ the answering file already in the repo. When the assistant had to ask, "I
 assumed" was expensive; now it is indefensible. **If a file settles the
 question, open it before answering.**
 
+🔑 **ON OTV5 (added 2026-10-25, OTV5 r7): WHO HOLDS §38.2.** The assistant that holds the
+GRANTED list below is the repository's **custodian, 1-REPORTER, on control** (the operator,
+2026-10-24: *"Reporter will seed, manage and take custody of otv5"*). **The agent on a fleet
+box holds §38.1 only.** The operator, 2026-10-25: *"a trading box under your control will not
+be making repo decisions or trading decisions"* — a box agent observes and reports (its brief
+is `docs/HANDOFF.md`); where §38.2 grants an action on a box, the box agent reads it as
+"report it to 1-REPORTER and the operator". Nothing in §38.3 or §38.4 changes.
+
 ### 38.1 FREE — no need to ask
 
 Read any file at any revision · run any report, study, checker or read-only menu
@@ -1453,8 +1462,12 @@ with `^C` because it looked hung. A study that widens its date window says so
   ACK, and an unacked message by the next turn is reported to the operator as
   undelivered rather than assumed read.
 
-- 🔑 **QQQ-TEST IS THIS REPO'S ONE CONTROLLER, AND IT MAY WAKE AND STOP SPX-TEST
-  (added 2026-10-04, OTV4TEST r233, WAKE.1).** The operator: *"You're essentially the
+- ⬛ **SUPERSEDED ON OTV5 (2026-10-25, OTV5 r7): the paragraph below describes the predecessor's
+  arrangement and is kept struck, not deleted (the r240 precedent). On OTV5 the one controller
+  is 1-REPORTER on control (§38.0 note above); no box wakes or stops another; `tools/wake_box.py`
+  and its gate are removed from this tree.**
+  ~~🔑 QQQ-TEST IS THIS REPO'S ONE CONTROLLER, AND IT MAY WAKE AND STOP SPX-TEST
+  (added 2026-10-04, OTV4TEST r233, WAKE.1).~~ The operator: *"You're essentially the
   controller for this repo like 1-REPORTER is for mainline. One controller for the
   repo"*; *"I do want to assign you permission to wake SPX-TEST. This is for diagnostic
   checks or git actions"*; and *"I want you to be able to stop it too."*
@@ -1937,7 +1950,35 @@ joins the table above.
 
 ---
 
+## 41. THE LINEAGE SPLIT — HOW TO READ A NUMBER IN THIS TREE.
+Added 2026-10-25, OTV5 r7 (SPLIT.1). The operator: *"We need to scrub otv5 of test references to
+avoid confusion between where the lineage separates."*
+
+This tree was seeded on 2026-10-24 as OTV5 r0, with one ledger (`docs/GENESIS.md`) numbered from
+r0. Everything it inherited carries the predecessor's own history, and that history is kept —
+**marked, never rewritten** — so the boundary is always legible:
+
+- **A bare revision number (`r3`, `r12`) is THIS tree's**, a row in `docs/GENESIS.md`. A revision
+  of any other repository is always prefixed: `OTV4TEST r316`, `otv4 r502`, `dtp r489`. A bare
+  number outside this repository means nothing; cite this tree as `OTV5 rN`.
+- **Every file header starts at v5.0 as of r7**, and each later change to a file counts v5.1,
+  v5.2, ... on the v5 corpus. The entries BELOW a file's `v5.0 ... OTV5 r7` line are the
+  predecessor's changelog (v4.x, v1.x and so on), kept as history. A version that does not
+  start with 5 is not this tree's edit. Six files whose own history had already spent v5.0
+  landed at the next free v5 decimal instead, and say so in their reset line.
+- **Trade rows carry a lineage stamp naming the engine that produced them.** The stamp is read
+  by control's reports, keyed per lineage and never filtered; see `database/trade_logger.py`.
+- **Box names are the symbol** (`✨SOFI`), not `<SYM>-TEST`; the `-TEST` names belong to the
+  predecessor's boxes.
+- **Docs named "superseded snapshot" by the predecessor are not carried.** Removed at r7:
+  FORK_BRIEF, PORT_STATE, PORT_MANIFEST, the mainline advisory, and the stray root BACKLOG.md.
+  ROADMAP stays because code comments cite its phase numbers.
+
+---
+
 ## CHANGELOG
+
+**v5.0 — 2026-10-25 — OTV5 r7 — THE LINEAGE SPLIT, §41, AND THE HEADER RESET.** §38.0 says who holds §38.2 on OTV5 (1-REPORTER; a fleet box's agent holds §38.1 only); §38.2's QQQ-TEST-as-controller paragraph is struck as the predecessor's; §41 states how to read a revision number, a file version, a lineage stamp and a box name across the split. Every file header starts at v5.0 from this revision.
 
 **v4.29 — 2026-10-24 — OTV5 r0 — ONE LEDGER.** The reading order (item 4) and §35 name `docs/GENESIS.md` as this tree's one ledger, numbered from r0 (the seed); the two-ledger arrangement is recorded as history. Facts only, no rule changed.
 

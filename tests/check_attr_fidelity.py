@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""check_attr_fidelity.py — v1.2
+"""check_attr_fidelity.py — v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.2  2026-10-03 — OTV4TEST r193 (CFG.1). A3/A4: THE SAME FAILURE, ON config ITSELF. The 10-03 audit
       found 29 names read as getattr(config, "NAME", literal) that config never defined - every
       "retune via config" took the module's literal, and a mistyped name could not fail. A3 resolves

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_plan_wiring.py  v1.7  (2026-09-13)
+tests/check_plan_wiring.py  v5.0  (2026-10-25)
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ... Previous title: tests/check_plan_wiring.py  v1.7  (2026-09-13)
 v1.7  2026-09-13  OTV4TEST r25 — W9/W9b PASS A 1m FRAME. r24 requires the last closed bar to
       hold the 50, and these two calls passed none, so both went HOLD before
       reaching the chain / R they test. RED SINCE r24 AND SHIPPED THAT WAY: r24's

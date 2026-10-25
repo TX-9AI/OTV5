@@ -1,5 +1,6 @@
 """
-execution/broker_reconcile.py  v4.2
+execution/broker_reconcile.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v4.2  2026-10-04  OTV4TEST r243 (LIVE.1 B1, MIRROR OF otv4 r465 7562317, WA 38.2) — reconcile reads ONLY this box's instrument family (SPX = SPX+SPXW; '*' = the whole account) and checks EVERY leg at its QUANTITY (summed across rows sharing a leg); a missing leg or a count off the broker is REPORTED (plan.mismatch + an alert), rows are never dropped, the phantom rule unchanged. The operator, 2026-10-04: 'multiple boxes will trade that account but never duplicate symbols ever.' Code hunks applied verbatim from 7562317.
 v4.1  2026-09-27  OTV4TEST r165 (EXP.1) — AN EXPIRED POSITION IS BOOKED AT ITS SETTLEMENT VALUE,
       NOT A FLAGGED $0.00. The operator, 2026-09-27, approving EXP.1's booking fix. QQQ is

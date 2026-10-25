@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_no_stray_duplicates.py  v1.1
+tests/check_no_stray_duplicates.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.1  2026-09-07  r302 - S1 IS STAGE-AWARE. land.sh applies DEL at line 409 and
 runs CHECKs at 371, so during the very land that removes them the strays are
 still on disk and v1.0 failed its own delivery. The end state is gated by DEL

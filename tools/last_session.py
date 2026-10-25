@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tools/last_session.py  v1.2 — WHAT THE OPERATOR SAID LAST TIME.
+tools/last_session.py  v5.0 — WHAT THE OPERATOR SAID LAST TIME.
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.2  2026-10-03  OTV4TEST r191 (AUD.2) — Eastern time comes from the tz database (zoneinfo), not a fixed
       UTC-4: from 2026-11-01 (DST ends) every time this digest printed would have been an hour late.
 

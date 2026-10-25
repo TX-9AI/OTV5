@@ -1,5 +1,6 @@
 """
-strategy/atp_butterfly_plan.py  v1.5
+strategy/atp_butterfly_plan.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.5  2026-10-19  OTV4TEST r303 (PSTATE.1) — the `enabled` condition is met when the plan is ACTIVE (ENABLED, as before)
       or switched to LOG (OT_ATP_BUTTERFLY=log): LOG reaches take(), which records LOG-ONLY. DORMANT is never asked.
 v1.4  2026-10-03  OTV4TEST r225 (FLY.2) — records the same three leg-quote facts as the pin butterfly on the wings it picks (gex_pin_butterfly.leg_quote_facts). Log-only.

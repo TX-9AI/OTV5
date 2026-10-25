@@ -1,5 +1,6 @@
 """
-strategy/plan_state.py  v1.0
+strategy/plan_state.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 EVERY PLAN HAS ONE OF THREE STATES - ACTIVE, LOG ONLY, DORMANT - AND ONE GATING CATEGORY (PSTATE.1).
 
 v1.0  2026-10-19  OTV4TEST r303 (PSTATE.1). The operator, 2026-10-19 08:34 ET: "Going forward, I want all the

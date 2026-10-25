@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_sma50_record.py  v1.1
+tests/check_sma50_record.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 
 Every trade's entry snapshot records the 5-minute 50 SMA (regular hours and
 extended), the entry's side of it, and the session's opening-candle cross; the

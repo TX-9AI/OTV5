@@ -1,5 +1,6 @@
 """
-derived/plan_ledger.py  v4.3
+derived/plan_ledger.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v4.3  2026-10-24  CD.2 — A PLAN DOES NOT OUTLIVE ITS SESSION. live_plans() and close_unfilled() read only rows created on
       or after TODAY's session start (ET midnight), except LEG1_FILLED (real money on; the broker reconcile decides
       it, not a clock). A row from an earlier session - a restart that skipped mark_restart_wipe, or a seeded one -

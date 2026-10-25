@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_fill_observers.py  v1.1
+tests/check_fill_observers.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.1  2026-10-13  OTV4TEST r280 (EXIT.5). O3 RE-POINTED, NOT DROPPED (section 38.4): "off" now sets BOTH OT_FILL_OBSERVE and
       OT_FLOOR_WATCH, because the acting watch (default trade) is its own switch; F6 in check_floor_watch pins that.
 TWO FILL OBSERVERS, RECORD ONLY (PMAP.1 + FILL.2, execution/fill_observers.py).

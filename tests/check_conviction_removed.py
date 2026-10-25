@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""check_conviction_removed.py — v2.1
+"""check_conviction_removed.py — v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v2.1  2026-08-27  r159: the docstring named the retired classifier's field by
       its old name, which tripped the exorcism gate
       — the land gate was RED at r152-r158. Renamed; the gate is green again.

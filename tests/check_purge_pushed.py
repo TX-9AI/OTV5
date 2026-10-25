@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_purge_pushed.py  v1.2
+tests/check_purge_pushed.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 NOTHING UNRECOVERABLE MAY LACK A PUSH STAGE. Executing invariant.
 
 v1.2  2026-08-29  r191 — C9/C10: THE DERIVED SERIES JOIN THE INVARIANT, AND

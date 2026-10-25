@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_brk_noprog.py  v1.0
+tests/check_brk_noprog.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 BREAKOUT'S NO-PROGRESS EXIT (BRK.8) AND ITS PER-BOX ENTRY END (BRK.9).
 v1.0  2026-10-10  OTV4TEST r265. The operator, 2026-10-10 13:37 ET: "Yes, to all. Study, fit & apply";
       11:47 ET: "...it should be implemented as long as this counter factual evidence is available for next

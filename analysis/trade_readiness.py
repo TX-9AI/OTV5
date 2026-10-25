@@ -1,5 +1,6 @@
 """
-analysis/trade_readiness.py  v4.6
+analysis/trade_readiness.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v4.6  2026-10-03  OTV4TEST r229 (EM.2) — _expected_move_now returns the tastytrade platform's expected move (volatility_measures.expected_move_platform), 0.0 when unreadable; the operator's ruling 2026-10-03. Log-only engine; its `em` unit is ~10-25% smaller from this revision on - do not pool across it.
 v4.5  2026-10-03  OTV4TEST r223 (EM.1) — _expected_move_now delegates to analysis.volatility_measures.straddle_nearest (moved verbatim).
 v4.4  2026-09-21  OTV4TEST r77 — the dead `sweep_reversal_strategy` import

@@ -1,5 +1,6 @@
 """
-strategy/sweep_plan.py  v1.18
+strategy/sweep_plan.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.18  2026-10-24  CD.2 — (1) THE FIRST LOOK SPENDS WHAT IS ALREADY THERE (§37, as tcs_plan r112 does): _fired_events is
       process memory, so a mid-session restart re-fired today's latest REJECTED whatever its age, against
       levels.py's own rule that an interrupted firing sequence is never re-entered. (2) The trigger's window is

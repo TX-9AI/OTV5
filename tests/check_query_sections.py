@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_query_sections.py  v1.6
+tests/check_query_sections.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.6  2026-09-23  OTV4TEST r126 — Q4 no longer opens analysis/liquidity_mapper.py (deleted):
       it read the file into a variable nothing used. Q4's assertion is unchanged.
 v1.5  2026-09-22  OTV4TEST r92 — Q7 covers the two panels that still range-query; Q7b pins

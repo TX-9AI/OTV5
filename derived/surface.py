@@ -1,5 +1,6 @@
 """
-derived/surface.py  v4.3
+derived/surface.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v4.3  2026-10-24  CD.2 — every row carries quote_ts, the receive stamp of the NEWEST greeks quote in the window it was
       derived from (its market time). The readers (gamma_regime.level, anchors._surface_row, main's charm/vanna port)
       judge a row by it, not by when it was written, so a stale or seeded row is never served as current.

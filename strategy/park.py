@@ -1,5 +1,6 @@
 """
-strategy/park.py  v1.0
+strategy/park.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.0  2026-10-18  OTV4TEST r288 (PARK.1) — PARK, THE 11:00 FIRST-HOUR CONTINUATION: THE SPECIFICATION. The
       operator, 2026-10-17 18:21 ET: "Trade it, don't just log it. Paper is free. Call it PARK (named after my
       friend)"; on SPX: "Use our actual numbers, trade it—don't log it"; 18:30 ET: "Make sure when you build it

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""check_chain_ordering.py — v1.4
+"""check_chain_ordering.py — v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.4  2026-10-19  OTV4TEST r303 (PSTATE.1) — its subject SweepCreditSpread (C9/C10) is DORMANT by default and a dormant plan now writes
       nothing by ruling, so this run switches it ACTIVE (OT_SWEEP_CS=1); what it pins is unchanged.
 v1.3  2026-10-03  OTV4TEST r196 (AUD.5) — C13/C14: THE VOLATILITY MEASURES REACH THE ENGINES. They were

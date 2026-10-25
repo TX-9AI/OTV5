@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_docs_roster.py  v1.1
+tests/check_docs_roster.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.1  2026-10-19  OTV4TEST r303 (PSTATE.1) — R3 reads every switch's default from strategy/plan_state.py (the one
       place that decides active / log / dormant), not from two source literals that no longer exist.
 v1.0  2026-10-03  OTV4TEST r226 (DOC.31) — docs/TRADES.md §0 IS PINNED TO config.py.

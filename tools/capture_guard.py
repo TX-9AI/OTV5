@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tools/capture_guard.py  v1.0
+tools/capture_guard.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.0  2026-10-24  CD.1 — BEFORE A BOX PUSHES, ASK THE WAREHOUSE WHO ELSE ALREADY PUSHES THIS SYMBOL. A second pusher
       into raw/.../sym=<SYM>/ does not error: latest-wins by pushed_at_utc silently overwrites the first box's rows in
       every report that reads them (SPX-TEST 10-03: 36 objects into mainline's sym=SPX; the 09-25 SOFI box about to

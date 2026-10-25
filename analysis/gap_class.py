@@ -1,5 +1,6 @@
 """
-analysis/gap_class.py  v1.0
+analysis/gap_class.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.0  2026-10-24  CD.3 (DISC.4) — THE GAP CLASSIFIER, ON THE SHIPPED SURFACE. analysis/gap_measure.py has imported
       `classify` from tests.gap_backfill since the OTV4 split; that module has never existed in this tree's history
       (mainline DISC.4; verified on OTV4TEST c825449), so `_classify` was None and gap_class was never emitted - a

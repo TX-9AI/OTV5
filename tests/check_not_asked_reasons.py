@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_not_asked_reasons.py  v1.1
+tests/check_not_asked_reasons.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.1  2026-10-19  OTV4TEST r303 (PSTATE.1) — its subjects SweepCreditSpread / TrendCreditSpread are DORMANT by default, and a
       dormant plan now writes nothing by ruling, so this run switches both ACTIVE (OT_SWEEP_CS=1, OT_TCS_ACTIVE=1)
       to test the board's mechanics on plans that write. tests/check_plan_states.py pins the dormant side.

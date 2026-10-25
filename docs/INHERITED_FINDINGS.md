@@ -1,4 +1,5 @@
-# docs/INHERITED_FINDINGS.md — v4.0
+# docs/INHERITED_FINDINGS.md — v5.0
+# v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 
 **What OTV3 measured. Carried so OTV4 does not rebuild any of it.**
 **Every number here is from the live book or banked tape, not from reasoning.**

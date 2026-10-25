@@ -1,5 +1,6 @@
 """
-strategy/management.py  v2.11
+strategy/management.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v2.11 2026-10-18  OTV4TEST r288 (BRK.13) — BREAKOUT'S DELTA FLOOR. After the spec stops, par delta and the target/nickel
       rules, before no-progress and exhaustion: once BRK_DFLOOR_AFTER_S (600 s) have passed since entry, a readable
       |delta| <= BRK_DELTA_FLOOR (0.30) closes the Breakout (OT_BRK_DFLOOR=trade, the default) or is recorded only (log).

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_dispatch.py  v4.3
+tests/check_dispatch.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v4.3  2026-09-24  OTV4TEST r128 — TWO STANDING REDS, BOTH THE CHECKER'S, NEITHER THE
       CODE'S. (1) "no dispatch-local name is used before it is assigned" flagged
       `_fire` (a NESTED `def`, main.py:3849) and `_adm_rules` (a LOCAL import,

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_admission_wired.py  v1.5
+tests/check_admission_wired.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.5  2026-10-19  OTV4TEST r303 (PSTATE.1) — A3's ORB trade is DORMANT by default and a dormant plan is never asked by ruling,
       so this run switches it ACTIVE (OT_ORB_TRADE=1). A5 asks a name NEITHER table carries (UnlistedStrategy):
       IronCondorStrategy is now DORMANT (no entry of its own), and admission's no-opinion rule is what A5 pins.

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_entry_gate.py  v1.0
+tests/check_entry_gate.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 
 r101 — DECIDE ALWAYS, PLACE AFTER 09:35. Operator directive 2026-08-24:
 "I want the executing logic running as long as the service is up. But one gate

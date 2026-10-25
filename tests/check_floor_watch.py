@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_floor_watch.py  v1.0
+tests/check_floor_watch.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 THE 2 s FLOOR WATCH WAKES THE TICK (EXIT.5 on TEST, execution/fill_observers.sleep_observing).
 v1.0  2026-10-13  OTV4TEST r280. The operator, 2026-10-13 13:19 ET: "Yes to all" (the relayed "Exit5, yes");
       13:22 ET, its scope: "Breakout + Runaway". Mechanics of otv4 r482 (0353b4e): the wait ends early on a FRESH

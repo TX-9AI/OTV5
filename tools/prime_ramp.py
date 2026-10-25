@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tools/prime_ramp.py  v1.0
+tools/prime_ramp.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.0  2026-10-24  CD.1 — THE INFORMERS' RAMP IS PRIMED FROM THE WAREHOUSE, AT FIRST START AND AT EVERY SYMBOL
       SWITCH. The operator, 2026-10-24 14:59 ET: "We need a script that primes the informers' ramp from s3 whenever we
       switch symbols. Once the deploy lands & config.sh params are all set, that should be the 1st start of options

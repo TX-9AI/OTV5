@@ -1,5 +1,6 @@
 """
-data/gex_data.py  v4.1
+data/gex_data.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v4.1  2026-09-01  r215 — 🔴 THE PIN STRIKE WAS A BARE ARGMAX OVER THE WHOLE
       CHAIN, UNBOUNDED. `max(strikes_sorted, key=net_gex)` with nothing
       constraining it to strikes near spot, so when net GEX is flat or noisy

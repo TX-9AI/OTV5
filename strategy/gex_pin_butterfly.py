@@ -1,5 +1,6 @@
 """
-strategy/gex_pin_butterfly.py  v5.11
+strategy/gex_pin_butterfly.py  v5.12
+v5.12  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ... (v5.0 was already spent by this file's own history, so the reset lands at v5.12.)
 v5.11  2026-10-19  OTV4TEST r303 (PSTATE.1) — the `enabled` condition is met when the plan is ACTIVE (ENABLED, as before)
       or switched to LOG (OT_GEX_BUTTERFLY=log): LOG reaches take(), which records LOG-ONLY, and main refuses the
       signal at _execute_entry_signal. A DORMANT fly is never asked (main._safe_strategy).

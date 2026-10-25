@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # ==========================================================================
-# configure.sh  v4.19
+# configure.sh  v5.0
+# v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 # v4.19 2026-10-24  CD.1 — DONE IS THE FIRST START, IN ORDER, AND MANAGED IS THE WAREHOUSE SWITCH. The operator,
 #       2026-10-24: "Once the deploy lands & config.sh params are all set, that should be the 1st start of options
 #       bot, candle service, the ramp primer & s3 push enabled (from configure.sh)"; "I'm good with the managed tag

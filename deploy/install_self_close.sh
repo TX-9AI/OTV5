@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# deploy/install_self_close.sh — v1.1
+# deploy/install_self_close.sh — v5.0
+# v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 # v1.1  2026-09-11  OTV4TEST r14 — moved from the repo root to deploy/ (root cleanup); no behaviour change.
 # v1.0 (2026-08-25) — THE BOX CLOSES ITSELF IF NOBODY ELSE DID.
 #

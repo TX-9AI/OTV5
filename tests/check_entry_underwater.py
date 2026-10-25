@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""tests/check_entry_underwater.py — v1.1
+"""tests/check_entry_underwater.py — v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 
 v1.1  2026-10-15  OTV4TEST r287 (CFDIR.1) — OT_COUNTERFACTUAL_DIR is set to a scratch directory before
       main is imported. Driving the entry path writes caution_size.jsonl (analysis/commitment.py, COMMIT.3)

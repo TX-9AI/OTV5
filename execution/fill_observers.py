@@ -1,5 +1,6 @@
 """
-execution/fill_observers.py  v1.1
+execution/fill_observers.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.1  2026-10-13  OTV4TEST r280 (EXIT.5 on TEST; the mechanics of otv4 r482 0353b4e) - THE QUOTE WATCH NOW WAKES THE
       TICK. When a Breakout or Runaway single long's own quote (<= 4 s old) is at or below the stop the engine enforces,
       sleep_observing ENDS THE WAIT and the tick runs at once; the tick's evaluate()/decide() still decides, so the

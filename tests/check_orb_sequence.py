@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_orb_sequence.py  v1.5
+tests/check_orb_sequence.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.5  2026-10-03  OTV4TEST r220 (TIME.1) — S4 PASSES A CLOCK (10:00). It called generate_signal with no now_hhmm and relied on the
       plan skipping its window check when the clock was unreadable; r220 makes an unreadable clock DORMANT. Production
       always passes one (main: _now_disp = now_et()). The assertion is unchanged.

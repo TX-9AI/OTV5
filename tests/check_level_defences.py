@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_level_defences.py  v1.0
+tests/check_level_defences.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.0  2026-10-03  OTV4TEST r214 (LVL.18) — A LEVEL'S DEFENCES AND FAILURES ARE COUNTED, AND NOTHING THAT TRADES CAN SEE THEM.
 
   The operator, 2026-10-03: "a sweep of a level is a successful defense. and

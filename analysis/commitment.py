@@ -1,5 +1,6 @@
 """
-analysis/commitment.py  v1.0
+analysis/commitment.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.0  2026-10-12  OTV4TEST r272 (COMMIT.1 / COMMIT.2 / COMMIT.3) — WE ENTER ON COMMITMENT AND EXIT ON ABANDONMENT.
       The operator, 2026-10-12 10:34 ET: "A good place to get out cannot be a good place to get in and vice versa."
       10:35 ET: "We need some way to define that we enter on commitment and we exit on abandonment. We go with the

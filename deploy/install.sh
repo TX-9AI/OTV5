@@ -1,6 +1,7 @@
 #!/bin/bash
 # ==========================================================================
-# deploy/install.sh  v4.7
+# deploy/install.sh  v5.0
+# v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 # v4.7  2026-10-24  OTV5 r0 — OT_DEFAULT_REPO is TX-9AI/OTV5 (== deploy/origin.conf v1.1).
 # v4.6  2026-10-24  CD.1 — the default repository is OT_DEFAULT_REPO, a pinned copy of deploy/origin.conf
 #       (this file runs before any clone, so it cannot read it); tests/check_origin.py pins them equal and drives
@@ -65,7 +66,7 @@ echo ""
 # r133 — padded to one width; keep the text ASCII (see setup_ec2.sh box()).
 _rule="$(printf '═%.0s' $(seq 1 54))"
 echo "╔${_rule}╗"
-printf "║ %-52s ║\n" "   OTV4TEST  |  Web Installer  |  install.sh 4.5"
+printf "║ %-52s ║\n" "   OTV5  |  Web Installer  |  install.sh 5.0"
 echo "╚${_rule}╝"
 echo ""
 

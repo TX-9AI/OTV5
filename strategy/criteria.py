@@ -1,5 +1,6 @@
 """
-strategy/criteria.py  v1.6
+strategy/criteria.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.6  2026-09-26  OTV4TEST r149 (EOD.1) — runaway_cutoff_et marked SUPERSEDED: the operator ruled directional debits run all day to 15:40 ("A"). The pair is unread by any code; config.ENTRY_WINDOWS governs.
 v1.5  2026-09-08  r321 — `sweep_max_age_bars` REMOVED, the residue r241 meant
       to take. r241 deleted the age gate from the strategy and shipped a

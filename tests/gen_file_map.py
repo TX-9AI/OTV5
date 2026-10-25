@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/gen_file_map.py  v4.19
+tests/gen_file_map.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v4.19 2026-10-08  OTV4TEST r261 — tools/rebuild_1m_from_last_trade.py (SEED.3) is an entry point: a hand-run repair tool, run on
       the operator's yes; its gate loads it by path, so undeclared it mapped as an orphan.
 v4.18 2026-10-05  OTV4TEST r255 — THE ORIENTATION PROSE STOPS CLAIMING "Nothing flows backwards". It was false
@@ -196,7 +197,6 @@ ENTRY_POINTS = {
     "tools/segregate_nonrth_bars.py",  # r216 — a hand-run REPAIR tool (moves overnight bars out of the RTH series); kept by ruling 2026-10-03
     "tools/seed_candles_from_warehouse.py",  # r233 SEED.1 — the operator's yes to backfilling a new box's feed from the warehouse (2026-10-04)
     "tools/rebuild_1m_from_last_trade.py",  # r261 SEED.3 — rebuilds MISSING RTH 1m bars from the warehouse's last_trade; --apply on his yes
-    "tools/wake_box.py",               # r233 WAKE.1 — QQQ-TEST wakes / stops SPX-TEST, by his grant (2026-10-04)
     # CLI helpers, run by hand or by a script
     "analysis/get_orb_range.py",
     "utils/check_sdk.py",

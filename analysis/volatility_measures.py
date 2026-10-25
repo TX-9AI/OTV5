@@ -1,5 +1,6 @@
 """
-analysis/volatility_measures.py  v4.3
+analysis/volatility_measures.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v4.3  2026-10-11  OTV4TEST r268 (DEP.12, mirror of otv4 r478) - session_fraction_remaining knows the day's bell. On a 13:00 close it is
       (390 - elapsed - 180) / 390: 210/390 at the open, 120/390 at 11:00, 0 at 13:00. The denominator stays 390 on purpose.
 v4.2  2026-10-03  OTV4TEST r229 (EM.2) — expected_move_platform: THE TASTYTRADE PLATFORM'S EXPECTED MOVE (the "± n" beside an expiration): 60% of the ATM straddle + 30% of the first out-of-the-money strangle + 10% of the second, at the marks. The operator, 2026-10-03: "Which expected move? Use the one that's built into the tasty trade platform." ORCS, the condor and readiness read it; the Hunt records it. THE BUTTERFLIES KEEP expected_move_session, BY HIS RULING the same evening ("Don't mess with the butterfly EV then") after the measurement: the session number is 3.0-3.4x the platform's, so the same fractions would have refused every pin butterfly the book has taken.

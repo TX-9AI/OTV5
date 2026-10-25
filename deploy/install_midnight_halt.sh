@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# deploy/install_midnight_halt.sh — v1.3
+# deploy/install_midnight_halt.sh — v5.0
+# v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 # v1.3  2026-09-22  OTV4TEST r102 — EXEC BIT. 100644 in the git INDEX, so a
 #       fresh clone or a repoint got Permission denied. Now 100755; C5 pins
 #       it. No content change.

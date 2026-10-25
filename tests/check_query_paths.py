@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""tests/check_query_paths.py — v1.0
+"""tests/check_query_paths.py — v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 QUERY.PY READS THE TREE IT LIVES IN, AND A FAILED CONFIG IMPORT IS NEVER SILENT.
 
 v1.0  2026-09-26 — OTV4TEST r152. SHARED with otv4 (WA section 38.2): this tree authors,

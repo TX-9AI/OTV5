@@ -1,5 +1,6 @@
 """
-strategy/orcs.py  v1.3
+strategy/orcs.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.3  2026-10-03  OTV4TEST r230 (PREM.5) — EXITS ARE THE CONDOR'S, VERBATIM (the operator, 2026-10-03: "On rolling/defending the ORCS, adopt the condor logic verbatim."). This file still has no exit of its own; the 'held to the close, no stop' wording is superseded (PLAN_SPEC §41.11).
 v1.2  2026-10-03  OTV4TEST r211 (PLN.2) — ledger_open(sig): ORCS opens its plan_ledger row immediately before each order
       (it fires without take()), keeping the sibling side's row, so the fill links to the right plan.

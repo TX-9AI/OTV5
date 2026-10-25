@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""tools/probe_order_dryrun.py — v1.2
+"""tools/probe_order_dryrun.py — v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 ASK THE BROKER WHAT IT WOULD DO WITH OUR ORDERS — DRY RUN ONLY, NOTHING IS PLACED, NO MONEY MOVES.
 
 v1.2 (2026-10-04) — OTV4TEST r242 (LIVE.1 B0 mirror) — every broker call goes through data.tasty_client.sdk_result, the helper

@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# deploy/install_retention_purge_timer.sh — v1.2
+# deploy/install_retention_purge_timer.sh — v5.0
+# v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 # v1.2  2026-10-12  OTV4TEST r275 (OPS.23). THE PURGE STOPS THE CANDLE-FEED AROUND ITSELF.
 #       ExecStartPre=+deploy/purge_feed_guard.sh stop / ExecStopPost=+... start (root, past
 #       User=ubuntu; ExecStopPost runs even when the purge fails, so the feed always comes

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_trade_report.py  v1.6
+tests/check_trade_report.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.6  2026-09-26  OTV4TEST r160 — T13 ADDED: EXIT REASON — DOLLARS is ranked by NET $ (operator: "For Exit
       Reason - Dollars, can you rank them by net?"), even where N would order it the other way.
 v1.5  2026-09-26  OTV4TEST r159 — T12 RE-POINTED to the dollar table: per exit reason NET $, AVG $ and mean

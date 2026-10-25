@@ -1,5 +1,6 @@
 """
-strategy/structure.py  v4.3
+strategy/structure.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v4.3  2026-09-26  OTV4TEST r149 (EOD.1): has_assignment_risk() — a position with a SHORT leg (credit verticals, condor/trend legs, the tent, butterflies, an adopted short). The end-of-day schedule closes these first, at 15:45, on a resting best-case limit. It FAILS TOWARD RISK: a short leg (short_symbol), a fly body (center_symbol) or a condor-leg flag is assignment risk whatever the strategy string says — of() alone would call an unknown strategy DIRECTIONAL and ladder a short leg at 15:50.
 v4.2  2026-08-24  r106: Structure.TENT — the post-roll hedge (short + its wing +
       an opposite-type long equidistant on the breached side). Tested FIRST

@@ -1,5 +1,6 @@
 """
-analysis/volatility_engine.py  v4.4
+analysis/volatility_engine.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v4.4  2026-10-03  OTV4TEST r221 (UTIL.1) — comment only: state.vwap is a frame-wide VWAP spanning more than one session, not the session VWAP (derived.anchors.vwap_now); names kept because they are recorded keys.
 v4.3  2026-08-28  r175: VolatilityState carries df_5m (the frame its ATR
       was read from) so TCS can measure the session's realized drift from the

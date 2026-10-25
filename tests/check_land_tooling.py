@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_land_tooling.py  v1.8
+tests/check_land_tooling.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.8  2026-10-25  OTV5 r4 (GATE.6) — T6 also requires OT_HEARTBEAT_FILE under $_scratch on every CHECK line (the watchdog's
       liveness signal; born red on land.sh v1.22).
 v1.7  2026-10-24  OTV5 r0 — ONE LEDGER. T4 requires docs/GENESIS.md to carry this tree's own r0 row (the seed) and T5

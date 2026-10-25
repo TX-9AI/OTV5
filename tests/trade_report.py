@@ -1,4 +1,5 @@
-# tests/trade_report.py — v1.24
+# tests/trade_report.py — v5.0
+# v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 # v1.24 (2026-09-26) — OTV4TEST r160. EXIT REASON — DOLLARS IS RANKED BY NET $, best first (was by N).
 #   Operator: "For Exit Reason - Dollars, can you rank them by net?" The table's rendering moves into
 #   show_exit_dollars() so the order is testable (check_trade_report T13); a reason with no P&L sorts

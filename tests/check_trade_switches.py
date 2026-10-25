@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_trade_switches.py  v1.3
+tests/check_trade_switches.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.3  2026-10-12  OTV4TEST r273 (BFLY.10) — S9's fly rows RE-POINTED 12:00 -> 13:00. r273 (BFLY.10), by ruling - the operator, 2026-10-12: "reduce the fly window to 1300".
 v1.2  2026-10-03  OTV4TEST r189 (RUNW.1) — S11: OT_RUNAWAY_END MOVES RUNAWAY'S END AND NOTHING ELSE.
       In a fresh interpreter per case, every reader of the window - config.ENTRY_WINDOWS, the admission

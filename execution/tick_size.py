@@ -1,5 +1,6 @@
 """
-execution/tick_size.py  v4.1
+execution/tick_size.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v4.1  2026-10-03  OTV4TEST r216 (HYG.14) — docstring only: the reference to the deleted fill_model is removed.
 Venue tick-size rules per symbol and price band.
 

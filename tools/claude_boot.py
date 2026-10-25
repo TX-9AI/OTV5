@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""tools/claude_boot.py — v1.8
+"""tools/claude_boot.py — v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 RAISE AN AGENT SESSION AT BOOT, AND PROVE IT IS ACTUALLY RUNNING.
 
 v1.8 (2026-10-23) — OTV4TEST r314 (MENU.2). THE SESSION NAME IS THE BOX'S, NEVER QQQ-TEST'S BY DEFAULT.
@@ -7,7 +8,7 @@ v1.8 (2026-10-23) — OTV4TEST r314 (MENU.2). THE SESSION NAME IS THE BOX'S, NEV
       came up under QQQ-TEST's name (2026-10-23, after an expired login; the operator fixed it with /rename).
       rc_name(): OT_RC_NAME when set (the unit, unchanged), else "✨<INSTRUMENT>-TEST" from
       utils.instrument.box_instrument() (the bot unit's OT_INSTRUMENT, one key, nothing printed), else
-      "✨UNSET-TEST" - a named absence, never a guessed box. `--rc-name` prints it, for devtools.sh.
+      "✨UNSET" - a named absence, never a guessed box. `--rc-name` prints it, for devtools.sh.
       The operator, 2026-10-23 11:10 ET: "Yes to both" (r313's menu item, and this fix).
 v1.7 (2026-10-04) — OTV4TEST r235 — THE PURGE SAYS ZERO. It printed only when it archived something, so a
       purge that ran and found nothing stale looked like one that never ran (SPX-TEST's agent, 2026-10-04,
@@ -190,8 +191,8 @@ RC_NAME = (os.environ.get("OT_RC_NAME") or "").strip()
 
 
 def rc_name() -> str:
-    """The Remote Control name: OT_RC_NAME, else "✨<INSTRUMENT>-TEST" from the
-    box's own instrument, else "✨UNSET-TEST". Never "qqq-test" on a box that
+    """The Remote Control name: OT_RC_NAME, else "✨<INSTRUMENT>" from the
+    box's own instrument, else "✨UNSET". Never "qqq-test" on a box that
     is not QQQ-TEST (r314)."""
     if RC_NAME:
         return RC_NAME
@@ -202,7 +203,7 @@ def rc_name() -> str:
         inst = "UNSET"
     if not inst.replace("_", "").isalnum():
         inst = "UNSET"
-    return "✨%s-TEST" % inst
+    return "✨%s" % inst
 
 
 # 🔴 r70 / AUTH.1 — LAUNCH ON THE SUBSCRIPTION, NEVER ON API CREDITS.

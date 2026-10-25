@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""check_structure_viable.py
+"""tests/check_structure_viable.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.3  2026-09-24  OTV4TEST r128: V6 AND V7 RE-POINTED AT strategy/sweep_plan.py AND
       strategy/credit_vertical.py. Fork r5 (8a36b6f) moved the sweep's selection
       out of sweep_credit_spread.py, so both read a file that no longer holds

@@ -1,5 +1,6 @@
 """
-main.py  v4.118
+main.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v4.118  2026-10-24  CD.3 (DISC.4) - the gap measure is given the instrument and the day, so analysis/gap_measure reads
       the prior session's 1d bar and today's 09:30 bar from the feed store instead of hoping the 5m frame reaches
       yesterday; gap_class / gap_bucket / range_gap_pct now reach ctx["gap"] (record-only readers: notes, snapshot,

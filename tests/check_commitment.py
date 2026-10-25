@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""tests/check_commitment.py — v1.0
+"""tests/check_commitment.py — v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 WE ENTER ON COMMITMENT (COMMIT.1 / COMMIT.2 / COMMIT.3, OTV4TEST r272).
 
 v1.0  2026-10-12  OTV4TEST r272 — the operator, 2026-10-12 10:34 ET: "A good place to get out cannot be a good place

@@ -1,5 +1,6 @@
 """
-execution/limit_ladder.py  v4.3
+execution/limit_ladder.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v4.3  2026-10-11  OTV4TEST r268 (DEP.12, mirror of otv4 r478) - hard_close_order_mode() moves its two EOD_SCHEDULE times (15:50 limit,
       15:55 market) to the day's bell: 12:50 / 12:55 on a 13:00 close. A bare time argument carries no date and is a full day.
 v4.2  2026-10-03  OTV4TEST r216 (HYG.14): comments only - the two references to the deleted fill_model are reworded; the rule stays (paper never books a fill from an inside-the-spread rung).

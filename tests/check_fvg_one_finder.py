@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_fvg_one_finder.py  v1.0
+tests/check_fvg_one_finder.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.0  2026-10-03  OTV4TEST r221 (UTIL.1) — ONE FAIR-VALUE-GAP FINDER, AND IT FINDS EXACTLY WHAT THE TWO COPIES FOUND.
 
   The 10-03 audit (C11): analysis/structure_analyzer and execution/exit_engine

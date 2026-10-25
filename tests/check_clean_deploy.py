@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_clean_deploy.py  v1.1
+tests/check_clean_deploy.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.1  2026-10-25  OTV5 r4 (GATE.5) — C17 imports utils.instrument with ROOT on sys.path EXPLICITLY. Under the boot
       sweep (OT_INSTRUMENT set) s3_push.own_symbol returns before the branch that put ROOT on the path, so C17 was
       RED under the sweep and GREEN bare (QQQ-TEST MSG-QQQ-1024-47). Control: OT_INSTRUMENT=QQQ python3 tests/check_clean_deploy.py.

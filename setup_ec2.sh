@@ -1,6 +1,7 @@
 #!/bin/bash
 # ==========================================================================
-# setup_ec2.sh  v4.12
+# setup_ec2.sh  v5.0
+# v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 # v4.12 2026-10-24  OTV5 r0 — the interactive repository prompt's format hint shows the deploy/origin.conf
 #       repository, not a literal of one repository's name.
 # v4.11 2026-10-24  CD.1 — AN INSTALL STARTS NOTHING AND PUSHES NOTHING. The operator, 2026-10-24: "optionsbot
@@ -152,7 +153,7 @@ INSTALL_DIR="$HOME/options-trader"
 DEPLOY_DIR="$HOME/options-trader-deploy"
 SERVICE_NAME="optionsbot"
 VENV="$INSTALL_DIR/venv"
-VERSION="4.4"
+VERSION="5.0"
 SRC_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLAN=0
 [ "${1:-}" = "--plan" ] && PLAN=1
@@ -200,7 +201,7 @@ ask_yn()     {
 }
 
 echo ""
-box "$CYAN" "   OTV4TEST v${VERSION}  |  Vertigo Capital" \
+box "$CYAN" "   OTV5 v${VERSION}  |  Vertigo Capital" \
            "   ${OT_INSTRUMENT:-QQQ} 0DTE  |  TastyTrade  |  Telegram"
 echo ""
 echo "  Have ready:"

@@ -1,5 +1,6 @@
 """
-analysis/pitchfork_observer.py  v4.1
+analysis/pitchfork_observer.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v4.1  2026-08-21  rails_for normalises the timeframe spelling. The cache is
       keyed "1d"/"1h" while CONDOR_PF_TIMEFRAME defaulted to "daily", so the
       condor never once received rails and stood down on every box, every

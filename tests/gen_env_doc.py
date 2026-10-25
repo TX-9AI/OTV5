@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/gen_env_doc.py  v1.0
+tests/gen_env_doc.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.0  2026-10-04  OTV4TEST r250 (DOC.31 item 4, audit D8) — docs/ENV.md IS GENERATED FROM THE CODE: every OT_* environment variable
       the tree reads, its default(s) as written at each read, and every file:line that reads it. ~200 variables lived only in the
       code, and the docs named a handful. The operator, 2026-10-04: "finish what you can" (the weekend's leftovers).

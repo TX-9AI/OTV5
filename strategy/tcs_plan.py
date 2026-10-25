@@ -1,5 +1,6 @@
 """
-strategy/tcs_plan.py  v1.10
+strategy/tcs_plan.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.10  2026-10-24  CD.2 — the trigger and the first look ask for TODAY's session by the bar's MARKET time (derived_store v4.9
       filters latest_event on the judging bar's close): `since` is today's 09:30 with no now-86400 fallback before the
       open. The HH:MM window test (r112) now has the date beside it. The operator, 2026-10-24: approved.

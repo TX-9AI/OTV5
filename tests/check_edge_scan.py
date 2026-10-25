@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""tests/check_edge_scan.py — v1.0
+"""tests/check_edge_scan.py — v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 THE EDGE SCAN SURVIVES A HETEROGENEOUS BOOK (RPL.3).
 
 v1.0  2026-09-19  OTV4TEST r63 — `edge_scan` CRASHED ON THE REAL BOOK while its

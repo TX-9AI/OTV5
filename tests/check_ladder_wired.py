@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_ladder_wired.py  v1.3
+tests/check_ladder_wired.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.3  2026-09-26  OTV4TEST r149 (EOD.1) — L7's hard-close rows and L8b/L8c RE-POINTED to the operator's
       end of day ("Resting limit orders at 1545, ladder exits at 1550 if they're not the assignment
       risk type"; "Best case on the trajectory"): a credit hard close RESTS at its best case before

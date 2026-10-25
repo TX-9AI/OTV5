@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # ==========================================================================
-# devtools.sh  v3.12  — OTV5 box menu
+# devtools.sh  v5.0  — OTV5 box menu
+# v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 # v3.12 2026-10-24  OTV5 r0 — GIT STATE reads the one ledger, docs/GENESIS.md (this tree has no second
 #       ledger). Title: OTV5 box menu.
 # v3.11 2026-10-23  OTV4TEST r314 (MENU.2) — HAND OFF / RESUME / RESUME [other]
@@ -704,7 +705,7 @@ MENU=(
   "ITEM|RESUME [other] -> pick a Claude thread|mi_claude_resume_pick"
   "ITEM|RESTART  -> fresh session via boot unit|mi_claude_restart_boot"
 
-  "SECTION|GIT & LAND (this box - OTV4TEST only)"
+  "SECTION|GIT & LAND (OTV5; the custodian lands from control)"
   "ITEM|show commit / status / last ledger row|git_state"
   "ITEM|git pull --ff-only|git_pull"
   "ITEM|LAND a tarball from ~|mi_land"
@@ -727,7 +728,7 @@ _RULE="======================================================"
 _colorize() {
   if [ -t 1 ]; then
     sed -E -e "s/^(=+)$/${_BLUE}\1${_RST}/" \
-           -e "s/^(  OTV4TEST .*)$/${_WHITE}\1${_RST}/" \
+           -e "s/^(  OTV5 .*)$/${_WHITE}\1${_RST}/" \
            -e "s/^( [A-Z][^:]*:)$/${_BLUE}\1${_RST}/"
   else
     cat
@@ -740,7 +741,7 @@ _colorize() {
 menu_render() {
   local n=0 e kind rest label
   printf '%s\n' "$_RULE"
-  printf '  OTV4TEST — devtools  v3.1   %s\n' "$(hostname -s)"
+  printf '  OTV5 — devtools  v5.0   %s\n' "$(hostname -s)"
   printf '  bot=%-8s feed=%-8s %s\n' "$(svc "$BOT")" "$(svc "$FEED")" \
          "$(git -C "$REPO" log -1 --format='%h %s' 2>/dev/null | cut -c1-22)"
   printf '%s\n' "$_RULE"

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""tests/check_atp_butterfly.py  v1.4
+"""tests/check_atp_butterfly.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.4  2026-10-19  OTV4TEST r303 (PSTATE.1) — the ATP fly is DORMANT by default and a dormant plan writes nothing by ruling;
       setting the plan's module ENABLED alone no longer switches it on, so this run sets OT_ATP_BUTTERFLY=1 too.
 THE ATP (AT-THE-PIN) BUTTERFLY — ITS PLAN, ITS STRATEGY, ITS EXITS AND ITS SESSION CAP.

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_cap_counterfactual.py  v1.1
+tests/check_cap_counterfactual.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.1  2026-10-18  OTV4TEST r288 (PARK.1) — the fake realized_pnl_today takes the cap's new exclude_strategies argument
       (RiskManager.day_realized_pnl passes config.CAP_EXCLUDED_STRATEGIES); no check changed.
 v1.0  2026-10-03  OTV4TEST r208 (CAP.4) — THE CAP COUNTERFACTUAL IS RECORDED FOR EVERY ENTRY AND REFUSES NOTHING.

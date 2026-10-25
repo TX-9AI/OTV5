@@ -1,5 +1,6 @@
 """
-strategy/credit_vertical.py  v4.5
+strategy/credit_vertical.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v4.5  2026-10-11  OTV4TEST r268 (mirror of otv4 r478) / DEP.12 — bars_left() moves its close to the day's bell
       (utils/time_utils.close_anchored): the condor's horizon is 12:45 on a 13:00
       close, so POP is not computed on three hours that do not exist.

@@ -1,5 +1,6 @@
 """
-derived/snapshot.py  v4.7
+derived/snapshot.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v4.7  2026-10-24  CD.2 — the VWAP slope is measured in MARKET time: the comparison row is the one whose bar_ts_ms is
       ~600 s before the current bar's, carrying the SAME session anchor. By write time, across a restart gap, the
       comparison row could be yesterday's or carry another day's anchor.

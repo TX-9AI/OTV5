@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_plan_ledger_take.py  v1.1
+tests/check_plan_ledger_take.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.1  2026-10-19  OTV4TEST r303 (PSTATE.1) — L4's ORCS is DORMANT by default and a dormant plan opens no ledger row by ruling,
       so this run switches ORCS ACTIVE (OT_ORCS=1) to test the per-leg rows. check_plan_states D3 pins dormant.
 v1.0  2026-10-03  OTV4TEST r211 (PLN.2) — EVERY TAKE OPENS ITS PLAN_LEDGER ROW, IN THE STORE THAT IS BOUND.

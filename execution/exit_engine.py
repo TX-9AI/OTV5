@@ -1,5 +1,6 @@
 """
-execution/exit_engine.py  v4.45
+execution/exit_engine.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v4.45 2026-10-24  OTV4TEST r317 (STALE.1, D1) — NO HANDOFF EXIT WHEN THE ENTRY TIME IS UNKNOWN. _entry_epoch() returns 0.0
       for a record whose entry_time is missing or unreadable, and _rejected_handoff() then asked latest_rejection(sym,
       0.0): ANY REJECTED ever written (any day, or a seeded row) could close a live ORB/Runaway/Hunt. Found by

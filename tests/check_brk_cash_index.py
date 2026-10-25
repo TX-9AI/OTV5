@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_brk_cash_index.py  v1.0
+tests/check_brk_cash_index.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 ON A CASH INDEX, BREAKOUT'S TAPE AND BOOK BARS ARE NOT APPLICABLE - NEVER A REFUSAL (BRK.6).
 
 v1.0  2026-10-05  OTV4TEST r251 - found and authored on SPX-TEST. SPX has no time-and-sale and no resting

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-warehouse/self_close.py  v1.5
+warehouse/self_close.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.5 2026-09-26  OTV4TEST r147 — A FAILED DRAIN HOLDS THE BOX. `drift` overrode `not ok` whatever failed= said, so any gap <= 2 anywhere (an S3 delete that EMPTIES a prefix leaves one PERMANENTLY: got=0 never heals) turned a failed PUT into a halt-and-purge. Drift now counts only on a drain the DRAIN line reports failed=0. Operator 2026-09-26, proposal 2a: "Concur". Shared with otv4 (WA 38.2); gate tests/check_self_close_hold.py; BACKLOG S3.15.
 v1.4 2026-09-26  OTV4TEST r146 — its alerts name the box's real instrument: the self-close unit carries no OT_INSTRUMENT, so config's QQQ fallback labelled SOFI's and AAL's alerts QQQ.
 The box closes ITSELF: drain to S3, verify it landed, then shut down.

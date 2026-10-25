@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""tests/check_exit_replay.py — v1.2
+"""tests/check_exit_replay.py — v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 THE PREMIUM-REPLAY TOOL IS GATED (RPL.1).
 
 v1.2  2026-09-19  OTV4TEST r64 — X11/X12/X13: r62's credit flip inverted every

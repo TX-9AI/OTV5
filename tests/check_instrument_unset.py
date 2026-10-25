@@ -1,4 +1,5 @@
-"""tests/check_instrument_unset.py — v1.1
+"""tests/check_instrument_unset.py — v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.1  2026-10-03 — OTV4TEST r194 (BOX.16): the children get OT_LOG_FILE in this check's own scratch. Under the
       new lander/sweep env they inherited the HARNESS's scratch log, which is not under this check's HOME, and
       U3b (the children never log to the live file) went red on the build's full sweep. Same property, re-pointed.

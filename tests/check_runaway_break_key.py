@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_runaway_break_key.py  v1.1
+tests/check_runaway_break_key.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.1  2026-09-13  OTV4TEST r24 — K3/K4 DRIVE `break_last_exit`, NOT THE DELETED HOOK. The
       close hook no longer writes a finished break into memory; the plan READS
       it from trades.db. So the audible-failure rule is asserted on the reader:

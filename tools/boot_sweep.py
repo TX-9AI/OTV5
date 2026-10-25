@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""tools/boot_sweep.py — v1.9
+"""tools/boot_sweep.py — v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.9 (2026-10-25) — OTV5 r4 (GATE.6). OT_HEARTBEAT_FILE IS SCRATCH. position_manager's mark fallback touches
 utils.heartbeat (data/BOT_HEARTBEAT unless OT_HEARTBEAT_FILE), and tools/emergency_watchdog.py reads that file's mtime as the
 bot's liveness; a sweep that drove it refreshed the watchdog's signal from a checker (QQQ-TEST MSG-QQQ-1024-47: the

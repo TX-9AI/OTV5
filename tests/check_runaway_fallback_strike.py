@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_runaway_fallback_strike.py  v1.0 (OTV4TEST)
+tests/check_runaway_fallback_strike.py  v5.0 (OTV4TEST)
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.0  2026-10-18  OTV4TEST r289 — MIRROR of otv4 r492 0bd66e9's checker (sha256 1ce01879), adapted to this tree: F8
       reads OUR two callers (strategy/runaway_plan.py, strategy/liquidity_hunt.py - this tree's RunawayContinuation
       delegates to its plan); F5b runs F5 at the Runaway plan's run x band (0.5 / 1.0 / 1.5); F9 (new) is the Hunt -

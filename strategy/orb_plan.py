@@ -1,5 +1,6 @@
 """
-strategy/orb_plan.py  v1.12
+strategy/orb_plan.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.12  2026-10-19  OTV4TEST r303 (PSTATE.1) — the ORB trade's state is strategy/plan_state.py's: OT_ORB_TRADE=active|log|off
       ("1" still = active). LOG evaluates and records the fire LOG-ONLY. The opening-range ENGINE is not this plan.
 v1.11  2026-10-06  OTV4TEST r259 (STRK.2) — select_contract gains keyword `inside` (default False: every
@@ -90,7 +91,7 @@ v1.0  2026-09-08  OTV4TEST r2 — THE ORB PLAN. Agreed with the operator on
       needed; otherwise the ORIGINAL impulsive candle stands and the plan
       re-issues the same stop, strike and floor for the next retest.
 
-      THE FOUR ROW STATES (docs/FORK_BRIEF.md §3.5):
+      THE FOUR ROW STATES (the predecessor's FORK_BRIEF §3.5, not carried in this tree):
         NO PLAN  — starved: no opening range, no chain
         HOLD     — "none available" is a DECLINE at gate `contract`; a
                    range with both sides priced holds "waiting on: impulsive

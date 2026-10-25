@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_sweep_liveness.py  v1.5
+tests/check_sweep_liveness.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.5  2026-09-23  OTV4TEST r126 — L3d RETIRED with analysis/liquidity_mapper (deleted): it
       guarded the mapper's own `sweep_age_bars` gate against a grep-and-delete;
       that gate and the mapper are gone.

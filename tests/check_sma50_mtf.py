@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_sma50_mtf.py  v1.0
+tests/check_sma50_mtf.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 EVERY ENTRY RECORDS THE 50 SMA ON 5m / 15m / 1h / 1d, IN POINTS, PERCENT AND ATR UNITS.
 
 v1.0  2026-10-23  OTV4TEST r315 (SMA.2) — born red at r314, where the entry snapshot

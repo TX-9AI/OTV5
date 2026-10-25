@@ -1,5 +1,6 @@
 """
-data/options_chain.py  v4.7
+data/options_chain.py  v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v4.7  2026-10-18  OTV4TEST r301 (LOG.1) — A ZERO-MARKS CHAIN OUTSIDE RTH IS SAID ONCE AT INFO, NOT EVERY MINUTE AT ERROR.
       The r101 rehearsal builds the chain every 60 s all evening and the marks are gone after the bell, so FAIL-LOUD
       logged 2,417 ERROR lines in the week of 10-12 - all 16:00-23:59 ET, none inside RTH - and a real ERROR was

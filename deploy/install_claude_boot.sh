@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# deploy/install_claude_boot.sh  v1.4
+# deploy/install_claude_boot.sh  v5.0
+# v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 #
 # v1.4  2026-10-03  OTV4TEST r231 (BOOT.7) — OT_BRIEF, when set at install, rides into the
 #       unit beside OT_RC_NAME so a box reads its own brief (SPX-TEST: docs/HANDOFF_SPX.md).
@@ -70,7 +71,7 @@ fi
 
 sudo tee /etc/systemd/system/optbot-claude-boot.service >/dev/null <<UNIT
 [Unit]
-Description=Raise a Claude agent session in tmux at boot (OTV4TEST r68, BOX.11)
+Description=OTV5: raise a Claude agent session in tmux at boot
 After=network-online.target
 # ORDERING ONLY — no Requires/Wants. See the header: the bot must never depend
 # on the agent, and its STARTED alert fires ~11s after boot.

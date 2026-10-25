@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""tools/probe_live_mark.py — v1.0
+"""tools/probe_live_mark.py — v5.0
+v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 ASK THE BROKER FOR A FEW OPTION MARKS THROUGH THE BOT'S OWN LIVE FALLBACK — READ ONLY, NO ORDER OF ANY KIND.
 
 v1.0 (2026-10-20) — OTV4TEST r308 (PRB.3, LIVE.1 F4 proof). The operator, 2026-10-20 10:53 ET: "Concur" (a read-only
