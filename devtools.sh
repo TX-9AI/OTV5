@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 # ==========================================================================
-# devtools.sh  v5.0  — OTV5 box menu
+# devtools.sh  v5.1  — OTV5 box menu
+# v5.1  2026-10-25  OTV5 r13 (BOOT.12) — CLAUDE CODE gains AT BOOT: turns the boot raise ON (deploy/install_claude_boot.sh:
+#       install and enable optbot-claude-boot; nothing is raised now) or OFF (disable the unit; a session running now is
+#       left running). The operator, 2026-10-25: the Claude-at-boot switch belongs in devtools, not configure.sh, and
+#       must be able to stop Claude coming up at every subsequent start.
 # v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 # v3.12 2026-10-24  OTV5 r0 — GIT STATE reads the one ledger, docs/GENESIS.md (this tree has no second
 #       ledger). Title: OTV5 box menu.
@@ -642,6 +646,42 @@ mi_claude_restart_boot() {
   pause
 }
 
+_claude_boot_state() {
+  local s; s="$(systemctl is-enabled "$CLAUDE_UNIT.service" 2>/dev/null)"
+  case "$s" in enabled|disabled) echo "$s" ;; *) echo "not installed" ;; esac
+}
+
+mi_claude_at_boot() {
+  # r13 (BOOT.12) — WHETHER A CLAUDE SESSION IS RAISED AT EVERY BOOT. ON installs
+  # and enables the boot unit (the same installer setup_ec2 runs for
+  # OT_CLAUDE_AT_BOOT=1); it raises nothing now (RESTART or HAND OFF does).
+  # OFF disables the unit and leaves a session running now alone. It does not
+  # exec: the menu comes back.
+  echo "  Claude at boot: $(_claude_boot_state)"
+  echo "    1) ON   raise a Claude session on Remote Control at every boot"
+  echo "    2) OFF  stop raising it at boot (a session running now stays up)"
+  local a rc
+  read -rp "  choose [1/2, blank = no change]: " a
+  case "${a:-}" in
+    1)
+      _claude_guard || return
+      bash "$REPO/deploy/install_claude_boot.sh" >/dev/null 2>&1; rc=$?
+      [ "$rc" -eq 0 ] && echo "  ON: $CLAUDE_UNIT installed and enabled." \
+                      || echo "  ON FAILED (rc $rc): bash deploy/install_claude_boot.sh shows why." ;;
+    2)
+      if [ "$(_claude_boot_state)" = "not installed" ]; then
+        echo "  OFF: no $CLAUDE_UNIT unit on this box; nothing is raised at boot."
+      else
+        sudo systemctl disable "$CLAUDE_UNIT.service" >/dev/null 2>&1; rc=$?
+        [ "$rc" -eq 0 ] && echo "  OFF: $CLAUDE_UNIT disabled; nothing is raised at the next boot." \
+                        || echo "  OFF FAILED (rc $rc)."
+      fi ;;
+    *) echo "  no change." ;;
+  esac
+  echo "  Claude at boot now: $(_claude_boot_state)"
+  pause
+}
+
 # ── THE MENU IS DATA — numbers are assigned at render time ─────────────────
 MENU=(
   "SECTION|STATUS (this box)"
@@ -704,6 +744,7 @@ MENU=(
   "ITEM|RESUME   -> the last Claude thread|mi_claude_resume"
   "ITEM|RESUME [other] -> pick a Claude thread|mi_claude_resume_pick"
   "ITEM|RESTART  -> fresh session via boot unit|mi_claude_restart_boot"
+  "ITEM|AT BOOT  -> raise Claude at every boot on/off|mi_claude_at_boot"
 
   "SECTION|GIT & LAND (OTV5; the custodian lands from control)"
   "ITEM|show commit / status / last ledger row|git_state"

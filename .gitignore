@@ -114,4 +114,9 @@ data/emergency_watchdog.json
 data/emergency_watchdog.json.tmp
 # r11 (BOOT.11) - tools/boot_sweep.py's last result, runtime only
 data/SWEEP_RESULT
+# r13 (BOOT.12) - runtime files a repointed box showed untracked (SOFI, 2026-10-25)
+data/SWEEP_PREV
+data/counterfactual/
+data/open_scan/
+data/plan_states.json
 cap_counterfactual.jsonl

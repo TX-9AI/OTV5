@@ -1,4 +1,8 @@
-"""tests/check_bootstrap.py — v5.2
+"""tests/check_bootstrap.py — v5.3
+v5.3  2026-10-25  OTV5 r13 (BOOT.12) — G22, DRIVEN: install_claude.sh with OT_CLAUDE_SETTINGS=pull-only and
+      OT_CLAUDE_SETTINGS_REPLACE=1 replaces a box's existing deny-less settings with the pull-only file and keeps the
+      old one as settings.json.pre-<stamp>, byte for byte; without the flag the existing file is left unchanged; the
+      login is untouched either way. BORN RED on r12 (the existing file was always left as it was).
 v5.2  2026-10-25  OTV5 r11 (BOOT.11) — G18 now requires OT_CLAUDE_AT_BOOT=0 (the operator: Claude does not start on
       first boot by default). G19: BOTH Claude settings templates pin the version (env DISABLE_AUTOUPDATER=1), and
       the pull-only file installed by the real install_claude.sh carries it - the proof-of-concept box auto-updated
@@ -889,6 +893,33 @@ _ig21 = subprocess.run(["git", "-C", _root, "check-ignore", "-q", "--no-index", 
 guard("G21 data/SWEEP_RESULT (tools/boot_sweep.py's result) is gitignored",
       lambda: _ig21.returncode == 0
       and "SWEEP_RESULT" in _read("tools/boot_sweep.py"), lambda: "check-ignore rc=%s" % _ig21.returncode)
+
+# ── G22 (r13) — a box built before OTV5 can be moved to the observe-only settings ─
+_OLD22 = '{"env": {"DISABLE_AUTOUPDATER": "1"}, "theme": "dark"}\n'
+def _run22(replace):
+    h, st = _fixture_home(_PIN, 0)
+    os.makedirs(os.path.join(h, ".claude"), exist_ok=True)
+    open(os.path.join(h, ".claude", "settings.json"), "w").write(_OLD22)
+    open(os.path.join(h, ".claude", ".credentials.json"), "w").write("LOGIN")
+    env = {"HOME": h, "PATH": st + ":/usr/bin:/bin", "OT_CLAUDE_SETTINGS": "pull-only"}
+    if replace:
+        env["OT_CLAUDE_SETTINGS_REPLACE"] = "1"
+    r = subprocess.run(["bash", os.path.join(_root, "deploy", "install_claude.sh")],
+                       capture_output=True, text=True, env=env, timeout=60)
+    cd = os.path.join(h, ".claude")
+    baks = [n for n in os.listdir(cd) if n.startswith("settings.json.pre-")]
+    return (r.returncode, open(os.path.join(cd, "settings.json")).read(),
+            [open(os.path.join(cd, b)).read() for b in baks], open(os.path.join(cd, ".credentials.json")).read())
+_rc22, _set22, _bak22, _cred22 = _run22(True)
+guard("G22 DRIVEN: REPLACE=1 installs the pull-only settings over an existing file and keeps the old one",
+      lambda: _rc22 == 0
+      and _set22 == _read("deploy/claude-user-settings-pull-only.json").replace("{{ORIGIN_REPO}}", _origin)
+      and _bak22 == [_OLD22] and _cred22 == "LOGIN",
+      lambda: "rc=%s replaced=%s backups=%d login=%r" % (_rc22, _set22 != _OLD22, len(_bak22), _cred22))
+_rc22n, _set22n, _bak22n, _ = _run22(False)
+guard("G22 DRIVEN: without REPLACE an existing settings file is left unchanged, no backup made",
+      lambda: _rc22n == 0 and _set22n == _OLD22 and not _bak22n,
+      lambda: "rc=%s unchanged=%s backups=%d" % (_rc22n, _set22n == _OLD22, len(_bak22n)))
 
 # ── G0 ────────────────────────────────────────────────────────────────────────
 for d in _TMP:

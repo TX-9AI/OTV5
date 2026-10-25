@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
-# deploy/install_claude.sh  v5.0
+# deploy/install_claude.sh  v5.1
+# v5.1  2026-10-25  OTV5 r13 (BOOT.12) — OT_CLAUDE_SETTINGS_REPLACE=1 REPLACES a box's existing ~/.claude/settings.json with
+#       the chosen template, keeping the old file as settings.json.pre-<UTC stamp>. Without it an existing file is left as
+#       it is (unchanged), so a box built before OTV5 - SOFI, 2026-10-25, with the deny-less settings - could not be moved
+#       to the observe-only settings by re-running this. The login is never touched.
 # v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 #
 # v1.2  2026-10-24  CD.1 — THE SETTINGS NAME THE REPOSITORY FROM deploy/origin.conf: {{ORIGIN_REPO}} in the template is
@@ -83,7 +87,14 @@ fi
 
 # ── 2. user settings, never overwritten ─────────────────────────────────────
 mkdir -p "$HOME/.claude"
-if [ -f "$HOME/.claude/settings.json" ]; then
+if [ -f "$HOME/.claude/settings.json" ] && [ "${OT_CLAUDE_SETTINGS_REPLACE:-0}" = "1" ] && [ -f "$TEMPLATE" ]; then
+    # BOOT.12 (r13) — the old file is kept beside it, never deleted
+    _bak="$HOME/.claude/settings.json.pre-$(date -u +%Y%m%dT%H%M%SZ)"
+    cp -p "$HOME/.claude/settings.json" "$_bak"
+    _origin="$( . "$DIR/deploy/origin.conf" && echo "$OT_ORIGIN_REPO" )"
+    sed "s#{{ORIGIN_REPO}}#${_origin}#g" "$TEMPLATE" > "$HOME/.claude/settings.json"
+    say "user settings REPLACED from $(basename "$TEMPLATE") (old kept as $(basename "$_bak"))"
+elif [ -f "$HOME/.claude/settings.json" ]; then
     say "user settings present — left as they are"
 elif [ -f "$TEMPLATE" ]; then
     # CD.1 — {{ORIGIN_REPO}} is rendered from deploy/origin.conf, the one place the repository is named
