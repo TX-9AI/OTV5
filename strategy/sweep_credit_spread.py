@@ -1,5 +1,6 @@
 """
-strategy/sweep_credit_spread.py  v5.5
+strategy/sweep_credit_spread.py  v5.6
+v5.6  2026-10-25  OTV5 r9 (GATE.7) — the session-open pin reaches the plan. prepare() and generate_signal() take session_open_epoch (default 0.0) and forward it to plan.prepare; they swallowed it in **_ignored, so a checker's pin never arrived and before 09:30 ET CD.2's bound was a future epoch (QQQ-TEST MSG-QQQ-1025-04). The live path passes no pin, so it reads today's 09:30 ET exactly as before: no behaviour change.
 v5.5  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ... (v5.0 was already spent by this file's own history, so the reset lands at v5.5.)
 v6.7  2026-10-03  OTV4TEST r193 (CFG.1) — its config dials are read as config.NAME with NO literal fallback; config v4.48 now defines them (they were getattr defaults on names config never had). Values unchanged.
 v6.6  2026-09-26  OTV4TEST r148 (WIN.1) — reads its entry window from config with NO literal fallback (one table, config.ENTRY_WINDOWS); a missing name now fails at import instead of silently defaulting. Value unchanged.
@@ -900,19 +901,22 @@ class SweepCreditSpreadStrategy:
 
     def prepare(self, *, price_now, now_et, atr_pct=None, chain=None,
                 orb_high=None, orb_low=None, required_side: str = "", df_1m=None,
-                **_ignored):
+                session_open_epoch: float = 0.0, **_ignored):
         return self.plan.prepare(price_now=price_now, now_et=now_et, atr_pct=atr_pct,
                                  chain=chain, orb_high=orb_high, orb_low=orb_low,
-                                 df_1m=df_1m, required_side=required_side)
+                                 df_1m=df_1m, required_side=required_side,
+                                 session_open_epoch=session_open_epoch)
 
     def generate_signal(self, *, price_now: float, now_et: str, atr_pct: float = None,
                         chain=None, orb_high: float = None, orb_low: float = None,
                         required_side: str = "", df_1m=None,
-                        complement_min_richness: float = 0.0, **_ignored) -> Optional[Signal]:
+                        complement_min_richness: float = 0.0, session_open_epoch: float = 0.0,
+                        **_ignored) -> Optional[Signal]:
         prep = self.plan.prepare(price_now=price_now, now_et=now_et, atr_pct=atr_pct,
                                  chain=chain, orb_high=orb_high, orb_low=orb_low,
                                  df_1m=df_1m, required_side=required_side,
-                                 complement_min_richness=complement_min_richness)
+                                 complement_min_richness=complement_min_richness,
+                                 session_open_epoch=session_open_epoch)
         if not prep.ready or prep.unmet or prep.structural or prep.starved:
             return prep.tick.already()
         if required_side and prep.side != required_side:

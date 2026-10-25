@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""check_entry_windows.py — v5.0
+"""check_entry_windows.py — v5.1
+v5.1  2026-10-25  OTV5 r9 (GATE.7) — its sweep prepare call is pinned to a session open (now - 2h), as every fixture that drives the trend or sweep wrapper now is (check_session_pin P6); the path it pins stops before any level read, so every expectation is unchanged.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.7  2026-10-12  OTV4TEST r273 (BFLY.10) — W4c: THE BUTTERFLIES OPEN AT 13:00, DRIVEN. The operator,
       2026-10-12 12:26 ET: "For TEST repo, I want to reduce the fly window to 1300 or later starting
@@ -281,6 +282,7 @@ def main():
         for _m in ("0", "1"):
             os.environ["OT_RELAXED_ENTRY"] = _m
             _armed[_m] = _rx.is_allowed()
+            import time as _time
             _strat = _sc.SweepCreditSpreadStrategy()
             _strat.plan.planner._store = _MemStore()
             _row = {}
@@ -289,7 +291,8 @@ def main():
                 # price_now=None: an OPEN window records entry_window=True and
                 # then starves on price, so nothing past the gate runs.
                 _prep = _strat.prepare(price_now=None, now_et=f"{_hmv[0]:02d}:{_hmv[1]:02d}",
-                                       atr_pct=0.1, chain=None)
+                                       atr_pct=0.1, chain=None,
+                                       session_open_epoch=_time.time() - 7200.0)   # GATE.7: pinned
                 _row[_hmv] = _prep.tick.checks.get("entry_window", (None, None))[1]
             _open[_m] = _row
     finally:

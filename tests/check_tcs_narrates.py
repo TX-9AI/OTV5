@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_tcs_narrates.py  v5.0
+tests/check_tcs_narrates.py  v5.1
+v5.1  2026-10-25  OTV5 r9 (GATE.7) — its generate_signal call is pinned to a session open (now - 2h), as every fixture that drives the trend or sweep wrapper now is (check_session_pin P6); the path it pins stops before any level read, so every expectation is unchanged.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.3  2026-10-19  OTV4TEST r303 (PSTATE.1) — its subject TrendCreditSpread is DORMANT by default and a dormant plan now writes
       nothing by ruling, so this run switches it ACTIVE (OT_TCS_ACTIVE=1); what it pins is unchanged.
@@ -76,13 +77,16 @@ def main():
                             "ORDER BY rowid DESC LIMIT 1").fetchone()
         return (r["verdict"], r["reason"] or "") if r else ("", "")
 
+    import time as _time
+
     def tick(n, acc, px, chain):
         orb = types.SimpleNamespace(state="ARMED_LONG", invalidation_reason="", break_direction="long",
                                     orb_high=101.0, orb_low=100.0, target_50pct=101.5,
                                     fifty_accepted=acc, bars_since_break=3)
         P.begin_tick(n)
         sig = T.generate_signal(ms=ms, vol_state=vol, chain=chain, macro=None, current_price=px, trend=None,
-                                orb=orb, condor_active=False, now_et=now, atm_iv=(0.2 if acc else None))
+                                orb=orb, condor_active=False, now_et=now, atm_iv=(0.2 if acc else None),
+                                session_open_epoch=_time.time() - 7200.0)   # GATE.7: pinned
         P.close_tick(st, "TST")
         return sig, row()
 

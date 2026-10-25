@@ -4,9 +4,9 @@
 Do not edit by hand: the generator runs inside the land command and
 the canary fails on drift (WORKING_AGREEMENT 33).
 
-486 Python modules across 12 local packages.
+487 Python modules across 12 local packages.
 
-**Reached by:** 134 imported · 26 declared entry points · 210 referenced from a script, unit or doc but never imported · **116 by nothing here**.
+**Reached by:** 134 imported · 26 declared entry points · 211 referenced from a script, unit or doc but never imported · **116 by nothing here**.
 
 ⚠️ The last group is a REVIEW LIST, not a delete list. A
 `land.spec CHECK` line ships inside a tarball and is never
@@ -42,7 +42,7 @@ execution.exit_engine); every such edge is listed below like any other.
 - `analysis/market_state.py` - the structural state assembly.
   **Carries the vocabulary, classifies nothing.**
 
-**Where the evidence lives:** `tests/` holds 287 standing
+**Where the evidence lives:** `tests/` holds 288 standing
 checks (`check_*.py`, all run by `tools/boot_sweep.py` at boot)
 plus the studies that produced every threshold in
 `docs/TRADES.md`. **A number in a strategy file should be
@@ -519,7 +519,7 @@ Change these with the most care; a break here reaches everything downstream.
 
 ### `strategy/sweep_credit_spread.py`
 - **calls:** `analysis/gate_report.py`, `config.py`, `database/trade_logger.py`, `strategy/__init__.py`, `strategy/base_strategy.py`, `strategy/relaxed.py`, `strategy/sweep_plan.py`, `utils/math_utils.py`
-- **called by:** `database/trade_logger.py`, `main.py`, `strategy/liquidity_hunt.py`, `strategy/sweep_plan.py`, `strategy/tcs_plan.py`, `tests/check_age_gate_gone.py`, `tests/check_atr_units.py`, `tests/check_chain_ordering.py`, `tests/check_dispatch.py`, `tests/check_entry_windows.py`, `tests/check_levels_in_play.py`, `tests/check_management_plan.py`, `tests/check_plan_prepares.py`, `tests/check_strike_beyond.py`, `tests/check_structure_viable.py`, `tests/check_sweep_liveness.py`, `tests/check_sweep_plan.py`, `tests/check_sweep_spread.py`, `tests/stress_entry_path.py`
+- **called by:** `database/trade_logger.py`, `main.py`, `strategy/liquidity_hunt.py`, `strategy/sweep_plan.py`, `strategy/tcs_plan.py`, `tests/check_age_gate_gone.py`, `tests/check_atr_units.py`, `tests/check_chain_ordering.py`, `tests/check_dispatch.py`, `tests/check_entry_windows.py`, `tests/check_levels_in_play.py`, `tests/check_management_plan.py`, `tests/check_plan_prepares.py`, `tests/check_session_pin.py`, `tests/check_strike_beyond.py`, `tests/check_structure_viable.py`, `tests/check_sweep_liveness.py`, `tests/check_sweep_plan.py`, `tests/check_sweep_spread.py`, `tests/stress_entry_path.py`
 
 ### `strategy/sweep_plan.py`
 - **calls:** `config.py`, `data/derived_store.py`, `derived/__init__.py`, `derived/anchors.py`, `derived/levels.py`, `strategy/__init__.py`, `strategy/credit_vertical.py`, `strategy/criteria.py`, `strategy/plan.py`, `strategy/relaxed.py`, `strategy/sweep_credit_spread.py`, `utils/math_utils.py`, `utils/time_utils.py`
@@ -531,7 +531,7 @@ Change these with the most care; a break here reaches everything downstream.
 
 ### `strategy/trend_credit_spread.py`
 - **calls:** `strategy/base_strategy.py`, `strategy/tcs_plan.py`
-- **called by:** `main.py`, `tests/check_plan_prepares.py`, `tests/check_tcs_narrates.py`, `tests/check_tcs_parked.py`, `tests/check_tcs_plan.py`
+- **called by:** `main.py`, `tests/check_plan_prepares.py`, `tests/check_session_pin.py`, `tests/check_tcs_narrates.py`, `tests/check_tcs_parked.py`, `tests/check_tcs_plan.py`
 
 ### `strategy/volt_plan.py`
 - **calls:** `config.py`, `data/options_chain.py`, `strategy/__init__.py`, `strategy/plan.py`, `strategy/plan_state.py`, `utils/time_utils.py`
@@ -1513,6 +1513,10 @@ Change these with the most care; a break here reaches everything downstream.
 - **calls:** `warehouse/__init__.py`, `warehouse/retention_purge.py`, `warehouse/self_close.py`
 - **called by:** (not imported) — referenced in `docs/BACKLOG.md`, `docs/ENV.md`
 
+### `tests/check_session_pin.py`
+- **calls:** `strategy/sweep_credit_spread.py`, `strategy/trend_credit_spread.py`
+- **called by:** (not imported) — referenced in `docs/BACKLOG.md`, `docs/ENV.md`
+
 ### `tests/check_shell_parses.py`
 - **calls:** (none)
 - **called by:** (nothing — no importer and no mention in any script, unit or doc here)
@@ -1627,7 +1631,7 @@ Change these with the most care; a break here reaches everything downstream.
 
 ### `tests/check_tcs_fifty.py`
 - **calls:** `tests/check_tcs_plan.py`
-- **called by:** (not imported) — referenced in `docs/PLAN_SPEC.md`
+- **called by:** (not imported) — referenced in `docs/BACKLOG.md`, `docs/PLAN_SPEC.md`
 
 ### `tests/check_tcs_narrates.py`
 - **calls:** `data/derived_store.py`, `strategy/__init__.py`, `strategy/plan.py`, `strategy/tcs_plan.py`, `strategy/trend_credit_spread.py`

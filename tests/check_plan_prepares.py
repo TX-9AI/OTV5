@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_plan_prepares.py  v5.0
+tests/check_plan_prepares.py  v5.1
+v5.1  2026-10-25  OTV5 r9 (GATE.7) — T4-T7 (the tine block) are pinned to the same session open as the S block; they passed no pin, so before 09:30 ET T5 and T7 were red and T4 and T6 passed for the wrong reason. The S-block pins now reach the plan (sweep_credit_spread v5.6). Every expectation is unchanged.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.25  CD.2 (2026-10-24) - seeded REJECTED rows carry their market time; the sweep's session open is pinned
       (session_open_epoch) so the checker does not depend on the clock; the fixture marks the level book SYNCED (store.mark_level_sync) after seeding the ledger:
@@ -673,14 +674,16 @@ def main():
     _ds.upsert_level((tine_id, "TST", 100.0, "resistance", "fork1h/upper", "1h", _now - 3600, 0, None, 0, None, None, 1))
     P.begin_tick(30.0)
     sigt = S2.generate_signal(chain=_Chain([], calls_t), price_now=99.6, now_et="10:40",
-                              atr_pct=0.08, orb_high=99.2, orb_low=98.4)
+                              atr_pct=0.08, orb_high=99.2, orb_low=98.4,
+                              session_open_epoch=_now - 7200.0)   # CD.2: pinned, as the S block
     rt4 = _row(st, "SweepCreditSpread", 30.0)
     check("T4 the upper tine is in play as a resistance; no rejection yet -> HOLD naming it",
           sigt is None and rt4 and rt4[0] == "HOLD" and "fork1h/upper" in rt4[1], str(rt4))
     P.begin_tick(31.0)
     _reject(tine_id, 100.0, "resistance", "fork1h/upper", bar="10:41")
     sigt = S2.generate_signal(chain=_Chain([], calls_t), price_now=99.6, now_et="10:41",
-                              atr_pct=0.08, orb_high=99.2, orb_low=98.4)
+                              atr_pct=0.08, orb_high=99.2, orb_low=98.4,
+                              session_open_epoch=_now - 7200.0)   # CD.2: pinned, as the S block
     check("T5 the tine REJECTED -> a call spread with the short at/beyond the tine (100), classed 1h_fork",
           sigt is not None and sigt.option_side == "call" and float(sigt.strike) == 100.0
           and sigt.condor_trigger_source == "1h_fork" and sigt.touch_of_tine is True,
@@ -689,7 +692,8 @@ def main():
     P.begin_tick(32.0)
     _reject(tine_id, 100.3, "resistance", "fork1h/upper", bar="10:42")
     sigt = S2.generate_signal(chain=_Chain([], calls_t), price_now=99.6, now_et="10:42",
-                              atr_pct=0.08, orb_high=99.2, orb_low=98.4)
+                              atr_pct=0.08, orb_high=99.2, orb_low=98.4,
+                              session_open_epoch=_now - 7200.0)   # CD.2: pinned, as the S block
     rt6 = _row(st, "SweepCreditSpread", 32.0)
     check("T6 an ACCEPTED (retired) tine is not in play — a stale REJECTED on it does not fire",
           sigt is None and rt6 and rt6[0] == "HOLD", str(rt6))
@@ -701,7 +705,8 @@ def main():
     P.begin_tick(33.0)
     _reject(tine_id, 100.6, "resistance", "fork1h/upper", bar="10:43")
     sig7 = S2.generate_signal(chain=_Chain([], calls_t), price_now=99.6, now_et="10:43",
-                              atr_pct=0.08, orb_high=99.2, orb_low=98.4)
+                              atr_pct=0.08, orb_high=99.2, orb_low=98.4,
+                              session_open_epoch=_now - 7200.0)   # CD.2: pinned, as the S block
     rt7 = _row(st, "SweepCreditSpread", 33.0)
     check("T7 a spent tine stays SPENT by name although its price has moved",
           sig7 is None and rt7 and rt7[0] == "DECLINE" and "spent_level" in rt7[1], str(rt7))

@@ -1,5 +1,6 @@
 """
-strategy/trend_credit_spread.py  v5.2
+strategy/trend_credit_spread.py  v5.3
+v5.3  2026-10-25  OTV5 r9 (GATE.7) — the session-open pin reaches the plan. prepare() and generate_signal() take session_open_epoch (default 0.0) and forward it to plan.prepare; they swallowed it in **_ignored, so a checker's pin never arrived and before 09:30 ET CD.2's bound was a future epoch (QQQ-TEST MSG-QQQ-1025-04). The live path passes no pin, so it reads today's 09:30 ET exactly as before: no behaviour change.
 v5.2  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ... (v5.0 was already spent by this file's own history, so the reset lands at v5.2.)
 v5.1  2026-10-11  OTV4TEST r269 (OPS.22, mirror of otv4 r479) - the zone NAME is "America/New_York", the zone the legacy link
       US/Eastern pointed to: identical rules, no behaviour change. tzdata 2026c moved the US/* links into tzdata-legacy;
@@ -308,18 +309,20 @@ class TrendCreditSpread:
         self.PLAN_CHECKS = self.plan.PLAN_CHECKS
 
     def prepare(self, ms=None, vol_state=None, chain=None, macro=None, current_price: float = 0.0,
-                trend=None, now_et=None, atm_iv=None, df_1m=None, **_ignored):
+                trend=None, now_et=None, atm_iv=None, df_1m=None, session_open_epoch: float = 0.0,
+                **_ignored):
         _adx = getattr(ms, "adx", None) if ms is not None else None
         return self.plan.prepare(price_now=current_price, now_et=now_et or datetime.now(ET),
-                                 atm_iv=atm_iv, chain=chain, df_1m=df_1m, adx=_adx)
+                                 atm_iv=atm_iv, chain=chain, df_1m=df_1m, adx=_adx,
+                                 session_open_epoch=session_open_epoch)
 
     def generate_signal(self, ms=None, vol_state=None, chain=None, macro=None,
                         current_price: float = 0.0, trend=None, now_et=None,
-                        atm_iv=None, df_1m=None, **_ignored):
+                        atm_iv=None, df_1m=None, session_open_epoch: float = 0.0, **_ignored):
         """Returns a condor-leg-shaped OptionsSignal, or None."""
         prep = self.prepare(ms=ms, vol_state=vol_state, chain=chain, macro=macro,
                             current_price=current_price, trend=trend, now_et=now_et,
-                            atm_iv=atm_iv, df_1m=df_1m)
+                            atm_iv=atm_iv, df_1m=df_1m, session_open_epoch=session_open_epoch)
         if not prep.ready or prep.unmet or prep.structural or prep.starved:
             return prep.tick.already()
         sig = self._build_signal(prep.side, prep.short, prep.long, prep.direction,

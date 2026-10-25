@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_tcs_plan.py  v5.0
+tests/check_tcs_plan.py  v5.1
+v5.1  2026-10-25  OTV5 r9 (GATE.7) — T11's restarted process is pinned to the same session open as every other tick (it passed no pin, so before 09:30 ET it saw no ACCEPTED at all and passed for the wrong reason). The pins now reach the plan (trend_credit_spread v5.3). Every expectation is unchanged.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.4  CD.2 (2026-10-24) - seeded ACCEPTED rows carry their market time; the session open is pinned (no pre-open
       fallback remains in tcs_plan); the fixture marks the level book SYNCED (store.mark_level_sync) after seeding the ledger:
@@ -203,7 +204,8 @@ def main():
     P.begin_tick(7.95)
     sig2 = T2.generate_signal(ms=types.SimpleNamespace(adx=12.0), vol_state=None, chain=chain, macro=None,
                               current_price=96.8, now_et=datetime(2026, 9, 9, 13, 6, tzinfo=ET),
-                              atm_iv=0.20, df_1m=_frame([97.8, 97.6, 96.8], "12:50"))
+                              atm_iv=0.20, df_1m=_frame([97.8, 97.6, 96.8], "12:50"),
+                              session_open_epoch=now - 7200.0)   # CD.2: pinned, as every other tick
     P.close_tick(st, "TST")
     check("T11 §37: a restarted process does not fire the ACCEPTED that existed at its first look",
           sig2 is None, f"sig={sig2 is not None}")

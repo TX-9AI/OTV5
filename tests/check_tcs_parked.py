@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_tcs_parked.py  v5.0
+tests/check_tcs_parked.py  v5.1
+v5.1  2026-10-25  OTV5 r9 (GATE.7) — its prepare call is pinned to a session open (now - 2h), as every fixture that drives the trend or sweep wrapper now is (check_session_pin P6); the path it pins stops before any level read, so every expectation is unchanged.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.4  2026-09-23  OTV4TEST r112 — the r106 venv bootstrap; red under system python3 on `pytz`.
 v1.3  2026-09-22  OTV4TEST r92 — P0/P1/P5 retargeted to the SHARED credit window. P5's
@@ -101,11 +102,13 @@ def main():
     _e_h, _e_m = C.TCS_ENTRY_END_ET
     _before = (_s_h - 2, _s_m)                       # comfortably before the open
     _after  = (_e_h, _e_m + 5) if _e_m < 55 else (_e_h + 1, (_e_m + 5) % 60)
+    import time as _time
     for h, m in (_before, _after, (15, 45)):         # r238: OUTSIDE the window
         now = datetime(2026, 9, 4, h, m, tzinfo=ET)
         s = TrendCreditSpread()
         try:
-            prep = s.prepare(None, None, None, None, 100.0, now_et=now, atm_iv=0.2)
+            prep = s.prepare(None, None, None, None, 100.0, now_et=now, atm_iv=0.2,
+                             session_open_epoch=_time.time() - 7200.0)   # GATE.7: pinned
             # `_close("DORMANT", f"{gate}: {why}")` lands on plan._last —
             # (n, verdict, reason). Read the real record, not a guess at a
             # field name.
