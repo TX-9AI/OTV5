@@ -1,6 +1,15 @@
 #!/bin/bash
 # ==========================================================================
-# setup_ec2.sh  v5.1
+# setup_ec2.sh  v5.2
+# v5.2  2026-10-25  OTV5 r17 (BOOT.14) — TWO INSTALL MODES, ONE INSTALLER (OT_INSTALL_MODE). "unattended" (default) is
+#       unchanged: a terminal is reattached when one exists, the summary prints, the bootstrap is shredded here, and the
+#       install ends in a login shell. "controller" (control's fleet.py): no terminal is reattached, the summary prints
+#       no account number, the bootstrap is left for the controller to shred after this process exits (shredding a
+#       file bash is still reading made dtp r504's first reinstall exit 2 after a complete install), and the install
+#       ENDS - no login shell (inside control's tmux it waited forever for input) - with exactly one line, "INSTALL OK
+#       <sha>" (exit 0) or "INSTALL FAILED step=<step> rc=<rc>" (non-zero), printed on any exit. Any other mode is
+#       refused (rc 2). The closing note says the history comes from TastyTrade through candle-feed (r16), not the
+#       warehouse. The operator, 2026-10-25: "Yes, that way each one is clean and intentional".
 # v5.1  2026-10-25  OTV5 r11 (BOOT.11) — THE INSTALL NO LONGER CREATES AN EMPTY trades.db. The touch left a
 #       0-byte file with no trades table, so check_lineage and check_agent_watch T0 read red on every fresh box's
 #       first sweep (found by the OTV5 proof-of-concept box, 2026-10-25) and FIRST_BOOT step 5 called it a
@@ -163,11 +172,25 @@ SRC_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLAN=0
 [ "${1:-}" = "--plan" ] && PLAN=1
 
+# ── r17 (BOOT.14) — the install mode: unattended (a person) or controller (control's fleet.py) ──
+INSTALL_MODE="${OT_INSTALL_MODE:-unattended}"
+case "$INSTALL_MODE" in
+    unattended|controller) ;;
+    *) echo "OT_INSTALL_MODE must be unattended or controller (got '${INSTALL_MODE}') - refused"; exit 2 ;;
+esac
+CUR_STEP="start"
+if [ "$INSTALL_MODE" = controller ] && [ "$PLAN" = 0 ]; then
+    # one result line on ANY exit: the controller judges the install by it, never by scraping the log
+    trap '_rc=$?; [ "$_rc" -ne 0 ] && echo "INSTALL FAILED step=${CUR_STEP} rc=${_rc}"' EXIT
+fi
+
 # 🔴 r132 — REATTACH A TERMINAL ONLY WHEN ONE EXISTS. The probe opens /dev/tty in a
 # subshell: with no controlling terminal it fails there, not in this shell, where
 # a failed `exec` redirection under `set -e` would end the install.
 HAVE_TTY=0
-if [ -t 0 ]; then
+if [ "$INSTALL_MODE" = controller ]; then
+    HAVE_TTY=0                      # r17: control drives this; no terminal is ever reattached
+elif [ -t 0 ]; then
     HAVE_TTY=1
 elif [ "$PLAN" = 0 ] && ( : < /dev/tty ) 2>/dev/null; then
     exec < /dev/tty
@@ -178,7 +201,7 @@ fi
 GREEN='\033[0;32m'; YELLOW='\033[1;33m'; CYAN='\033[0;36m'
 RED='\033[0;31m'; BOLD='\033[1m'; RESET='\033[0m'
 
-print_step() { echo -e "\n${BOLD}${GREEN}[ $1 ]${RESET} $2"; }
+print_step() { CUR_STEP="$1"; echo -e "\n${BOLD}${GREEN}[ $1 ]${RESET} $2"; }
 print_ok()   { echo -e "  ${GREEN}✓${RESET}  $1"; }
 print_info() { echo -e "  ${CYAN}→${RESET}  $1"; }
 print_warn() { echo -e "  ${YELLOW}⚠${RESET}  $1"; }
@@ -382,6 +405,7 @@ REQ_FILE="requirements.lock"
 # ─── r132 — --plan: EVERYTHING RESOLVED, NOTHING CHANGED ────────────────────
 if [ "$PLAN" = 1 ]; then
     echo "PLAN unattended=$UNATTENDED"
+    echo "PLAN install_mode=$INSTALL_MODE"
     echo "PLAN tty=$HAVE_TTY"
     echo "PLAN instrument=$INSTRUMENT"
     echo "PLAN paper=$PAPER_TRADING"
@@ -615,7 +639,7 @@ fi
 
 # ── Nothing is started here (CD.1) ───────────────────────────────────────────
 print_info "candle-feed and ${SERVICE_NAME} are installed and STOPPED. Next: ./configure.sh, set everything, choose Done:"
-print_info "  Done starts candle-feed, primes the informers' history from the warehouse, starts ${SERVICE_NAME},"
+print_info "  Done starts candle-feed (which primes a new symbol's history from TastyTrade), waits for it, starts ${SERVICE_NAME},"
 print_info "  then applies data capture (standalone unless item 14 chose managed)."
 if [ "$CLAUDE_AT_BOOT" = 1 ]; then
     print_info "Raising the Claude session (first boot)..."
@@ -630,7 +654,7 @@ echo ""
 echo -e "  Instrument:  ${INSTRUMENT} 0DTE (TastyTrade)"
 echo -e "  Mode:        $([ "$PAPER_TRADING" = "True" ] && echo "📄 PAPER" || echo "🔴 LIVE")"
 echo -e "  Risk:        \$${RISK_USD}/trade"
-echo -e "  TT Account:  ${TT_ACCOUNT_NUMBER}"
+echo -e "  TT Account:  $([ "$INSTALL_MODE" = controller ] && echo "<not printed: controller install>" || echo "${TT_ACCOUNT_NUMBER}")"
 echo -e "  Telegram:    chat ${TELEGRAM_CHAT_ID}"
 echo -e "  Commit:      $(git -C "$INSTALL_DIR" log -1 --format='%h' 2>/dev/null) (${GIT_REF})"
 echo -e "  Swap:        $(swapon --show --noheadings | awk '{print $3}' | head -1)"
@@ -655,7 +679,11 @@ rm -rf "$DEPLOY_DIR"
 rm -f "$HOME/install.sh"
 # Destroy the one-shot secrets bootstrap now that credentials are baked into the
 # systemd unit. shred first so the plaintext is not trivially recoverable.
-for _secret_file in "$HOME/bootstrap.sh" "$HOME/cred.txt"; do
+# r17: a CONTROLLER install leaves bootstrap.sh to the controller, which shreds it once this process has exited (bash
+# may still be reading it now).
+_secret_files="$HOME/bootstrap.sh $HOME/cred.txt"
+[ "$INSTALL_MODE" = controller ] && _secret_files="$HOME/cred.txt"
+for _secret_file in $_secret_files; do
     if [ -f "$_secret_file" ]; then
         command -v shred >/dev/null 2>&1 && shred -u "$_secret_file" 2>/dev/null || rm -f "$_secret_file"
     fi
@@ -669,6 +697,17 @@ else
 fi
 # r132 — the final shell must not inherit the secrets this install was given.
 unset TT_CLIENT_SECRET TT_REFRESH_TOKEN TELEGRAM_TOKEN GITHUB_TOKEN CLAUDE_LOGIN_B64
+
+# r17 (BOOT.14): a CONTROLLER install ends here with its one result line; nothing waits for input.
+if [ "$INSTALL_MODE" = controller ]; then
+    trap - EXIT
+    if [ -n "$INSTALL_FAILED" ]; then
+        echo "INSTALL FAILED step=$(echo $INSTALL_FAILED | tr " " ",") rc=1"
+        exit 1
+    fi
+    echo "INSTALL OK $(git -C "$INSTALL_DIR" rev-parse HEAD 2>/dev/null)"
+    exit 0
+fi
 
 # Always end in the install dir with venv active
 export PATH="$VENV/bin:$PATH"

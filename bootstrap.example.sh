@@ -1,5 +1,12 @@
 #!/bin/bash
-# bootstrap.example.sh  v5.2
+# bootstrap.example.sh  v5.3
+# v5.3 — 2026-10-25 — OTV5 r17 (BOOT.14). TWO INSTALL MODES, ONE INSTALLER. OT_INSTALL_MODE="unattended" (the default:
+#         YOU run this copy - it re-runs itself inside tmux so a dropped connection cannot kill the install, reattaches
+#         your terminal, prints the summary and ends in a login shell) or "controller" (fleet.py builds and runs it from
+#         control - control already runs it detached in tmux, so it does not re-run itself in tmux; setup_ec2.sh then
+#         attaches no terminal, prints no credential, leaves the shred to the controller and ends with one line,
+#         INSTALL OK <sha> or INSTALL FAILED step=..., and its exit code). The operator, 2026-10-25: "Yes, that way each
+#         one is clean and intentional"; "A user ran unattended install needs the tmux in case of a disconnect".
 # v5.2 — 2026-10-25 — OTV5 r11 (BOOT.11). OT_CLAUDE_AT_BOOT defaults to 0 again: Claude Code is installed (pinned,
 #         observe-only settings) but NOT raised at boot. The operator: "make the default installation setting for
 #         Claude code not start on first boot." Set it to 1 in your copy to raise it on Remote Control at boot.
@@ -57,10 +64,14 @@
 # can re-run — delete it by hand if you abandon the deploy.
 # =============================================================================
 
+# ── Install mode (r17) ────────────────────────────────────────────────────────
+# unattended = you run this copy (the default). controller = control's fleet.py runs it; leave it to control.
+export OT_INSTALL_MODE="unattended"
+
 # ── Run inside tmux ───────────────────────────────────────────────────────────
 # A dropped SSH connection can't kill a multi-minute install (or leave secrets
 # un-shredded). Reconnect with:  tmux attach -t deploy
-if [ -z "$TMUX" ] && [ -z "$OT_PLAN_ONLY" ]; then
+if [ -z "$TMUX" ] && [ -z "$OT_PLAN_ONLY" ] && [ "${OT_INSTALL_MODE:-unattended}" != controller ]; then
     command -v tmux >/dev/null 2>&1 || { sudo apt-get update -qq; sudo apt-get install -y -qq tmux; }
     if command -v tmux >/dev/null 2>&1; then
         exec tmux new-session -A -s deploy "bash '$(readlink -f "$0")'"

@@ -1,4 +1,11 @@
-"""tests/check_bootstrap.py — v5.3
+"""tests/check_bootstrap.py — v5.4
+v5.4  2026-10-25  OTV5 r17 (BOOT.14) — G23: TWO INSTALL MODES, ONE INSTALLER. DRIVEN: setup_ec2 --plan names the mode
+      (unattended by default, controller when asked) and refuses any other (rc 2); the template's own tmux step, run
+      with a recording tmux stub, re-runs an UNATTENDED install inside tmux (the operator: "A user ran unattended install
+      needs the tmux in case of a disconnect") and does NOT for a controller install; setup_ec2's own ending, run on a
+      scratch tree, ends a CONTROLLER install with exactly "INSTALL OK <sha>" and exit 0, leaves bootstrap.sh for the
+      controller to shred, and never reaches the login shell; an unattended install still ends in `exec bash --login`;
+      a controller install's summary prints no account number. BORN RED on r16 (no OT_INSTALL_MODE anywhere).
 v5.3  2026-10-25  OTV5 r13 (BOOT.12) — G22, DRIVEN: install_claude.sh with OT_CLAUDE_SETTINGS=pull-only and
       OT_CLAUDE_SETTINGS_REPLACE=1 replaces a box's existing deny-less settings with the pull-only file and keeps the
       old one as settings.json.pre-<stamp>, byte for byte; without the flag the existing file is left unchanged; the
@@ -920,6 +927,67 @@ _rc22n, _set22n, _bak22n, _ = _run22(False)
 guard("G22 DRIVEN: without REPLACE an existing settings file is left unchanged, no backup made",
       lambda: _rc22n == 0 and _set22n == _OLD22 and not _bak22n,
       lambda: "rc=%s unchanged=%s backups=%d" % (_rc22n, _set22n == _OLD22, len(_bak22n)))
+
+# ── G23 (r17) — two install modes, one installer ─────────────────────────────
+_r23u, _p23u = _setup(["--plan"])[:2]
+_r23c, _p23c = _setup(["--plan"], {"OT_INSTALL_MODE": "controller"})[:2]
+_r23x = _setup(["--plan"], {"OT_INSTALL_MODE": "bogus"})[0]
+guard("G23 --plan names the mode: unattended by default, controller when asked; any other mode refused (rc 2)",
+      lambda: _p23u.get("install_mode") == "unattended" and _p23c.get("install_mode") == "controller"
+      and _r23x.returncode == 2,
+      lambda: "default=%r controller=%r bogus rc=%s" % (_p23u.get("install_mode"), _p23c.get("install_mode"),
+                                                        _r23x.returncode))
+_tpl23 = _read("bootstrap.example.sh")
+_head23 = _tpl23[:_tpl23.index("# ── Instrument and sizing")]
+
+
+def _tmux23(mode):
+    d = _mk("tmux23_")
+    log = os.path.join(d, "tmux.log")
+    with open(os.path.join(d, "tmux"), "w") as fh:
+        fh.write('#!/bin/sh\necho "tmux $*" >> "%s"\nexit 0\n' % log)
+    os.chmod(os.path.join(d, "tmux"), 0o755)
+    body = _head23.replace('export OT_INSTALL_MODE="unattended"', 'export OT_INSTALL_MODE="%s"' % mode)
+    env = {"PATH": d + ":/usr/bin:/bin", "HOME": d}
+    subprocess.run(["bash", "-c", body + "\necho PAST_TMUX\n"], capture_output=True, text=True, env=env, timeout=30)
+    return open(log).read() if os.path.exists(log) else ""
+_t23u, _t23c = _tmux23("unattended"), _tmux23("controller")
+guard("G23 DRIVEN template: an unattended install re-runs itself inside tmux; a controller install does not",
+      lambda: "new-session" in _t23u and "deploy" in _t23u and _t23c == "",
+      lambda: "unattended=%r controller=%r" % (_t23u.strip(), _t23c.strip()))
+_su23 = _read("setup_ec2.sh")
+_tail23 = _su23[_su23.index("# ── Cleanup ─"):]
+
+
+def _tail_run(mode):
+    d = _mk("tail23_")
+    inst, dep = os.path.join(d, "options-trader"), os.path.join(d, "deploy")
+    os.makedirs(inst)
+    os.makedirs(dep)
+    subprocess.run(["git", "-C", inst, "init", "-q", "-b", "main"], check=True)
+    subprocess.run(["git", "-C", inst, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty",
+                    "-m", "x"], check=True)
+    sha = subprocess.run(["git", "-C", inst, "rev-parse", "HEAD"], capture_output=True, text=True).stdout.strip()
+    open(os.path.join(d, "bootstrap.sh"), "w").write("secret\n")
+    pre = ('print_info(){ :; }; print_ok(){ echo "OK $1"; }; RED=; BOLD=; RESET=; INSTALL_FAILED=""; '
+           'INSTALL_MODE=%s; DEPLOY_DIR=%s; INSTALL_DIR=%s; VENV=%s/venv\n' % (mode, dep, inst, inst))
+    r = subprocess.run(["bash", "-c", pre + _tail23.replace("exec bash --login", "echo REACHED_LOGIN_SHELL")],
+                       stdin=subprocess.DEVNULL, capture_output=True, text=True, env={"PATH": "/usr/bin:/bin", "HOME": d},
+                       timeout=30)
+    return r, sha, os.path.exists(os.path.join(d, "bootstrap.sh"))
+_rc23, _sha23, _boot23 = _tail_run("controller")
+_ru23, _shu23, _bootu23 = _tail_run("unattended")
+_last23 = (_rc23.stdout.strip().splitlines() or [""])[-1]
+guard("G23 DRIVEN ending: a controller install ends with exactly 'INSTALL OK <sha>', exit 0, no login shell, "
+      "bootstrap.sh left for the controller",
+      lambda: _rc23.returncode == 0 and _last23 == "INSTALL OK " + _sha23 and "REACHED_LOGIN_SHELL" not in _rc23.stdout
+      and _boot23,
+      lambda: "rc=%s last=%r bootstrap_left=%s" % (_rc23.returncode, _last23, _boot23))
+guard("G23 DRIVEN ending: an unattended install still shreds bootstrap.sh and ends in the login shell",
+      lambda: "REACHED_LOGIN_SHELL" in _ru23.stdout and not _bootu23,
+      lambda: "rc=%s bootstrap_left=%s" % (_ru23.returncode, _bootu23))
+guard("G23 a controller install's summary prints no account number",
+      lambda: re.search(r'TT Account:  \$\(\[ "\$INSTALL_MODE" = controller \]', _su23) is not None)
 
 # ── G0 ────────────────────────────────────────────────────────────────────────
 for d in _TMP:
