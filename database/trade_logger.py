@@ -1,5 +1,13 @@
 """
-database/trade_logger.py  v5.1
+database/trade_logger.py  v5.2
+v5.2  2026-10-25  OTV5 r15 (SCHEMA.1) — NO COLUMN OR TABLE IS EVER DROPPED AT BOOT, AND tape_band IS A COLUMN. The boot migration
+      dropped, by difference, every trades column and every table outside this tree's shape. The legacy fleet's trades
+      (mainline otv4 r499) carry tape_band, which this tree lacked, so a repoint to OTV5 (NVDA, preflight 2026-10-25) would
+      have PHYSICALLY DROPPED tape_band and its values at the first start. The operator: "We don't want less columns -
+      that would be a mistake." (1) tape_band REAL, no default (NULL = not recorded, never 0), after tape_prints_at_level
+      in the CREATE and _MIGRATION_ADDS - mainline r499's exact shape; analysis/tape_at_level.measure already returns it.
+      (2) A column or table outside this tree's shape is KEPT with its values and named once in the log
+      ("[schema] kept ..."). Retiring schema is now a named, reviewed act, never a side effect of a boot.
 v5.1  2026-10-25  OTV5 r8 (LIN.1) — EVERY NEW TRADE ROW IS STAMPED lineage "OTV5", THE ENGINE THAT PRODUCED IT. "TEST" named the predecessor's second engine; this tree is the third, and control's strategy_registry v1.4 (otv4 r503) knows it. Rows already in a store keep their stamp (OTV4, TEST or NULL): the boot migration adds no default and nothing relabels. The operator, 2026-10-25: "just send it".
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v4.23 2026-10-18  OTV4TEST r298 (CAP.4) — today_summary's docstring stops claiming it equals realized_pnl_today(): since r288
@@ -419,6 +427,8 @@ class TradeLogger:
         tape_vol_at_level      REAL,
         tape_buy_frac_at_level REAL,
         tape_prints_at_level   INTEGER,
+        -- OTV5 r15: the price band tape_prints_at_level counted in (mainline r499's shape).
+        tape_band              REAL,
         short_strike      REAL DEFAULT 0.0,
         long_strike       REAL DEFAULT 0.0,
         credit_received   REAL DEFAULT 0.0,
@@ -602,6 +612,7 @@ class TradeLogger:
             ("tape_vol_at_level",      "REAL"),
             ("tape_buy_frac_at_level", "REAL"),
             ("tape_prints_at_level",   "INTEGER"),
+            ("tape_band",              "REAL"),              # OTV5 r15 (mainline r499)
             # OTV4TEST r11 — the condor's final form (condor_roll v4.8, exit_engine v4.16)
             ("final_form_basis",       "REAL"),
             ("final_form_group",       "TEXT DEFAULT ''"),
@@ -627,14 +638,13 @@ class TradeLogger:
         # 138k-line files. It also means every session's first ~25 minutes are
         # v1.3-labelled by design (the RANGING/COMPRESSION 1m warm-up), and no fit
         # could exclude them without this column. Provenance belongs in the row.
-        # ── one-way boot migration: retired schema is PHYSICALLY DROPPED ──
-        # A later query against these RAISES `no such column`/`no such table`
-        # — the loud refusal the removal standard demands, instead of empty
-        # strings forever. Idempotent. DROP COLUMN needs SQLite >= 3.35;
-        # older engines get a table rebuild.
-        # canonical shape = the CREATE TABLE above + every migration ADD; anything
-        # else on disk is retired schema and is dropped BY DIFFERENCE, so this
-        # code never names what it buries and future retirements need no edit.
+        # ── OTV5 r15 (SCHEMA.1): NOTHING ON DISK IS DROPPED AT BOOT ──
+        # Until r15 every column and table outside this tree's shape was dropped
+        # BY DIFFERENCE here. Across a repoint that destroys data: the legacy
+        # fleet's tape_band (mainline r499) is not in a tree that never had it.
+        # A column or table this tree does not know is KEPT with its values and
+        # named once; log_entry still writes only the columns it knows. Retiring
+        # schema is a named, reviewed act, never a side effect of a boot.
         _scratch = sqlite3.connect(":memory:")
         _scratch.executescript(self.SCHEMA)
         _canon = {r[1] for r in _scratch.execute("PRAGMA table_info(trades)")}
@@ -642,23 +652,14 @@ class TradeLogger:
             "SELECT name FROM sqlite_master WHERE type='table'")}
         _scratch.close()
         _canon |= {c for c, _ in _MIGRATION_ADDS}
-        gone = [r[1] for r in conn.execute("PRAGMA table_info(trades)")
-                if r[1] not in _canon]
-        for _col in gone:
-            try:
-                conn.execute(f"ALTER TABLE trades DROP COLUMN {_col}")
-            except sqlite3.OperationalError:
-                _cols = [r[1] for r in conn.execute("PRAGMA table_info(trades)")
-                         if r[1] != _col]
-                conn.execute(f"CREATE TABLE _trades_rebuild AS "
-                             f"SELECT {', '.join(_cols)} FROM trades")
-                conn.execute("DROP TABLE trades")
-                conn.execute("ALTER TABLE _trades_rebuild RENAME TO trades")
-            conn.commit()
-        for (_t,) in list(conn.execute(
-                "SELECT name FROM sqlite_master WHERE type='table'")):
-            if _t not in _keep_tables and not _t.startswith("sqlite_"):
-                conn.execute(f"DROP TABLE IF EXISTS {_t}")
+        _extra_cols = [r[1] for r in conn.execute("PRAGMA table_info(trades)")
+                       if r[1] not in _canon]
+        _extra_tables = [t for (t,) in conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table'")
+            if t not in _keep_tables and not t.startswith("sqlite_")]
+        if _extra_cols or _extra_tables:
+            logger.info("[schema] kept outside this tree's shape (never dropped): columns %s tables %s",
+                        _extra_cols or "none", _extra_tables or "none")
         conn.commit()
         conn.close()
 

@@ -7,7 +7,13 @@ Regenerated in the land gate; a stale map fails `--check`.
 
 ⚠️ **A table with no writer is an orphan. A table nobody reads is dead weight.** Both are visible here and in neither the schema nor the call graph alone.
 
-**32 tables.**
+**33 tables.**
+
+## (unattributed)
+
+| table | created by | written by | read by |
+|---|---|---|---|
+| `zz_unknown_table` | — | `tests/check_schema_keeps.py` (insert) | — |
 
 ## derived_store.db
 
@@ -59,11 +65,11 @@ Regenerated in the land gate; a stale map fails `--check`.
 | table | created by | written by | read by |
 |---|---|---|---|
 | `circuit_breaker_events` | `database/trade_logger.py` | `database/trade_logger.py` (insert) | `query.py`, `tests/check_loss_cap_rearm.py`, `warehouse/s3_push.py` |
-| `trades` | `database/trade_logger.py`, `tests/check_condor_stop_suppression.py`, `tests/check_plan_states.py` | `database/trade_logger.py` (insert/update), `tests/check_agent_watch.py` (insert/update), `tests/check_atp_butterfly.py` (insert), `tests/check_breakout_new_extreme.py` (delete/update), `tests/check_breakout_rearm.py` (delete/update), `tests/check_cap_fly_exempt.py` (insert), `tests/check_commitment.py` (insert), `tests/check_condor_pairing.py` (insert), `tests/check_counterfactual_reads.py` (update), `tests/check_dashboards_multi_position.py` (insert), `tests/check_db_handles.py` (update), `tests/check_emergency_watchdog.py` (insert), `tests/check_et_offset.py` (insert), `tests/check_lineage.py` (insert), `tests/check_liquidity_hunt.py` (delete), `tests/check_management_plan.py` (insert), `tests/check_one_per_session.py` (insert), `tests/check_orb_geometry.py` (insert), `tests/check_park.py` (delete/insert), `tests/check_plan_prepares.py` (insert), `tests/check_plan_states.py` (delete/insert), `tests/check_runaway_break_key.py` (insert), `tests/check_runaway_plan.py` (insert), `tests/check_sma50_record.py` (insert), `tests/check_structure_viable.py` (insert), `tests/check_sweep_plan.py` (insert), `tests/check_trade_report.py` (insert), `tools/backfill_sma50.py` (update) | `analysis/commitment.py`, `query.py`, `status.py`, `strategy/breakout_plan.py`, `strategy/liquidity_hunt.py`, `strategy/runaway_continuation.py`, `strategy/sweep_credit_spread.py`, `tests/check_exit_deadline.py`, `tests/check_exit_partial_persist.py`, `tests/check_exit_quote.py`, `tests/check_expiry_settlement.py`, `tests/check_no_mark_close.py`, `tests/check_pnl_pct_sign.py`, `tests/edge_scan.py`, `tests/entry_profile.py`, `tests/eod_compare.py`, `tests/exit_record.py`, `tests/exit_replay.py`, `tests/orb_bleed_study.py`, `tests/r_ledger.py`, `tests/stop_sweep.py`, `tests/trade_report.py`, `tools/agent_verdict.py`, `tools/agent_watch.py`, `tools/emergency_watchdog.py`, `tools/eod_summary.py`, `warehouse/s3_push.py` |
+| `trades` | `database/trade_logger.py`, `tests/check_condor_stop_suppression.py`, `tests/check_plan_states.py` | `database/trade_logger.py` (insert/update), `tests/check_agent_watch.py` (insert/update), `tests/check_atp_butterfly.py` (insert), `tests/check_breakout_new_extreme.py` (delete/update), `tests/check_breakout_rearm.py` (delete/update), `tests/check_cap_fly_exempt.py` (insert), `tests/check_commitment.py` (insert), `tests/check_condor_pairing.py` (insert), `tests/check_counterfactual_reads.py` (update), `tests/check_dashboards_multi_position.py` (insert), `tests/check_db_handles.py` (update), `tests/check_emergency_watchdog.py` (insert), `tests/check_et_offset.py` (insert), `tests/check_lineage.py` (insert), `tests/check_liquidity_hunt.py` (delete), `tests/check_management_plan.py` (insert), `tests/check_one_per_session.py` (insert), `tests/check_orb_geometry.py` (insert), `tests/check_park.py` (delete/insert), `tests/check_plan_prepares.py` (insert), `tests/check_plan_states.py` (delete/insert), `tests/check_runaway_break_key.py` (insert), `tests/check_runaway_plan.py` (insert), `tests/check_schema_keeps.py` (insert), `tests/check_sma50_record.py` (insert), `tests/check_structure_viable.py` (insert), `tests/check_sweep_plan.py` (insert), `tests/check_trade_report.py` (insert), `tools/backfill_sma50.py` (update) | `analysis/commitment.py`, `query.py`, `status.py`, `strategy/breakout_plan.py`, `strategy/liquidity_hunt.py`, `strategy/runaway_continuation.py`, `strategy/sweep_credit_spread.py`, `tests/check_exit_deadline.py`, `tests/check_exit_partial_persist.py`, `tests/check_exit_quote.py`, `tests/check_expiry_settlement.py`, `tests/check_no_mark_close.py`, `tests/check_pnl_pct_sign.py`, `tests/edge_scan.py`, `tests/entry_profile.py`, `tests/eod_compare.py`, `tests/exit_record.py`, `tests/exit_replay.py`, `tests/orb_bleed_study.py`, `tests/r_ledger.py`, `tests/stop_sweep.py`, `tests/trade_report.py`, `tools/agent_verdict.py`, `tools/agent_watch.py`, `tools/emergency_watchdog.py`, `tools/eod_summary.py`, `warehouse/s3_push.py` |
 
 ## Flags
 
 - **No writer** (0): none
-- **No external reader** (1): `level_sync`
+- **No external reader** (2): `level_sync`, `zz_unknown_table`
 
 ⚠️ *No external reader* is not automatically a defect — a table written today for a study run in a month is exactly the point of the derived layer. It IS a defect when nobody ever intends to read it, and this list is where that question gets asked.
