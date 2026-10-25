@@ -1,5 +1,9 @@
 #!/bin/bash
-# bootstrap.example.sh  v5.0
+# bootstrap.example.sh  v5.1
+# v5.1 — 2026-10-25 — OTV5 r10 (BOOT.10). THE TEMPLATE'S DEFAULTS ARE A FRESH OTV5 BOX'S: Claude raised at first
+#         boot on Remote Control (OT_CLAUDE_AT_BOOT=1), under the observe-and-report settings (OT_CLAUDE_SETTINGS=pull-only;
+#         without it install_claude.sh installed the settings file with no deny rules), GITHUB_TOKEN empty (a box never pushes;
+#         a REPLACE_ME was stored as the token), every service stopped until configure.sh Done. Stale names scrubbed.
 # v5.0 — 2026-10-25 — OTV5 r7 (SPLIT.1). HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 # v4.5 — 2026-10-24 — OTV5 r0. GITHUB_REPO is TX-9AI/OTV5 (== deploy/origin.conf v1.1).
 # v4.4 — 2026-10-03 — OTV4TEST r228. The ORB and VOLT scaling switches have no configure.sh
@@ -20,7 +24,11 @@
 #         boot, swap, git push, git ref) and the Claude login (CLAUDE_LOGIN_B64).
 # v3.0 — 2026-07-10 — options_trader_v3 (predecessor).
 # =============================================================================
-# bootstrap.sh — one-shot unattended deploy of OTV4TEST onto a fresh EC2 box.
+# bootstrap.sh — one-shot unattended deploy of OTV5 onto a fresh EC2 box.
+#
+# WHAT A FRESH INSTALL GIVES YOU (the defaults below): PAPER; every trading service installed and
+# STOPPED; the warehouse push off; Claude Code up on Remote Control from the first boot, observing
+# and reporting only. Nothing trades until you run ./configure.sh and choose Done.
 #
 # This is a TEMPLATE (placeholders only) — safe to commit, and the repo is
 # PUBLIC. Put real secrets ONLY in a copy named bootstrap.sh, which is
@@ -69,14 +77,14 @@ export OT_RISK_USD="200"               # configure.sh item 2  Risk per trade / r
 export OT_PIN_PROXIMITY_ACTIVE="0"    # configure.sh item 7  Pin-proximity gate (PIN.1: off pending data)
 
 # ── Box ───────────────────────────────────────────────────────────────────────
-export OT_ROLE="control"        # full checkout: tests/ (the sweep) and docs/ (the agent's brief)
+export OT_ROLE="control"        # full checkout: tests/ (the sweep) and docs/ (the agent's brief). "trader" strips both.
 export OT_SWAP_GB="2"           # /swapfile when the box has no swap; 0 = none
 export OT_GIT_REF="main"        # branch, tag or commit to install
 export OT_GIT_PUSH="0"          # 1 = this box may push (stores GITHUB_TOKEN); 0 = pull only
 export OT_DATA_CAPTURE="standalone"  # RECORDED only (CD.1): an install always lands standalone; managed is offered by configure.sh item 14 and applied at Done
-# (CD.1) no start-at-install switch: every service ships stopped; ./configure.sh -> Done is the first start
-                                     # (S3 push on; tag the instance Name=<SYMBOL>, attach
-                                     # role day-trader-box, launch with the fleet key pair)
+# (CD.1) no start-at-install switch: every service ships stopped; ./configure.sh -> Done is the first start.
+# For a managed (S3-pushing) box: tag the instance Name=<SYMBOL>, attach role day-trader-box, launch with
+# the fleet key pair, and choose managed at configure.sh item 14.
 
 # ── TastyTrade OAuth ──────────────────────────────────────────────────────────
 export TT_CLIENT_SECRET="REPLACE_ME"
@@ -88,16 +96,19 @@ export TELEGRAM_TOKEN="REPLACE_ME"
 export TELEGRAM_CHAT_ID="REPLACE_ME"
 
 # ── GitHub ────────────────────────────────────────────────────────────────────
-# The repo is public, so cloning needs no token. The token is for push.sh and,
-# with OT_GIT_PUSH=1, for git push.
+# The repo is public, so cloning needs no token. A fleet box never pushes: leave the token EMPTY
+# (a placeholder left here is stored as the token). Only with OT_GIT_PUSH=1 does it need one.
 export GITHUB_REPO="TX-9AI/OTV5"       # == deploy/origin.conf OT_ORIGIN_REPO (tests/check_origin.py)
-export GITHUB_TOKEN="REPLACE_ME"
+export GITHUB_TOKEN=""
 
 # ── Claude Code ───────────────────────────────────────────────────────────────
 # Installed on every box, pinned (deploy/install_claude.sh). Whether it comes up
 # in a Remote Control session at boot is this toggle:
-export OT_CLAUDE_AT_BOOT="0"            # 1 = raise it at first boot and every boot
-# export OT_RC_NAME="qqq-test"          # Remote Control session name
+export OT_CLAUDE_AT_BOOT="1"            # 1 = raise it on Remote Control at first boot and every boot; 0 = installed, not raised
+export OT_CLAUDE_SETTINGS="pull-only"   # the box agent observes and reports only (docs/HANDOFF.md): deny rules for
+                                        # commits, pushes, pulls, service control, configure.sh and trading actions.
+                                        # Unset installs deploy/claude-user-settings.json, which has NO deny rules.
+# export OT_RC_NAME="✨QQQ"             # Remote Control session name; unset = "✨<OT_INSTRUMENT>"
 #
 # THE LOGIN (optional; without it, ssh in once and run `claude auth login`).
 # Make a DEDICATED login for this box — never copy an existing box's, or the two

@@ -1,4 +1,10 @@
-"""tests/check_bootstrap.py — v5.0
+"""tests/check_bootstrap.py — v5.1
+v5.1  2026-10-25  OTV5 r10 (BOOT.10) — G18: THE TEMPLATE'S DEFAULTS ARE A FRESH OTV5 BOX'S. Its own export lines,
+      evaluated by bash, raise Claude at boot (OT_CLAUDE_AT_BOOT=1), leave GITHUB_TOKEN empty and pushing off,
+      and - DRIVEN through the real deploy/install_claude.sh in a fixture HOME with exactly those values - install
+      the pull-only settings (the deny rules), not the deny-less default. BORN RED on r9 (AT_BOOT 0, token
+      REPLACE_ME, OT_CLAUDE_SETTINGS absent so the default file landed). G18 also bars the predecessor's names
+      from the template's instructions.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 
 v1.12 2026-10-24 — OTV5 r0. RE-POINTED, NOT DROPPED (section 38.4): G3's planned git_repo is the deploy/origin.conf
@@ -825,6 +831,31 @@ guard("G17 each sizing line names its configure.sh item",
                                     ("OT_DAILY_LOSS_LIMIT", "6", "Daily catastrophic loss cap")))
       and all(re.search(r"%s=.*no configure\.sh item since r228" % v, _b17)
               for v in ("OT_SCALE_ORB", "OT_SCALE_VOLT")))
+
+# ── G18 (r10) — the template's defaults are a fresh OTV5 box's ───────────────
+_ex18 = subprocess.run(["bash", "-c", 'eval "$(grep -E \'^export (OT_CLAUDE_AT_BOOT|OT_CLAUDE_SETTINGS|GITHUB_TOKEN|OT_GIT_PUSH)=\' "%s")"; '
+                        'printf "%%s|%%s|%%s|%%s" "${OT_CLAUDE_AT_BOOT-}" "${OT_CLAUDE_SETTINGS-}" "${GITHUB_TOKEN-}" "${OT_GIT_PUSH-}"'
+                        % os.path.join(_root, "bootstrap.example.sh")], capture_output=True, text=True).stdout.split("|")
+guard("G18 the template raises Claude at first boot (OT_CLAUDE_AT_BOOT=1)",
+      lambda: _ex18[0] == "1", lambda: "got %r" % (_ex18,))
+guard("G18 the template never pushes: GITHUB_TOKEN empty, OT_GIT_PUSH=0",
+      lambda: _ex18[2] == "" and _ex18[3] == "0", lambda: "got %r" % (_ex18,))
+_h18, _st18 = _fixture_home(_PIN, 0)
+_env18 = {"HOME": _h18, "PATH": _st18 + ":/usr/bin:/bin"}
+if len(_ex18) > 1 and _ex18[1]:
+    _env18["OT_CLAUDE_SETTINGS"] = _ex18[1]
+_r18 = subprocess.run(["bash", os.path.join(_root, "deploy", "install_claude.sh")],
+                      capture_output=True, text=True, env=_env18, timeout=60)
+_set18 = os.path.join(_h18, ".claude", "settings.json")
+guard("G18 DRIVEN: install_claude.sh with the template's values installs the pull-only settings (deny rules)",
+      lambda: _r18.returncode == 0 and os.path.exists(_set18)
+      and open(_set18).read() == _read("deploy/claude-user-settings-pull-only.json").replace("{{ORIGIN_REPO}}", _origin)
+      and len(json.load(open(_set18)).get("permissions", {}).get("deny", [])) > 0,
+      lambda: "rc=%s settings=%s" % (_r18.returncode, os.path.exists(_set18)))
+_inst18 = [l for l in _b17.splitlines() if l.startswith("#") and not re.match(r"#\s+v\d|#\s{6,}", l)]
+guard("G18 the template's instructions name no predecessor (OTV4TEST, qqq-test)",
+      lambda: not [l for l in _inst18 if "OTV4TEST" in l or "qqq-test" in l],
+      lambda: str([l for l in _inst18 if "OTV4TEST" in l or "qqq-test" in l][:3]))
 
 # ── G0 ────────────────────────────────────────────────────────────────────────
 for d in _TMP:
