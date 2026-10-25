@@ -1,5 +1,15 @@
 """
-query.py  v5.0
+query.py  v5.1
+v5.1  2026-10-25  OTV5 r18 (VIEW.1) — THE PLANS PANEL FITS THE PAGE: EVERY LINE IS AT MOST PANEL_W = 62 CHARACTERS (the
+      width of this page's own separators). The operator, 2026-10-25, from a phone screenshot of SOFI: "I don't like the
+      plan rows spanning multiple lines. Have it respect the character limit." NOT EVALUATING rows were 4+24+1+14+1+11
+      columns plus a 64-character reason, so every one wrapped. Each row is now ONE line: the plan (its column as wide
+      as the longest name shown), its state (as wide as the longest state shown), the time HH:MM (the header says ET)
+      and the reason, shortened where a known phrase has a short form ("opening range not established yet" -> "no
+      opening range yet"; "nothing to manage - no open X position" -> "no open position" / "no credit position") and otherwise cut with "…".
+      PLAN STATES lists its names wrapped inside the width, every line led by its own label (DORMANT / LOG ONLY) so a
+      grep for a plan still finds its state; READING THE FEED and PROBLEMS wrap inside the width, the first PROBLEMS
+      line keeping the plan and its verdict; a feed plan's watching note shows at most three lines. Nothing else in the panel changes.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v4.20  2026-10-19  OTV4TEST r303 (PSTATE.1) - THE PLANS PANEL KNOWS A DORMANT PLAN FROM A BROKEN ONE. A dormant plan
       writes no heartbeat (the operator, 2026-10-19: "dormant plans should not write to the ledger"), so the panel
@@ -965,18 +975,24 @@ def show_decisions(dc):
     if live:
         print("  ── READING THE FEED ──")
         for plan, verdict, w, t in live:
-            print(f"    {plan:<24s} {(verdict or 'EVALUATING'):<8s} {t} ET")
-            for line in _wrap(w, 84):
-                print(f"        {line}")
+            print(_fit(f"    {plan:<24s} {(verdict or 'EVALUATING'):<8s} {t} ET"))
+            _ww = _wrap(w, PANEL_W - 8)
+            for line in _ww[:3]:
+                print(_fit(f"        {line}"))
+            if len(_ww) > 3:
+                print("        …")
     else:
         print("  ── READING THE FEED ──")
         print("    none this tick")
 
     if quiet:
-        print("  ── NOT EVALUATING (by design) ──")
+        # r18 (VIEW.1): ONE line per plan, inside PANEL_W; the columns are as wide as what this render shows
+        print("  ── NOT EVALUATING (by design; times ET) ──")
+        _pw = max(len(p) for p, _, _, _ in quiet)
+        _sw = max(len(y) for _, y, _, _ in quiet)
         for plan, why, w, t in quiet:
-            first = (w.split(":", 1)[1].strip() if ":" in w else w)[:64]
-            print(f"    {plan:<24s} {why:<14s} {t} ET  {first}")
+            first = _short_reason(w.split(":", 1)[1].strip() if ":" in w else w)
+            print(_fit(f"    {plan:<{_pw}s} {why:<{_sw}s} {t[:5]} {first}"))
 
     # ⚠️ THE ROSTER IS THE ADMISSION TABLE, NOT THE HEARTBEAT. A plan that was
     # never CONSTRUCTED cannot heartbeat, so asking the heartbeat who exists
@@ -989,8 +1005,11 @@ def show_decisions(dc):
     if _sdoc:
         _when = datetime.fromtimestamp(float(_sdoc.get("written_epoch") or 0), ET).strftime("%m-%d %H:%M")
         print(f"  ── PLAN STATES (bot start {_when} ET) ──")
-        print(f"    DORMANT (switched off, writes nothing): {', '.join(_dormant) or 'none'}")
-        print(f"    LOG ONLY (recorded, never traded):      {', '.join(_logonly) or 'none'}")
+        print("    dormant = off, writes nothing · log only = never traded")
+        # r18 (VIEW.1): names wrapped inside PANEL_W; EVERY line carries its label, so a grep for a plan finds its state
+        for _lab, _names in (("DORMANT ", _dormant), ("LOG ONLY", _logonly)):
+            for _ln in (_wrap(", ".join(_names), PANEL_W - 13) or ["none"]):
+                print(_fit(f"    {_lab} {_ln}"))
     else:
         print("  ── PLAN STATES ──")
         print("    data/plan_states.json not found - a dormant plan cannot be told from a broken one")
@@ -1002,11 +1021,37 @@ def show_decisions(dc):
     if broken:
         print("  ── PROBLEMS ──")
         for plan, why, w in broken:
-            print(f"    !! {plan:<22s} {why}")
+            # r18 (VIEW.1): the first line keeps the plan and its verdict; the rest wraps inside PANEL_W
+            _wl = _wrap(why, PANEL_W - 8 - len(plan)) or [""]
+            print(_fit(f"    !! {plan} {_wl[0]}"))
+            for line in _wrap(" ".join(_wl[1:]), PANEL_W - 8):
+                print(_fit(f"        {line}"))
             if w:
-                for line in _wrap(w, 84)[:2]:
-                    print(f"        last said: {line}")
+                for line in _wrap(w, PANEL_W - 19)[:2]:
+                    print(_fit(f"        last said: {line}"))
     print()
+
+
+# r18 (VIEW.1) — the plans panel's hard width: this page's separators are 62 wide (sep()).
+PANEL_W = 62
+_SHORT_REASON = (
+    ("opening range not established yet", "no opening range yet"),
+)
+
+
+def _fit(line: str, width: int = PANEL_W) -> str:
+    """One display line, never wider than `width`: cut with an ellipsis."""
+    return line if len(line) <= width else line[:width - 1] + "…"
+
+
+def _short_reason(text: str) -> str:
+    t = (text or "").strip()
+    for long_, short in _SHORT_REASON:
+        if t.startswith(long_):
+            return short + t[len(long_):]
+    if t.startswith("nothing to manage - no open "):
+        return "no credit position" if "credit" in t else "no open position"
+    return t
 
 
 def _wrap(text: str, width: int):
