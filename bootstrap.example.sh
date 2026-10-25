@@ -1,5 +1,8 @@
 #!/bin/bash
-# bootstrap.example.sh  v5.1
+# bootstrap.example.sh  v5.2
+# v5.2 — 2026-10-25 — OTV5 r11 (BOOT.11). OT_CLAUDE_AT_BOOT defaults to 0 again: Claude Code is installed (pinned,
+#         observe-only settings) but NOT raised at boot. The operator: "make the default installation setting for
+#         Claude code not start on first boot." Set it to 1 in your copy to raise it on Remote Control at boot.
 # v5.1 — 2026-10-25 — OTV5 r10 (BOOT.10). THE TEMPLATE'S DEFAULTS ARE A FRESH OTV5 BOX'S: Claude raised at first
 #         boot on Remote Control (OT_CLAUDE_AT_BOOT=1), under the observe-and-report settings (OT_CLAUDE_SETTINGS=pull-only;
 #         without it install_claude.sh installed the settings file with no deny rules), GITHUB_TOKEN empty (a box never pushes;
@@ -27,8 +30,9 @@
 # bootstrap.sh — one-shot unattended deploy of OTV5 onto a fresh EC2 box.
 #
 # WHAT A FRESH INSTALL GIVES YOU (the defaults below): PAPER; every trading service installed and
-# STOPPED; the warehouse push off; Claude Code up on Remote Control from the first boot, observing
-# and reporting only. Nothing trades until you run ./configure.sh and choose Done.
+# STOPPED; the warehouse push off; Claude Code installed with the observe-and-report settings but NOT
+# raised at boot (OT_CLAUDE_AT_BOOT=1 raises it on Remote Control). Nothing trades until you run
+# ./configure.sh and choose Done.
 #
 # This is a TEMPLATE (placeholders only) — safe to commit, and the repo is
 # PUBLIC. Put real secrets ONLY in a copy named bootstrap.sh, which is
@@ -104,7 +108,7 @@ export GITHUB_TOKEN=""
 # ── Claude Code ───────────────────────────────────────────────────────────────
 # Installed on every box, pinned (deploy/install_claude.sh). Whether it comes up
 # in a Remote Control session at boot is this toggle:
-export OT_CLAUDE_AT_BOOT="1"            # 1 = raise it on Remote Control at first boot and every boot; 0 = installed, not raised
+export OT_CLAUDE_AT_BOOT="0"            # 0 = installed, not raised (the default); 1 = raise it on Remote Control at first boot and every boot
 export OT_CLAUDE_SETTINGS="pull-only"   # the box agent observes and reports only (docs/HANDOFF.md): deny rules for
                                         # commits, pushes, pulls, service control, configure.sh and trading actions.
                                         # Unset installs deploy/claude-user-settings.json, which has NO deny rules.

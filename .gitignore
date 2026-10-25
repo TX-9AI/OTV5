@@ -112,4 +112,6 @@ data/retention_purge.lock
 data/BOT_HEARTBEAT
 data/emergency_watchdog.json
 data/emergency_watchdog.json.tmp
+# r11 (BOOT.11) - tools/boot_sweep.py's last result, runtime only
+data/SWEEP_RESULT
 cap_counterfactual.jsonl

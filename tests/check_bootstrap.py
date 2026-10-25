@@ -1,4 +1,10 @@
-"""tests/check_bootstrap.py — v5.1
+"""tests/check_bootstrap.py — v5.2
+v5.2  2026-10-25  OTV5 r11 (BOOT.11) — G18 now requires OT_CLAUDE_AT_BOOT=0 (the operator: Claude does not start on
+      first boot by default). G19: BOTH Claude settings templates pin the version (env DISABLE_AUTOUPDATER=1), and
+      the pull-only file installed by the real install_claude.sh carries it - the proof-of-concept box auto-updated
+      2.1.281 -> 2.1.310 on r10. G20: setup_ec2.sh creates no trades.db at install (a 0-byte file with no trades
+      table turned check_lineage and check_agent_watch T0 red) and still creates bot.log. G21: data/SWEEP_RESULT,
+      which tools/boot_sweep.py writes, is gitignored. BORN RED on r10 at G18 (AT_BOOT), G19, G20 and G21.
 v5.1  2026-10-25  OTV5 r10 (BOOT.10) — G18: THE TEMPLATE'S DEFAULTS ARE A FRESH OTV5 BOX'S. Its own export lines,
       evaluated by bash, raise Claude at boot (OT_CLAUDE_AT_BOOT=1), leave GITHUB_TOKEN empty and pushing off,
       and - DRIVEN through the real deploy/install_claude.sh in a fixture HOME with exactly those values - install
@@ -836,8 +842,8 @@ guard("G17 each sizing line names its configure.sh item",
 _ex18 = subprocess.run(["bash", "-c", 'eval "$(grep -E \'^export (OT_CLAUDE_AT_BOOT|OT_CLAUDE_SETTINGS|GITHUB_TOKEN|OT_GIT_PUSH)=\' "%s")"; '
                         'printf "%%s|%%s|%%s|%%s" "${OT_CLAUDE_AT_BOOT-}" "${OT_CLAUDE_SETTINGS-}" "${GITHUB_TOKEN-}" "${OT_GIT_PUSH-}"'
                         % os.path.join(_root, "bootstrap.example.sh")], capture_output=True, text=True).stdout.split("|")
-guard("G18 the template raises Claude at first boot (OT_CLAUDE_AT_BOOT=1)",
-      lambda: _ex18[0] == "1", lambda: "got %r" % (_ex18,))
+guard("G18 the template installs Claude but does not raise it at boot (OT_CLAUDE_AT_BOOT=0)",
+      lambda: _ex18[0] == "0", lambda: "got %r" % (_ex18,))
 guard("G18 the template never pushes: GITHUB_TOKEN empty, OT_GIT_PUSH=0",
       lambda: _ex18[2] == "" and _ex18[3] == "0", lambda: "got %r" % (_ex18,))
 _h18, _st18 = _fixture_home(_PIN, 0)
@@ -856,6 +862,33 @@ _inst18 = [l for l in _b17.splitlines() if l.startswith("#") and not re.match(r"
 guard("G18 the template's instructions name no predecessor (OTV4TEST, qqq-test)",
       lambda: not [l for l in _inst18 if "OTV4TEST" in l or "qqq-test" in l],
       lambda: str([l for l in _inst18 if "OTV4TEST" in l or "qqq-test" in l][:3]))
+
+# ── G19-G21 (r11) — what the proof-of-concept box found on a fresh r10 install ─
+def _env_pin(rel):
+    try:
+        return json.loads(_read(rel).replace("{{ORIGIN_REPO}}", _origin)).get("env", {}).get("DISABLE_AUTOUPDATER")
+    except Exception:                                           # noqa: BLE001
+        return None
+guard("G19 both Claude settings templates pin the version (env DISABLE_AUTOUPDATER=1)",
+      lambda: _env_pin("deploy/claude-user-settings.json") == "1"
+      and _env_pin("deploy/claude-user-settings-pull-only.json") == "1",
+      lambda: "default=%r pull-only=%r" % (_env_pin("deploy/claude-user-settings.json"),
+                                           _env_pin("deploy/claude-user-settings-pull-only.json")))
+guard("G19 DRIVEN: the pull-only settings install_claude.sh installed carry DISABLE_AUTOUPDATER=1",
+      lambda: os.path.exists(_set18)
+      and json.load(open(_set18)).get("env", {}).get("DISABLE_AUTOUPDATER") == "1")
+_su20 = [l.strip() for l in _read("setup_ec2.sh").splitlines()]
+_mk20 = [l for l in _su20 if re.match(r"(sudo\s+)?(touch|chown|install|cp|:\s*>)\b", l)]
+guard("G20 setup_ec2.sh creates no trades.db at install (the bot creates it, with its tables)",
+      lambda: not [l for l in _mk20 if "trades.db" in l], lambda: str([l for l in _mk20 if "trades.db" in l]))
+guard("G20 setup_ec2.sh still creates bot.log and gives it to the box user",
+      lambda: 'touch "$INSTALL_DIR/bot.log"' in _su20
+      and 'chown "${USER}:${USER}" "$INSTALL_DIR/bot.log"' in _su20)
+_ig21 = subprocess.run(["git", "-C", _root, "check-ignore", "-q", "--no-index", "data/SWEEP_RESULT"],
+                       capture_output=True, text=True)
+guard("G21 data/SWEEP_RESULT (tools/boot_sweep.py's result) is gitignored",
+      lambda: _ig21.returncode == 0
+      and "SWEEP_RESULT" in _read("tools/boot_sweep.py"), lambda: "check-ignore rc=%s" % _ig21.returncode)
 
 # ── G0 ────────────────────────────────────────────────────────────────────────
 for d in _TMP:

@@ -1,6 +1,11 @@
 #!/bin/bash
 # ==========================================================================
-# setup_ec2.sh  v5.0
+# setup_ec2.sh  v5.1
+# v5.1  2026-10-25  OTV5 r11 (BOOT.11) — THE INSTALL NO LONGER CREATES AN EMPTY trades.db. The touch left a
+#       0-byte file with no trades table, so check_lineage and check_agent_watch T0 read red on every fresh box's
+#       first sweep (found by the OTV5 proof-of-concept box, 2026-10-25) and FIRST_BOOT step 5 called it a
+#       finding. The bot runs as ${USER} and creates trades.db with its tables at the first start. bot.log is
+#       still created (empty, owned by ${USER}).
 # v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 # v4.12 2026-10-24  OTV5 r0 — the interactive repository prompt's format hint shows the deploy/origin.conf
 #       repository, not a literal of one repository's name.
@@ -540,8 +545,9 @@ sudo chmod 600 /etc/systemd/system/${SERVICE_NAME}.service
 . "$INSTALL_DIR/deploy/install_services.sh"
 ot_services_installed_stopped candle-feed ${SERVICE_NAME}
 
-touch "$INSTALL_DIR/bot.log" "$INSTALL_DIR/trades.db"
-chown "${USER}:${USER}" "$INSTALL_DIR/bot.log" "$INSTALL_DIR/trades.db"
+# BOOT.11 (r11): bot.log only. trades.db is the bot's to create, with its tables, at the first start.
+touch "$INSTALL_DIR/bot.log"
+chown "${USER}:${USER}" "$INSTALL_DIR/bot.log"
 INSTALL_FAILED=""
 
 # ── Git init — repo-ready on every fresh install ─────────────────────────────

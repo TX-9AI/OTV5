@@ -132,5 +132,8 @@
       "**Org-specific CLIs**: None configured",
       "routine under `~/options-trader/` prefix: sqlite3 (36× in this project's transcripts) and systemctl/journalctl for the `optionsbot` systemd service are frequent, non-destructive operational patterns"
     ]
+  },
+  "env": {
+    "DISABLE_AUTOUPDATER": "1"
   }
 }

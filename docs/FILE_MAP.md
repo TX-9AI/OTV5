@@ -575,7 +575,7 @@ Change these with the most care; a break here reaches everything downstream.
 
 ### `tests/check_agent_watch.py`
 - **calls:** `notifications/alert_manager.py`
-- **called by:** (not imported) — referenced in `docs/BACKLOG.md`, `docs/ENV.md`
+- **called by:** (not imported) — referenced in `docs/BACKLOG.md`, `docs/ENV.md`, `setup_ec2.sh`
 
 ### `tests/check_anchors.py`
 - **calls:** `analysis/trade_readiness.py`, `derived/__init__.py`, `derived/anchors.py`, `strategy/__init__.py`, `strategy/plan.py`
@@ -1111,7 +1111,7 @@ Change these with the most care; a break here reaches everything downstream.
 
 ### `tests/check_lineage.py`
 - **calls:** `database/__init__.py`, `database/trade_logger.py`, `warehouse/__init__.py`, `warehouse/s3_push.py`
-- **called by:** (not imported) — referenced in `docs/BACKLOG.md`, `docs/ENV.md`
+- **called by:** (not imported) — referenced in `docs/BACKLOG.md`, `docs/ENV.md`, `setup_ec2.sh`
 
 ### `tests/check_liquidity_hunt.py`
 - **calls:** `config.py`, `data/derived_store.py`, `database/trade_logger.py`, `execution/__init__.py`, `execution/exit_engine.py`, `execution/handoff.py`, `execution/position_manager.py`, `main.py`, `strategy/__init__.py`, `strategy/liquidity_hunt.py`, `strategy/plan.py`
