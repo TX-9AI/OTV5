@@ -1,6 +1,6 @@
 # WORKING_AGREEMENT.md — how we operate (read this first, every new thread)
 
-**`WORKING_AGREEMENT.md` v5.0 · 2026-10-25 — §0 through §41, plus §15a, §18a, §36a, §38.9 and §40.1. See the CHANGELOG at the foot.**
+**`WORKING_AGREEMENT.md` v5.1 · 2026-10-25 — §0 through §41, plus §15a, §18a, §36a, §38.9 and §40.1. See the CHANGELOG at the foot.**
 **v5.0 · 2026-10-25 · OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...**
 
 > 🔴 **§0 IS THE FLOOR — AN ATTESTATION, NOT A TIP. Read it first, every thread.**
@@ -1966,8 +1966,9 @@ r0. Everything it inherited carries the predecessor's own history, and that hist
   predecessor's changelog (v4.x, v1.x and so on), kept as history. A version that does not
   start with 5 is not this tree's edit. Six files whose own history had already spent v5.0
   landed at the next free v5 decimal instead, and say so in their reset line.
-- **Trade rows carry a lineage stamp naming the engine that produced them.** The stamp is read
-  by control's reports, keyed per lineage and never filtered; see `database/trade_logger.py`.
+- **Trade rows carry a lineage stamp naming the engine that produced them:** `OTV5` from r8 on.
+  Rows written before keep theirs (`OTV4` for the predecessor's production tree, `TEST` for its
+  second tree). Control's reports key per lineage and never filter; see `database/trade_logger.py`.
 - **Box names are the symbol** (`✨SOFI`), not `<SYM>-TEST`; the `-TEST` names belong to the
   predecessor's boxes.
 - **Docs named "superseded snapshot" by the predecessor are not carried.** Removed at r7:
@@ -1977,6 +1978,8 @@ r0. Everything it inherited carries the predecessor's own history, and that hist
 ---
 
 ## CHANGELOG
+
+**v5.1 — 2026-10-25 — OTV5 r8 — §41: THE LINEAGE STAMP IS `OTV5`.** Facts only, no rule changed.
 
 **v5.0 — 2026-10-25 — OTV5 r7 — THE LINEAGE SPLIT, §41, AND THE HEADER RESET.** §38.0 says who holds §38.2 on OTV5 (1-REPORTER; a fleet box's agent holds §38.1 only); §38.2's QQQ-TEST-as-controller paragraph is struck as the predecessor's; §41 states how to read a revision number, a file version, a lineage stamp and a box name across the split. Every file header starts at v5.0 from this revision.
 

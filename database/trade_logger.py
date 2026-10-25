@@ -1,5 +1,6 @@
 """
-database/trade_logger.py  v5.0
+database/trade_logger.py  v5.1
+v5.1  2026-10-25  OTV5 r8 (LIN.1) — EVERY NEW TRADE ROW IS STAMPED lineage "OTV5", THE ENGINE THAT PRODUCED IT. "TEST" named the predecessor's second engine; this tree is the third, and control's strategy_registry v1.4 (otv4 r503) knows it. Rows already in a store keep their stamp (OTV4, TEST or NULL): the boot migration adds no default and nothing relabels. The operator, 2026-10-25: "just send it".
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v4.23 2026-10-18  OTV4TEST r298 (CAP.4) — today_summary's docstring stops claiming it equals realized_pnl_today(): since r288
       the cap excludes PARK and the displays do not. Docstring only; no code change in this file.
@@ -322,11 +323,11 @@ logger = logging.getLogger(__name__)
 _WARNED_UNKNOWN_COLS: set = set()   # TCS.4: warn once per unknown key
 _WARNED_SCHEMA_READ: set = set()    # SWALLOW T1: warn once if PRAGMA fails
 
-# r140 — the PRODUCER tag control's rollups key on. One field name and two
-# values across both repos: this tree writes "TEST", mainline writes "MAIN".
-# ⚠️ A cross-repo contract, not a label: renaming either one silently turns
-# every row this tree writes into UNKN in the fleet rollups.
-LINEAGE = "TEST"
+# r140 — the PRODUCER tag control's rollups key on. One field name; the value names the ENGINE:
+# OTV4 (the predecessor's production tree), TEST (the predecessor's second tree), OTV5 (this tree, from r8).
+# ⚠️ A cross-repo contract, not a label: control must list a value in strategy_registry.LINEAGES before any
+# box writes it, or the box map relabels the row (dtp strategy_registry v1.4 lists OTV5).
+LINEAGE = "OTV5"
 
 
 @dataclass

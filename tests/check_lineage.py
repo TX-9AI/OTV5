@@ -1,6 +1,7 @@
-"""tests/check_lineage.py — v5.0
+"""tests/check_lineage.py — v5.1
+v5.1  2026-10-25  OTV5 r8 (LIN.1) — RE-POINTED, NOT DROPPED (WA §38.4): the stamp is "OTV5". Every expectation that read 'TEST' reads 'OTV5'; L3 still proves a caller cannot relabel (a record handed in as 'MAIN' or 'TEST' is stored 'OTV5'); L5 still proves a pre-existing row is never relabelled. Born red on trade_logger v5.0 at L1-L6.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
-EVERY NEW TRADE ROW THIS TREE WRITES CARRIES lineage = 'TEST', AND NO ROW THAT
+EVERY NEW TRADE ROW THIS TREE WRITES CARRIES lineage = 'OTV5', AND NO ROW THAT
 ALREADY EXISTED IS RELABELLED.
 
 v1.0  2026-09-25 — OTV4TEST r140. control's r426/OPS.50 keys every
@@ -104,8 +105,8 @@ def _lineage(db, tid):
 
 
 # ── L1: the contract literals ────────────────────────────────────────────────
-guard("L1  trade_logger.LINEAGE is exactly 'TEST'",
-      lambda: getattr(tl, "LINEAGE", None) == "TEST",
+guard("L1  trade_logger.LINEAGE is exactly 'OTV5'",
+      lambda: getattr(tl, "LINEAGE", None) == "OTV5",
       lambda: repr(getattr(tl, "LINEAGE", "<absent>")))
 
 # ── L2: a fresh store, the real log_entry ───────────────────────────────────
@@ -114,19 +115,19 @@ L = tl.TradeLogger(db_path=fresh, paper_trading=True)
 guard("L1b the trades table has a `lineage` column",
       lambda: "lineage" in L._columns(), lambda: "columns=%d" % len(L._columns()))
 L.log_entry(_rec("t-new"))
-guard("L2  log_entry writes lineage 'TEST' (read back by SQL)",
-      lambda: _lineage(fresh, "t-new") == "TEST",
+guard("L2  log_entry writes lineage 'OTV5' (read back by SQL)",
+      lambda: _lineage(fresh, "t-new") == "OTV5",
       lambda: repr(_lineage(fresh, "t-new")))
 
 # ── L3: a caller cannot relabel ─────────────────────────────────────────────
 L.log_entry(_rec("t-claims-main", lineage="MAIN"))
-guard("L3  a record handed in as 'MAIN' is stored 'TEST'",
-      lambda: _lineage(fresh, "t-claims-main") == "TEST",
+guard("L3  a record handed in as 'MAIN' is stored 'OTV5'",
+      lambda: _lineage(fresh, "t-claims-main") == "OTV5",
       lambda: repr(_lineage(fresh, "t-claims-main")))
 
 # ── L4: rehydrated shape ────────────────────────────────────────────────────
-guard("L4  get_open_trades() (SELECT *) returns lineage 'TEST'",
-      lambda: {r["trade_id"]: r.get("lineage") for r in L.get_open_trades()}.get("t-new") == "TEST",
+guard("L4  get_open_trades() (SELECT *) returns lineage 'OTV5'",
+      lambda: {r["trade_id"]: r.get("lineage") for r in L.get_open_trades()}.get("t-new") == "OTV5",
       lambda: repr({r["trade_id"]: r.get("lineage") for r in L.get_open_trades()}))
 
 # ── L5: a pre-r140 store migrates without backfill ──────────────────────────
@@ -148,8 +149,8 @@ L_old.log_entry(_rec("t-after"))
 guard("L5  the pre-existing row is NOT backfilled (stays NULL)",
       lambda: _lineage(legacy, "t-old") is None,
       lambda: repr(_lineage(legacy, "t-old")))
-guard("L5b a row written after the migration is 'TEST'",
-      lambda: _lineage(legacy, "t-after") == "TEST",
+guard("L5b a row written after the migration is 'OTV5'",
+      lambda: _lineage(legacy, "t-after") == "OTV5",
       lambda: repr(_lineage(legacy, "t-after")))
 
 # ── L6: the real push_trades carries it ─────────────────────────────────────
@@ -178,8 +179,8 @@ def _pushed():
     return pushed, failed, out
 
 
-guard("L6  push_trades sends lineage 'TEST' on the new row",
-      lambda: _pushed()[2].get("t-after") == (True, "TEST"),
+guard("L6  push_trades sends lineage 'OTV5' on the new row",
+      lambda: _pushed()[2].get("t-after") == (True, "OTV5"),
       lambda: repr(_pushed()))
 guard("L6b push_trades sends the old row untagged (key present, None)",
       lambda: _pushed()[2].get("t-old") == (True, None),
