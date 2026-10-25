@@ -1,5 +1,18 @@
 """
-query.py  v5.1
+query.py  v5.2
+v5.2  2026-10-25  OTV5 r19 (VIEW.2) — THE PLANS PANEL SHOWS EVERY SWITCHED-ON PLAN, THE SAME ON EVERY BOX, AT ANY HOUR, AND
+      HIDES WHAT IS SWITCHED OFF. The operator, 2026-10-25, comparing SOFI's and NVDA's panels: "Look at the plans. Why
+      aren't they showing the same lines?"; "Can we suppress retired or paused plans from displaying here?"; "Yes. I want
+      to see active plans that would trade during RTH that are switched on, even outside of RTH because we have rehearsal
+      mode enabled". The panel listed a plan only if it had a heartbeat row, so SOFI showed management plans its old tree
+      wrote while it held positions (10-02..10-23, two of them for DORMANT entries, with undated stale times) and NVDA
+      did not; and it printed nothing before 09:30. Now, when data/plan_states.json is present, the panel's ROSTER is:
+      every switched-on (active or log) entry plan, its "<plan>/manage", CondorManagement and CreditRoll only while a
+      credit entry is switched on, and any management plan with an open position. A roster plan with nothing to manage
+      reads IDLE --:--; a plan with no heartbeat reads NOT RUNNING, and an old heartbeat STALE, only while the trading
+      path runs (RTH, or the rehearsal on: no data/REHEARSAL_OFF) - otherwise OFF HOURS. Dormant plans are hidden; one
+      line counts them. A heartbeat row for a plan outside the roster that is not dormant is shown as before (a plan the
+      states file does not know is never hidden). Without the states file the panel behaves exactly as v5.1.
 v5.1  2026-10-25  OTV5 r18 (VIEW.1) — THE PLANS PANEL FITS THE PAGE: EVERY LINE IS AT MOST PANEL_W = 62 CHARACTERS (the
       width of this page's own separators). The operator, 2026-10-25, from a phone screenshot of SOFI: "I don't like the
       plan rows spanning multiple lines. Have it respect the character limit." NOT EVALUATING rows were 4+24+1+14+1+11
@@ -874,9 +887,14 @@ def show_decisions(dc):
     sep("=")
     print("  PLANS  (are they reading the feed right now?)")
     sep("=")
-    if _now < _open:
+    # r19 (VIEW.2): the trading path runs in RTH, and outside it while the rehearsal is on (no data/REHEARSAL_OFF)
+    _rehearsal = not os.path.exists(os.environ.get("OT_REHEARSAL_OFF_FILE") or os.path.join(
+        os.path.dirname(os.path.abspath(__file__)), "data", "REHEARSAL_OFF"))
+    _rth = _now.weekday() < 5 and _open <= _now < _now.replace(hour=16, minute=0, second=0, microsecond=0)
+    _path_runs = _rth or _rehearsal
+    if _now < _open and not _rehearsal:
         print(f"    nothing yet — the session opens at 09:30 ET "
-              f"(now {_now.strftime('%H:%M')})")
+              f"(now {_now.strftime('%H:%M')}; rehearsal off)")
         print()
         return
 
@@ -952,16 +970,45 @@ def show_decisions(dc):
                 _tc.close()
         except Exception:                                       # noqa: BLE001
             return ""
+    # r19 (VIEW.2) — THE ROSTER: what is switched on, the same on every box, whatever heartbeat rows exist
+    _cats = {k: (v or {}).get("category", "") for k, v in ((_sdoc.get("plans") or {}).items())}
+    _CREDIT_ENTRIES = ("OpeningRangeCreditSpread", "SweepCreditSpread", "TrendCreditSpread", "IronCondorStrategy")
+    _entries = sorted(k for k, v in _states.items() if v in ("active", "log") and not k.endswith("/manage")
+                      and k not in ("CondorManagement", "CreditRoll"))
+    _credit_on = any(_states.get(k) in ("active", "log") for k in _CREDIT_ENTRIES)
+    _hbmap = {r[0]: r for r in hb}
+    roster = set()
+    if _sdoc:
+        roster |= set(_entries)
+        roster |= {f"{e}/manage" for e in _entries if e not in _CREDIT_ENTRIES}
+        for c in ("CondorManagement", "CreditRoll"):
+            if _states.get(c) in ("active", "log") and (_credit_on or not _idle_condition(c)):
+                roster.add(c)
+        roster |= {p for p in _hbmap if p.endswith("/manage") and not _idle_condition(p)}   # a position is open
+    for plan in sorted(roster - set(_hbmap)):
+        # a roster plan with no heartbeat row at all
+        seen[plan] = True
+        if (plan.endswith("/manage") or plan in ("CondorManagement", "CreditRoll")) and _idle_condition(plan):
+            quiet.append((plan, "IDLE", f"nothing to manage - {_idle_condition(plan)}", "--:--"))
+        elif _path_runs:
+            broken.append((plan, "NOT RUNNING — switched on, no heartbeat", ""))
+        else:
+            quiet.append((plan, "OFF HOURS", "rehearsal off - runs from 09:30", "--:--"))
     for plan, ts, tick, state, gate, verdict, watching in hb:
         seen[plan] = True
         if plan in _dormant:
             continue
+        if _sdoc and plan not in roster and (plan.endswith("/manage") or plan in ("CondorManagement", "CreditRoll")):
+            continue            # r19: management of a switched-off entry, with nothing open - hidden
         age = now_ts - (ts or 0)
         w = (watching or "").strip()
         if age > STALE_S and _idle_condition(plan):
             # r303 (PSTATE.1) — a condition-gated plan with nothing to manage writes no heartbeat by
             # ruling; its old row is not STALE. It is STALE only while a position it manages is open.
-            quiet.append((plan, "IDLE", f"nothing to manage - {_idle_condition(plan)}", _et(ts)))
+            # r19: its old time is not shown (an undated time from another day read as today's).
+            quiet.append((plan, "IDLE", f"nothing to manage - {_idle_condition(plan)}", "--:--"))
+        elif age > STALE_S and not _path_runs:
+            quiet.append((plan, "OFF HOURS", f"last heartbeat {_et(ts)[:5]} ET; rehearsal off", _et(ts)))
         elif age > STALE_S:
             broken.append((plan, f"STALE — last heartbeat {_et(ts)} ET "
                                  f"({age/60:.0f}m ago, tick #{tick})", w))
@@ -990,7 +1037,7 @@ def show_decisions(dc):
         print("  ── NOT EVALUATING (by design; times ET) ──")
         _pw = max(len(p) for p, _, _, _ in quiet)
         _sw = max(len(y) for _, y, _, _ in quiet)
-        for plan, why, w, t in quiet:
+        for plan, why, w, t in sorted(quiet):
             first = _short_reason(w.split(":", 1)[1].strip() if ":" in w else w)
             print(_fit(f"    {plan:<{_pw}s} {why:<{_sw}s} {t[:5]} {first}"))
 
@@ -1004,16 +1051,15 @@ def show_decisions(dc):
         expected = set()
     if _sdoc:
         _when = datetime.fromtimestamp(float(_sdoc.get("written_epoch") or 0), ET).strftime("%m-%d %H:%M")
-        print(f"  ── PLAN STATES (bot start {_when} ET) ──")
-        print("    dormant = off, writes nothing · log only = never traded")
-        # r18 (VIEW.1): names wrapped inside PANEL_W; EVERY line carries its label, so a grep for a plan finds its state
-        for _lab, _names in (("DORMANT ", _dormant), ("LOG ONLY", _logonly)):
-            for _ln in (_wrap(", ".join(_names), PANEL_W - 13) or ["none"]):
-                print(_fit(f"    {_lab} {_ln}"))
+        # r19 (VIEW.2): switched-off plans are hidden; one line says how many, so none reads as lost
+        print(_fit(f"  ── {len(_dormant)} switched-off plan(s) hidden (bot start {_when} ET)"))
+        if _logonly:
+            for _ln in _wrap(", ".join(_logonly), PANEL_W - 13):
+                print(_fit(f"    LOG ONLY {_ln}"))
     else:
         print("  ── PLAN STATES ──")
         print("    data/plan_states.json not found - a dormant plan cannot be told from a broken one")
-    missing = sorted(e for e in expected if e not in seen and e not in _dormant)
+    missing = sorted(e for e in expected if e not in seen and e not in _dormant) if _path_runs else []
     for m in missing:
         broken.append((m, "NOT RUNNING — in the admission table, never "
                           "heartbeat today", ""))

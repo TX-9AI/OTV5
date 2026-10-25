@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """
-tests/check_plan_states.py  v5.0
+tests/check_plan_states.py  v5.1
+v5.1  2026-10-25  OTV5 r19 (VIEW.2) — D8 RE-POINTED (WA section 38.4): the plans panel now HIDES a switched-off plan
+      (the operator: "Can we suppress retired or paused plans from displaying here?"), so a DORMANT plan must not appear
+      in the panel at all - and so never as STALE or NOT RUNNING - and the panel says how many are hidden.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.1  2026-10-19  OTV4TEST r305 (GATE.3) — D8/D10 write their heartbeat rows under the symbol the plans panel READS
       (query.INSTRUMENT, which takes the live unit's OT_INSTRUMENT before the checker's), not a literal 'QQQ': on
@@ -291,10 +294,9 @@ def main():
         out = buf.getvalue()
     except Exception as exc:                                    # noqa: BLE001
         out = f"RAISED {type(exc).__name__}: {exc}"
-    volt_lines = [ln for ln in out.splitlines() if "VOLT" in ln]
-    check("D8 the plans panel lists a DORMANT plan as DORMANT - not STALE, not NOT RUNNING",
-          any("DORMANT" in ln for ln in volt_lines) and not any("STALE" in ln or "NOT RUNNING" in ln
-                                                                for ln in volt_lines),
+    volt_lines = [ln for ln in out.splitlines() if " VOLT" in ln or ln.strip().startswith("VOLT")]
+    check("D8 a DORMANT plan is hidden from the plans panel (never STALE, never NOT RUNNING) and the hidden count is said",
+          not volt_lines and "switched-off plan(s) hidden" in out,
           f"VOLT lines: {volt_lines[:4]}")
 
     # ── D9: condition-gated silence ──
