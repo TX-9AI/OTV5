@@ -1390,8 +1390,8 @@ Change these with the most care; a break here reaches everything downstream.
 - **called by:** (nothing — no importer and no mention in any script, unit or doc here)
 
 ### `tests/check_prime_ramp.py`
-- **calls:** `data/candle_feed.py`, `utils/__init__.py`, `utils/instrument.py`
-- **called by:** (not imported) — referenced in `docs/ENV.md`
+- **calls:** `data/candle_feed.py`, `warehouse/retention_purge.py`
+- **called by:** (not imported) — referenced in `docs/BACKLOG.md`, `docs/ENV.md`
 
 ### `tests/check_probe_daily_candles.py`
 - **calls:** (none)
@@ -1914,8 +1914,8 @@ Change these with the most care; a break here reaches everything downstream.
 - **called by:** (entry point)
 
 ### `tools/prime_ramp.py`
-- **calls:** `utils/__init__.py`, `utils/instrument.py`, `utils/market_calendar.py`, `utils/paths.py`, `warehouse/retention_purge.py`
-- **called by:** (not imported) — referenced in `README.md`, `configure.sh`, `docs/ENV.md`, `docs/FIRST_BOOT.md` +2
+- **calls:** `utils/__init__.py`, `utils/instrument.py`, `utils/market_calendar.py`, `utils/paths.py`
+- **called by:** (not imported) — referenced in `README.md`, `configure.sh`, `docs/BACKLOG.md`, `docs/ENV.md` +3
 
 ### `tools/probe_aux_streams.py`
 - **calls:** `config.py`, `data/tasty_client.py`
@@ -1963,7 +1963,7 @@ Change these with the most care; a break here reaches everything downstream.
 
 ### `utils/__init__.py`
 - **calls:** (none)
-- **called by:** `data/candle_feed.py`, `derived/level_book.py`, `main.py`, `tests/check_claude_boot.py`, `tests/check_eod_schedule.py`, `tests/check_half_day.py`, `tests/check_holiday_aware.py`, `tests/check_instrument_unset.py`, `tests/check_level_tape.py`, `tests/check_low_price_symbols.py`, `tests/check_market_calendar.py`, `tests/check_prime_ramp.py`, `tests/check_rebuild_1m.py`, `tests/check_shutdown_cause.py`, `tests/check_store_paths.py`, `tests/check_time_parse.py`, `tools/prime_ramp.py`, `tools/rebuild_1m_from_last_trade.py`, `tools/seed_candles_from_warehouse.py`, `utils/time_utils.py`
+- **called by:** `data/candle_feed.py`, `derived/level_book.py`, `main.py`, `tests/check_claude_boot.py`, `tests/check_eod_schedule.py`, `tests/check_half_day.py`, `tests/check_holiday_aware.py`, `tests/check_instrument_unset.py`, `tests/check_level_tape.py`, `tests/check_low_price_symbols.py`, `tests/check_market_calendar.py`, `tests/check_rebuild_1m.py`, `tests/check_shutdown_cause.py`, `tests/check_store_paths.py`, `tests/check_time_parse.py`, `tools/prime_ramp.py`, `tools/rebuild_1m_from_last_trade.py`, `tools/seed_candles_from_warehouse.py`, `utils/time_utils.py`
 
 ### `utils/agent_status.py`
 - **calls:** (none)
@@ -1983,7 +1983,7 @@ Change these with the most care; a break here reaches everything downstream.
 
 ### `utils/instrument.py`
 - **calls:** (none)
-- **called by:** `analysis/get_orb_range.py`, `tests/check_clean_deploy.py`, `tests/check_instrument_unset.py`, `tests/check_level_tape.py`, `tests/check_prime_ramp.py`, `tests/check_rebuild_1m.py`, `tests/check_seed_candles.py`, `tools/claude_boot.py`, `tools/eod_summary.py`, `tools/manifold_health.py`, `tools/open_scan.py`, `tools/prime_ramp.py`, `tools/rebuild_1m_from_last_trade.py`, `tools/seed_candles_from_warehouse.py`, `warehouse/s3_push.py`, `warehouse/self_close.py`
+- **called by:** `analysis/get_orb_range.py`, `tests/check_clean_deploy.py`, `tests/check_instrument_unset.py`, `tests/check_level_tape.py`, `tests/check_rebuild_1m.py`, `tests/check_seed_candles.py`, `tools/claude_boot.py`, `tools/eod_summary.py`, `tools/manifold_health.py`, `tools/open_scan.py`, `tools/prime_ramp.py`, `tools/rebuild_1m_from_last_trade.py`, `tools/seed_candles_from_warehouse.py`, `warehouse/s3_push.py`, `warehouse/self_close.py`
 
 ### `utils/market_calendar.py`
 - **calls:** (none)
@@ -2023,7 +2023,7 @@ Change these with the most care; a break here reaches everything downstream.
 
 ### `warehouse/retention_purge.py`
 - **calls:** (none)
-- **called by:** `tests/check_audit_20260823.py`, `tests/check_level_tape.py`, `tests/check_purge_batched.py`, `tests/check_purge_lock.py`, `tests/check_purge_pushed.py`, `tests/check_purge_reclaim.py`, `tests/check_reclaim_paths.py`, `tests/check_retention_armed.py`, `tests/check_seed_candles.py`, `tests/check_self_close_hold.py`, `tests/check_symbol_universe.py`, `tests/check_vacuum_headroom.py`, `tools/prime_ramp.py`, `tools/rebuild_1m_from_last_trade.py`, `tools/seed_candles_from_warehouse.py`, `warehouse/self_close.py`
+- **called by:** `tests/check_audit_20260823.py`, `tests/check_level_tape.py`, `tests/check_prime_ramp.py`, `tests/check_purge_batched.py`, `tests/check_purge_lock.py`, `tests/check_purge_pushed.py`, `tests/check_purge_reclaim.py`, `tests/check_reclaim_paths.py`, `tests/check_retention_armed.py`, `tests/check_seed_candles.py`, `tests/check_self_close_hold.py`, `tests/check_symbol_universe.py`, `tests/check_vacuum_headroom.py`, `tools/rebuild_1m_from_last_trade.py`, `tools/seed_candles_from_warehouse.py`, `warehouse/self_close.py`
 
 ### `warehouse/s3_push.py`
 - **calls:** `utils/instrument.py`

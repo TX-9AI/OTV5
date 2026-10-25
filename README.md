@@ -1,6 +1,6 @@
 # OTV5 — Autonomous Day Trading Bot with Telegram Notifications and embedded Claude Code agent
 
-**`README.md` v5.0 · 2026-10-25 (OTV5 r7) — what this repo is, how it is laid out, how work lands.**
+**`README.md` v5.1 · 2026-10-25 (OTV5 r16) — what this repo is, how it is laid out, how work lands.**
 **v5.0 · 2026-10-25 · OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...**
 
 **What this is.** One box trades one underlying (equity options, or SPX/SPXW for the
@@ -56,10 +56,11 @@ repository a box installs from is named in **one place**, `deploy/origin.conf`
 (two pinned copies run before any clone exists; `tests/check_origin.py` keeps the
 three equal and proves the URL actually cloned). The install leaves the trading
 services **installed and stopped**, and the warehouse push **off**. The operator
-then runs `configure.sh`: symbol, risk, the switches; **Done** primes the ramp from
-the warehouse (`tools/prime_ramp.py`: the 1m tape, the higher timeframes built from
-it, the daily bars from the study corpus), refuses to start if priming fails,
-starts the feed and the bot, and turns the push on only if the symbol is not
+then runs `configure.sh`: symbol, risk, the switches; **Done** starts the feed, which
+primes a symbol the store has never held from TastyTrade (`PRIME_DAYS` in
+`data/candle_feed.py`; a held symbol backfills only as before, never from S3), waits for
+it (`tools/prime_ramp.py`), refuses to start the bot if the last session's 1m never lands,
+starts the bot, and turns the push on only if the symbol is not
 already pushed by another box (`tools/capture_guard.py`, a live read of the
 warehouse). A symbol switch drains the old symbol's rows under the old label before
 the new one is primed.
@@ -107,6 +108,8 @@ a market fact.
 ---
 
 ## Changelog
+
+**v5.1 — 2026-10-25 — OTV5 r16.** Installing a box: a new symbol's history comes from TastyTrade through the feed, not from the warehouse.
 
 **v5.0 — 2026-10-25 — OTV5 r7.** Header reset at the lineage split (WORKING_AGREEMENT §41); every file in this tree now starts at v5.0 and counts v5.1, v5.2, ... from here.
 

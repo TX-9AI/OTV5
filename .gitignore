@@ -119,4 +119,8 @@ data/SWEEP_PREV
 data/counterfactual/
 data/open_scan/
 data/plan_states.json
+# r16 (PRIME.1) - a legacy (mainline) box's own runtime files, untracked on NVDA after its repoint (2026-10-25)
+data/integrator_state.json
+data/level_history/
+data/feed_store.db.pre_rth_purge_*
 cap_counterfactual.jsonl

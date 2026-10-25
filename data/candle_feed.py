@@ -1,5 +1,17 @@
 """
-data/candle_feed.py  v5.0
+data/candle_feed.py  v5.1
+v5.1  2026-10-25  OTV5 r16 (PRIME.1) — A SYMBOL THIS STORE HAS NEVER HELD IS PRIMED FROM TASTYTRADE, DEEP; ANYTHING ELSE
+      BACKFILLS AS BEFORE. The operator, 2026-10-25: prime "from tasty trade of whatever's obtainable", never from S3 ("if
+      we haven't traded it recently last July's data ... isn't relevant"), "only priming missing data - there is no reason
+      to prime stuff that's already on the box", and only at a symbol switch. _backfill_start takes the store's newest
+      held bar for that (store symbol, interval): NONE held (a fresh box, or the symbol just switched to) -> PRIME_DAYS
+      deep; held -> the old start (BACKFILL_DAYS / today's open), reaching back to the newest held bar if the box was down
+      longer, never deeper than PRIME_DAYS. Recomputed at EVERY (re)subscribe from the store, so a reconnect replays only
+      what a restart would. TastyTrade's reach, MEASURED 2026-10-25 by QQQ-TEST (MSG-QQQ-1025-14, every ask 20 years back):
+      8,000 bars per subscription from the newest back (1m RTH ~21 sessions, 1m EXT ~8, 5m EXT ~34 sessions), else time
+      windows (5m/15m ~3 months, 1h ~9.5 months, 1d to 2022-12-29). PRIME_DAYS stays inside RETENTION_DAYS (1m 60, 5m/15m
+      30, 1h 60) so the nightly purge never deletes what was just primed; 1d (no retention) 400 days, which clears
+      sma50_mtf's 55. A held bar is rewritten only under FEED.9b / FEED.10, unchanged.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v4.21 2026-10-12  OTV4TEST r277 (FEED.10b) — THE REFEREE WAITS 60 s, NOT 5, AND AN IDENTICAL REPLAY IS SILENT. From
       1-REPORTER's critique (MSG-1REP-1012-12): the feed writes in flush batches, so a bar's FINAL live update can
@@ -519,8 +531,27 @@ def _base_symbol(event_symbol: str) -> str:
     return (event_symbol or "").split("{")[0]
 
 
-def _backfill_start(interval: str, now_et: Optional[datetime] = None) -> datetime:
+# OTV5 r16 (PRIME.1) — how deep a symbol the store has NEVER held is primed, per interval, from TastyTrade.
+# Inside RETENTION_DAYS (warehouse/retention_purge.py) for every purged interval; TastyTrade caps 1m at its newest
+# 8,000 bars (~21 RTH sessions), so the 1m ask returns what it can.
+PRIME_DAYS = {
+    "1m":  60,
+    "5m":  30,
+    "15m": 30,
+    "1h":  60,
+    "1d":  400,
+}
+
+
+def _backfill_start(interval: str, now_et: Optional[datetime] = None,
+                    newest_held_ms: Optional[int] = None, held: bool = True) -> datetime:
+    """Where a subscription's history starts. held=False: the store has NO bar for this (store symbol, interval) -
+    a fresh box or a symbol just switched to - so prime PRIME_DAYS deep. held=True: the old start (BACKFILL_DAYS, or
+    today's open for 1m), reaching back to the newest held bar when that is older, never deeper than PRIME_DAYS."""
     now_et = now_et or datetime.now(ET)
+    deep = now_et - timedelta(days=PRIME_DAYS.get(interval, BACKFILL_DAYS.get(interval, 4)))
+    if not held:
+        return deep
     days = BACKFILL_DAYS.get(interval, 4)
     if interval == "1m":
         # Today's session open; if pre-open, previous calendar day's open so the
@@ -528,8 +559,12 @@ def _backfill_start(interval: str, now_et: Optional[datetime] = None) -> datetim
         d = now_et.date()
         if now_et.time() < dtime(*SESSION_OPEN_HM):
             d = d - timedelta(days=1)
-        return datetime.combine(d, dtime(*SESSION_OPEN_HM), tzinfo=ET)
-    return now_et - timedelta(days=days)
+        start = datetime.combine(d, dtime(*SESSION_OPEN_HM), tzinfo=ET)
+    else:
+        start = now_et - timedelta(days=days)
+    if newest_held_ms is not None:
+        start = min(start, datetime.fromtimestamp(newest_held_ms / 1000.0, tz=ET))
+    return max(deep, start)
 
 
 # ─── SQLite store (WAL, one writer — this process) ────────────────────────────
@@ -722,6 +757,13 @@ class FeedStore:
                 PRIMARY KEY (symbol, ts_epoch)
             );""")
         self.conn.commit()
+
+    def newest_held_ms(self, symbol: str, interval: str) -> Optional[int]:
+        """OTV5 r16 — the newest stored bar's ts for (symbol, interval), or None when the store holds none."""
+        with self._lock:
+            row = self.conn.execute("SELECT MAX(ts_epoch_ms) FROM candles WHERE symbol=? AND interval=?",
+                                    (symbol, interval)).fetchone()
+        return int(row[0]) if row and row[0] is not None else None
 
     def upsert_candles(self, rows: List[Tuple]):
         """rows: (symbol, interval, ts_ms, o, h, l, c, v). Last write wins."""
@@ -1235,6 +1277,25 @@ class CandleFeed:
         self._underlying_buf: List[tuple] = []
         self._theo_buf: List[tuple] = []
 
+
+    def _start_for(self, dx_sym: str, tf: str, ext: bool, fallback: datetime) -> datetime:
+        """OTV5 r16 (PRIME.1) — this subscription's history start, read from the store NOW: a (store symbol, interval)
+        the store has never held is primed PRIME_DAYS deep; a held one backfills as before. A store read error keeps
+        the start computed at construction (named, never silent)."""
+        sym = self.symbol_map.get((dx_sym, tf, ext))
+        if not sym:
+            return fallback
+        try:
+            newest = self.store.newest_held_ms(sym, tf)
+        except Exception as exc:                                    # noqa: BLE001
+            logger.warning("backfill start for %s %s: store read failed (%s) - using %s",
+                           sym, tf, _explain_exc(exc), fallback.isoformat())
+            return fallback
+        start = _backfill_start(tf, newest_held_ms=newest, held=newest is not None)
+        if newest is None:
+            logger.info("PRIME %s %s: the store holds none - priming %d days from TastyTrade (from %s)",
+                        sym, tf, PRIME_DAYS.get(tf, 0), start.isoformat())
+        return start
     def _interval_of(self, event_symbol: str) -> Optional[str]:
         """Map DXFeed's echoed candle symbol back to OUR config timeframe key.
 
@@ -1903,6 +1964,7 @@ class CandleFeed:
                     # its REAL cause (see _explain_exc) and skipped.
                     ok_subs = 0
                     for (dx_sym, tf, start, ext) in self.subs:
+                        start = self._start_for(dx_sym, tf, ext, start)   # r16: from the store, every (re)subscribe
                         try:
                             await streamer.subscribe_candle(
                                 [dx_sym], tf, start_time=start,

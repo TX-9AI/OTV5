@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 # ==========================================================================
-# configure.sh  v5.1
+# configure.sh  v5.2
+# v5.2  2026-10-25  OTV5 r16 (PRIME.1) — THE HISTORY COMES FROM TASTYTRADE THROUGH THE FEED, NOT FROM S3. candle-feed v5.1
+#       primes a symbol the store has never held PRIME_DAYS deep and backfills a held one as before; tools/prime_ramp.py
+#       v5.1 waits for that backfill and reports it (no S3, no writes). The first start's and item 1's messages say so.
 # v5.1  2026-10-25  OTV5 r13 (BOOT.12) — THE FIRST-START MARKER AND THE CAPTURE CHOICE CREATE THEIR DIRECTORY. Only
 #       setup_ec2.sh makes ~/.optbot, so on a box repointed to OTV5 (SOFI, 2026-10-25) Done started the bot but could not
 #       write ~/.optbot/first_start_done: first start stayed PENDING and the next Done would run it again. Every write
@@ -233,7 +236,8 @@ first_start_label() {
 capture_choice() { cat "$CAPTURE_CHOICE_FILE" 2>/dev/null || echo standalone; }
 
 run_primer() {
-    # the informers' history for THIS box's instrument (tools/prime_ramp.py reads it from the bot unit)
+    # r16 — candle-feed primes THIS box's instrument from TastyTrade (deep only for a symbol the store never held);
+    # tools/prime_ramp.py waits for that backfill and reports what the store holds. No S3, no writes.
     ( cd "$BOT_DIR" && "$BOT_PY" tools/prime_ramp.py --apply )
 }
 
@@ -258,9 +262,8 @@ first_start() {
     # The operator, 2026-10-24: "Don't allow this situation to happen in the 1st place. We have s3." A first start
     # whose history cannot be primed is REFUSED - the bot does not start cold. candle-feed stays up; Done again.
     case "$rc" in
-        0) print_ok "History primed from the warehouse." ;;
-        4) print_warn "FIRST START REFUSED: the warehouse holds no 1m for the last session - the bot is NOT started." ;;
-        3) print_warn "FIRST START REFUSED: the warehouse could not be read or holds nothing for this symbol - the bot is NOT started." ;;
+        0) print_ok "History in place (TastyTrade, through candle-feed's backfill)." ;;
+        4) print_warn "FIRST START REFUSED: candle-feed has not backfilled the last session's 1m from TastyTrade - the bot is NOT started." ;;
         *) print_warn "FIRST START REFUSED: the primer exited $rc (see the lines above) - the bot is NOT started." ;;
     esac
     if [[ "$rc" != 0 ]]; then
