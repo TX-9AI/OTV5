@@ -1,4 +1,5 @@
-# requirements.txt  v1.0
+# requirements.txt  v5.0
+# v5.0  2026-10-25  OTV5 r12 — HEADER RESET AT THE LINEAGE SPLIT, MISSED BY r7 (OTV5 r12, HDR.1). Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 # v1.0  2026-09-11  OTV4TEST r14 — the fork predates mainline r323's file; setup_ec2.sh and
 #       deploy/install_tooling.sh have always assumed it exists. Derived from the tree's
 #       third-party imports; the QQQ TEST box's venv (check_imports 113/113) is the
