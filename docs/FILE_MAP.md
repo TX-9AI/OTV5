@@ -739,7 +739,7 @@ Change these with the most care; a break here reaches everything downstream.
 
 ### `tests/check_clean_deploy.py`
 - **calls:** `utils/instrument.py`
-- **called by:** (not imported) — referenced in `configure.sh`, `deploy/install_services.sh`, `docs/BACKLOG.md`, `docs/ENV.md` +1
+- **called by:** (not imported) — referenced in `configure.sh`, `deploy/install_services.sh`, `docs/BACKLOG.md`, `docs/ENV.md` +2
 
 ### `tests/check_commitment.py`
 - **calls:** `analysis/__init__.py`, `analysis/commitment.py`, `config.py`, `main.py`, `risk/risk_manager.py`, `strategy/base_strategy.py`
@@ -887,7 +887,7 @@ Change these with the most care; a break here reaches everything downstream.
 
 ### `tests/check_env_doc.py`
 - **calls:** (none)
-- **called by:** (not imported) — referenced in `docs/BACKLOG.md`
+- **called by:** (not imported) — referenced in `docs/BACKLOG.md`, `tools/land.sh`
 
 ### `tests/check_eod_schedule.py`
 - **calls:** `config.py`, `data/options_chain.py`, `execution/__init__.py`, `execution/exit_engine.py`, `execution/limit_ladder.py`, `execution/position_manager.py`, `strategy/__init__.py`, `strategy/structure.py`, `utils/__init__.py`, `utils/time_utils.py`
@@ -1743,7 +1743,7 @@ Change these with the most care; a break here reaches everything downstream.
 
 ### `tests/gen_env_doc.py`
 - **calls:** (none)
-- **called by:** (not imported) — referenced in `docs/BACKLOG.md`, `docs/ENV.md`
+- **called by:** (not imported) — referenced in `docs/BACKLOG.md`, `docs/ENV.md`, `tools/land.sh`
 
 ### `tests/gen_file_map.py`
 - **calls:** (none)

@@ -1,5 +1,12 @@
 #!/usr/bin/env bash
-# tools/land.sh — v1.23
+# tools/land.sh — v1.24
+# v1.24 (2026-10-25) — OTV5 r5 (DOC.35). docs/ENV.md IS REGENERATED AT LAND, LIKE THE TWO MAPS. r4 moved lines in
+#   tools/boot_sweep.py and tests/check_clean_deploy.py and shipped without regenerating docs/ENV.md, so check_env_doc E1
+#   went red on the next sweep (QQQ-TEST MSG-QQQ-1025-03) - a generated document that depends on an edit after its
+#   generation is the r315 lesson again. Now the land runs tests/gen_env_doc.py after the write map (when the tree carries
+#   it) and stages docs/ENV.md by name. The regeneration runs BEFORE the CHECK stage, so a spec may list check_env_doc
+#   in CHECK and pass on the drift it fixes; it FAILS CLOSED (exit non-zero or an empty file refuses the land by name).
+#   Gate: tests/check_land_spec_parse.py L12-L14 (born red on v1.23). Critiqued by QQQ-TEST (MSG-QQQ-1025-05).
 # v1.23 (2026-10-25) — OTV5 r4 (GATE.6). OT_HEARTBEAT_FILE UNDER $_scratch on every CHECK: position_manager's mark
 #   fallback touches utils.heartbeat (data/BOT_HEARTBEAT unless moved), and tools/emergency_watchdog.py reads that file's
 #   mtime as the bot's liveness, so a checker run by a land refreshed the watchdog's signal (QQQ-TEST MSG-QQQ-1024-47,
@@ -577,6 +584,19 @@ land_one() {
   # presence." §21 says the same one level up: a test that reads source text
   # proves nothing about runtime. Each CHECK runs with the repo as cwd, which
   # is how every checker in these trees expects to be invoked.
+  # ── docs/ENV.md is regenerated BEFORE the checks (v1.24 / DOC.35) ─────────
+  # It depends only on the code that just landed, so it is regenerated here, ahead of the CHECK stage: a spec that
+  # lists check_env_doc in CHECK then passes on exactly the drift the regeneration fixes (the maps stay after the
+  # checks for their own reasons). FAILS CLOSED: a generator that exits non-zero or leaves the file empty refuses the
+  # land by name; the stale document is never staged and carried on.
+  if [ -f "$repo/tests/gen_env_doc.py" ]; then
+    if ! ( cd "$repo" && python3 tests/gen_env_doc.py >/dev/null 2>&1 ) || [ ! -s "$repo/docs/ENV.md" ]; then
+      die "ENV DOC regeneration failed (tests/gen_env_doc.py exited non-zero or wrote nothing) — refusing."; return 1
+    fi
+    pb_step "env doc"; pb_clear
+    echo "  env doc: regenerated"
+  fi
+
   local nchk=0 chk
   while IFS= read -r line; do
     chk="$(_spec_val "$line" CHECK)"
@@ -703,7 +723,7 @@ land_one() {
     git add -- "$rel" && staged=$((staged+1))
   done < <(cd "$d" && find . -type f ! -name land.spec -printf '%P\n')
 
-  for gen in docs/FILE_MAP.md docs/WRITE_MAP.md "$ledger"; do
+  for gen in docs/FILE_MAP.md docs/WRITE_MAP.md docs/ENV.md "$ledger"; do
     [ -f "$repo/$gen" ] && git add -- "$gen"
   done
   pb_step "staging"; pb_clear

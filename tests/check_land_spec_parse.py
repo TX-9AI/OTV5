@@ -1,5 +1,13 @@
 #!/usr/bin/env python3
-"""tests/check_land_spec_parse.py — v1.1
+"""tests/check_land_spec_parse.py — v1.2
+THE LAND REGENERATES docs/ENV.md, BEFORE THE CHECKS, AND FAILS CLOSED (DOC.35).
+
+v1.2  2026-10-25  OTV5 r5 — L12: the scratch repo carries a stub tests/gen_env_doc.py that writes a marker into docs/ENV.md
+      (committed stale); after the land the working tree's docs/ENV.md carries the marker, i.e. the lander ran the
+      generator after the payload landed. L13: a spec with check_env_doc in CHECK plus the same drift still LANDS, because
+      the regeneration runs before the check stage. L14: a generator that exits 1 refuses the land by name, HEAD untouched
+      (QQQ-TEST MSG-QQQ-1025-05). Born red on land.sh v1.23 at L12, L13 and L14.
+
 TWO CHECKOUTS WITH THE SAME MARKERS ARE REFUSED; ORIGIN SAYS WHICH (LAND.2).
 
 v1.1  2026-10-24  OTV5 r1 — L6-L8 drive the v1.22 resolver: the scratch HOME gains a SECOND marker-carrying
@@ -67,7 +75,7 @@ def _git(cwd, *a):
                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
-def _world(spec_body, payload=("payload.txt", "NEWCONTENT\n"), twin=False, checkers=False):
+def _world(spec_body, payload=("payload.txt", "NEWCONTENT\n"), twin=False, checkers=False, envdoc=False):
     """A throwaway HOME containing one uniquely-marked repo, plus a stage."""
     root = tempfile.mkdtemp(prefix="landgate-")
     home = os.path.join(root, "home")
@@ -99,6 +107,21 @@ def _world(spec_body, payload=("payload.txt", "NEWCONTENT\n"), twin=False, check
         os.makedirs(stub)
         open(os.path.join(stub, "check_land_discipline.py"), "w").write(
             "import sys\nprint('STUB-DTP consulted')\nsys.exit(1)\n")
+    if envdoc:                                 # v1.2 / L12 — a generated doc the land must regenerate
+        os.makedirs(os.path.join(repo, "tests"), exist_ok=True)
+        os.makedirs(os.path.join(repo, "docs"), exist_ok=True)
+        if envdoc == "fail":                   # L14: a generator that exits 1 and writes nothing
+            open(os.path.join(repo, "tests", "gen_env_doc.py"), "w").write("import sys\nsys.exit(1)\n")
+        else:
+            open(os.path.join(repo, "tests", "gen_env_doc.py"), "w").write(
+                "import os\nopen(os.path.join('docs', 'ENV.md'), 'w').write('ENV-REGEN\\n')\n")
+        # a stub check_env_doc: green only once the generator has run (L13 lists it in CHECK)
+        open(os.path.join(repo, "tests", "check_env_doc.py"), "w").write(
+            "import sys\nsys.exit(0 if 'ENV-REGEN' in open('docs/ENV.md').read() else 1)\n")
+        open(os.path.join(repo, "docs", "ENV.md"), "w").write("STALE\n")
+        _git(repo, "add", "-A")
+        _git(repo, "commit", "-qm", "env doc")
+        _git(repo, "push", "-q", "origin", "HEAD:refs/heads/master")
     sha = subprocess.run(["git", "rev-parse", "HEAD"], cwd=repo,
                          capture_output=True, text=True).stdout.strip()
     if twin:                                   # v1.1 — a SECOND checkout carrying the same markers
@@ -137,8 +160,15 @@ def _land(spec_body, **kw):
     head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=repo,
                           capture_output=True, text=True).stdout.strip()
     out = r.stdout + r.stderr
+    try:                                       # v1.2 — what the land left in the generated doc
+        _ENVDOC["after"] = open(os.path.join(repo, "docs", "ENV.md")).read()
+    except OSError:
+        _ENVDOC["after"] = None
     shutil.rmtree(root, ignore_errors=True)
     return r.returncode, out, sha, head
+
+
+_ENVDOC = {}
 
 
 BASE_SPEC = """REPO   .landgate_a .landgate_b
@@ -227,6 +257,25 @@ check("L11 the discipline checker consulted is the target tree's own tools/check
       "OWN-CHECKER consulted" in out and "STUB-DTP" not in out,
       "" if ("OWN-CHECKER consulted" in out and "STUB-DTP" not in out) else
       ("stub consulted" if "STUB-DTP" in out else "own checker never ran"))
+
+# ── L12 (v1.2 / DOC.35) — the land regenerates docs/ENV.md ─────────────────
+rc, out, sha, head = _land(BASE_SPEC.format(extra="POS    payload.txt|NEWCONTENT"), envdoc=True)
+_env_after = _ENVDOC.get("after") or ""
+check("L12 the land runs tests/gen_env_doc.py after the payload lands (docs/ENV.md regenerated, 'env doc: regenerated' said)",
+      "ENV-REGEN" in _env_after and "env doc: regenerated" in out,
+      "" if "ENV-REGEN" in _env_after else f"docs/ENV.md after the land: {_env_after.strip()[:40]!r}")
+
+# ── L13 — check_env_doc in CHECK plus a drifting edit still LANDS (regen runs before the checks) ──
+rc, out, sha, head = _land(BASE_SPEC.format(extra="CHECK  tests/check_env_doc.py\nPOS    payload.txt|NEWCONTENT"), envdoc=True)
+check("L13 a spec listing check_env_doc in CHECK passes the check stage on the drift the regeneration fixes",
+      "check: tests/check_env_doc.py PASS" in out and "CHECK FAILED" not in out,
+      "the check stage refused it" if "CHECK FAILED" in out else "check stage never ran")
+
+# ── L14 — a generator that fails refuses the land by name; nothing is committed ──
+rc, out, sha, head = _land(BASE_SPEC.format(extra="POS    payload.txt|NEWCONTENT"), envdoc="fail")
+check("L14 a failing tests/gen_env_doc.py refuses the land by name, HEAD untouched",
+      rc != 0 and "ENV DOC regeneration failed" in out and sha == head,
+      f"rc={rc} {sha[:8]}->{head[:8]}")
 
 print()
 if FAILED:
