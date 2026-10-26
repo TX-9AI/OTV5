@@ -1,5 +1,13 @@
 """
-strategy/plan.py  v5.0
+strategy/plan.py  v5.1
+v5.1  2026-10-25  (PLN.R) — THE ECONOMICS NO LONGER OVERWRITE A STRATEGY'S OWN R VERDICT. credit_spread, debit_directional and
+      butterfly wrote check("r", premium R, None) and set self.r AFTER Breakout had judged its own price R
+      (breakout_plan: t.check("r", prep.r, B.accepts(...))), so the stored row showed the premium R with no verdict
+      (SPX-TEST 10-07: price R 3.79 accepted, row R 4.30, verdict None). Harmless while R accepts anything; wrong once
+      Breakout's research window ends (BRK_RESEARCH_UNTIL 2026-10-30) and R refuses. Now: when the strategy already
+      recorded a VERDICT on "r", it stands (value and verdict, and self.r) and the premium R is recorded as
+      "r_premium"; a plan that never judged R is unchanged (executable() still sets the verdict). Gate
+      tests/check_plan_r_owner.py.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v2.8 2026-10-19  OTV4TEST r303 (PSTATE.1) — A DORMANT PLAN WRITES NOTHING. The operator, 2026-10-19 08:43 ET: "The intent is dormant plans should not write to the ledger, unless we are studying them as 'log only'". strategy/plan_state.py decides each plan's state (active / log / dormant); here, a DORMANT name gets no plan_tick or plan_check row (write_row), no INACTIVE row from close_tick, no plan_heartbeat upsert, and no place on the [plans] line; CondorManagement / CreditRoll leave the line while they have no credit position (the "legs" check both already record, kept per plan by _close as _last_checks). A LOG plan is OBSERVED (strategy/observe.is_active), so take() writes LOG-ONLY as r254 does. AND A CONDITION-GATED PLAN WRITES NOTHING WHILE ITS CONDITION IS ABSENT (the operator, 09:54 ET: "Yes"): a /manage plan or CondorManagement / CreditRoll that was not run this tick gets no INACTIVE row (and no "dispatch gap" default) and no heartbeat, and the condor plans' "legs" < 1 HOLD rows are not written; they write the moment a position of theirs is open, and NO PLAN (asked, wrote nothing) still reports. Nothing here decides a trade. tests/check_plan_states.py.
 v2.7 2026-10-06  OTV4TEST r258 (HYG.17) — A NON-WINDOW REASON THAT COMES BACK DECLARES ITSELF. _status_changed kept every token of an inactive episode in one SET, so a reason said once was silent for the rest of the episode: SPX-TEST's Breakout/manage went "no open position" -> "position open — managing" -> "no open position" (10:14 / 10:42 / 10:49 ET 10-06) and the return was never written - plan.last(), the heartbeat and the [plans] line read "managing" on a flat book until 16:00 (_STATUS held the truth). The operator's r42 rule is two-sided: the WINDOW is said once per episode; "if something other than the window made it inactive it should declare that". So a non-window token is now written whenever it differs from the LAST token written for that plan (_LAST_SAID); the window keeps its once-per-episode set exactly as before (window -> cap -> window is still two rows). DISPLAY ONLY - traced 10-06: no trading path reads plan.last(), plan_heartbeat, the latest plan_tick, _STATUS or plan_status(). tests/check_plan_status.py S13-S15 (born red on 2feb827).
@@ -559,6 +567,15 @@ class PlanTick:
         self.notes.append(text)
         return self
 
+    def _economics_r(self) -> None:
+        """PLN.R - record the economics R without overwriting a strategy's own R verdict."""
+        prior = self.checks.get("r")
+        if prior is not None and prior[1] is not None:
+            self.check("r_premium", self.r, None)
+            self.r = prior[0]
+            return
+        self.check("r", self.r, None)
+
     def anchor(self, trigger=None, invalidation=None) -> "PlanTick":
         """The structural prices the STRATEGY fixed. Frozen — the plan never
         moves them. Recorded so `dist_to_trigger` is answerable."""
@@ -611,7 +628,7 @@ class PlanTick:
         self.check("credit", self.credit, None if self.credit is None else self.credit > 0)
         self.check("width", width or None, None if not width else True)
         self.check("risk", self.risk, None if self.risk is None else self.risk > 0)
-        self.check("r", self.r, None)      # verdict set by executable()
+        self._economics_r()                # verdict set by executable() (PLN.R: or kept)
         return self
 
     def debit_directional(self, premium, delta, gamma, stop_distance,
@@ -642,7 +659,7 @@ class PlanTick:
         self.check("delta", d or None, None if not d else d > 0)
         self.check("stop_distance", ds or None, None if not ds else ds > 0)
         self.check("target_distance", dt or None, None if not dt else dt > 0)
-        self.check("r", self.r, None)
+        self._economics_r()
         return self
 
     def butterfly(self, debit, width, invalidation=None, trigger=None) -> "PlanTick":
@@ -658,7 +675,7 @@ class PlanTick:
             self.r = round((w - dbt) / dbt, 4)
         self.check("debit", self.debit, None if self.debit is None else True)
         self.check("width", w or None, None if not w else w > 0)
-        self.check("r", self.r, None)
+        self._economics_r()
         return self
 
     # ── the antagonistic verdict ───────────────────────────────────────
