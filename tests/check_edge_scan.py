@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""tests/check_edge_scan.py — v5.0
+"""tests/check_edge_scan.py — v5.1
+v5.1  2026-10-25  (RPT.29) — E6: A SPARSE FEATURE THAT CLEARS THE CANDIDATE FLOOR REACHES THE STABILITY SPLIT and must
+      not raise there. E1's sparse feature never cleared CAND_N, so the d1/d2 lines (still r[k]) were never reached and
+      control's real run died with KeyError. Born red on 26df107 at E6.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 THE EDGE SCAN SURVIVES A HETEROGENEOUS BOOK (RPL.3).
 
@@ -103,6 +106,24 @@ def _bar_binds():
 
 
 guard("E5 a feature below the candidate floor yields no finding", _bar_binds)
+
+
+def _split_sparse():
+    """300 rows; `sep` on two rows in three, cleanly separating winners from losers, so it clears CAND_N and the
+    delta bar and reaches the stability split - where a row without it must not raise."""
+    rows = []
+    for i in range(300):
+        win = i % 2 == 0
+        r = {"_pnl": 1.0 if win else -1.0, "_session": f"2026-09-{(i % 20) + 1:02d}", "_side": "call"}
+        if i % 3 != 0:
+            r["sep"] = (100.0 + i) if win else float(i % 7)
+        rows.append(r)
+    out = es.scan_features(rows)
+    hit = [o for o in out if o["feature"] == "sep"]
+    return bool(hit) and hit[0]["stable"] is True, f"findings: {[(o['feature'], o['stable']) for o in out]}"
+
+
+guard("E6 a sparse feature that clears the floor reaches the stability split without KeyError", _split_sparse)
 
 print()
 if FAILED:

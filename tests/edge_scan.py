@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """
-tests/edge_scan.py  v5.0
+tests/edge_scan.py  v5.1
+v5.1  2026-10-25  (RPT.29) — THE STABILITY SPLIT READS A SPARSE FEATURE WITH .get() TOO. OTV4TEST r63 fixed the win/lose
+      comprehensions but left d1/d2 indexing r[k], so a sparse feature that cleared the candidate floor still died with
+      KeyError ('flow_imbalance', control's 10-25 run over 9,025 warehouse trades after 9m25s). Gate check_edge_scan E6.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.3  2026-09-19  OTV4TEST r63 — CRASHED ON THE REAL BOOK WHILE ITS SELFTEST
       PASSED. `scan_features` built `feats` as the UNION of feature keys across
@@ -113,7 +116,7 @@ def scan_features(rows: list) -> list:
         by_side[r.get("_side") or "?"].append(r)
     for side, rs in sorted(by_side.items()):
         feats = sorted({k for r in rs for k in r
-                        if not k.startswith("_") and _f(r[k]) is not None})
+                        if not k.startswith("_") and _f(r.get(k)) is not None})
         for k in feats:
             # 🔴 r63 — `feats` is the UNION of keys across rows, so indexing
             # `r[k]` raised KeyError on the first row missing that feature.
@@ -132,10 +135,10 @@ def scan_features(rows: list) -> list:
             p = mannwhitney_p(win, lose)
             sessions = len({r["_session"] for r in rs if _f(r.get(k)) is not None})
             half = len(rs) // 2
-            d1 = cliffs_delta([_f(r[k]) for r in rs[:half] if r["_pnl"] > 0 and _f(r[k]) is not None],
-                              [_f(r[k]) for r in rs[:half] if r["_pnl"] <= 0 and _f(r[k]) is not None])
-            d2 = cliffs_delta([_f(r[k]) for r in rs[half:] if r["_pnl"] > 0 and _f(r[k]) is not None],
-                              [_f(r[k]) for r in rs[half:] if r["_pnl"] <= 0 and _f(r[k]) is not None])
+            d1 = cliffs_delta([_f(r.get(k)) for r in rs[:half] if r["_pnl"] > 0 and _f(r.get(k)) is not None],
+                              [_f(r.get(k)) for r in rs[:half] if r["_pnl"] <= 0 and _f(r.get(k)) is not None])
+            d2 = cliffs_delta([_f(r.get(k)) for r in rs[half:] if r["_pnl"] > 0 and _f(r.get(k)) is not None],
+                              [_f(r.get(k)) for r in rs[half:] if r["_pnl"] <= 0 and _f(r.get(k)) is not None])
             stable = d1 is not None and d2 is not None and (d1 * d2) > 0
             meets = (min(len(win), len(lose)) >= BAR["n"] and sessions >= BAR["sessions"]
                      and p is not None and p < BAR["p"] and abs(d) >= BAR["delta"]
