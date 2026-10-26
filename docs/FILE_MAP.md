@@ -6,7 +6,7 @@ the canary fails on drift (WORKING_AGREEMENT 33).
 
 514 Python modules across 12 local packages.
 
-**Reached by:** 135 imported · 26 declared entry points · 237 referenced from a script, unit or doc but never imported · **116 by nothing here**.
+**Reached by:** 135 imported · 26 declared entry points · 238 referenced from a script, unit or doc but never imported · **115 by nothing here**.
 
 ⚠️ The last group is a REVIEW LIST, not a delete list. A
 `land.spec CHECK` line ships inside a tarball and is never
@@ -595,7 +595,7 @@ Change these with the most care; a break here reaches everything downstream.
 
 ### `tests/check_alert_page.py`
 - **calls:** `data/disk_watch.py`, `notifications/alert_manager.py`, `notifications/pager.py`
-- **called by:** (not imported) — referenced in `docs/ENV.md`
+- **called by:** (not imported) — referenced in `docs/BACKLOG.md`, `docs/ENV.md`
 
 ### `tests/check_anchors.py`
 - **calls:** `analysis/trade_readiness.py`, `derived/__init__.py`, `derived/anchors.py`, `strategy/__init__.py`, `strategy/plan.py`
@@ -1007,7 +1007,7 @@ Change these with the most care; a break here reaches everything downstream.
 
 ### `tests/check_floor_watch.py`
 - **calls:** `execution/fill_observers.py`
-- **called by:** (not imported) — referenced in `docs/BACKLOG.md`, `docs/ENV.md`
+- **called by:** (not imported) — referenced in `docs/ENV.md`
 
 ### `tests/check_fly_mark_cap.py`
 - **calls:** `execution/__init__.py`, `execution/entry_engine.py`, `execution/entry_ladder.py`, `execution/ladder_registry.py`
@@ -1095,7 +1095,7 @@ Change these with the most care; a break here reaches everything downstream.
 
 ### `tests/check_instrument_unset.py`
 - **calls:** `utils/__init__.py`, `utils/instrument.py`
-- **called by:** (not imported) — referenced in `docs/ENV.md`
+- **called by:** (not imported) — referenced in `docs/BACKLOG.md`, `docs/ENV.md`
 
 ### `tests/check_journal_isolation.py`
 - **calls:** (none)
@@ -1747,7 +1747,7 @@ Change these with the most care; a break here reaches everything downstream.
 
 ### `tests/check_telegram_queue.py`
 - **calls:** `notifications/telegram_sender.py`
-- **called by:** (nothing — no importer and no mention in any script, unit or doc here)
+- **called by:** (not imported) — referenced in `docs/BACKLOG.md`
 
 ### `tests/check_tent.py`
 - **calls:** `config.py`, `strategy/condor_roll.py`, `strategy/structure.py`
