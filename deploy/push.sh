@@ -1,6 +1,13 @@
 #!/bin/bash
 # ==========================================================================
-# deploy/push.sh  v5.0
+# deploy/push.sh  v5.1
+# v5.1  2026-10-25  OTV5 r21 (DEPLOY.1) — `--deploy` WORKS ON AN OTV5 BOX. The service was chosen by matching
+#       "options_trader" in the origin URL; TX-9AI/OTV5 (and OTV4TEST before it) never matched, so the script
+#       refused with "Could not detect repo from git remote" and `fleet.py update` (control) deployed 0/14 on
+#       2026-10-25 - it had never worked on an OTV box. The tree's own deploy/origin.conf names its repository
+#       (OT_ORIGIN_REPO); an origin that matches it is this tree's, and its service is optionsbot. The crypto and
+#       options_trader rules are unchanged; any other remote still refuses. Gate tests/check_push_deploy.py
+#       D1-D4, end to end against a local bare remote. The operator: "Definitely fix the push.sh".
 # v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 # v4.3  2026-09-11  OTV4TEST r14 — moved from the repo root to deploy/ (root cleanup); no behaviour change.
 # v4.2  2026-09-08  r322 — 🔴 THE COMMENT MARKERS. r65 wrote its changelog
@@ -189,6 +196,9 @@ if echo "$CURRENT_REMOTE" | grep -q "crypto_trader"; then
     SERVICE="cryptobot"
 elif echo "$CURRENT_REMOTE" | grep -q "options_trader"; then
     SERVICE="optionsbot"
+elif [ -f deploy/origin.conf ] && _ORIGIN=$(sed -nE 's/^OT_ORIGIN_REPO="?([^"]+)"?.*/\1/p' deploy/origin.conf | head -1) \
+        && [ -n "$_ORIGIN" ] && echo "$CURRENT_REMOTE" | grep -qiE "github\.com[:/]+${_ORIGIN}(\.git)?/?$"; then
+    SERVICE="optionsbot"      # r21 DEPLOY.1: the origin this tree names (deploy/origin.conf) - OTV5
 else
     echo -e "${YELLOW}  ⚠  Could not detect repo from git remote. Is git initialized?${RESET}"
     echo "  Current remote: $CURRENT_REMOTE"

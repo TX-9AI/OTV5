@@ -4,9 +4,9 @@
 Do not edit by hand: the generator runs inside the land command and
 the canary fails on drift (WORKING_AGREEMENT 33).
 
-494 Python modules across 12 local packages.
+495 Python modules across 12 local packages.
 
-**Reached by:** 134 imported · 26 declared entry points · 220 referenced from a script, unit or doc but never imported · **114 by nothing here**.
+**Reached by:** 134 imported · 26 declared entry points · 221 referenced from a script, unit or doc but never imported · **114 by nothing here**.
 
 ⚠️ The last group is a REVIEW LIST, not a delete list. A
 `land.spec CHECK` line ships inside a tarball and is never
@@ -42,7 +42,7 @@ execution.exit_engine); every such edge is listed below like any other.
 - `analysis/market_state.py` - the structural state assembly.
   **Carries the vocabulary, classifies nothing.**
 
-**Where the evidence lives:** `tests/` holds 295 standing
+**Where the evidence lives:** `tests/` holds 296 standing
 checks (`check_*.py`, all run by `tools/boot_sweep.py` at boot)
 plus the studies that produced every threshold in
 `docs/TRADES.md`. **A number in a strategy file should be
@@ -1432,6 +1432,10 @@ Change these with the most care; a break here reaches everything downstream.
 ### `tests/check_purge_reclaim.py`
 - **calls:** `warehouse/__init__.py`, `warehouse/retention_purge.py`
 - **called by:** (not imported) — referenced in `docs/BACKLOG.md`, `docs/ENV.md`
+
+### `tests/check_push_deploy.py`
+- **calls:** (none)
+- **called by:** (not imported) — referenced in `deploy/push.sh`
 
 ### `tests/check_push_memory.py`
 - **calls:** (none)
