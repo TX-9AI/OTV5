@@ -6,7 +6,7 @@ the canary fails on drift (WORKING_AGREEMENT 33).
 
 496 Python modules across 12 local packages.
 
-**Reached by:** 134 imported · 26 declared entry points · 217 referenced from a script, unit or doc but never imported · **119 by nothing here**.
+**Reached by:** 134 imported · 26 declared entry points · 218 referenced from a script, unit or doc but never imported · **118 by nothing here**.
 
 ⚠️ The last group is a REVIEW LIST, not a delete list. A
 `land.spec CHECK` line ships inside a tarball and is never
@@ -1643,7 +1643,7 @@ Change these with the most care; a break here reaches everything downstream.
 
 ### `tests/check_surface_columns.py`
 - **calls:** `analysis/__init__.py`, `analysis/second_order.py`, `data/derived_store.py`, `derived/surface.py`
-- **called by:** (nothing — no importer and no mention in any script, unit or doc here)
+- **called by:** (not imported) — referenced in `docs/ENV.md`
 
 ### `tests/check_sweep_liveness.py`
 - **calls:** `config.py`, `strategy/__init__.py`, `strategy/sweep_credit_spread.py`, `strategy/sweep_plan.py`

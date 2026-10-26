@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """
-tests/check_surface_columns.py  v5.0
+tests/check_surface_columns.py  v5.1
+v5.1  2026-10-25  (MEAS.5) — U6: each row's strike_gex is that strike's own net GEX and gex is still the chain total;
+      U7: an existing store without the column gains it on open. Born red on 5597794 at U6 U7.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.1  2026-10-03  OTV4TEST r215 (DER.3) — U3 RESTATED, U5 ADDED: gamma_flow is the change in a strike's net GEX since the
       engine's previous reading ("Concur, populate it"). U3: the FIRST reading writes NULL. U5: the second
@@ -42,9 +44,11 @@ os.environ.setdefault("OT_LOG_FILE", os.path.join(_S, "bot.log"))
 os.environ.setdefault("OT_INSTRUMENT", "QQQ")
 
 FAILED = []
+RAN = set()
 
 
 def check(name, ok, detail=""):
+    RAN.add(name.split()[0])
     print(f"  {'PASS' if ok else 'FAIL'}  {name}" + ("" if ok else f"  — {detail}"))
     if not ok:
         FAILED.append(name.split()[0])
@@ -92,9 +96,27 @@ def main():
             last[k_] = gf
         check("U5 the second reading: 750 flowed +400 (1400 - 1000); 740, absent from the first snapshot, stays NULL",
               last.get(750.0) == 400.0 and last.get(740.0) is None, str(last))
+        sg = {}
+        for k_, sgx, gx in st.conn.execute("SELECT strike, strike_gex, gex FROM surface_series ORDER BY ts_epoch"):
+            sg[k_] = (sgx, gx)
+        check("U6 strike_gex is the strike's own net GEX (750: 1400, 740: -300); gex stays the chain total 1100",
+              sg.get(750.0) == (1400.0, 1100.0) and sg.get(740.0) == (-300.0, 1100.0), str(sg))
+        old = os.path.join(_S, "old_derived.db")
+        oc = sqlite3.connect(old)
+        oc.execute("CREATE TABLE surface_series (symbol TEXT NOT NULL, ts_epoch REAL NOT NULL, strike REAL, expiry TEXT,"
+                   " charm REAL, vanna REAL, gex REAL, gamma_flow REAL, iv REAL, iv_slope REAL, dt_seconds REAL,"
+                   " d_vol REAL, PRIMARY KEY (symbol, ts_epoch, strike, expiry))")
+        oc.execute("INSERT INTO surface_series (symbol, ts_epoch, strike) VALUES ('QQQ', 1.0, 700.0)")
+        oc.commit(); oc.close()
+        os.environ["OT_DERIVED_DB"] = old
+        st2 = DerivedStore()
+        cols = {r[1] for r in st2.conn.execute("PRAGMA table_info(surface_series)")}
+        kept = st2.conn.execute("SELECT COUNT(*) FROM surface_series").fetchone()[0]
+        check("U7 an existing store gains strike_gex on open and keeps its rows",
+              "strike_gex" in cols and kept == 1, f"cols has strike_gex={'strike_gex' in cols}, rows {kept}")
     except Exception as exc:                                  # noqa: BLE001
-        for n_ in ("U1", "U2", "U3", "U4", "U5"):
-            if n_ not in FAILED:
+        for n_ in ("U1", "U2", "U3", "U4", "U5", "U6", "U7"):
+            if n_ not in RAN:
                 check(f"{n_} (did not run)", False, f"{type(exc).__name__}: {exc}")
     if FAILED:
         print(f"\nRED — {len(set(FAILED))} check(s): {sorted(set(FAILED))}")

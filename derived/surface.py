@@ -1,5 +1,7 @@
 """
-derived/surface.py  v5.0
+derived/surface.py  v5.1
+v5.1  2026-10-25  (MEAS.5) — EVERY ROW CARRIES strike_gex, THE STRIKE'S OWN NET GEX from the same snapshot gamma_flow
+      differences (NULL when the snapshot lacks the strike). gex stays the chain-wide total, unchanged for its readers.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v4.3  2026-10-24  CD.2 — every row carries quote_ts, the receive stamp of the NEWEST greeks quote in the window it was
       derived from (its market time). The readers (gamma_regime.level, anchors._surface_row, main's charm/vanna port)
@@ -193,7 +195,8 @@ class SurfaceEngine(DerivedEngine):
                          _f(m.get("charm")), _f(m.get("vanna")),
                          gex, _flow(k),             # r215: the strike's net-GEX change since the last reading
                          _f(m.get("iv")), slope, _f(m.get("dt_seconds")), _f(m.get("d_vol")),
-                         quote_ts))                 # CD.2
+                         quote_ts,                  # CD.2
+                         _now_k.get(round(k, 4))))  # MEAS.5: the strike's own net GEX
         if _now_k:
             self._prev_gex_by_strike = _now_k
         return store.append_surface(rows)

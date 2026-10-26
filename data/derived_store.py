@@ -1,5 +1,8 @@
 """
-data/derived_store.py  v5.0
+data/derived_store.py  v5.1
+v5.1  2026-10-25  (MEAS.5) — surface_series GAINS strike_gex, THE STRIKE'S OWN NET GEX. gex stays the chain-wide total (its readers
+      depend on it); without a per-strike value no study of pin structure or a gamma flip level is possible. Added to an
+      existing store on open (ALTER TABLE); append_surface takes a 14th value, and 12/13-value rows still store NULL.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v4.9  2026-10-24  CD.2 — A LEVEL EVENT CARRIES ITS MARKET TIME, AND THE READER JUDGES BY IT. level_event's ts_epoch is
       WRITE time, so a row written today about an old bar - a restart replay, or a row seeded from another box - read
@@ -233,6 +236,8 @@ class DerivedStore:
         c.execute("CREATE INDEX IF NOT EXISTS ix_surf_ts ON surface_series(ts_epoch)")
         if "quote_ts" not in {r[1] for r in c.execute("PRAGMA table_info(surface_series)")}:   # CD.2
             c.execute("ALTER TABLE surface_series ADD COLUMN quote_ts REAL")
+        if "strike_gex" not in {r[1] for r in c.execute("PRAGMA table_info(surface_series)")}:   # MEAS.5
+            c.execute("ALTER TABLE surface_series ADD COLUMN strike_gex REAL")
         c.execute("CREATE INDEX IF NOT EXISTS ix_surf_qts ON surface_series(symbol, quote_ts)")
         # CD.2 — when, in MARKET time, the level book was last synced against the tape (LevelEngine.board reads it)
         c.execute("""
@@ -362,12 +367,13 @@ class DerivedStore:
             " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", rows)
 
     def append_surface(self, rows):
-        """CD.2: a 13th value is quote_ts (the newest quote behind the row); a 12-value row stores NULL."""
-        rows = [tuple(r) + ((None,) if len(r) == 12 else ()) for r in rows]
+        """CD.2: a 13th value is quote_ts (the newest quote behind the row); MEAS.5: a 14th is strike_gex (the strike's
+        own net GEX). Shorter rows store NULL for what they lack."""
+        rows = [tuple(r) + (None,) * (14 - len(r)) for r in rows]
         return self._write(
             "INSERT OR IGNORE INTO surface_series (symbol, ts_epoch, strike,"
             " expiry, charm, vanna, gex, gamma_flow, iv, iv_slope, dt_seconds,"
-            " d_vol, quote_ts) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)", rows)
+            " d_vol, quote_ts, strike_gex) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)", rows)
 
     def mark_level_sync(self, symbol: str, bar_close_epoch: float, now: float = None):
         """CD.2 — the level book was synced against a tape whose newest closed 1m bar closed at bar_close_epoch."""
