@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """
-tests/check_handoff_entry_time.py  v5.0
+tests/check_handoff_entry_time.py  v5.1
+v5.1  2026-10-26  OTV5 r38 (HYG.18) — scratch no longer names dir="/var/tmp": mkdtemp honours TMPDIR, which boot_sweep and land.sh point
+      at a per-run dir they remove (HYG.14), so a sweep leaves nothing behind (237 dirs had piled up on SOFI). No check changed.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.0  2026-10-24  OTV4TEST r317 (STALE.1, D1) — BORN RED on 2cc9502 (r316).
 
@@ -30,7 +32,7 @@ for _sp in _glob.glob(os.path.join(os.path.dirname(os.path.dirname(os.path.abspa
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
-_S = tempfile.mkdtemp(prefix="chk_hoet_", dir="/var/tmp")
+_S = tempfile.mkdtemp(prefix="chk_hoet_")
 for _k, _v in (("OT_TRADES_DB", "t.db"), ("OT_DERIVED_DB", "d.db"), ("OT_RESTING_DB", "r.db"), ("OT_FEED_DB", "f.db"),
                ("OT_SIGNAL_JOURNAL_DIR", "sj"), ("OT_COUNTERFACTUAL_DIR", "cf"), ("OT_LOG_FILE", "bot.log"),
                ("OT_RESTING_STOP_STATE", "rs.json"), ("OT_WAREHOUSE_STATE", "ws"), ("OT_PLAN_STATES_FILE", "ps.json")):

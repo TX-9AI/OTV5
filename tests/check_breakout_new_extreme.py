@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """
-tests/check_breakout_new_extreme.py  v5.0
+tests/check_breakout_new_extreme.py  v5.1
+v5.1  2026-10-26  OTV5 r38 (HYG.18) — scratch no longer names dir="/var/tmp": mkdtemp honours TMPDIR, which boot_sweep and land.sh point
+      at a per-run dir they remove (HYG.14), so a sweep leaves nothing behind (237 dirs had piled up on SOFI). No check changed.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.7  2026-10-24  OTV4TEST r316 (BRK.15) — RE-POINTED, NOT DROPPED (section 38.4): r131 is no longer the default. The
       operator, 2026-10-24 13:45 ET: "The new session high/low rule needs to be dropped"; OT_BRK_REFIRE=extreme is the
@@ -90,7 +92,7 @@ sys.path.insert(0, ROOT)
 # the N5 child re-enters this file in a fresh interpreter and must use the
 # PARENT's scratch stores — that is the whole point of the restart check
 SCRATCH = (os.environ["N5_SCRATCH"] if os.environ.get("N5_RESTART") == "1"
-           else tempfile.mkdtemp(prefix="chk_brk_ne_", dir="/var/tmp"))
+           else tempfile.mkdtemp(prefix="chk_brk_ne_"))
 os.environ["OT_TRADES_DB"] = os.path.join(SCRATCH, "trades.db")
 os.environ["OT_DERIVED_DB"] = os.path.join(SCRATCH, "derived.db")
 os.environ["OT_RESTING_DB"] = os.path.join(SCRATCH, "resting.db")

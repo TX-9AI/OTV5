@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """
-tests/check_scaling_toggle.py  v5.0
+tests/check_scaling_toggle.py  v5.1
+v5.1  2026-10-26  OTV5 r38 (HYG.18) — scratch no longer names dir="/var/tmp": mkdtemp honours TMPDIR, which boot_sweep and land.sh point
+      at a per-run dir they remove (HYG.14), so a sweep leaves nothing behind (237 dirs had piled up on SOFI). No check changed.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.1  2026-10-03  OTV4TEST r228 (CFG.4) — S9 RE-POINTED: the menu carries ONE scaling item, 9 =
       Breakout; no menu line dispatches the ORB or VOLT switch (both trades are off; the operator:
@@ -71,8 +73,7 @@ for _sp in _glob.glob(os.path.join(ROOT, "venv", "lib", "python*", "site-package
         sys.path.insert(1, _sp)
 sys.path.insert(0, ROOT)
 if not os.environ.get("OT_TRADES_DB"):
-    _scr = tempfile.mkdtemp(prefix="check_scaling_toggle_",
-                            dir="/var/tmp" if os.path.isdir("/var/tmp") else None)
+    _scr = tempfile.mkdtemp(prefix="check_scaling_toggle_")
     atexit.register(shutil.rmtree, _scr, True)
     os.environ.setdefault("OT_TRADES_DB", os.path.join(_scr, "trades.db"))
     os.environ.setdefault("OT_DERIVED_DB", os.path.join(_scr, "derived_store.db"))

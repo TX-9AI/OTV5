@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """
-tests/check_no_zero_price.py  v5.0
+tests/check_no_zero_price.py  v5.1
+v5.1  2026-10-26  OTV5 r38 (HYG.18) — scratch no longer names dir="/var/tmp": mkdtemp honours TMPDIR, which boot_sweep and land.sh point
+      at a per-run dir they remove (HYG.14), so a sweep leaves nothing behind (237 dirs had piled up on SOFI). No check changed.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 
 NO ORDER IS EVER PRICED AT $0.00 - entry ladder, exit ladder, combos.
@@ -44,7 +46,7 @@ for _sp in _glob.glob(os.path.join(ROOT, "venv", "lib", "python*", "site-package
         sys.path.insert(1, _sp)
 sys.path.insert(0, ROOT)
 if not os.environ.get("OT_TRADES_DB"):
-    _s = tempfile.mkdtemp(prefix="check_no_zero_price_", dir="/var/tmp" if os.path.isdir("/var/tmp") else None)
+    _s = tempfile.mkdtemp(prefix="check_no_zero_price_")
     os.environ["OT_TRADES_DB"] = os.path.join(_s, "t.db")
     os.environ["OT_DERIVED_DB"] = os.path.join(_s, "d.db")
     os.environ["OT_RESTING_DB"] = os.path.join(_s, "r.db")

@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """
-tests/check_volt_sizing.py  v5.0
+tests/check_volt_sizing.py  v5.1
+v5.1  2026-10-26  OTV5 r38 (HYG.18) — scratch no longer names dir="/var/tmp": mkdtemp honours TMPDIR, which boot_sweep and land.sh point
+      at a per-run dir they remove (HYG.14), so a sweep leaves nothing behind (237 dirs had piled up on SOFI). No check changed.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.5  2026-10-02  OTV4TEST r187 (ROSTER.1) — RE-POINTED BY THE RULING, NOT LOOSENED:
       the strategy is OFF by default from r187; this checker tests its LOGIC,
@@ -84,8 +86,7 @@ sys.path.insert(0, _root)
 # the harness did not point the stores somewhere, this does, under /var/tmp
 # (/tmp is a small RAM tmpfs, HYG.14), and removes it on exit.
 if not all(os.environ.get(k) for k in ("OT_TRADES_DB", "OT_DERIVED_DB", "OT_RESTING_DB")):
-    _scr = tempfile.mkdtemp(prefix="check_volt_sizing_",
-                            dir="/var/tmp" if os.path.isdir("/var/tmp") else None)
+    _scr = tempfile.mkdtemp(prefix="check_volt_sizing_")
     atexit.register(shutil.rmtree, _scr, True)
     os.environ.setdefault("OT_TRADES_DB", os.path.join(_scr, "trades.db"))
     os.environ.setdefault("OT_DERIVED_DB", os.path.join(_scr, "derived_store.db"))

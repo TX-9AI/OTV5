@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """
-tests/check_cap_fly_exempt.py  v5.0
+tests/check_cap_fly_exempt.py  v5.1
+v5.1  2026-10-26  OTV5 r38 (HYG.18) — scratch no longer names dir="/var/tmp": mkdtemp honours TMPDIR, which boot_sweep and land.sh point
+      at a per-run dir they remove (HYG.14), so a sweep leaves nothing behind (237 dirs had piled up on SOFI). No check changed.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.3  2026-10-19  OTV4TEST r303 (PSTATE.1) — its subject ATPButterfly (F6: both flies asked at the cap) is DORMANT by default and a dormant plan now writes
       nothing by ruling, so this run switches it ACTIVE (OT_ATP_BUTTERFLY=1); what it pins is unchanged.
@@ -76,8 +78,7 @@ sys.path.insert(0, ROOT)
 os.environ["OT_ATP_BUTTERFLY"] = "1"   # r303: F6's second fly is active (check_plan_states pins dormant)
 
 # Self-isolating: run by hand without the harness, no live store is touched.
-_SCR = tempfile.mkdtemp(prefix="check_cap_fly_exempt_",
-                        dir="/var/tmp" if os.path.isdir("/var/tmp") else None)
+_SCR = tempfile.mkdtemp(prefix="check_cap_fly_exempt_")
 for _k, _f in (("OT_TRADES_DB", "trades.db"), ("OT_DERIVED_DB", "derived_store.db"),
                ("OT_RESTING_DB", "resting_orders.db"),
                ("OT_SIGNAL_JOURNAL_DIR", "signal_journal")):

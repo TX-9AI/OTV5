@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """
-tests/check_liquidity_hunt.py  v5.0
+tests/check_liquidity_hunt.py  v5.1
+v5.1  2026-10-26  OTV5 r38 (HYG.18) — scratch no longer names dir="/var/tmp": mkdtemp honours TMPDIR, which boot_sweep and land.sh point
+      at a per-run dir they remove (HYG.14), so a sweep leaves nothing behind (237 dirs had piled up on SOFI). No check changed.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.6  CD.2 (2026-10-24) - the fixture marks the level book SYNCED (store.mark_level_sync) after seeding the ledger:
       LevelEngine.board() now fails closed as not_synced until a book sync against a recent closed 1m bar has been
@@ -49,7 +51,7 @@ import sqlite3
 import sys
 import subprocess
 import tempfile
-os.environ.setdefault("OT_COUNTERFACTUAL_DIR", tempfile.mkdtemp(prefix="cf_", dir="/var/tmp"))   # r285: never the live log
+os.environ.setdefault("OT_COUNTERFACTUAL_DIR", tempfile.mkdtemp(prefix="cf_"))   # r285: never the live log
 _H12_DIR = tempfile.mkdtemp(prefix="chk_hunt_db_")
 os.environ.setdefault("OT_TRADES_DB", os.path.join(_H12_DIR, "trades.db"))   # r297: H12 logs Hunt rows through the real TradeLogger
 for _k, _v in (("OT_DERIVED_DB", "d.db"), ("OT_FEED_DB", "f.db"), ("OT_LOG_FILE", "bot.log"),        # r304: H13 imports main
