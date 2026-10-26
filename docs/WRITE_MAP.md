@@ -7,12 +7,13 @@ Regenerated in the land gate; a stale map fails `--check`.
 
 ⚠️ **A table with no writer is an orphan. A table nobody reads is dead weight.** Both are visible here and in neither the schema nor the call graph alone.
 
-**33 tables.**
+**34 tables.**
 
 ## (unattributed)
 
 | table | created by | written by | read by |
 |---|---|---|---|
+| `seen` | `warehouse/s3_push.py` | `warehouse/s3_push.py` (delete/insert) | `tests/check_push_memory.py` |
 | `zz_unknown_table` | — | `tests/check_schema_keeps.py` (insert) | — |
 
 ## derived_store.db
@@ -33,7 +34,7 @@ Regenerated in the land gate; a stale map fails `--check`.
 | `plan_check` | `strategy/plan.py` | `strategy/plan.py` (insert), `tests/check_open_scan.py` (insert), `tests/check_plan_check_note.py` (insert), `tests/check_purge_reclaim.py` (insert), `tests/check_stop_spread_report.py` (insert), `warehouse/retention_purge.py` (delete) | `tests/check_bfly_vwap_band.py`, `tests/check_chain_ordering.py`, `tests/check_levels_in_play.py`, `tests/check_orb_plan.py`, `tests/check_orcs.py`, `tests/check_plan_prepares.py`, `tests/check_plan_wiring.py`, `tests/check_tick_join.py`, `tests/stop_spread_report.py`, `tools/open_scan.py`, `warehouse/s3_push.py` |
 | `plan_heartbeat` | `strategy/plan.py` | `strategy/plan.py` (insert), `tests/check_foreign_symbol_board.py` (insert), `tests/check_plan_states.py` (delete/insert/update), `tests/check_plans_panel_width.py` (insert) | `query.py`, `tests/check_plan_heartbeat.py` |
 | `plan_ledger` | `derived/plan_ledger.py` | `derived/plan_ledger.py` (insert/update), `tests/check_market_time.py` (insert), `tests/check_purge_pushed.py` (update) | `query.py`, `tests/check_audit_20260823.py`, `tests/check_missed_inert.py`, `tests/check_plan_ledger_take.py`, `tests/check_plan_lifecycle.py`, `tests/check_plan_states.py`, `tests/edge_scan.py`, `warehouse/s3_push.py` |
-| `plan_tick` | `strategy/plan.py`, `tests/check_plan_board.py` | `strategy/plan.py` (insert), `tests/check_open_scan.py` (insert), `tests/check_plan_board.py` (insert), `tests/check_plan_states.py` (delete), `tests/check_plan_status.py` (delete), `tests/check_purge_reclaim.py` (insert), `tests/check_stop_spread_report.py` (insert), `tests/check_tick_join.py` (insert), `warehouse/retention_purge.py` (delete) | `tests/check_atp_butterfly.py`, `tests/check_atp_pin_floor.py`, `tests/check_bfly_vwap_band.py`, `tests/check_breakout_rearm.py`, `tests/check_butterfly_foundational.py`, `tests/check_butterfly_legs.py`, `tests/check_chain_ordering.py`, `tests/check_condor_mgmt.py`, `tests/check_liquidity_hunt.py`, `tests/check_management_plan.py`, `tests/check_not_asked_reasons.py`, `tests/check_orb_plan.py`, `tests/check_orb_reentry.py`, `tests/check_orb_sequence.py`, `tests/check_orcs.py`, `tests/check_plan_prepares.py`, `tests/check_plan_signal.py`, `tests/check_plan_wiring.py`, `tests/check_runaway_plan.py`, `tests/check_tcs_narrates.py`, `tests/check_tcs_plan.py`, `tests/check_time_parse.py`, `tools/open_scan.py`, `tools/plan_board.py`, `warehouse/s3_push.py` |
+| `plan_tick` | `strategy/plan.py`, `tests/check_plan_board.py` | `strategy/plan.py` (insert), `tests/check_open_scan.py` (insert), `tests/check_plan_board.py` (insert), `tests/check_plan_states.py` (delete), `tests/check_plan_status.py` (delete), `tests/check_purge_reclaim.py` (insert), `tests/check_push_memory.py` (delete/update), `tests/check_stop_spread_report.py` (insert), `tests/check_tick_join.py` (insert), `warehouse/retention_purge.py` (delete) | `tests/check_atp_butterfly.py`, `tests/check_atp_pin_floor.py`, `tests/check_bfly_vwap_band.py`, `tests/check_breakout_rearm.py`, `tests/check_butterfly_foundational.py`, `tests/check_butterfly_legs.py`, `tests/check_chain_ordering.py`, `tests/check_condor_mgmt.py`, `tests/check_liquidity_hunt.py`, `tests/check_management_plan.py`, `tests/check_not_asked_reasons.py`, `tests/check_orb_plan.py`, `tests/check_orb_reentry.py`, `tests/check_orb_sequence.py`, `tests/check_orcs.py`, `tests/check_plan_prepares.py`, `tests/check_plan_signal.py`, `tests/check_plan_wiring.py`, `tests/check_runaway_plan.py`, `tests/check_tcs_narrates.py`, `tests/check_tcs_plan.py`, `tests/check_time_parse.py`, `tools/open_scan.py`, `tools/plan_board.py`, `warehouse/s3_push.py` |
 | `strategy_note` | `derived/notes.py` | `derived/notes.py` (insert) | `tests/check_management_plan.py`, `tests/check_tick_join.py`, `warehouse/s3_push.py` |
 | `surface_series` | `data/derived_store.py` | `data/derived_store.py` (insert), `tests/check_purge_reclaim.py` (insert), `warehouse/retention_purge.py` (delete) | `derived/anchors.py`, `derived/gamma_regime.py`, `main.py`, `query.py`, `tests/check_gamma_regime.py`, `tests/check_surface_columns.py`, `warehouse/s3_push.py` |
 

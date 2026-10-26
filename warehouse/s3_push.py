@@ -1,5 +1,16 @@
 """
-warehouse/s3_push.py  v5.0
+warehouse/s3_push.py  v5.1
+v5.1  2026-10-25  OTV5 r20 (PUSH.1) — THE DERIVED STAGE RUNS IN BOUNDED MEMORY. The 2026-10-25 fleet field test measured
+      the 5-minute push peaking ~700 MB on 951 MB boxes (220-430 MB into swap, 70-95 s a run) and 1.5 GB on SOFI. The cause
+      was push_derived's ledger: derived_ledger.json held a 64-hex hash for EVERY row ever pushed, never pruned (147 MB on
+      AMD, 177 MB on SOFI), json-loaded whole each run and rewritten whole at every flush; and every derived table was
+      read into one Python list. Now: the ledger is SQLite (derived_ledger.db: tbl, rid, 16-byte digest), read per chunk;
+      tables stream by rowid in DERIVED_SCAN_ROWS chunks; changed rows ship in objects of at most DERIVED_BATCH_ROWS (a
+      table with a handful of changes is still ONE object); entries for rows the purge removed (rid below the table's
+      lowest rowid) are pruned. The old JSON is converted ONCE by a streaming scan (never json-loaded) and removed after
+      the conversion commits. The rule is unchanged: a row ships when its content hash differs from the last one S3
+      confirmed. A plain dict ledger (the gates) still works. Gate tests/check_push_memory.py M1-M7. The operator:
+      "Let's fix those issues".
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v4.12 2026-10-24  CD.1 — A SYMBOL SWITCH CANNOT MISLABEL A PUSH, AND A PAUSED BOX PUSHES NOTHING FROM ANY ENTRYPOINT.
       (1) own_symbol(): after OT_INSTRUMENT, the BOT UNIT's instrument (utils.instrument.box_instrument) - before the
@@ -732,7 +743,10 @@ _SINCE_FLUSH = [0]
 
 MISC_LEDGER    = os.path.join(STATE_DIR, "misc_ledger.json")
 CANDLE_LEDGER  = os.path.join(STATE_DIR, "candle_ledger.json")
-DERIVED_LEDGER = os.path.join(STATE_DIR, "derived_ledger.json")
+DERIVED_LEDGER = os.path.join(STATE_DIR, "derived_ledger.json")   # r20: legacy; converted once, then removed
+DERIVED_LEDGER_DB = os.path.join(STATE_DIR, "derived_ledger.db")  # r20 PUSH.1: the CDC ledger
+DERIVED_SCAN_ROWS = int(os.environ.get("OT_S3_DERIVED_SCAN", "5000"))
+DERIVED_BATCH_ROWS = int(os.environ.get("OT_S3_DERIVED_BATCH", "10000"))
 # v4.5 — the derived SERIES high-water marks. Its own file: derived_ledger.json
 # holds {table: {rid: sha}} and candle_ledger.json holds {SYM|interval: hwm}.
 # A flat float map in either of those is two meanings in one dict, which is
@@ -1048,39 +1062,161 @@ DERIVED_TABLES = ("fire_snapshot", "strategy_note", "plan_ledger",
                   "exit_counterfactual")
 
 
+class _DictSeen:
+    """The {table: {rid: sha}} dict ledger behind the SQLite one's interface (the gates pass a dict)."""
+
+    def __init__(self, d):
+        self.d = d
+
+    def get_many(self, table, rids):
+        seen = self.d.get(table, {})
+        return {r: seen[r] for r in rids if r in seen}
+
+    def put_many(self, table, items):
+        self.d.setdefault(table, {}).update(items)
+
+    def prune_below(self, table, min_rid):
+        seen = self.d.get(table)
+        if seen:
+            for r in [r for r in seen if int(r) < min_rid]:
+                del seen[r]
+
+    def commit(self):
+        pass
+
+    def close(self):
+        pass
+
+
+class DerivedLedger:
+    """r20 PUSH.1 — the CDC ledger on disk, read a chunk at a time. Stores a 16-byte digest per (table, rid):
+    the hex sha256 the row is compared by, truncated to 128 bits (a collision would need 2**64 rows)."""
+
+    def __init__(self, path=None, legacy_json=None):
+        self.path = path or DERIVED_LEDGER_DB
+        os.makedirs(os.path.dirname(self.path), exist_ok=True)
+        self.con = sqlite3.connect(self.path, timeout=30)
+        self.con.execute("PRAGMA journal_mode=WAL")
+        self.con.execute("CREATE TABLE IF NOT EXISTS seen (tbl TEXT NOT NULL, rid INTEGER NOT NULL, "
+                         "sha BLOB NOT NULL, PRIMARY KEY (tbl, rid)) WITHOUT ROWID")
+        self.con.commit()
+        legacy = DERIVED_LEDGER if legacy_json is None else legacy_json
+        if legacy and os.path.exists(legacy):
+            self._convert(legacy)
+
+    @staticmethod
+    def _d(sha_hex):
+        return bytes.fromhex(sha_hex[:32])
+
+    def _convert(self, path):
+        """Stream the legacy {table: {rid: sha}} JSON in 1 MB reads (never json.load: the file is what blew the
+        memory). It was written with separators (",", ":"), so its tokens are fixed; a file this cannot read is
+        kept and named, and the next run tries again."""
+        import re
+        tok = re.compile(r'"([A-Za-z_][A-Za-z0-9_]*)":\{|"(\d+)":"([0-9a-f]{64})"')
+        table, n, buf, batch = None, 0, "", []
+        try:
+            with open(path, "r", encoding="utf-8") as fh:
+                while True:
+                    chunk = fh.read(1 << 20)
+                    buf += chunk
+                    end = len(buf) if not chunk else max(0, len(buf) - 200)
+                    pos = 0
+                    for m in tok.finditer(buf):
+                        if m.end() > end:
+                            break
+                        pos = m.end()
+                        if m.group(1):
+                            table = m.group(1)
+                        elif table:
+                            batch.append((table, int(m.group(2)), self._d(m.group(3))))
+                            if len(batch) >= 50000:
+                                self.con.executemany("INSERT OR REPLACE INTO seen VALUES (?,?,?)", batch)
+                                n += len(batch)
+                                batch = []
+                    buf = buf[pos:]
+                    if not chunk:
+                        break
+            if batch:
+                self.con.executemany("INSERT OR REPLACE INTO seen VALUES (?,?,?)", batch)
+                n += len(batch)
+            self.con.commit()
+            os.replace(path, path + ".converted")
+            os.remove(path + ".converted")
+            print("s3_push: derived ledger converted to SQLite ({} rows)".format(n))
+        except Exception as exc:                                # noqa: BLE001
+            self.con.rollback()
+            print("s3_push: derived ledger conversion FAILED ({}); the JSON is kept".format(
+                type(exc).__name__))
+
+    def get_many(self, table, rids):
+        out = {}
+        for i in range(0, len(rids), 900):
+            part = rids[i:i + 900]
+            q = "SELECT rid, sha FROM seen WHERE tbl=? AND rid IN (%s)" % ",".join("?" * len(part))
+            for rid, sha in self.con.execute(q, [table] + [int(r) for r in part]):
+                out[str(rid)] = sha
+        return out
+
+    def put_many(self, table, items):
+        self.con.executemany("INSERT OR REPLACE INTO seen VALUES (?,?,?)",
+                             [(table, int(r), v) for r, v in items.items()])
+
+    def prune_below(self, table, min_rid):
+        cur = self.con.execute("DELETE FROM seen WHERE tbl=? AND rid<?", (table, int(min_rid)))
+        self.pruned = getattr(self, "pruned", 0) + max(0, cur.rowcount or 0)
+
+    def compact_if_pruned(self, threshold=100000):
+        """Give a large prune's pages back to the disk (the first run after the conversion frees ~80%)."""
+        if getattr(self, "pruned", 0) >= threshold:
+            self.con.commit()
+            self.con.execute("VACUUM")
+            self.pruned = 0
+
+    def commit(self):
+        self.con.commit()
+
+    def close(self):
+        self.con.close()
+
+
+def _derived_stage(s3, me, counters):
+    """The production derived stage: the SQLite ledger, opened and closed around one push_derived."""
+    led = DerivedLedger()
+    try:
+        out = push_derived(s3, BUCKET, DERIVED_DB, led, me, counters)
+        led.compact_if_pruned()
+        return out
+    finally:
+        led.close()
+
+
 def push_derived(s3, bucket, db_path, ledger, me, counters=None):
     """derived_store.db lifecycle tables — CDC by rowid, batched per table.
 
     Every row is `SELECT rowid AS _rid, *`; its content hash is compared to
-    the ledger's `{table: {rid: sha}}` map and CHANGED rows ship as ONE
-    object per table per run. A plan that transitions re-ships its row with
-    a newer pushed_at; the reader keeps latest-per-rid. ⚠️ THE LEDGER IS ITS
-    OWN FILE (derived_ledger.json): its nested shape must never share a dict
-    with the offset or high-water ledgers — same helper, different meaning,
-    is exactly the r82 failure class.
+    the ledger's last confirmed hash for that rid and CHANGED rows ship. A plan
+    that transitions re-ships its row with a newer pushed_at; the reader keeps
+    latest-per-rid. ⚠️ THE LEDGER IS ITS OWN STORE: its nested shape must never
+    share a dict with the offset or high-water ledgers — same helper, different
+    meaning, is exactly the r82 failure class.
+    🔴 r20 PUSH.1 — BOUNDED MEMORY. Rows stream in DERIVED_SCAN_ROWS chunks and
+    the ledger is read per chunk (DerivedLedger, SQLite); changed rows ship in
+    objects of at most DERIVED_BATCH_ROWS, so a table with a few changes is
+    still ONE object per run. `ledger` may be a plain dict (the gates) or a
+    DerivedLedger (production).
     """
     pushed = failed = 0
+    store = ledger if hasattr(ledger, "get_many") else _DictSeen(ledger)
     try:
         con = sqlite3.connect("file:%s?mode=ro" % db_path, uri=True, timeout=5)
         con.row_factory = sqlite3.Row
     except Exception:
         return 0, 0
     day = datetime.now(ZoneInfo("America/New_York")).date().isoformat()
-    for table in DERIVED_TABLES:
-        try:
-            rows = [dict(r) for r in con.execute(
-                "SELECT rowid AS _rid, * FROM %s" % table)]
-        except Exception:
-            continue                     # table absent on this box — fine
-        seen = ledger.setdefault(table, {})
-        changed = []
-        for rec in rows:
-            sha = _sha256(_canon(rec))
-            rid = str(rec["_rid"])
-            if seen.get(rid) != sha:
-                changed.append((rid, sha, rec))
-        if not changed:
-            continue
+    is_dict = isinstance(store, _DictSeen)
+
+    def _ship(table, changed):
         batch = [rec for _r, _s, rec in changed]
         sha_b = _sha256(_canon(batch))
         body = _wrap("derived_%s" % table, batch, me or "UNKNOWN", day,
@@ -1089,13 +1225,48 @@ def push_derived(s3, bucket, db_path, ledger, me, counters=None):
             PREFIX, table, day, me or "UNKNOWN",
             int(time.time() * 1000), sha_b[:16])
         if put_and_verify(s3, bucket, key, body, counters):
-            for rid, sha, _rec in changed:
-                seen[rid] = sha
-            pushed += 1
-        else:
-            failed += 1
+            store.put_many(table, {rid: (sha if is_dict else DerivedLedger._d(sha))
+                                   for rid, sha, _rec in changed})
+            store.commit()
+            return 1, 0
+        return 0, 1
+
+    for table in DERIVED_TABLES:
+        try:
+            cur = con.execute("SELECT rowid AS _rid, * FROM %s ORDER BY rowid" % table)
+        except Exception:
+            continue                     # table absent on this box — fine
+        changed, min_rid = [], None
+        while True:
+            chunk = cur.fetchmany(DERIVED_SCAN_ROWS)
+            if not chunk:
+                break
+            recs = [dict(r) for r in chunk]
+            if min_rid is None:
+                min_rid = recs[0]["_rid"]
+            known = store.get_many(table, [str(r["_rid"]) for r in recs])
+            for rec in recs:
+                sha = _sha256(_canon(rec))
+                rid = str(rec["_rid"])
+                k = known.get(rid)
+                if k != (sha if is_dict else DerivedLedger._d(sha)):
+                    changed.append((rid, sha, rec))
+                    if len(changed) >= DERIVED_BATCH_ROWS:
+                        p_, f_ = _ship(table, changed)
+                        pushed += p_
+                        failed += f_
+                        changed = []
+        if changed:
+            p_, f_ = _ship(table, changed)
+            pushed += p_
+            failed += f_
+        if min_rid is not None:
+            store.prune_below(table, min_rid)   # rows the purge removed no longer need a hash
+            store.commit()
     con.close()
     return pushed, failed
+
+
 SERIES_BATCH_ROWS = int(os.environ.get("OT_S3_SERIES_BATCH", "50000"))
 
 
@@ -1271,7 +1442,6 @@ def main(argv=None) -> int:
         t_ledger = load_ledger(TRADES_LEDGER)
         misc = load_ledger(MISC_LEDGER)
         c_ledger = load_ledger(CANDLE_LEDGER)
-        d_ledger = load_ledger(DERIVED_LEDGER)
         ds_ledger = load_ledger(DSERIES_LEDGER)
         me = own_symbol()
         total_pushed = 0
@@ -1316,8 +1486,8 @@ def main(argv=None) -> int:
             ("derived_series", lambda: push_series(
                 s3, BUCKET, DERIVED_DB, ds_ledger, me, counters,
                 tables=DERIVED_SERIES_TABLES, ns="dseries")),
-            ("derived", lambda: push_derived(s3, BUCKET, DERIVED_DB, d_ledger,
-                                             me, counters)),
+            # r20 PUSH.1 — opened inside the stage, so a ledger that cannot open fails THIS stage only.
+            ("derived", lambda: _derived_stage(s3, me, counters)),
             ("liquidity_ledger", lambda: push_whole_files(
                 s3, BUCKET, discover(LIQ_ROOT, ".json"), "liquidity_ledger",
                 misc, counters)),

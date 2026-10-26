@@ -1,5 +1,12 @@
 """
-data/tasty_client.py  v5.0
+data/tasty_client.py  v5.1
+v5.1  2026-10-25  OTV5 r20 (LIVE.2) — get_account() NO LONGER DEADLOCKS. It held _session_lock (a plain, non-reentrant
+      threading.Lock) and, with no account cached, called get_session(), which takes the same lock: the first call blocked
+      forever, silently. Every LIVE order path calls it (entry_engine after its paper branch, main.py order confirm and
+      history, condor_roll); paper never does, and every gate stubbed get_account, so nothing ever saw it. Found by the
+      fleet field test 2026-10-25 (the TastyTrade check hung on get_account on every box). _session_lock is an RLock:
+      the same thread may re-enter, other threads still wait. Gate tests/check_account_lock.py A1-A4 drives the REAL
+      get_account with a fake Session/Account. The operator: "Let's fix those issues".
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v4.3  2026-10-04  OTV4TEST r243 (LIVE.1 B1, MIRROR OF otv4 r465 7562317, WA 38.2) — reconcile reads ONLY this box's instrument family (SPX = SPX+SPXW; '*' = the whole account) and checks EVERY leg at its QUANTITY (summed across rows sharing a leg); a missing leg or a count off the broker is REPORTED (plan.mismatch + an alert), rows are never dropped, the phantom rule unchanged. The operator, 2026-10-04: 'multiple boxes will trade that account but never duplicate symbols ever.' Code hunks applied verbatim from 7562317.
 v4.2  2026-10-04  OTV4TEST r242 (LIVE.1 B0, MIRROR OF otv4 r463 c912ce7, WA 38.2) — every Account call goes through tasty_client.sdk_result: on tastytrade 13.x the Account methods are coroutines and a bare call placed and closed NOTHING live (paper never calls them). Hunks applied verbatim from c912ce7. Adds sdk_result.
@@ -94,7 +101,7 @@ def run_async(coro):
 
 _session: Optional[Session]  = None
 _account: Optional[Account]  = None
-_session_lock = threading.Lock()
+_session_lock = threading.RLock()   # r20 LIVE.2: get_account() re-enters it through get_session()
 
 
 def get_session() -> Session:
