@@ -1,5 +1,11 @@
 #!/usr/bin/env python3
-"""tests/check_self_close_hold.py — v5.0
+"""tests/check_self_close_hold.py — v5.1
+v5.1  2026-10-26  (TG.2) — THE FAKE ALERT MANAGER HAD A METHOD THE REAL ONE DOES NOT. drive() faked
+      `SimpleNamespace(send=...)`, so H3-H5 counted alerts that, on a box, raised AttributeError (AlertManager has
+      no `send`) and were swallowed. The fake now carries `_send`, the real method, and only that. H6 drives a held
+      close through the REAL AlertManager with only its Telegram sender faked: the page reaches the sender. H6b
+      every method self_close calls on the alert manager exists on the real class (AST). H7 the clean close pages
+      nothing (a control, green on both). Born red on self_close v5.0 at H3 H4 H4b H5 H6 H6b.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 A FAILED DRAIN HOLDS THE BOX, WHATEVER ELSE THE VERIFIER PRINTS.
 
@@ -60,7 +66,7 @@ def check(name: str, ok: bool, detail: str = "") -> None:
         PROBLEMS.append(name)
 
 
-def drive(verifier_out: str) -> dict:
+def drive(verifier_out: str, am=None) -> dict:
     """Run self_close.main() against a canned verifier output. Records only."""
     import subprocess
     from warehouse import self_close as sc
@@ -76,9 +82,9 @@ def drive(verifier_out: str) -> dict:
     # A stand-in MODULE, not a patched attribute: self_close imports the alert
     # manager lazily, and the real one needs the bot venv (pytz) - importing it
     # here would make this check red on ENVIRONMENT, not content (WA §36).
-    fake_am = types.SimpleNamespace(send=lambda msg: rec["alerts"].append(msg))
+    fake_am = types.SimpleNamespace(_send=lambda msg, *a, **k: rec["alerts"].append(msg))
     fake_mod = types.ModuleType("notifications.alert_manager")
-    fake_mod.get_alert_manager = lambda: fake_am
+    fake_mod.get_alert_manager = lambda: (am if am is not None else fake_am)
     saved = (subprocess.run, rp.main, sys.modules.get("notifications.alert_manager"))
     subprocess.run = fake_run
     rp.main = lambda argv=None: rec["purge"].append(list(argv or [])) or 0
@@ -122,6 +128,37 @@ def main() -> int:
     r = drive(drain(0, 1) + "\n  ⚠️ SHORTFALL VARIES (max 3) — that is NOT the counter-drift signature.")
     check("H5 clean drain, gap >= 3 -> HELD (unchanged)", held(r),
           f"rc={r['rc']} shutdown={r['shutdown']}")
+    # ── H6 / H6b / H7 — TG.2: the page reaches the REAL alert manager's sender ──
+    try:
+        from notifications.alert_manager import AlertManager
+        real = AlertManager.__new__(AlertManager)       # no constructor: no real TelegramSender
+        sent = []
+        real._tg = types.SimpleNamespace(send=lambda msg, *a, **k: sent.append(msg) or True)
+        real._enabled = True
+        r = drive(drain(1, 0), am=real)
+        check("H6 a held close pages through the REAL AlertManager to its sender",
+              r["rc"] == 1 and len(sent) == 1 and "self-close held" in sent[0],
+              f"rc={r['rc']} sent={sent}")
+        n0 = len(sent)
+        r = drive(drain(0, 0), am=real)
+        check("H7 a clean close pages nothing (control)", r["rc"] == 0 and len(sent) == n0,
+              f"sent {n0}->{len(sent)}")
+    except Exception as e:                                          # noqa: BLE001
+        check("H6 a held close pages through the REAL AlertManager to its sender", False,
+              f"{type(e).__name__}: {e}")
+    try:
+        import ast
+        from notifications.alert_manager import AlertManager
+        src = open(os.path.join(ROOT, "warehouse", "self_close.py"), encoding="utf-8").read()
+        called = sorted({n.func.attr for n in ast.walk(ast.parse(src))
+                         if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)
+                         and isinstance(n.func.value, ast.Name) and n.func.value.id == "am"})
+        missing = [m for m in called if not callable(getattr(AlertManager, m, None))]
+        check("H6b every method self_close calls on the alert manager exists on AlertManager",
+              bool(called) and not missing, f"called={called} missing={missing}")
+    except Exception as e:                                          # noqa: BLE001
+        check("H6b every method self_close calls on the alert manager exists on AlertManager", False,
+              f"{type(e).__name__}: {e}")
     print("GREEN" if not PROBLEMS else f"RED — {len(PROBLEMS)} failed: {', '.join(PROBLEMS)}")
     return 1 if PROBLEMS else 0
 

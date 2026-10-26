@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
-"""tests/check_claude_boot.py — v5.0
+"""tests/check_claude_boot.py — v5.1
+v5.1  2026-10-26  (PAGE.1) — the fake _send takes AlertManager._send's new code/ref keywords (each send_* now passes
+      its page code), so the captured texts are unchanged. Nothing else in this checker moved.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 AN AGENT SESSION IS RAISED AT BOOT, AND "UP" MEANS A LIVE CLAUDE PROCESS
 WHOSE FIRST TURN GOT A REAL REPLY.
@@ -434,7 +436,7 @@ def _alert(with_stamp: bool):
     mgr = am.AlertManager.__new__(am.AlertManager)
     mgr._tg, mgr._enabled = None, False
     sent = []
-    mgr._send = lambda msg: (sent.append(msg), True)[1]
+    mgr._send = lambda msg, *a, **k: (sent.append(msg), True)[1]
     am.public_ip = lambda: ("1.2.3.4", "")
     mgr.send_startup_alert(paper=True, instrument="QQQ", risk_usd=1050.0,
                            restart_type="fresh boot")

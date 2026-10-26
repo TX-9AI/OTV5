@@ -1,5 +1,12 @@
 """
-notifications/alert_manager.py  v5.1
+notifications/alert_manager.py  v5.2
+v5.2  2026-10-26  (PAGE.1) — THE BOT PAGES CONTROL WITH ONE SHORT LINE IN bot.log. _send(msg, code="MSG", ref="")
+      keeps everything it did (escape, Telegram, the ALERT line, the return value) and then, on a managed box, writes
+      `[page] <CODE> [ref]` through notifications/pager.py (logger notifications.pager). Each send_* passes its code
+      (UP DN ENT EXT SUM HCF BLD SEE RCU EXR SLC ADP ORF PHN RCV; ref = the trade id's first 8 chars where there is
+      one); every other `_send` caller in the tree is unchanged and pages MSG. PAGE_CODES is the fixed table; an
+      unknown code is written as MSG. The page never raises and never changes what _send returns.
+      Gate tests/check_alert_page.py P1-P9.
 v5.1  2026-10-25  (ALRT.1) — send_circuit_breaker_alert IS DELETED. A no-op that only logged ("not sent to Telegram"),
       kept "so existing callers don't break" — and it had ZERO callers in this tree and in day_trader_pro (measured
       2026-09-29 and again 2026-10-25); the catastrophic cap pages through risk/risk_manager.py's own _send. Dead code
@@ -170,6 +177,7 @@ import urllib.request
 from typing import Optional
 from utils.time_utils import fmt_et_short
 from config import INSTRUMENT
+from notifications.pager import PAGE_CODES, page as _page     # v5.2 (PAGE.1)
 
 logger = logging.getLogger(__name__)
 
@@ -224,8 +232,8 @@ class AlertManager:
             self._tg      = None
             self._enabled = False
 
-    def _send(self, msg: str) -> bool:
-        """True iff the message actually reached Telegram.
+    def _send(self, msg: str, code: str = "MSG", ref: str = "") -> bool:
+        """True iff Telegram ACCEPTED the message for delivery (TG.1: the sender queues and retries; a final failure is logged by the courier as DROPPED).
 
         v1.9: TelegramSender.send() has always returned a bool; this discarded
         it, so no caller could ever distinguish "sent" from "silently disabled".
@@ -245,6 +253,12 @@ class AlertManager:
                 logger.error(f"Telegram send failed: {e}")
                 sent = False
         logger.info(f"ALERT: {msg}")
+        # v5.2 (PAGE.1) — control's page, AFTER the send and the ALERT line. Managed boxes only; never raises, and
+        # `sent` is returned untouched whatever the page does.
+        try:
+            _page(code, ref)
+        except Exception:                                       # noqa: BLE001
+            pass
         return sent
 
     # ── 1. Bot started ──────────────────────────────────────────────────────
@@ -282,7 +296,8 @@ class AlertManager:
         self._send(
             f"\U0001F680 OptionsBot [{mode}] STARTED | "
             f"{instrument}{rt}{ipf}{agentf} | "
-            f"{fmt_et_short()}"
+            f"{fmt_et_short()}",
+            code="UP",
         )
 
     # ── 1b. Open position resumed after a restart ───────────────────────────
@@ -303,7 +318,8 @@ class AlertManager:
             f"{head} | {instrument} | "
             f"{position_desc} \u00d7{contracts} @ ${entry_premium:.2f} "
             f"(${total_cost:.2f} at risk) | {strategy}{rt} | now managing | "
-            f"{fmt_et_short()}"
+            f"{fmt_et_short()}",
+            code="RCV",
         )
 
     # ── 1c. Expired orphans auto-cleared on startup ─────────────────────────
@@ -319,7 +335,8 @@ class AlertManager:
         self._send(
             f"\U0001F9F9 OptionsBot cleared {n} expired orphan(s) | {instrument} | "
             f"{joined} | expiry had passed — auto-closed{rt} | starting flat | "
-            f"{fmt_et_short()}"
+            f"{fmt_et_short()}",
+            code="ORF",
         )
 
     # ── 1d. Hard-close (15:45) could not flatten a position ─────────────────
@@ -334,7 +351,8 @@ class AlertManager:
             f"\U0001F6A8 HARD CLOSE INCOMPLETE | {instrument} | "
             f"{len(trade_ids)} position(s) still OPEN past 15:45 — retrying to "
             f"16:00 | {ids} | MANUAL CHECK before the box is stopped | "
-            f"{fmt_et_short()}"
+            f"{fmt_et_short()}",
+            code="HCF", ref=str(trade_ids[0]) if trade_ids else "",
         )
 
     # ── 1e. Broker reconciliation (LIVE) ────────────────────────────────────
@@ -354,13 +372,15 @@ class AlertManager:
                 f"\U0001F6A8 ADOPTED LONE SHORT (anomaly) | {instrument} | "
                 f"{position_desc} \u00d7{contracts} @ ${entry_premium:.2f} | "
                 f"no defining long found — managing on its own merit{rt} | "
-                f"CHECK margin/broker | {fmt_et_short()}"
+                f"CHECK margin/broker | {fmt_et_short()}",
+                code="ADP",
             )
         else:
             self._send(
                 f"\U0001F91D OptionsBot ADOPTED POSITION ({side}) | {instrument} | "
                 f"{position_desc} \u00d7{contracts} @ ${entry_premium:.2f} | "
-                f"no DB plan — now managing{rt} | {fmt_et_short()}"
+                f"no DB plan — now managing{rt} | {fmt_et_short()}",
+                code="ADP",
             )
 
     def send_phantom_closed_alert(self, instrument: str, trade_ids: list):
@@ -373,7 +393,8 @@ class AlertManager:
                         for t in trade_ids) if trade_ids else "-"
         self._send(
             f"\U0001F9F9 Closed {len(trade_ids)} phantom(s) | {instrument} | "
-            f"{ids} | in DB but not at broker | {fmt_et_short()}"
+            f"{ids} | in DB but not at broker | {fmt_et_short()}",
+            code="PHN",
         )
 
     def send_exercise_footprint_alert(self, instrument: str, equity: list, notional: float = 0.0):
@@ -383,7 +404,8 @@ class AlertManager:
             f"\U0001F6A8 SHARES IN THE ACCOUNT | {instrument} | {desc}"
             + (f" | ~${notional:,.0f} notional" if notional else "")
             + " | an option was exercised or assigned - flatten before the next open | "
-            + f"{fmt_et_short()}"
+            + f"{fmt_et_short()}",
+            code="EXR",
         )
 
     def send_reconcile_unavailable_alert(self, instrument: str, reason: str = ""):
@@ -394,7 +416,8 @@ class AlertManager:
         self._send(
             f"\u26A0\uFE0F Broker reconcile unavailable{why} | {instrument} | "
             f"DB-only recovery, no positions closed | verify manually | "
-            f"{fmt_et_short()}"
+            f"{fmt_et_short()}",
+            code="RCU",
         )
 
     def send_blind_alert(self, instrument: str, snapshot: dict,
@@ -444,7 +467,7 @@ class AlertManager:
         else:
             msg += "no open positions | "
         msg += fmt_et_short()
-        return self._send(msg)
+        return self._send(msg, code="BLD")
 
     def send_sight_restored_alert(self, instrument: str, blind_for_s: float,
                                   cause: str = "", drill: bool = False) -> bool:
@@ -454,7 +477,8 @@ class AlertManager:
         pre = "\U0001F9EA DRILL — NOT REAL — " if drill else ""
         return self._send(
             f"\u2705 {pre}Sight restored{why} | {instrument} | "
-            f"was blind {blind_for_s:.0f}s | {fmt_et_short()}"
+            f"was blind {blind_for_s:.0f}s | {fmt_et_short()}",
+            code="SEE",
         )
 
     def send_short_leg_closed_alert(self, instrument: str,
@@ -465,7 +489,8 @@ class AlertManager:
         self._send(
             f"\U0001F6A8 SHORT LEG CLOSED BY BROKER | {instrument} | "
             f"{closed_desc} | short gone, now holding: {surviving} | "
-            f"protection removed — managing the long on its own | {fmt_et_short()}"
+            f"protection removed — managing the long on its own | {fmt_et_short()}",
+            code="SLC",
         )
 
     # ── 2. Bot stopped ──────────────────────────────────────────────────────
@@ -475,7 +500,8 @@ class AlertManager:
         self._send(
             f"\U0001F534 OptionsBot STOPPED | "
             f"{instrument}{reason_str} | "
-            f"{fmt_et_short()}"
+            f"{fmt_et_short()}",
+            code="DN",
         )
 
     # ── 3. Trade entered ─────────────────────────────────────────────────────
@@ -491,7 +517,8 @@ class AlertManager:
                 f"\u00d7{record.get('contracts',0)} "
                 f"debit=${record.get('net_debit',0):.2f} "
                 f"total=${record.get('total_cost',0):.0f} | "
-                f"{fmt_et_short()}"
+                f"{fmt_et_short()}",
+                code="ENT", ref=str(record.get("trade_id") or ""),
             )
         else:
             self._send(
@@ -500,7 +527,8 @@ class AlertManager:
                 f"\u00d7{record.get('contracts',0)} "
                 f"@ ${record.get('entry_premium',0):.2f} "
                 f"total=${record.get('total_cost',0):.0f} | "
-                f"{fmt_et_short()}"
+                f"{fmt_et_short()}",
+                code="ENT", ref=str(record.get("trade_id") or ""),
             )
 
     # ── 4. Trade closed — win/loss ───────────────────────────────────────────
@@ -513,7 +541,8 @@ class AlertManager:
         self._send(
             f"{icon} {INSTRUMENT} CLOSED {setup_type[:20]} | "
             f"pnl={sign}${pnl_usd:.2f} | "
-            f"{fmt_et_short()}"
+            f"{fmt_et_short()}",
+            code="EXT", ref=str(trade_id or ""),
         )
 
     # ── 5. End-of-day P&L summary (sent before shutdown sweep) ───────────────
@@ -574,7 +603,7 @@ class AlertManager:
             lines.append(f"_{note}_")
 
         lines.append(fmt_et_short())
-        self._send("\n".join(lines))
+        self._send("\n".join(lines), code="SUM")
 
 
 # ── 🔴 r67 (2026-08-25) — RESTORED. ITS ABSENCE CRASH-LOOPED THE ENTIRE FLEET.

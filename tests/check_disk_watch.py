@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
-"""tests/check_disk_watch.py — v5.0
+"""tests/check_disk_watch.py — v5.1
+v5.1  2026-10-26  (TG.1) — THE VERDICT COMES FROM THE SENDER'S CALLBACK. TelegramSender v5.1 queues, so send() -> True
+      is ACCEPTED, not delivered. D10 the DRILL returns at once, never calls send_sync, and writes "DRILL delivered=True"
+      only when the callback reports it (False on a drop); D11 a real alert the sender finally does NOT deliver re-arms,
+      so the next cycle pages again; D12 a late failure from an OLDER episode does not re-arm a newer one. Born red on
+      disk_watch v5.0 at D10 D11 D12 (it passes no on_result).
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.3  2026-09-06 — r290 / DEV.12. D9 pins that no message contains a character
 `parse_mode="HTML"` will choke on. The WAL marker was `<-- WAL`; Telegram
@@ -40,6 +45,34 @@ def check(name, ok, detail=""):
     print(f"  {'PASS' if ok else 'FAIL'}  {name}" + (f"  [{detail}]" if detail else ""))
     if not ok:
         FAILED.append(name)
+
+
+class _AsyncSender:
+    """TelegramSender v5.1's shape: send() accepts, the verdict comes later."""
+    def __init__(self):
+        self.sent, self.cbs, self.sync_calls = [], [], 0
+
+    def send(self, msg, on_result=None):
+        self.sent.append(msg)
+        self.cbs.append(on_result)
+        return True
+
+    def send_sync(self, msg, timeout=10):
+        self.sync_calls += 1
+        return True
+
+
+class _Cap:
+    def __init__(self, logger):
+        import logging
+        self.rows = []
+        h = logging.Handler()
+        h.emit = lambda rec: self.rows.append(rec.getMessage())
+        logger.addHandler(h)
+        logger.setLevel(logging.DEBUG)
+
+    def has(self, sub):
+        return any(sub in r for r in self.rows)
 
 
 class _Sender:
@@ -217,11 +250,54 @@ def main():
           s9.sent and "<" not in s9.sent[0],
           ("has <" if s9.sent and "<" in s9.sent[0] else "clean"))
 
+    # ══ 🔴 D10-D12 — TG.1: ACCEPTED IS NOT DELIVERED ═════════════════════
+    cap = _Cap(D.log)
+    with tempfile.TemporaryDirectory() as tmp:
+        flag = os.path.join(tmp, "DRILL_DISK")
+        D.DRILL_FLAG = flag
+        open(flag, "w").close()
+        a = _AsyncSender()
+        t0 = time.time()
+        got = D.check(sender=a, instrument="QQQ")
+        cb = a.cbs[0] if a.cbs else None
+        check("D10 the drill goes through send() with an on_result callback, never send_sync",
+              got and len(a.sent) == 1 and callable(cb) and a.sync_calls == 0,
+              f"got={got} sent={len(a.sent)} cb={callable(cb)} sync={a.sync_calls}")
+        check("D10b ...and no verdict line is written before the sender reports one",
+              not cap.has("DRILL delivered=True"))
+        if callable(cb):
+            cb(True, "delivered")
+        check("D10c ...the callback writes the line the menu reads: DRILL delivered=True",
+              cap.has("disk_watch: DRILL delivered=True"), f"{[r for r in cap.rows if 'DRILL' in r]}")
+    D._state.update(over=False, last_check=0.0)
+    _arm(D, 93.0)
+    a = _AsyncSender()
+    D.check(sender=a, instrument="QQQ")
+    _arm(D, 93.0)
+    D.check(sender=a, instrument="QQQ")
+    n_before = len(a.sent)
+    if a.cbs and callable(a.cbs[0]):
+        a.cbs[0](False, "dropped: deadline after 9 attempts")
+    _arm(D, 93.0)
+    D.check(sender=a, instrument="QQQ")
+    check("D11 a real alert the sender finally does NOT deliver re-arms: the next cycle pages again",
+          n_before == 1 and len(a.sent) == 2 and cap.has("NOT DELIVERED"),
+          f"sent before={n_before} after={len(a.sent)}")
+    # D12: episode 1's callback is a.cbs[0] (already fired); fire a stale failure for it AGAIN after
+    # episode 2 paged — it must not re-arm episode 2.
+    stale = a.cbs[0] if a.cbs else None
+    if callable(stale):
+        stale(False, "late")
+    _arm(D, 93.0)
+    D.check(sender=a, instrument="QQQ")
+    check("D12 a late failure from an OLDER episode does not re-arm the current one",
+          len(a.sent) == 2 and D._state["over"] is True, f"sent={len(a.sent)} over={D._state['over']}")
+
     print()
     if FAILED:
         print(f"RED — {len(FAILED)} failed: {', '.join(FAILED)}")
         return 1
-    print("GREEN — 20 checks")
+    print("GREEN — 26 checks")
     return 0
 
 

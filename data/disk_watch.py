@@ -1,4 +1,14 @@
-"""data/disk_watch.py — v5.0
+"""data/disk_watch.py — v5.2
+v5.2  2026-10-26  (TG.1) — THE VERDICT COMES FROM THE SENDER'S CALLBACK, AND THE LOOP NEVER WAITS FOR TELEGRAM.
+      notifications/telegram_sender v5.1 queues: send() -> True means ACCEPTED, not delivered. Both sends pass
+      on_result=, through _send_async (a sender whose send() takes no on_result is treated as synchronous: its bool is
+      the verdict). The DRILL logs "disk_watch: DRILL delivered=<bool>" (the line the dtp menu tells the operator to
+      read) when the verdict arrives; a real alert that is finally NOT delivered (dropped at the 15-min deadline, not
+      retryable, queue overflow, undelivered at exit) RE-ARMS its episode, as a failed send() already did. An episode
+      counter keeps a late verdict from re-arming a newer episode. Gate tests/check_disk_watch.py D10-D12.
+v5.1  2026-10-26  (PAGE.1) — THE BOT PAGES CONTROL. Both direct TelegramSender.send calls (the DRILL and the real alert),
+returned or raised, are followed by notifications.pager.page("MSG"): the `[page] MSG` line in bot.log that every
+AlertManager._send writes, on a managed box only; it never raises. Gate tests/check_alert_page.py P9.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 
 v1.3 (2026-09-06) — r290 / DEV.12. 🔴 THE WAL MARKER WAS `<-- WAL`, AND
@@ -76,12 +86,24 @@ fit and for a box to be stopped deliberately rather than die.
 from __future__ import annotations
 
 import html
+import inspect
 import logging
 import os
 import stat
 import time
 
 log = logging.getLogger(__name__)
+
+
+def _page() -> None:
+    """v5.1 (PAGE.1) — `[page] MSG` for control after a direct send. NEVER raises: the guard's own "never raises"
+    contract (check()) is not allowed to depend on the pager importing."""
+    try:
+        from notifications.pager import page
+        page("MSG")
+    except Exception:                                       # noqa: BLE001
+        pass
+
 
 DISK_PCT_ALERT = int(os.environ.get("OT_DISK_PCT", "92"))
 CHECK_EVERY_S = float(os.environ.get("OT_DISK_CHECK_S", "300"))
@@ -107,7 +129,7 @@ DRILL_FLAG = os.environ.get(
     os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                  "data", "DRILL_DISK"))
 
-_state = {"over": False, "last_check": 0.0}
+_state = {"over": False, "last_check": 0.0, "episode": 0}
 
 
 def _drill_requested() -> bool:
@@ -197,6 +219,24 @@ def largest_files(root: str = "/", top: int = TOP_N, budget_s: float = None):
     return best[:top]
 
 
+def _send_async(sender, msg: str, on_result) -> bool:
+    """-> True if the sender ACCEPTED the message. TG.1: a sender whose send()
+    takes on_result (TelegramSender v5.1) reports the delivery verdict later,
+    once; any other sender is synchronous, so its True is the verdict and is
+    reported at once. False is returned, never reported - the caller has it."""
+    try:
+        ps = inspect.signature(sender.send).parameters
+        takes = "on_result" in ps or any(p.kind == p.VAR_KEYWORD for p in ps.values())
+    except (TypeError, ValueError):
+        takes = False
+    if takes:
+        return bool(sender.send(msg, on_result=on_result))
+    ok = bool(sender.send(msg))
+    if ok:
+        on_result(True, "synchronous sender")
+    return ok
+
+
 def check(sender=None, instrument: str = "?") -> bool:
     """One cycle. Returns True if an alert was sent. NEVER raises.
 
@@ -212,11 +252,18 @@ def check(sender=None, instrument: str = "?") -> bool:
             log.error("disk_watch: DRILL not delivered — no sender")
             return False
         try:
-            ok = bool(sender.send(msg))
-            log.warning("disk_watch: DRILL delivered=%s", ok)
+            # TG.1 — NON-BLOCKING. The verdict line is written when the sender
+            # reports it, not by holding the loop for a POST.
+            def _drill_result(delivered, detail=""):
+                log.warning("disk_watch: DRILL delivered=%s (%s)", bool(delivered), detail)
+            ok = _send_async(sender, msg, _drill_result)
+            if not ok:
+                log.warning("disk_watch: DRILL delivered=%s (sender refused)", False)
+            _page()
             return ok
         except Exception as exc:                            # noqa: BLE001
             log.error("disk_watch: DRILL send failed (%s)", exc)
+            _page()
             return False
 
     now = time.time()
@@ -284,7 +331,22 @@ def check(sender=None, instrument: str = "?") -> bool:
         # episode as reported when the operator never heard it, and the next
         # cycle would stay silent — a disk alert that is silent because the
         # FIRST attempt failed is the worst of both designs.
-        ok = bool(sender.send(msg))
+        # TG.1 — ACCEPTED IS NOT DELIVERED. The sender queues; a message it
+        # finally fails to deliver comes back through the callback and re-arms
+        # THIS episode (the counter stops a late verdict touching a newer one).
+        _state["episode"] = _state.get("episode", 0) + 1
+        ep = _state["episode"]
+
+        def _alert_result(delivered, detail=""):
+            if delivered:
+                log.info("disk_watch: alert delivered (%s)", detail)
+                return
+            if _state.get("episode") == ep:
+                _state["over"] = False
+            log.error("disk_watch: NOT DELIVERED (%s) — re-armed; alert text:\n%s", detail, msg)
+
+        ok = _send_async(sender, msg, _alert_result)
+        _page()                                             # v5.1 (PAGE.1) — control's page; never raises
         if not ok:
             _state["over"] = False
             log.error("disk_watch: NOT DELIVERED (sender returned false — "
@@ -293,6 +355,7 @@ def check(sender=None, instrument: str = "?") -> bool:
     except Exception as exc:                                # noqa: BLE001
         _state["over"] = False
         log.error("disk_watch: send failed (%s); alert text:\n%s", exc, msg)
+        _page()
         return False
 
 

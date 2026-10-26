@@ -4,9 +4,9 @@
 Do not edit by hand: the generator runs inside the land command and
 the canary fails on drift (WORKING_AGREEMENT 33).
 
-507 Python modules across 12 local packages.
+510 Python modules across 12 local packages.
 
-**Reached by:** 134 imported · 26 declared entry points · 231 referenced from a script, unit or doc but never imported · **116 by nothing here**.
+**Reached by:** 135 imported · 26 declared entry points · 232 referenced from a script, unit or doc but never imported · **117 by nothing here**.
 
 ⚠️ The last group is a REVIEW LIST, not a delete list. A
 `land.spec CHECK` line ships inside a tarball and is never
@@ -42,7 +42,7 @@ execution.exit_engine); every such edge is listed below like any other.
 - `analysis/market_state.py` - the structural state assembly.
   **Carries the vocabulary, classifies nothing.**
 
-**Where the evidence lives:** `tests/` holds 308 standing
+**Where the evidence lives:** `tests/` holds 310 standing
 checks (`check_*.py`, all run by `tools/boot_sweep.py` at boot)
 plus the studies that produced every threshold in
 `docs/TRADES.md`. **A number in a strategy file should be
@@ -202,8 +202,8 @@ Change these with the most care; a break here reaches everything downstream.
 - **called by:** `analysis/gate_report.py`, `derived/anchors.py`, `derived/gamma_regime.py`, `derived/registry.py`, `derived/snapshot.py`, `execution/exit_engine.py`, `main.py`, `strategy/breakout_plan.py`, `strategy/liquidity_hunt.py`, `strategy/plan.py`, `strategy/sweep_plan.py`, `strategy/tcs_plan.py`, `tests/check_bfly_vwap_band.py`, `tests/check_breakout_rearm.py`, `tests/check_derived_layer.py`, `tests/check_engine_status.py`, `tests/check_foreign_symbol_board.py`, `tests/check_fork_closed_bars.py`, `tests/check_fork_invalidation.py`, `tests/check_handoff_entry_time.py`, `tests/check_indicator_votes.py`, `tests/check_level_defences.py`, `tests/check_level_engine_book.py`, `tests/check_level_flip.py`, `tests/check_level_source.py`, `tests/check_levels_in_play.py`, `tests/check_liquidity_hunt.py`, `tests/check_market_time.py`, `tests/check_plan_heartbeat.py`, `tests/check_plan_prepares.py`, `tests/check_plan_states.py`, `tests/check_rails_book.py`, `tests/check_runaway_plan.py`, `tests/check_store_paths.py`, `tests/check_surface_columns.py`, `tests/check_tcs_narrates.py`, `tests/check_tcs_plan.py`, `tests/check_zones.py`
 
 ### `data/disk_watch.py`
-- **calls:** (none)
-- **called by:** `main.py`, `tests/check_disk_watch.py`
+- **calls:** `notifications/pager.py`
+- **called by:** `main.py`, `tests/check_alert_page.py`, `tests/check_disk_watch.py`
 
 ### `data/gex_data.py`
 - **calls:** `data/options_chain.py`
@@ -386,12 +386,16 @@ Change these with the most care; a break here reaches everything downstream.
 - **called by:** (nothing — no importer and no mention in any script, unit or doc here)
 
 ### `notifications/alert_manager.py`
-- **calls:** `config.py`, `notifications/telegram_sender.py`, `utils/agent_status.py`, `utils/time_utils.py`
-- **called by:** `execution/buying_power.py`, `execution/entry_engine.py`, `execution/exit_engine.py`, `execution/order_guard.py`, `execution/position_manager.py`, `main.py`, `risk/risk_manager.py`, `strategy/condor_roll.py`, `tests/check_agent_watch.py`, `tests/check_alert_dead_method.py`, `tests/check_buying_power.py`, `tests/check_claude_boot.py`, `tests/check_startup_alert.py`, `tools/eod_summary.py`, `warehouse/self_close.py`
+- **calls:** `config.py`, `notifications/pager.py`, `notifications/telegram_sender.py`, `utils/agent_status.py`, `utils/time_utils.py`
+- **called by:** `execution/buying_power.py`, `execution/entry_engine.py`, `execution/exit_engine.py`, `execution/order_guard.py`, `execution/position_manager.py`, `main.py`, `risk/risk_manager.py`, `strategy/condor_roll.py`, `tests/check_agent_watch.py`, `tests/check_alert_dead_method.py`, `tests/check_alert_page.py`, `tests/check_buying_power.py`, `tests/check_claude_boot.py`, `tests/check_self_close_hold.py`, `tests/check_startup_alert.py`, `tools/eod_summary.py`, `warehouse/self_close.py`
+
+### `notifications/pager.py`
+- **calls:** (none)
+- **called by:** `data/disk_watch.py`, `notifications/alert_manager.py`, `tests/check_alert_page.py`
 
 ### `notifications/telegram_sender.py`
 - **calls:** `config.py`
-- **called by:** `main.py`, `notifications/alert_manager.py`
+- **called by:** `main.py`, `notifications/alert_manager.py`, `tests/check_telegram_queue.py`
 
 ### `query.py`
 - **calls:** `config.py`, `data/market_data.py`, `execution/position_manager.py`, `strategy/__init__.py`, `strategy/plan_state.py`, `strategy/structure.py`
@@ -588,6 +592,10 @@ Change these with the most care; a break here reaches everything downstream.
 ### `tests/check_alert_dead_method.py`
 - **calls:** `notifications/alert_manager.py`
 - **called by:** (not imported) — referenced in `docs/BACKLOG.md`
+
+### `tests/check_alert_page.py`
+- **calls:** `data/disk_watch.py`, `notifications/alert_manager.py`, `notifications/pager.py`
+- **called by:** (not imported) — referenced in `docs/ENV.md`
 
 ### `tests/check_anchors.py`
 - **calls:** `analysis/trade_readiness.py`, `derived/__init__.py`, `derived/anchors.py`, `strategy/__init__.py`, `strategy/plan.py`
@@ -1586,7 +1594,7 @@ Change these with the most care; a break here reaches everything downstream.
 - **called by:** (not imported) — referenced in `docs/BACKLOG.md`, `docs/ENV.md`
 
 ### `tests/check_self_close_hold.py`
-- **calls:** `warehouse/__init__.py`, `warehouse/retention_purge.py`, `warehouse/self_close.py`
+- **calls:** `notifications/alert_manager.py`, `warehouse/__init__.py`, `warehouse/retention_purge.py`, `warehouse/self_close.py`
 - **called by:** (not imported) — referenced in `docs/BACKLOG.md`, `docs/ENV.md`
 
 ### `tests/check_session_pin.py`
@@ -1720,6 +1728,10 @@ Change these with the most care; a break here reaches everything downstream.
 ### `tests/check_tcs_plan.py`
 - **calls:** `data/derived_store.py`, `execution/exit_engine.py`, `strategy/__init__.py`, `strategy/plan.py`, `strategy/tcs_plan.py`, `strategy/trend_credit_spread.py`
 - **called by:** `tests/check_tcs_fifty.py`
+
+### `tests/check_telegram_queue.py`
+- **calls:** `notifications/telegram_sender.py`
+- **called by:** (nothing — no importer and no mention in any script, unit or doc here)
 
 ### `tests/check_tent.py`
 - **calls:** `config.py`, `strategy/condor_roll.py`, `strategy/structure.py`
