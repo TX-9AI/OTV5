@@ -1,5 +1,11 @@
 """
-data/candle_feed.py  v5.1
+data/candle_feed.py  v5.2
+v5.2  2026-10-25  (LVL.20) — A HALF DAY'S RTH ENDS AT ITS BELL. _within_rth ended every intraday window at a FIXED
+      16:00 (1h 16:30), so on 2026-11-27 and 12-24 (13:00 close) the 13:00-16:00 bars would be written to the plain RTH
+      series and every RTH reader (opening range, session extremes, the level book) would read three after-hours hours
+      as the session. The window's end moves earlier by utils.market_calendar.close_shift_minutes (180 on a 13:00 day,
+      else 0); a calendar fault keeps the 16:00 window and never drops the write. Port of otv4 r494 (FEED.11), the
+      shared half OTV4TEST r300 left open. Gate tests/check_half_day_rth.py H1-H8.
 v5.1  2026-10-25  OTV5 r16 (PRIME.1) — A SYMBOL THIS STORE HAS NEVER HELD IS PRIMED FROM TASTYTRADE, DEEP; ANYTHING ELSE
       BACKFILLS AS BEFORE. The operator, 2026-10-25: prime "from tasty trade of whatever's obtainable", never from S3 ("if
       we haven't traded it recently last July's data ... isn't relevant"), "only priming missing data - there is no reason
@@ -441,7 +447,13 @@ def _within_rth(ts_ms: int, interval: str) -> bool:
         return False
     (sh, sm), (eh, em) = win
     minutes = et.hour * 60 + et.minute
-    return (sh * 60 + sm) <= minutes < (eh * 60 + em)
+    # LVL.20 (otv4 r494): the table is written against a 16:00 bell; a half day's ends earlier
+    try:
+        from utils import market_calendar as _mc
+        shift = _mc.close_shift_minutes(et.date())
+    except Exception:                    # noqa: BLE001 - a calendar fault keeps the 16:00 window, never drops the write
+        shift = 0
+    return (sh * 60 + sm) <= minutes < (eh * 60 + em) - shift
 
 
 # ── v4.20 FEED.10 — the 1m referee's spans, grace and helpers ───────────────────

@@ -4,9 +4,9 @@
 Do not edit by hand: the generator runs inside the land command and
 the canary fails on drift (WORKING_AGREEMENT 33).
 
-500 Python modules across 12 local packages.
+501 Python modules across 12 local packages.
 
-**Reached by:** 134 imported · 26 declared entry points · 220 referenced from a script, unit or doc but never imported · **120 by nothing here**.
+**Reached by:** 134 imported · 26 declared entry points · 220 referenced from a script, unit or doc but never imported · **121 by nothing here**.
 
 ⚠️ The last group is a REVIEW LIST, not a delete list. A
 `land.spec CHECK` line ships inside a tarball and is never
@@ -42,7 +42,7 @@ execution.exit_engine); every such edge is listed below like any other.
 - `analysis/market_state.py` - the structural state assembly.
   **Carries the vocabulary, classifies nothing.**
 
-**Where the evidence lives:** `tests/` holds 301 standing
+**Where the evidence lives:** `tests/` holds 302 standing
 checks (`check_*.py`, all run by `tools/boot_sweep.py` at boot)
 plus the studies that produced every threshold in
 `docs/TRADES.md`. **A number in a strategy file should be
@@ -65,7 +65,7 @@ Change these with the most care; a break here reaches everything downstream.
 | `execution/position_manager.py` | 33 | check_admission.py, check_admission_wired.py, check_atp_pin_floor.py, check_breakout.py |
 | `main.py` | 33 | check_admission_wired.py, check_adx_stamp.py, check_atm_iv_stored.py, check_atp_butterfly.py |
 | `data/tasty_client.py` | 29 | buying_power.py, candle_feed.py, check_account_lock.py, check_boot_order_sweep.py |
-| `data/candle_feed.py` | 27 | breakout_plan.py, candle_logger.py, check_audit_20260823.py, check_bar_referee.py |
+| `data/candle_feed.py` | 28 | breakout_plan.py, candle_logger.py, check_audit_20260823.py, check_bar_referee.py |
 
 ## Every module
 
@@ -183,11 +183,11 @@ Change these with the most care; a break here reaches everything downstream.
 
 ### `data/__init__.py`
 - **calls:** (none)
-- **called by:** `data/open_interest.py`, `main.py`, `tests/check_audit_20260823.py`, `tests/check_db_handles.py`, `tests/check_feed_always_on.py`, `tests/check_oi_shared_loop.py`, `tests/check_pin_bounded.py`, `tests/check_spxw_only.py`
+- **called by:** `data/open_interest.py`, `main.py`, `tests/check_audit_20260823.py`, `tests/check_db_handles.py`, `tests/check_feed_always_on.py`, `tests/check_half_day_rth.py`, `tests/check_oi_shared_loop.py`, `tests/check_pin_bounded.py`, `tests/check_spxw_only.py`
 
 ### `data/candle_feed.py`
 - **calls:** `config.py`, `data/tasty_client.py`, `utils/__init__.py`, `utils/market_calendar.py`
-- **called by:** `analysis/gap_measure.py`, `analysis/tape_at_level.py`, `data/candle_logger.py`, `data/market_data.py`, `derived/counterfactual.py`, `derived/levels.py`, `derived/surface.py`, `execution/fill_observers.py`, `main.py`, `strategy/breakout_plan.py`, `strategy/park_plan.py`, `tests/check_audit_20260823.py`, `tests/check_bar_referee.py`, `tests/check_brk_cash_index.py`, `tests/check_brk_strike_inside.py`, `tests/check_brk_zero_risk.py`, `tests/check_ext_polarity.py`, `tests/check_feed_always_on.py`, `tests/check_feed_log_noise.py`, `tests/check_foreign_symbol_board.py`, `tests/check_gap_measure.py`, `tests/check_prime_ramp.py`, `tests/check_rebuild_1m.py`, `tests/check_replay_overwrite.py`, `tests/check_seed_candles.py`, `tests/check_spxw_settle_orcs_live.py`, `tests/check_store_paths.py`
+- **called by:** `analysis/gap_measure.py`, `analysis/tape_at_level.py`, `data/candle_logger.py`, `data/market_data.py`, `derived/counterfactual.py`, `derived/levels.py`, `derived/surface.py`, `execution/fill_observers.py`, `main.py`, `strategy/breakout_plan.py`, `strategy/park_plan.py`, `tests/check_audit_20260823.py`, `tests/check_bar_referee.py`, `tests/check_brk_cash_index.py`, `tests/check_brk_strike_inside.py`, `tests/check_brk_zero_risk.py`, `tests/check_ext_polarity.py`, `tests/check_feed_always_on.py`, `tests/check_feed_log_noise.py`, `tests/check_foreign_symbol_board.py`, `tests/check_gap_measure.py`, `tests/check_half_day_rth.py`, `tests/check_prime_ramp.py`, `tests/check_rebuild_1m.py`, `tests/check_replay_overwrite.py`, `tests/check_seed_candles.py`, `tests/check_spxw_settle_orcs_live.py`, `tests/check_store_paths.py`
 
 ### `data/candle_logger.py`
 - **calls:** `config.py`, `data/candle_feed.py`
@@ -1032,6 +1032,10 @@ Change these with the most care; a break here reaches everything downstream.
 ### `tests/check_half_day.py`
 - **calls:** `analysis/volatility_measures.py`, `config.py`, `data/market_data.py`, `execution/limit_ladder.py`, `execution/position_manager.py`, `main.py`, `strategy/__init__.py`, `strategy/credit_vertical.py`, `tools/emergency_watchdog.py`, `utils/__init__.py`, `utils/market_calendar.py`, `utils/time_utils.py`
 - **called by:** (not imported) — referenced in `docs/BACKLOG.md`
+
+### `tests/check_half_day_rth.py`
+- **calls:** `data/__init__.py`, `data/candle_feed.py`, `utils/__init__.py`, `utils/market_calendar.py`
+- **called by:** (nothing — no importer and no mention in any script, unit or doc here)
 
 ### `tests/check_handoff_entry_time.py`
 - **calls:** `data/derived_store.py`, `execution/exit_engine.py`
@@ -1999,7 +2003,7 @@ Change these with the most care; a break here reaches everything downstream.
 
 ### `utils/__init__.py`
 - **calls:** (none)
-- **called by:** `data/candle_feed.py`, `derived/level_book.py`, `main.py`, `tests/check_claude_boot.py`, `tests/check_eod_schedule.py`, `tests/check_half_day.py`, `tests/check_holiday_aware.py`, `tests/check_instrument_unset.py`, `tests/check_level_tape.py`, `tests/check_low_price_symbols.py`, `tests/check_market_calendar.py`, `tests/check_rebuild_1m.py`, `tests/check_shutdown_cause.py`, `tests/check_store_paths.py`, `tests/check_time_parse.py`, `tools/prime_ramp.py`, `tools/rebuild_1m_from_last_trade.py`, `tools/seed_candles_from_warehouse.py`, `utils/time_utils.py`
+- **called by:** `data/candle_feed.py`, `derived/level_book.py`, `main.py`, `tests/check_claude_boot.py`, `tests/check_eod_schedule.py`, `tests/check_half_day.py`, `tests/check_half_day_rth.py`, `tests/check_holiday_aware.py`, `tests/check_instrument_unset.py`, `tests/check_level_tape.py`, `tests/check_low_price_symbols.py`, `tests/check_market_calendar.py`, `tests/check_rebuild_1m.py`, `tests/check_shutdown_cause.py`, `tests/check_store_paths.py`, `tests/check_time_parse.py`, `tools/prime_ramp.py`, `tools/rebuild_1m_from_last_trade.py`, `tools/seed_candles_from_warehouse.py`, `utils/time_utils.py`
 
 ### `utils/agent_status.py`
 - **calls:** (none)
@@ -2023,7 +2027,7 @@ Change these with the most care; a break here reaches everything downstream.
 
 ### `utils/market_calendar.py`
 - **calls:** (none)
-- **called by:** `data/candle_feed.py`, `derived/level_book.py`, `tests/check_half_day.py`, `tests/check_holiday_aware.py`, `tests/check_market_calendar.py`, `tools/emergency_watchdog.py`, `tools/open_scan.py`, `tools/prime_ramp.py`, `tools/rebuild_1m_from_last_trade.py`, `utils/time_utils.py`
+- **called by:** `data/candle_feed.py`, `derived/level_book.py`, `tests/check_half_day.py`, `tests/check_half_day_rth.py`, `tests/check_holiday_aware.py`, `tests/check_market_calendar.py`, `tools/emergency_watchdog.py`, `tools/open_scan.py`, `tools/prime_ramp.py`, `tools/rebuild_1m_from_last_trade.py`, `utils/time_utils.py`
 
 ### `utils/math_utils.py`
 - **calls:** (none)
