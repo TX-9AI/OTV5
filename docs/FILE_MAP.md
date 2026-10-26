@@ -6,7 +6,7 @@ the canary fails on drift (WORKING_AGREEMENT 33).
 
 495 Python modules across 12 local packages.
 
-**Reached by:** 134 imported · 26 declared entry points · 221 referenced from a script, unit or doc but never imported · **114 by nothing here**.
+**Reached by:** 134 imported · 26 declared entry points · 216 referenced from a script, unit or doc but never imported · **119 by nothing here**.
 
 ⚠️ The last group is a REVIEW LIST, not a delete list. A
 `land.spec CHECK` line ships inside a tarball and is never
@@ -599,7 +599,7 @@ Change these with the most care; a break here reaches everything downstream.
 
 ### `tests/check_atr_units.py`
 - **calls:** `analysis/volatility_engine.py`, `strategy/orb_strategy.py`, `strategy/runaway_continuation.py`, `strategy/sweep_credit_spread.py`
-- **called by:** (nothing — no importer and no mention in any script, unit or doc here)
+- **called by:** (not imported) — referenced in `docs/BACKLOG.md`
 
 ### `tests/check_attr_fidelity.py`
 - **calls:** `config.py`
@@ -619,7 +619,7 @@ Change these with the most care; a break here reaches everything downstream.
 
 ### `tests/check_bfly_vwap_band.py`
 - **calls:** `data/derived_store.py`, `data/market_data.py`, `derived/__init__.py`, `derived/anchors.py`, `derived/indicators.py`, `strategy/__init__.py`, `strategy/gex_pin_butterfly.py`, `strategy/plan.py`, `utils/time_utils.py`
-- **called by:** (not imported) — referenced in `docs/BACKLOG.md`, `docs/ENV.md`
+- **called by:** (not imported) — referenced in `docs/ENV.md`
 
 ### `tests/check_boot_brief.py`
 - **calls:** (none)
@@ -627,7 +627,7 @@ Change these with the most care; a break here reaches everything downstream.
 
 ### `tests/check_boot_order_sweep.py`
 - **calls:** `config.py`, `data/tasty_client.py`, `database/trade_logger.py`, `execution/__init__.py`, `execution/entry_engine.py`, `execution/exit_engine.py`, `execution/ladder_registry.py`, `execution/order_confirm.py`, `execution/order_guard.py`, `execution/resting_orders.py`, `strategy/condor_roll.py`, `utils/heartbeat.py`
-- **called by:** (not imported) — referenced in `docs/BACKLOG.md`, `docs/ENV.md`
+- **called by:** (not imported) — referenced in `docs/ENV.md`
 
 ### `tests/check_boot_sweep.py`
 - **calls:** (none)
@@ -707,11 +707,11 @@ Change these with the most care; a break here reaches everything downstream.
 
 ### `tests/check_buying_power.py`
 - **calls:** `config.py`, `data/tasty_client.py`, `execution/__init__.py`, `execution/buying_power.py`, `execution/entry_engine.py`, `execution/ladder_registry.py`, `execution/order_confirm.py`, `execution/order_guard.py`, `main.py`, `notifications/alert_manager.py`
-- **called by:** (not imported) — referenced in `docs/BACKLOG.md`
+- **called by:** (nothing — no importer and no mention in any script, unit or doc here)
 
 ### `tests/check_candle_closed.py`
 - **calls:** `warehouse/__init__.py`, `warehouse/s3_push.py`
-- **called by:** (not imported) — referenced in `docs/BACKLOG.md`
+- **called by:** (nothing — no importer and no mention in any script, unit or doc here)
 
 ### `tests/check_cap_counterfactual.py`
 - **calls:** `database/trade_logger.py`, `risk/risk_manager.py`
@@ -919,7 +919,7 @@ Change these with the most care; a break here reaches everything downstream.
 
 ### `tests/check_exit_partial_persist.py`
 - **calls:** `config.py`, `database/trade_logger.py`, `execution/exit_engine.py`
-- **called by:** (not imported) — referenced in `docs/BACKLOG.md`
+- **called by:** (nothing — no importer and no mention in any script, unit or doc here)
 
 ### `tests/check_exit_pricing.py`
 - **calls:** `execution/exit_engine.py`, `execution/position_manager.py`, `strategy/__init__.py`, `strategy/management.py`, `strategy/plan.py`
@@ -979,7 +979,7 @@ Change these with the most care; a break here reaches everything downstream.
 
 ### `tests/check_fly_mark_cap.py`
 - **calls:** `execution/__init__.py`, `execution/entry_engine.py`, `execution/entry_ladder.py`, `execution/ladder_registry.py`
-- **called by:** (not imported) — referenced in `docs/BACKLOG.md`
+- **called by:** (nothing — no importer and no mention in any script, unit or doc here)
 
 ### `tests/check_fly_quote_log.py`
 - **calls:** `strategy/__init__.py`, `strategy/atp_butterfly_plan.py`, `strategy/gex_pin_butterfly.py`
@@ -1135,7 +1135,7 @@ Change these with the most care; a break here reaches everything downstream.
 
 ### `tests/check_live_mark_fallback.py`
 - **calls:** `execution/position_manager.py`
-- **called by:** (not imported) — referenced in `docs/BACKLOG.md`
+- **called by:** (nothing — no importer and no mention in any script, unit or doc here)
 
 ### `tests/check_lone_stop.py`
 - **calls:** `config.py`
@@ -1171,7 +1171,7 @@ Change these with the most care; a break here reaches everything downstream.
 
 ### `tests/check_mark_rate_limit.py`
 - **calls:** `execution/position_manager.py`, `utils/heartbeat.py`
-- **called by:** (not imported) — referenced in `docs/BACKLOG.md`
+- **called by:** (nothing — no importer and no mention in any script, unit or doc here)
 
 ### `tests/check_market_calendar.py`
 - **calls:** `utils/__init__.py`, `utils/market_calendar.py`
@@ -1247,7 +1247,7 @@ Change these with the most care; a break here reaches everything downstream.
 
 ### `tests/check_oi_shared_loop.py`
 - **calls:** `data/__init__.py`, `data/open_interest.py`, `data/tasty_client.py`
-- **called by:** (not imported) — referenced in `docs/BACKLOG.md`
+- **called by:** (nothing — no importer and no mention in any script, unit or doc here)
 
 ### `tests/check_one_per_session.py`
 - **calls:** `database/trade_logger.py`
@@ -1307,7 +1307,7 @@ Change these with the most care; a break here reaches everything downstream.
 
 ### `tests/check_orb_sequence.py`
 - **calls:** `analysis/orb_engine.py`, `execution/__init__.py`, `execution/resting_orders.py`, `strategy/__init__.py`, `strategy/orb_strategy.py`, `strategy/plan.py`
-- **called by:** (not imported) — referenced in `docs/PLAN_SPEC.md`
+- **called by:** (not imported) — referenced in `docs/BACKLOG.md`, `docs/PLAN_SPEC.md`
 
 ### `tests/check_orb_window.py`
 - **calls:** `config.py`
@@ -1319,7 +1319,7 @@ Change these with the most care; a break here reaches everything downstream.
 
 ### `tests/check_order_guard.py`
 - **calls:** `config.py`, `data/tasty_client.py`, `execution/__init__.py`, `execution/entry_engine.py`, `execution/ladder_registry.py`, `execution/order_confirm.py`, `execution/order_guard.py`, `main.py`
-- **called by:** (not imported) — referenced in `docs/BACKLOG.md`
+- **called by:** (nothing — no importer and no mention in any script, unit or doc here)
 
 ### `tests/check_origin.py`
 - **calls:** (none)
@@ -1475,7 +1475,7 @@ Change these with the most care; a break here reaches everything downstream.
 
 ### `tests/check_reconcile_strict.py`
 - **calls:** `data/tasty_client.py`, `execution/broker_reconcile.py`
-- **called by:** (not imported) — referenced in `docs/BACKLOG.md`, `docs/ENV.md`
+- **called by:** (not imported) — referenced in `docs/ENV.md`
 
 ### `tests/check_recorder_keys.py`
 - **calls:** `analysis/gap_measure.py`, `derived/notes.py`, `main.py`
@@ -1535,7 +1535,7 @@ Change these with the most care; a break here reaches everything downstream.
 
 ### `tests/check_sdk_async.py`
 - **calls:** `data/tasty_client.py`, `execution/exit_engine.py`
-- **called by:** (not imported) — referenced in `docs/BACKLOG.md`
+- **called by:** (nothing — no importer and no mention in any script, unit or doc here)
 
 ### `tests/check_seed_candles.py`
 - **calls:** `data/candle_feed.py`, `utils/instrument.py`, `warehouse/retention_purge.py`
@@ -1551,7 +1551,7 @@ Change these with the most care; a break here reaches everything downstream.
 
 ### `tests/check_shell_parses.py`
 - **calls:** (none)
-- **called by:** (nothing — no importer and no mention in any script, unit or doc here)
+- **called by:** (not imported) — referenced in `docs/BACKLOG.md`
 
 ### `tests/check_shutdown_cause.py`
 - **calls:** `utils/__init__.py`, `utils/shutdown_cause.py`
@@ -1699,7 +1699,7 @@ Change these with the most care; a break here reaches everything downstream.
 
 ### `tests/check_trail_restart.py`
 - **calls:** `execution/exit_engine.py`
-- **called by:** (not imported) — referenced in `docs/BACKLOG.md`
+- **called by:** (nothing — no importer and no mention in any script, unit or doc here)
 
 ### `tests/check_trend_strength.py`
 - **calls:** `analysis/trend_strength.py`
@@ -1755,7 +1755,7 @@ Change these with the most care; a break here reaches everything downstream.
 
 ### `tests/eod_compare.py`
 - **calls:** `config.py`
-- **called by:** (nothing — no importer and no mention in any script, unit or doc here)
+- **called by:** (not imported) — referenced in `docs/BACKLOG.md`
 
 ### `tests/exit_record.py`
 - **calls:** (none)
@@ -1787,7 +1787,7 @@ Change these with the most care; a break here reaches everything downstream.
 
 ### `tests/gex_from_chains.py`
 - **calls:** (none)
-- **called by:** (nothing — no importer and no mention in any script, unit or doc here)
+- **called by:** (not imported) — referenced in `docs/BACKLOG.md`
 
 ### `tests/magnitude_estimator.py`
 - **calls:** (none)
@@ -1843,7 +1843,7 @@ Change these with the most care; a break here reaches everything downstream.
 
 ### `tests/tape_harness.py`
 - **calls:** (none)
-- **called by:** (nothing — no importer and no mention in any script, unit or doc here)
+- **called by:** (not imported) — referenced in `docs/BACKLOG.md`
 
 ### `tests/test_candle_routing.py`
 - **calls:** (none)
