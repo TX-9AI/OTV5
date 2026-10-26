@@ -1,5 +1,7 @@
 """
-execution/exit_engine.py  v5.1
+execution/exit_engine.py  v5.2
+v5.2  2026-10-26  OTV5 r36 (EOD.2) — FillResult.held: the paper EOD close HELD to the 15:55 cross says so (held=True), so
+      the position manager can tell an intended hold from a failed exit. The hold itself is unchanged.
 v5.1  2026-10-25  (DOC.31) — VOLT'S EXIT TEXT NAMES THE FRAME IT READ, AND _evaluate_volt'S DOCSTRING DESCRIBES THE STOP
       AND R IT USES. Both VOLT reasons said "1m close" while the close is frame.iloc[-2] of df_5m (the operator's
       2026-09-21 frame ruling): volt_structure_stop and volt_trail_stop now say "5m close". The docstring still described
@@ -922,6 +924,7 @@ class FillResult:
     order_id:    Optional[str]   = None       # broker order id (live); None in paper
     partial:     bool            = False      # live: partially filled, remainder working
     detail:      str             = ""         # human-readable status for logs/alerts
+    held:        bool            = False      # r36: an INTENDED hold (paper EOD close held to the 15:55 cross)
 
 
 @dataclass
@@ -3379,7 +3382,7 @@ class ExitEngine:
             # unchanged: their walk already ends at the mark, where paper fills them.
             if "hard_close" in (reason or "").lower():
                 if hard_close_order_mode(now_et()) != "market":
-                    return FillResult(confirmed=False,
+                    return FillResult(confirmed=False, held=True,
                                       detail="paper: EOD close held to the 15:55 cross (latest possible close)")
                 det = self._eod_determined(record)
                 if det is not None:

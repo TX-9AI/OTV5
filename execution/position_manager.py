@@ -1,5 +1,10 @@
 """
-execution/position_manager.py  v5.23
+execution/position_manager.py  v5.24
+v5.24 2026-10-26  OTV5 r36 (EOD.2) — AN INTENDED EOD HOLD IS ONE INFO LINE, NOT AN ERROR EVERY TICK. The paper EOD
+      close (EOD.1) is held from 15:45 to the 15:55 cross by design, and every manage tick logged it as
+      "Exit NOT confirmed ... will retry" at ERROR: AMD 2026-10-26 wrote 60 such lines for f819b0bd. A fill with
+      held=True now logs once per trade at INFO and is quiet after; the position stays open and closes at the cross
+      exactly as before. Every other unconfirmed exit keeps its ERROR line.
 v5.23  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ... (v5.0 was already spent by this file's own history, so the reset lands at v5.23.)
 v5.22 2026-10-20  OTV4TEST r310 (LIVE.1 F4.2, MIRROR OF otv4 r496 fcbf104, WA 38.2) — THE LIVE MARK FALLBACK
       SURVIVES THE BROKER'S RATE LIMIT. Measured by r308 tools/probe_live_mark.py (16:05 ET): QQQ priced
@@ -320,6 +325,7 @@ def _vertical_close_due() -> bool:
         return True
 
 logger = logging.getLogger(__name__)
+_HELD_LOGGED: set = set()      # r36 (EOD.2): trade ids whose intended EOD hold has been named once
 _WARNED_LEG_COUNT: set = set()   # SWALLOW T1: warn once on an unreadable count
 
 
@@ -1397,6 +1403,12 @@ class PositionManager:
                                              mark_price=current_premium)
 
         if not fill.confirmed:
+            if getattr(fill, "held", False):                 # r36 (EOD.2): intended, not a failure
+                if trade_id not in _HELD_LOGGED:
+                    _HELD_LOGGED.add(trade_id)
+                    logger.info(f"EOD close of {trade_id[:8]} held to the 15:55 cross (EOD.1) — intended; "
+                                f"it closes at the cross")
+                return False
             logger.error(f"Exit NOT confirmed for {trade_id[:8]} "
                          f"({fill.detail or 'no fill'}) — position stays OPEN, will retry")
             return False
