@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""tests/check_map_accuracy.py — v5.0
+"""tests/check_map_accuracy.py — v5.1
+v5.1  2026-10-25  OTV5 r23 — R1b EXEMPTS THE TABLES s3_push ITSELF WRITES. r20 (PUSH.1) gave s3_push its own SQLite
+      ledger (derived_ledger.db, table `seen`), which it creates, writes and reads; R1b read that true read of its own
+      state as over-attribution and went RED at r20-r22. The exemption is by WRITER (a table s3_push writes is its
+      own), not by name, so a store table it merely reads by mistake still fails.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.4  2026-10-13  OTV4TEST r279 — R1b admits circuit_breaker_events and R1c RE-POINTED (not dropped): the
       literal-arg read it pinned as unresolved is now resolved by gen_write_map v4.6's helper rule.
@@ -162,6 +166,7 @@ def main():
     # the failure mode a looser substitution actually produces.
     not_pushed = sorted(t for t in (set(creates) | set(writes)) - pushed
                         if "warehouse/s3_push.py" in reads.get(t, set())
+                        and "warehouse/s3_push.py" not in writes.get(t, {})   # r23: its own ledger (`seen`)
                         and t not in ("candles", "trades",
                                       # r279: push_table(..., "circuit_breaker_events", ...) is a
                                       # REAL read (s3_push.py, the circuit_breaker stage), now resolved

@@ -235,7 +235,7 @@ Unit `Environment=` lines set these; NEVER print a unit's Environment block to r
 | `OT_CLAUDE_SETTLE_S` | '12' | `tools/claude_boot.py:288` |
 | `OT_FIRST_BOOT_MARKER` | (none) | `tools/claude_boot.py:238` |
 | `OT_HEARTBEAT_FILE` | (required) | `tests/check_exit_deadline.py:151` |
-| `OT_MAP_STORE_ROOT` | (none) | `tests/check_map_accuracy.py:242` |
+| `OT_MAP_STORE_ROOT` | (none) | `tests/check_map_accuracy.py:247` |
 | `OT_RC_NAME` | (none) | `tools/claude_boot.py:190` |
 | `OT_REBUILD_TOOL` | (none) | `tests/check_rebuild_1m.py:97` |
 | `OT_RELAXED_ENTRY` | (none), (set here) | `tests/check_atp_butterfly.py:125`, `tests/check_atp_pin_floor.py:75`, `tests/check_bfly_vwap_band.py:150`, `tests/check_butterfly_legs.py:110`, `tests/check_criteria.py:44`, `tests/check_entry_windows.py:276`, `tests/check_entry_windows.py:283`, `tests/check_entry_windows.py:302`, `tests/check_plan_prepares.py:280`, `tests/check_plan_prepares.py:549`, `tests/check_plan_prepares.py:603`, `tests/check_plan_prepares.py:610`, `tests/check_plan_prepares.py:793`, `tests/check_plan_prepares.py:890`, `tests/check_plan_prepares.py:900`, `tests/check_plan_prepares.py:910`, `tests/check_plan_wiring.py:148`, `tests/check_plan_wiring.py:170`, `tests/check_plan_wiring.py:191`, `tests/check_runaway_plan.py:158`, `tests/check_runaway_plan.py:434`, `tests/check_signal_numeric_tail.py:127`, `tests/check_signal_numeric_tail.py:131` |
