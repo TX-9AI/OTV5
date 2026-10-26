@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
-"""tools/claude_boot.py — v5.0
+"""tools/claude_boot.py — v5.1
+v5.1  2026-10-25  (BOX.13) — THE ARCHIVE NAME CANNOT COLLIDE. purge_scratch named each entry <stamp>-<name> with a
+      per-SECOND stamp, so two purges of one name inside a second sent the second into shutil.move onto an existing
+      directory, which NESTS it inside the first (20260923-011250-sessOLD/sessOLD, seen in check_claude_purge's fixtures;
+      never observed in production). The name is now <stamp>-<pid>-<name>, suffixed .1, .2 ... while taken; nothing
+      else changes (still archive, never delete). Gate tests/check_claude_purge.py P14.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 RAISE AN AGENT SESSION AT BOOT, AND PROVE IT IS ACTUALLY RUNNING.
 
@@ -681,7 +686,14 @@ def purge_scratch(root: str | None = None) -> tuple[int, int | None]:
             continue                                  # the live session's own
         try:
             os.makedirs(arch, exist_ok=True)
-            shutil.move(p, os.path.join(arch, "%s-%s" % (stamp, name)))
+            # v5.1 (BOX.13): pid + a suffix while taken. A per-second stamp alone
+            # collided, and shutil.move onto an existing dir NESTS rather than fails.
+            dst = os.path.join(arch, "%s-%d-%s" % (stamp, os.getpid(), name))
+            i = 0
+            while os.path.lexists(dst):
+                i += 1
+                dst = os.path.join(arch, "%s-%d-%s.%d" % (stamp, os.getpid(), name, i))
+            shutil.move(p, dst)
             moved += 1
         except Exception:                                       # noqa: BLE001
             pass

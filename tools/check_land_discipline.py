@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
-# tools/check_land_discipline.py — v5.0
+# tools/check_land_discipline.py — v5.1
+# v5.1  2026-10-25  (LAND.1) — A RE-ISSUED REVISION'S ROW IS FOUND. §26 suffixes a re-issue of a shipped revision
+#   (r18_r2, r18_r3), and the ledger-row regex `r\d+[a-z]?` could not match one, so the land of a genuine re-issue died
+#   with "no row for r18_r2" and the payload loose in the tree (hit 2026-09-13). The row id now allows one optional
+#   `_r<N>` suffix: `r\d+[a-z]?(?:_r\d+)?`. Plain ids are matched exactly as before, and r18_r2 is not counted as r18.
+#   Gate: tests/check_land_reissue.py R1-R4, born red on ffe10bf at R1 and R2.
 # v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 # v1.2 (2026-09-08) — OTV4TEST r1. `--ledger <path>` selects the revision ledger
 #   whose row is verified. Defaults to docs/GENESIS.md, so every existing caller
@@ -259,7 +264,7 @@ def check(repo, rev, ref, problems, notes, hook=False, ledger="docs/GENESIS.md")
                             "--rev was given, so the row cannot be verified. "
                             "Pass --rev rNNN, or --hook if this is a hand commit")
     else:
-        rows = re.findall(r"^\|\s*\*\*(r\d+[a-z]?)\*\*\s*\|", open(gpath, encoding="utf-8").read(), re.M)
+        rows = re.findall(r"^\|\s*\*\*(r\d+[a-z]?(?:_r\d+)?)\*\*\s*\|", open(gpath, encoding="utf-8").read(), re.M)
         n = rows.count(rev)
         if n == 0:
             problems.append("GENESIS: no row for %s. WA §35 — a revision absent "

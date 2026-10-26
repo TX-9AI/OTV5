@@ -1,5 +1,10 @@
 """
-notifications/alert_manager.py  v5.0
+notifications/alert_manager.py  v5.1
+v5.1  2026-10-25  (ALRT.1) — send_circuit_breaker_alert IS DELETED. A no-op that only logged ("not sent to Telegram"),
+      kept "so existing callers don't break" — and it had ZERO callers in this tree and in day_trader_pro (measured
+      2026-09-29 and again 2026-10-25); the catastrophic cap pages through risk/risk_manager.py's own _send. Dead code
+      that read as a live alert. The module singleton and get_alert_manager() below it are untouched (r67's scar).
+      Gate tests/check_alert_dead_method.py D1-D3.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v4.5  2026-09-27  OTV4TEST r165 (EXP.1) — send_exercise_footprint_alert: shares in the account
       are what an exercise or assignment leaves. Pages ONCE per episode (a key per symbol and
@@ -571,14 +576,6 @@ class AlertManager:
         lines.append(fmt_et_short())
         self._send("\n".join(lines))
 
-    # ── Suppressed — kept as no-ops so existing callers don't break ─────────
-
-    def send_circuit_breaker_alert(self, session_losses: int, reason: str):
-        """Suppressed. Check status.py for circuit breaker state if curious."""
-        logger.info(
-            f"Circuit breaker fired (not sent to Telegram): "
-            f"{session_losses} losses — {reason}"
-        )
 
 # ── 🔴 r67 (2026-08-25) — RESTORED. ITS ABSENCE CRASH-LOOPED THE ENTIRE FLEET.
 # `get_alert_manager()` declares `global _alert_manager` and reads it before

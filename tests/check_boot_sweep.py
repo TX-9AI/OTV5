@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """
-tests/check_boot_sweep.py  v5.0
+tests/check_boot_sweep.py  v5.1
+v5.1  2026-10-25  (HYG.14) — B9 DRIVES THE REAL run_one ON A CHECKER THAT LEAKS A tempfile.mkdtemp() DIR and records its
+      path: the dir must sit under that run's bootsweep- scratch (not at /tmp's top level) and be GONE when run_one
+      returns. ~110 checkers leak such dirs into /tmp (tmpfs; 2,225 dirs / 814 MB on control). Born red on ffe10bf at B9.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.8  2026-10-25  OTV5 r4 (GATE.6) — B3/B3b REQUIRE THE HEARTBEAT FILE IN SCRATCH TOO: tools/emergency_watchdog.py reads its
       mtime as the bot's liveness and a checker driving position_manager's mark fallback touched the live one. Born red on boot_sweep v1.8.
@@ -276,6 +279,39 @@ check("B8 DRIVEN: under OT_SWEEP_NESTED=1 the tool refuses - exit 0, says NESTED
       f"rc={_rc8} secs={_dt8:.1f} result_dir={os.listdir(_rd8)} out={_out8.strip()[:160]!r}")
 check("B8b DRIVEN: run_one hands every checker OT_SWEEP_NESTED=1",
       _B3B_ENV.get("OT_SWEEP_NESTED") == "1", f"OT_SWEEP_NESTED={_B3B_ENV.get('OT_SWEEP_NESTED')!r}")
+
+# ── B9 (v5.1, HYG.14) — a checker's mkdtemp dies with its run ──────────────
+def _b9():
+    import importlib.util as _ilu
+    import shutil as _sh
+    _s = _ilu.spec_from_file_location("_bs9", _p)
+    _m = _ilu.module_from_spec(_s)
+    _s.loader.exec_module(_m)
+    tdir = tempfile.mkdtemp(prefix="chk_bs9_")
+    rec = os.path.join(tdir, "where.txt")
+    try:
+        with open(os.path.join(tdir, "check_leaks_tmp.py"), "w") as fh:
+            fh.write("import tempfile\nd = tempfile.mkdtemp(prefix='leak9_')\n"
+                     "open(%r, 'w').write(d)\n" % rec)
+        _m.TESTS, _m.PY = tdir, sys.executable
+        ok_run = _m.run_one("check_leaks_tmp.py")
+        where = open(rec).read().strip() if os.path.exists(rec) else ""
+        survived = bool(where) and os.path.exists(where)
+        if survived and where.startswith("/tmp/leak9_"):
+            _sh.rmtree(where, ignore_errors=True)        # a pristine tool leaks it; do not leave it
+        parent = os.path.basename(os.path.dirname(os.path.dirname(where))) if where else ""
+        return (ok_run and bool(where) and parent.startswith("bootsweep-") and not survived), \
+            f"ran={ok_run} path={where!r} survived={survived}"
+    finally:
+        _sh.rmtree(tdir, ignore_errors=True)
+
+
+try:
+    _ok9, _d9 = _b9()
+except Exception as _e9:                                        # noqa: BLE001
+    _ok9, _d9 = False, f"{type(_e9).__name__}: {_e9}"
+check("B9 DRIVEN: a checker's tempfile.mkdtemp() lands under its run's bootsweep- scratch and is GONE after run_one",
+      _ok9, _d9)
 
 print(f"\n{'PASS' if not FAIL else 'FAIL'}: {len(FAIL)} problem(s) {FAIL}")
 sys.exit(1 if FAIL else 0)

@@ -1,5 +1,14 @@
 #!/usr/bin/env python3
-"""tests/check_claude_purge.py — v5.0
+"""tests/check_claude_purge.py — v5.1
+v5.1  2026-10-25  (BOX.13) — P12-P14: THE MENU'S PURGE ARCHIVES, AND NO ARCHIVE NAME COLLIDES. P12 DRIVES devtools.sh
+      _claude_purge_scratch (sourced without its loop; `id` stubbed to a fixture uid so the root is a throwaway
+      /tmp/claude-<fixture>, HOME a throwaway dir) and requires the root emptied AND the payload's bytes in
+      ~/claude_scratch_archive. P13 runs that purge twice in one second (`date` stubbed to one stamp) on the same name:
+      two top-level archive entries, both payloads, nothing nested. P14 the same for claude_boot.purge_scratch (its
+      strftime pinned). Born red on ffe10bf at P12, P13 (rm -rf: nothing archived) and P14 (the second move nested).
+      Nothing touches the real scratch root (P7 still guards it). ALSO (HYG.14): the scratchtest_ fixtures are made with
+      dir="/tmp", because purge_scratch's pinned root rule accepts only /tmp/<name>scratchtest<name> and the sweep and
+      the lander now hand every checker a TMPDIR under their own scratch (P1/P2/P8 went red under it).
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.2  2026-10-04  OTV4TEST r235 — P11: a purge that archives NOTHING still says so ("scratch purge: archived 0"),
       driven through the real main() with the raiser, the recorder and the purge itself stubbed (nothing real
@@ -122,7 +131,7 @@ except Exception as exc:                                        # noqa: BLE001
 
 
 def _scratch():
-    d = tempfile.mkdtemp(prefix="scratchtest_")
+    d = tempfile.mkdtemp(prefix="scratchtest_", dir="/tmp")
     os.makedirs(os.path.join(d, "sessOLD"), exist_ok=True)
     os.makedirs(os.path.join(d, "sessLIVE"), exist_ok=True)
     return d
@@ -302,6 +311,107 @@ def _p11():
 
 
 guard("P11 a purge that archives NOTHING still says so (0 is printed, through the real main())", _p11)
+
+# ── P12-P14 (v5.1, BOX.13) — the menu's purge archives; no archive name collides ──
+import subprocess as _sp12
+
+
+def _devtools_purge(rounds):
+    """Drive devtools.sh _claude_purge_scratch `rounds` times in ONE shell, a fixture
+    session sessA (with a payload file) re-created before each round. Returns
+    (root_left, archive_entries, payloads_found, nested)."""
+    work = tempfile.mkdtemp(prefix="chk_dtpurge_")
+    fake_uid = "39%05d" % (os.getpid() % 100000)
+    root = "/tmp/claude-" + fake_uid
+    if os.path.exists(root):
+        shutil.rmtree(work, ignore_errors=True)
+        raise RuntimeError("fixture root %s already exists" % root)
+    try:
+        src = _src("devtools.sh").splitlines()
+        with open(os.path.join(work, "devtools.sh"), "w", encoding="utf-8") as fh:
+            fh.write("\n".join(l for l in src if l.strip() != "while true; do menu; done") + "\n")
+        stub = os.path.join(work, "stubbin")
+        os.makedirs(stub)
+        for name, body in (("id", '[ "$1" = "-u" ] && { echo %s; exit 0; }\nexec /usr/bin/id "$@"\n' % fake_uid),
+                           ("date", 'echo 20260101-000000\n')):
+            with open(os.path.join(stub, name), "w") as fh:
+                fh.write("#!/bin/bash\n" + body)
+            os.chmod(os.path.join(stub, name), 0o755)
+        home = os.path.join(work, "home")
+        os.makedirs(home)
+        one = ('mkdir -p "$R/sessA" && echo "payload-$k" > "$R/sessA/unlanded.txt"; '
+               '_claude_purge_scratch >/dev/null; ')
+        script = 'source "$0/devtools.sh" >/dev/null 2>&1; ' + "".join(
+            one.replace("$k", str(k)) for k in range(rounds))
+        env = {"PATH": stub + ":/usr/bin:/bin", "HOME": home, "TERM": "dumb", "R": root}
+        _sp12.run(["bash", "-c", script, work], env=env, capture_output=True, text=True, timeout=60)
+        left = os.listdir(root) if os.path.isdir(root) else []
+        arch = os.path.join(home, "claude_scratch_archive")
+        entries = sorted(os.listdir(arch)) if os.path.isdir(arch) else []
+        payloads, nested = set(), False
+        for e in entries:
+            for dp, dn, fn in os.walk(os.path.join(arch, e)):
+                if "sessA" in dn:
+                    nested = True
+                for f in fn:
+                    payloads.add(open(os.path.join(dp, f)).read().strip())
+        return left, entries, payloads, nested
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+        shutil.rmtree(work, ignore_errors=True)
+
+
+def _p12():
+    left, entries, payloads, _n = _devtools_purge(1)
+    _P12.update(left=left, entries=entries, payloads=sorted(payloads))
+    return left == [] and len(entries) == 1 and payloads == {"payload-0"}
+
+
+_P12 = {}
+guard("P12 DRIVEN: devtools' _claude_purge_scratch ARCHIVES (root emptied, the bytes in ~/claude_scratch_archive)",
+      _p12, lambda: str(_P12))
+
+
+def _p13():
+    left, entries, payloads, nested = _devtools_purge(2)
+    _P13.update(entries=entries, payloads=sorted(payloads), nested=nested)
+    return left == [] and len(entries) == 2 and payloads == {"payload-0", "payload-1"} and not nested
+
+
+_P13 = {}
+guard("P13 DRIVEN: two menu purges of one name in one second -> two archive entries, nothing nested or lost",
+      _p13, lambda: str(_P13))
+
+
+def _p14():
+    import time as _t14
+    home, old = _own_home()
+    real_strftime = _t14.strftime
+    roots = []
+    try:
+        os.environ.pop("CLAUDE_SCRATCH", None)
+        _t14.strftime = lambda *a, **k: "20260101-000000"
+        for k in range(2):
+            d = tempfile.mkdtemp(prefix="scratchtest_", dir="/tmp")
+            roots.append(d)
+            os.makedirs(os.path.join(d, "sessOLD"))
+            open(os.path.join(d, "sessOLD", "p.txt"), "w").write("payload-%d" % k)
+            cb.purge_scratch(d)
+        arch = os.path.join(home, "claude_scratch_archive")
+        entries = sorted(os.listdir(arch)) if os.path.isdir(arch) else []
+        nested = any(os.path.isdir(os.path.join(arch, e, "sessOLD")) for e in entries)
+        _P14.update(entries=entries, nested=nested)
+        return len(entries) == 2 and not nested
+    finally:
+        _t14.strftime = real_strftime
+        for d in roots:
+            shutil.rmtree(d, ignore_errors=True)
+        _restore_home(home, old)
+
+
+_P14 = {}
+guard("P14 claude_boot.purge_scratch twice in one second -> two archive entries, nothing nested",
+      _p14, lambda: str(_P14))
 
 guard("P7 CONTROL: the box's real scratch root is untouched",
       lambda: (sorted(os.listdir(REAL_ROOT)) if os.path.isdir(REAL_ROOT) else None)

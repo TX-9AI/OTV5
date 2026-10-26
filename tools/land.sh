@@ -1,5 +1,12 @@
 #!/usr/bin/env bash
-# tools/land.sh — v5.0
+# tools/land.sh — v5.1
+# v5.1  2026-10-25  (DEP.2 mirror, HYG.14) — POS/NEG GREP `-qF --`, AND EVERY CHECK GETS ITS OWN TMPDIR, REMOVED AFTER.
+#   DEP.2: `grep -qF "$p"` read a POS/NEG text beginning with `-` as a grep OPTION (exit 2): a NEG could never fire
+#   (fails OPEN) and a POS refused a correct delivery (fails CLOSED). Mirrors day_trader_pro's lander v1.14 (dtp r374 /
+#   LAND.10): `grep -qF -- "$p" ... 2>/dev/null`. HYG.14: ~110 checkers leave mkdtemp dirs in /tmp, which is tmpfs (RAM;
+#   control held 2,225 of them, 814 MB), and the per-CHECK $_scratch was itself never removed. Each CHECK now runs with
+#   TMPDIR=$_scratch/tmp and $_scratch is removed when it returns, pass or fail. Gate: tests/check_land_spec_parse.py
+#   L15-L17, born red on ffe10bf.
 # v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 # v1.24 (2026-10-25) — OTV5 r5 (DOC.35). docs/ENV.md IS REGENERATED AT LAND, LIKE THE TWO MAPS. r4 moved lines in
 #   tools/boot_sweep.py and tests/check_clean_deploy.py and shipped without regenerating docs/ENV.md, so check_env_doc E1
@@ -551,7 +558,7 @@ land_one() {
     val="$(_spec_val "$line" POS)"; p="${val#*|}"; f="${val%%|*}"
     if [ ! -f "$repo/$f" ]; then
       echo "  POS NAMES A FILE THAT DOES NOT EXIST: '$f'"; g=1
-    elif ! grep -qF "$p" "$repo/$f"; then
+    elif ! grep -qF -- "$p" "$repo/$f" 2>/dev/null; then
       echo "  MISSING in $f: $p"; g=1
     fi
   done < <(grep -E '^POS[[:space:]]' "$spec")
@@ -562,7 +569,7 @@ land_one() {
     if [ ! -f "$repo/$f" ]; then
       echo "  NEG NAMES A FILE THAT DOES NOT EXIST: '$f' — refusing rather than"
       echo "     passing an assertion that cannot have been evaluated."; g=1
-    elif grep -qF "$p" "$repo/$f"; then
+    elif grep -qF -- "$p" "$repo/$f" 2>/dev/null; then
       echo "  STILL PRESENT in $f: $p"; g=1
     fi
   done < <(grep -E '^NEG[[:space:]]' "$spec")
@@ -617,10 +624,16 @@ land_one() {
     # with the trades and derived stores pointed at scratch files, whatever it does.
     # r109 — AND THE RESTING-ORDER STORE, the third one r13 missed (v1.15 above).
     _scratch="$(mktemp -d /tmp/land-check.XXXXXX)"
-    if ( cd "$repo" && env -u LAND_ARCHIVE -u LAND_STAGE OT_TRADES_DB="$_scratch/trades.db" OT_DERIVED_DB="$_scratch/derived_store.db" OT_RESTING_DB="$_scratch/resting_orders.db" OT_SIGNAL_JOURNAL_DIR="$_scratch/signal_journal" OT_LOG_FILE="$_scratch/bot.log" OT_COUNTERFACTUAL_DIR="$_scratch/counterfactual" OT_FEED_DB="$_scratch/feed_store.db" OT_RESTING_STOP_STATE="$_scratch/resting_stop_state.json" OT_WAREHOUSE_STATE="$_scratch/warehouse_state" OT_PLAN_STATES_FILE="$_scratch/plan_states.json" OT_HEARTBEAT_FILE="$_scratch/BOT_HEARTBEAT" OT_INSTRUMENT="${OT_INSTRUMENT:-QQQ}" python3 "$chk" ) >/dev/null 2>&1; then
+    # v5.1 (HYG.14) — THE CHECK'S TEMP FILES DIE WITH IT. /tmp is tmpfs (RAM) and
+    # ~110 checkers mkdtemp without removing; TMPDIR points them into $_scratch,
+    # which is removed below on both branches.
+    mkdir -p "$_scratch/tmp"
+    if ( cd "$repo" && env -u LAND_ARCHIVE -u LAND_STAGE TMPDIR="$_scratch/tmp" OT_TRADES_DB="$_scratch/trades.db" OT_DERIVED_DB="$_scratch/derived_store.db" OT_RESTING_DB="$_scratch/resting_orders.db" OT_SIGNAL_JOURNAL_DIR="$_scratch/signal_journal" OT_LOG_FILE="$_scratch/bot.log" OT_COUNTERFACTUAL_DIR="$_scratch/counterfactual" OT_FEED_DB="$_scratch/feed_store.db" OT_RESTING_STOP_STATE="$_scratch/resting_stop_state.json" OT_WAREHOUSE_STATE="$_scratch/warehouse_state" OT_PLAN_STATES_FILE="$_scratch/plan_states.json" OT_HEARTBEAT_FILE="$_scratch/BOT_HEARTBEAT" OT_INSTRUMENT="${OT_INSTRUMENT:-QQQ}" python3 "$chk" ) >/dev/null 2>&1; then
+      rm -rf "${_scratch:?}"
       pb_clear
       echo "  check: $chk PASS"
     else
+      rm -rf "${_scratch:?}"
       pb_clear
       echo "  🔴 CHECK FAILED: $chk"
       echo "     re-run it yourself:  cd $repo && python3 $chk"

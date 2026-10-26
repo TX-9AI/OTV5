@@ -75,17 +75,17 @@ Unit `Environment=` lines set these; NEVER print a unit's Environment block to r
 | `OT_DISK_DRILL_FLAG` | <expr> | `data/disk_watch.py:105` |
 | `OT_DISK_PCT` | '92' | `data/disk_watch.py:86` |
 | `OT_DISK_WALK_S` | '20' | `data/disk_watch.py:92` |
-| `OT_DXFEED_SYMBOL` | '' | `data/candle_feed.py:521` |
-| `OT_DXFEED_VIX` | 'VIX' | `data/candle_feed.py:500` |
+| `OT_DXFEED_SYMBOL` | '' | `data/candle_feed.py:542` |
+| `OT_DXFEED_VIX` | 'VIX' | `data/candle_feed.py:521` |
 | `OT_ENTRY_LADDER` | '0' | `config.py:1158` |
 | `OT_ENTRY_LADDER_STEP_SEC` | '15' | `config.py:1157` |
 | `OT_ENTRY_OPEN_ET` | '9,35' | `config.py:1779` |
-| `OT_EXT_1H` | '1' | `data/candle_feed.py:509` |
-| `OT_EXT_INTERVAL` | '1h' | `data/candle_feed.py:507` |
-| `OT_FEED_DB` | '', (none), (required), (set here) | `data/candle_feed.py:314`, `data/candle_feed.py:2219`, `tests/check_breakout_new_extreme.py:97`, `tests/check_breakout_new_extreme.py:144`, `tests/check_breakout_new_extreme.py:176`, `tests/check_breakout_new_extreme.py:299`, `tests/check_breakout_new_extreme.py:300`, `tests/check_breakout_new_extreme.py:306`, `tests/check_breakout_new_extreme.py:454`, `tests/check_breakout_new_extreme.py:455`, `tests/check_breakout_new_extreme.py:461`, `tests/check_breakout_new_extreme.py:542`, `tests/check_breakout_new_extreme.py:543`, `tests/check_breakout_new_extreme.py:547`, `tests/check_breakout_rearm.py:110`, `tests/check_breakout_rearm.py:128`, `tests/check_breakout_rearm.py:289`, `tests/check_breakout_rearm.py:291`, `tests/check_breakout_rearm.py:298`, `tests/check_brk_cash_index.py:39`, `tests/check_brk_cash_index.py:77`, `tests/check_brk_delta_floor.py:34`, `tests/check_brk_noprog.py:37`, `tests/check_brk_stop5m.py:52`, `tests/check_brk_stop5m.py:89`, `tests/check_brk_stop5m.py:123`, `tests/check_brk_stop5m.py:215`, `tests/check_brk_stop5m.py:216`, `tests/check_brk_stop5m.py:224`, `tests/check_brk_strike_inside.py:36`, `tests/check_brk_strike_inside.py:67`, `tests/check_brk_zero_risk.py:38`, `tests/check_brk_zero_risk.py:94`, `tests/check_commitment.py:165`, `tests/check_floor_watch.py:69`, `tests/check_fork_closed_bars.py:40`, `tests/check_fork_invalidation.py:44`, `tests/check_hunt_stop5m.py:89`, `tests/check_hunt_stop5m.py:179`, `tests/check_hunt_stop5m.py:180`, `tests/check_hunt_stop5m.py:184`, `tests/check_hunt_stop5m.py:247`, `tests/check_level_engine_book.py:145`, `tests/check_level_engine_book.py:256`, `tests/check_level_engine_book.py:301`, `tests/check_level_engine_book.py:328`, `tests/check_level_flip.py:317`, `tests/check_level_flip.py:402`, `tests/check_park.py:69`, `tests/check_plan_observe.py:46`, `tests/check_rails_book.py:63`, `tests/check_sma50_mtf.py:134`, `tests/check_sma50_mtf.py:190`, `tests/check_sma50_record.py:61`, `tests/check_spxw_settle_orcs_live.py:39`, `tests/check_spxw_settle_orcs_live.py:43`, `tools/agent_verdict.py:46`, `tools/backfill_sma50.py:87`, `tools/feed_capabilities.py:58`, `tools/probe_aux_streams.py:61` |
+| `OT_EXT_1H` | '1' | `data/candle_feed.py:530` |
+| `OT_EXT_INTERVAL` | '1h' | `data/candle_feed.py:528` |
+| `OT_FEED_DB` | '', (none), (required), (set here) | `data/candle_feed.py:322`, `data/candle_feed.py:2241`, `tests/check_breakout_new_extreme.py:97`, `tests/check_breakout_new_extreme.py:144`, `tests/check_breakout_new_extreme.py:176`, `tests/check_breakout_new_extreme.py:299`, `tests/check_breakout_new_extreme.py:300`, `tests/check_breakout_new_extreme.py:306`, `tests/check_breakout_new_extreme.py:454`, `tests/check_breakout_new_extreme.py:455`, `tests/check_breakout_new_extreme.py:461`, `tests/check_breakout_new_extreme.py:542`, `tests/check_breakout_new_extreme.py:543`, `tests/check_breakout_new_extreme.py:547`, `tests/check_breakout_rearm.py:110`, `tests/check_breakout_rearm.py:128`, `tests/check_breakout_rearm.py:289`, `tests/check_breakout_rearm.py:291`, `tests/check_breakout_rearm.py:298`, `tests/check_brk_cash_index.py:39`, `tests/check_brk_cash_index.py:77`, `tests/check_brk_delta_floor.py:34`, `tests/check_brk_noprog.py:37`, `tests/check_brk_stop5m.py:52`, `tests/check_brk_stop5m.py:89`, `tests/check_brk_stop5m.py:123`, `tests/check_brk_stop5m.py:215`, `tests/check_brk_stop5m.py:216`, `tests/check_brk_stop5m.py:224`, `tests/check_brk_strike_inside.py:36`, `tests/check_brk_strike_inside.py:67`, `tests/check_brk_zero_risk.py:38`, `tests/check_brk_zero_risk.py:94`, `tests/check_commitment.py:165`, `tests/check_floor_watch.py:69`, `tests/check_fork_closed_bars.py:40`, `tests/check_fork_invalidation.py:44`, `tests/check_hunt_stop5m.py:89`, `tests/check_hunt_stop5m.py:179`, `tests/check_hunt_stop5m.py:180`, `tests/check_hunt_stop5m.py:184`, `tests/check_hunt_stop5m.py:247`, `tests/check_level_engine_book.py:145`, `tests/check_level_engine_book.py:256`, `tests/check_level_engine_book.py:301`, `tests/check_level_engine_book.py:328`, `tests/check_level_flip.py:317`, `tests/check_level_flip.py:402`, `tests/check_park.py:69`, `tests/check_plan_observe.py:46`, `tests/check_rails_book.py:63`, `tests/check_sma50_mtf.py:134`, `tests/check_sma50_mtf.py:190`, `tests/check_sma50_record.py:61`, `tests/check_spxw_settle_orcs_live.py:39`, `tests/check_spxw_settle_orcs_live.py:43`, `tools/agent_verdict.py:46`, `tools/backfill_sma50.py:87`, `tools/feed_capabilities.py:58`, `tools/probe_aux_streams.py:61` |
 | `OT_FEED_INTRADAY_SCOPE` | 'session' | `data/market_data.py:110` |
-| `OT_FEED_MAINT_FLAG` | <expr> | `data/candle_feed.py:377` |
-| `OT_FEED_MODE` | 'service', (none), (set here) | `data/candle_feed.py:400`, `tests/check_feed_always_on.py:67`, `tests/check_feed_always_on.py:68`, `tests/check_feed_always_on.py:89`, `tests/check_feed_always_on.py:94` |
+| `OT_FEED_MAINT_FLAG` | <expr> | `data/candle_feed.py:385` |
+| `OT_FEED_MODE` | 'service', (none), (set here) | `data/candle_feed.py:408`, `tests/check_feed_always_on.py:67`, `tests/check_feed_always_on.py:68`, `tests/check_feed_always_on.py:89`, `tests/check_feed_always_on.py:94` |
 | `OT_FEED_STALE_S` | '120' | `data/market_data.py:109` |
 | `OT_FILL_OBSERVE` | '', (set here) | `execution/fill_observers.py:70`, `tests/check_fill_observers.py:141`, `tests/check_fill_observers.py:200`, `tests/check_floor_watch.py:121`, `tests/check_floor_watch.py:150` |
 | `OT_FLOOR_WATCH` | '', (set here) | `execution/fill_observers.py:62`, `tests/check_fill_observers.py:141`, `tests/check_floor_watch.py:112`, `tests/check_floor_watch.py:121`, `tests/check_floor_watch.py:157` |
@@ -132,7 +132,7 @@ Unit `Environment=` lines set these; NEVER print a unit's Environment block to r
 | `OT_PLAN_R_FLOOR_STOP` | '1.00' | `strategy/criteria.py:180` |
 | `OT_PLAN_STATES_FILE` | '', (none), (set here) | `strategy/plan_state.py:217`, `strategy/plan_state.py:239`, `tests/check_foreign_symbol_board.py:146`, `tests/check_foreign_symbol_board.py:147`, `tests/check_foreign_symbol_board.py:155` |
 | `OT_POST_TARGET_TRAIL_LOCK_PCT` | '0.75' | `config.py:2505` |
-| `OT_PRUNE_KEEP_ROWS` | '0' | `data/candle_feed.py:329` |
+| `OT_PRUNE_KEEP_ROWS` | '0' | `data/candle_feed.py:337` |
 | `OT_PURGE_BATCH_ROWS` | '200000', (set here) | `tests/check_purge_batched.py:88`, `warehouse/retention_purge.py:713` |
 | `OT_PURGE_BUDGET_S` | '0' | `warehouse/retention_purge.py:714` |
 | `OT_PURGE_BUSY_MS` | '120000' | `warehouse/retention_purge.py:434` |
@@ -223,26 +223,26 @@ Unit `Environment=` lines set these; NEVER print a unit's Environment block to r
 | `OT_AGENT_WATCH_STATE` | (none), (required) | `tests/check_agent_watch.py:196`, `tests/check_breakout_exit_line.py:111`, `tools/agent_watch.py:72` |
 | `OT_BOT_LOG` | (none), (required) | `tests/check_breakout_exit_line.py:109`, `tools/agent_watch.py:69` |
 | `OT_BOT_SERVICE` | 'optionsbot' | `tools/emergency_watchdog.py:93` |
-| `OT_BRIEF` | (none) | `tools/claude_boot.py:222` |
-| `OT_CLAUDE_BOOT_LOG` | (none), (required), (set here) | `tests/check_claude_boot.py:139`, `tests/check_claude_boot.py:764`, `tools/claude_boot.py:383` |
-| `OT_CLAUDE_FIRST_TURN_S` | '20' | `tools/claude_boot.py:378` |
-| `OT_CLAUDE_PROJECTS_DIR` | (none), (set here) | `tests/check_claude_boot.py:137`, `tools/claude_boot.py:392` |
-| `OT_CLAUDE_RELAUNCH_AFTER_S` | '660' | `tools/claude_boot.py:380` |
-| `OT_CLAUDE_RETRY_MAX` | '2' | `tools/claude_boot.py:382` |
-| `OT_CLAUDE_RETRY_POLL_S` | '30' | `tools/claude_boot.py:379` |
-| `OT_CLAUDE_RETRY_WINDOW_S` | '1800' | `tools/claude_boot.py:381` |
-| `OT_CLAUDE_SCRATCH_ROOT` | (none) | `tools/claude_boot.py:877` |
-| `OT_CLAUDE_SETTLE_S` | '12' | `tools/claude_boot.py:288` |
-| `OT_FIRST_BOOT_MARKER` | (none) | `tools/claude_boot.py:238` |
+| `OT_BRIEF` | (none) | `tools/claude_boot.py:227` |
+| `OT_CLAUDE_BOOT_LOG` | (none), (required), (set here) | `tests/check_claude_boot.py:139`, `tests/check_claude_boot.py:764`, `tools/claude_boot.py:388` |
+| `OT_CLAUDE_FIRST_TURN_S` | '20' | `tools/claude_boot.py:383` |
+| `OT_CLAUDE_PROJECTS_DIR` | (none), (set here) | `tests/check_claude_boot.py:137`, `tools/claude_boot.py:397` |
+| `OT_CLAUDE_RELAUNCH_AFTER_S` | '660' | `tools/claude_boot.py:385` |
+| `OT_CLAUDE_RETRY_MAX` | '2' | `tools/claude_boot.py:387` |
+| `OT_CLAUDE_RETRY_POLL_S` | '30' | `tools/claude_boot.py:384` |
+| `OT_CLAUDE_RETRY_WINDOW_S` | '1800' | `tools/claude_boot.py:386` |
+| `OT_CLAUDE_SCRATCH_ROOT` | (none) | `tools/claude_boot.py:889` |
+| `OT_CLAUDE_SETTLE_S` | '12' | `tools/claude_boot.py:293` |
+| `OT_FIRST_BOOT_MARKER` | (none) | `tools/claude_boot.py:243` |
 | `OT_HEARTBEAT_FILE` | (required) | `tests/check_exit_deadline.py:151` |
 | `OT_MAP_STORE_ROOT` | (none) | `tests/check_map_accuracy.py:247` |
-| `OT_RC_NAME` | (none) | `tools/claude_boot.py:190` |
+| `OT_RC_NAME` | (none) | `tools/claude_boot.py:195` |
 | `OT_REBUILD_TOOL` | (none) | `tests/check_rebuild_1m.py:97` |
 | `OT_RELAXED_ENTRY` | (none), (set here) | `tests/check_atp_butterfly.py:125`, `tests/check_atp_pin_floor.py:75`, `tests/check_bfly_vwap_band.py:150`, `tests/check_butterfly_legs.py:110`, `tests/check_criteria.py:44`, `tests/check_entry_windows.py:276`, `tests/check_entry_windows.py:283`, `tests/check_entry_windows.py:302`, `tests/check_plan_prepares.py:280`, `tests/check_plan_prepares.py:549`, `tests/check_plan_prepares.py:603`, `tests/check_plan_prepares.py:610`, `tests/check_plan_prepares.py:793`, `tests/check_plan_prepares.py:890`, `tests/check_plan_prepares.py:900`, `tests/check_plan_prepares.py:910`, `tests/check_plan_wiring.py:148`, `tests/check_plan_wiring.py:170`, `tests/check_plan_wiring.py:191`, `tests/check_runaway_plan.py:158`, `tests/check_runaway_plan.py:434`, `tests/check_signal_numeric_tail.py:127`, `tests/check_signal_numeric_tail.py:131` |
 | `OT_RESTING_DB` | (required), (set here) | `tests/check_breakout_new_extreme.py:96`, `tests/check_brk_delta_floor.py:37`, `tests/check_brk_noprog.py:40`, `tests/check_brk_stop5m.py:51`, `tests/check_cap_page_once.py:62`, `tests/check_db_handles.py:54`, `tests/check_expiry_settlement.py:56`, `tests/check_loss_cap_rearm.py:69`, `tests/check_no_zero_price.py:50`, `tests/check_offer_fill_price.py:57`, `tests/check_park.py:72`, `tests/check_standing_offer.py:58` |
 | `OT_ROUTE_SELFTEST` | '0' | `tests/test_candle_routing.py:114` |
 | `OT_SEED_TOOL` | (none) | `tests/check_seed_candles.py:62` |
-| `OT_SWEEP_MIN_FREE_MB` | '180' | `tools/boot_sweep.py:124` |
-| `OT_SWEEP_NESTED` | (none) | `tools/boot_sweep.py:250` |
-| `OT_SWEEP_RESULT_DIR` | (none) | `tools/boot_sweep.py:113` |
-| `OT_SWEEP_TIMEOUT_S` | '300' | `tools/boot_sweep.py:125` |
+| `OT_SWEEP_MIN_FREE_MB` | '180' | `tools/boot_sweep.py:128` |
+| `OT_SWEEP_NESTED` | (none) | `tools/boot_sweep.py:256` |
+| `OT_SWEEP_RESULT_DIR` | (none) | `tools/boot_sweep.py:117` |
+| `OT_SWEEP_TIMEOUT_S` | '300' | `tools/boot_sweep.py:129` |

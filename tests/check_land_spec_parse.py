@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
-"""tests/check_land_spec_parse.py — v5.0
+"""tests/check_land_spec_parse.py — v5.1
+v5.1  2026-10-25  (DEP.2 mirror, HYG.14) — L15: a POS whose text begins with `-` (the payload carries "--dash-led line")
+      passes the content gate; L16: a NEG of that same present text FAILS as STILL PRESENT (grep read it as an option:
+      the POS refused and the NEG could never fire). L17: a CHECK that calls tempfile.mkdtemp() and records the path got
+      a dir OUTSIDE /tmp's top level (under the land's per-check TMPDIR), and that dir is GONE once the land returns.
+      Born red on ffe10bf at L15, L16 and L17.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 THE LAND REGENERATES docs/ENV.md, BEFORE THE CHECKS, AND FAILS CLOSED (DOC.35).
 
@@ -76,7 +81,8 @@ def _git(cwd, *a):
                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
-def _world(spec_body, payload=("payload.txt", "NEWCONTENT\n"), twin=False, checkers=False, envdoc=False):
+def _world(spec_body, payload=("payload.txt", "NEWCONTENT\n"), twin=False, checkers=False, envdoc=False,
+           tmpcheck=False):
     """A throwaway HOME containing one uniquely-marked repo, plus a stage."""
     root = tempfile.mkdtemp(prefix="landgate-")
     home = os.path.join(root, "home")
@@ -123,6 +129,14 @@ def _world(spec_body, payload=("payload.txt", "NEWCONTENT\n"), twin=False, check
         _git(repo, "add", "-A")
         _git(repo, "commit", "-qm", "env doc")
         _git(repo, "push", "-q", "origin", "HEAD:refs/heads/master")
+    if tmpcheck:                               # v5.1 / L17 — a CHECK that leaks a mkdtemp dir and says where
+        os.makedirs(os.path.join(repo, "tests"), exist_ok=True)
+        open(os.path.join(repo, "tests", "check_tmpleak.py"), "w").write(
+            "import os, tempfile\nd = tempfile.mkdtemp(prefix='leak_')\n"
+            "open(os.path.join(os.environ['HOME'], 'tmpleak.txt'), 'w').write(d)\n")
+        _git(repo, "add", "-A")
+        _git(repo, "commit", "-qm", "tmp leak check")
+        _git(repo, "push", "-q", "origin", "HEAD:refs/heads/master")
     sha = subprocess.run(["git", "rev-parse", "HEAD"], cwd=repo,
                          capture_output=True, text=True).stdout.strip()
     if twin:                                   # v1.1 — a SECOND checkout carrying the same markers
@@ -161,6 +175,13 @@ def _land(spec_body, **kw):
     head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=repo,
                           capture_output=True, text=True).stdout.strip()
     out = r.stdout + r.stderr
+    try:                                       # v5.1 — where a CHECK's mkdtemp went, and whether it survived
+        _leak = open(os.path.join(home, "tmpleak.txt")).read().strip()
+        _TMPLEAK.update(path=_leak, survived=os.path.exists(_leak))
+        if _leak.startswith("/tmp/leak_"):     # a pristine lander leaks it into /tmp: do not leave it there
+            shutil.rmtree(_leak, ignore_errors=True)
+    except OSError:
+        pass
     try:                                       # v1.2 — what the land left in the generated doc
         _ENVDOC["after"] = open(os.path.join(repo, "docs", "ENV.md")).read()
     except OSError:
@@ -170,6 +191,7 @@ def _land(spec_body, **kw):
 
 
 _ENVDOC = {}
+_TMPLEAK = {}
 
 
 BASE_SPEC = """REPO   .landgate_a .landgate_b
@@ -277,6 +299,26 @@ rc, out, sha, head = _land(BASE_SPEC.format(extra="POS    payload.txt|NEWCONTENT
 check("L14 a failing tests/gen_env_doc.py refuses the land by name, HEAD untouched",
       rc != 0 and "ENV DOC regeneration failed" in out and sha == head,
       f"rc={rc} {sha[:8]}->{head[:8]}")
+
+# ── L15/L16 (v5.1 / DEP.2 mirror) — a POS/NEG text that begins with "-" ────
+_dash = ("payload.txt", "--dash-led line\n")
+rc, out, sha, head = _land(BASE_SPEC.format(extra="POS    payload.txt|--dash-led line"), payload=_dash)
+check("L15 a POS whose text begins with '-' is matched as text (the content gate passes)",
+      "content gate: pass" in out and "MISSING" not in out,
+      "" if "content gate: pass" in out else "refused: " + " | ".join(l.strip() for l in out.splitlines() if "MISSING" in l)[:120])
+rc, out, sha, head = _land(BASE_SPEC.format(extra="NEG    payload.txt|--dash-led line"), payload=_dash)
+check("L16 a NEG whose text begins with '-' and IS present fails as STILL PRESENT, HEAD untouched",
+      rc != 0 and "STILL PRESENT" in out and sha == head,
+      f"rc={rc} still_present={'STILL PRESENT' in out} {sha[:8]}->{head[:8]}")
+
+# ── L17 (v5.1 / HYG.14) — a CHECK's mkdtemp lands under a per-check TMPDIR that is removed ──
+rc, out, sha, head = _land(BASE_SPEC.format(extra="CHECK  tests/check_tmpleak.py\nPOS    payload.txt|NEWCONTENT"),
+                           tmpcheck=True)
+_lp = _TMPLEAK.get("path", "")
+check("L17 a CHECK's tempfile.mkdtemp() is NOT at /tmp's top level and is GONE after the land",
+      "check: tests/check_tmpleak.py PASS" in out and bool(_lp)
+      and os.path.dirname(_lp) != "/tmp" and not _TMPLEAK.get("survived", True),
+      f"path={_lp!r} survived={_TMPLEAK.get('survived')}")
 
 print()
 if FAILED:

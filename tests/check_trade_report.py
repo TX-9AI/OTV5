@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 """
-tests/check_trade_report.py  v5.0
+tests/check_trade_report.py  v5.1
+v5.1  2026-10-25  (HYG.14) — THE FIXTURE DIR IS MADE AT /tmp's TOP LEVEL (dir="/tmp"), AS BEFORE. The report prints its
+      SOURCE path and T10 caps every line at 76 characters; the sweep and the lander now hand each checker a TMPDIR under
+      their own scratch (/tmp/bootsweep-XXXXXXXX/tmp, /tmp/land-check.XXXXXX/tmp), which lengthened that path to 83 and
+      turned T10 red on correct code. The dir is still removed at the end (unchanged).
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.6  2026-09-26  OTV4TEST r160 — T13 ADDED: EXIT REASON — DOLLARS is ranked by NET $ (operator: "For Exit
       Reason - Dollars, can you rank them by net?"), even where N would order it the other way.
@@ -63,7 +67,7 @@ for _sp in _glob.glob(os.path.join(ROOT, "venv", "lib", "python*", "site-package
         sys.path.insert(1, _sp)
 
 FAILED, RAN = [], []
-WORK = tempfile.mkdtemp(prefix="chk_trade_report-")
+WORK = tempfile.mkdtemp(prefix="chk_trade_report-", dir="/tmp")   # v5.1: T10 measures the SOURCE path width
 REPORT = os.path.join(ROOT, "tests", "trade_report.py")
 
 

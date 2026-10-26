@@ -1,5 +1,12 @@
 """
-data/candle_feed.py  v5.2
+data/candle_feed.py  v5.3
+v5.3  2026-10-25  (TTS.1) — EACH RECONNECT WAIT CARRIES BOUNDED RANDOM JITTER. The streamer's backoff was a fixed 3 -> 6 ->
+      ... -> 60 s ladder, so after one server-side DXLink break (2026-09-29 09:30:10 ET, six boxes at once) every box
+      retried on the same schedule against the shared TastyTrade session ceiling and the last one in stayed blind
+      (09:30-09:37, "number of user sessions has exceeded the configured limit"). reconnect_wait() scales each wait by a
+      uniform factor in [1 - RECONNECT_JITTER, 1 + RECONNECT_JITTER] (0.20), never below RECONNECT_MIN_S; the ladder
+      itself (doubling, the 60 s cap, the reset on a live socket) is unchanged, and the log names the actual wait.
+      Gate tests/check_reconnect_jitter.py J1-J5.
 v5.2  2026-10-25  (LVL.20) — A HALF DAY'S RTH ENDS AT ITS BELL. _within_rth ended every intraday window at a FIXED
       16:00 (1h 16:30), so on 2026-11-27 and 12-24 (13:00 close) the 13:00-16:00 bars would be written to the plain RTH
       series and every RTH reader (opening range, session extremes, the level book) would read three after-hours hours
@@ -273,6 +280,7 @@ import logging
 import os
 import json
 import math
+import random
 import sqlite3
 import traceback
 import threading
@@ -409,6 +417,19 @@ if FEED_MODE not in _VALID_FEED_MODES:
         FEED_MODE, ", ".join(_VALID_FEED_MODES))
     FEED_MODE = "service"
 RECONNECT_MAX_S   = 60
+# v5.2 (TTS.1) — JITTER ON EVERY RECONNECT WAIT. Fourteen boxes share one TastyTrade
+# login's session ceiling; a server-side break hits them together, and a fixed
+# ladder made them retry together (2026-09-29). +/-20% de-phases the retries.
+RECONNECT_JITTER  = 0.20
+
+
+def reconnect_wait(backoff: float, rng=None) -> float:
+    """The seconds to sleep for this rung of the ladder: backoff scaled by a uniform
+    factor in [1 - RECONNECT_JITTER, 1 + RECONNECT_JITTER], never below RECONNECT_MIN_S.
+    `rng` (anything with .uniform) is for the gate; production passes nothing."""
+    r = rng if rng is not None else random
+    return max(float(RECONNECT_MIN_S),
+               float(backoff) * r.uniform(1.0 - RECONNECT_JITTER, 1.0 + RECONNECT_JITTER))
 def _is_ext_route(store_symbol: str) -> bool:
     """v3.17 — is this store symbol the extended-hours stream?"""
     return str(store_symbol or "").endswith("_EXT")
@@ -2167,11 +2188,12 @@ class CandleFeed:
                 # — the real DXFeed cause is in .exceptions and was thrown away,
                 # leaving XOM in a 60s reconnect loop with NO diagnosable reason
                 # for two days (07-13 -> 07-15).
-                logger.error("feed stream error: %s — reconnecting in %ds",
-                             _explain_exc(e), backoff)
+                wait = reconnect_wait(backoff)       # v5.2 (TTS.1): jittered, never in lockstep
+                logger.error("feed stream error: %s — reconnecting in %.1fs",
+                             _explain_exc(e), wait)
                 logger.debug("feed stream traceback:\n%s",
                              "".join(traceback.format_exception(type(e), e, e.__traceback__)))
-                await asyncio.sleep(backoff)
+                await asyncio.sleep(wait)
                 backoff = min(backoff * 2, RECONNECT_MAX_S)
 
 

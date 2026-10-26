@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""tools/boot_sweep.py — v5.0
+"""tools/boot_sweep.py — v5.1
+v5.1  2026-10-25  (HYG.14) — EVERY CHECKER GETS ITS OWN TMPDIR, REMOVED WITH THE RUN. ~110 checkers call
+tempfile.mkdtemp() and never remove the dir; /tmp is tmpfs (RAM) and control held 2,225 such dirs, 814 MB. run_one sets
+TMPDIR to <its bootsweep- mkdtemp>/tmp, which the existing finally-rmtree removes, so whatever a checker leaks dies with its
+run. check_boot_sweep B9.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.9 (2026-10-25) — OTV5 r4 (GATE.6). OT_HEARTBEAT_FILE IS SCRATCH. position_manager's mark fallback touches
 utils.heartbeat (data/BOT_HEARTBEAT unless OT_HEARTBEAT_FILE), and tools/emergency_watchdog.py reads that file's mtime as the
@@ -161,6 +165,8 @@ def run_one(name: str) -> bool:
     env["OT_WAREHOUSE_STATE"] = os.path.join(d, "warehouse_state")    # r292: the push/purge ledgers
     env["OT_PLAN_STATES_FILE"] = os.path.join(d, "plan_states.json")  # r307 (GATE.4): the live bot's plan states
     env["OT_HEARTBEAT_FILE"] = os.path.join(d, "BOT_HEARTBEAT")        # OTV5 r4 (GATE.6): the watchdog's liveness signal
+    env["TMPDIR"] = os.path.join(d, "tmp")                           # v5.1 (HYG.14): a checker's mkdtemp dies with the run
+    os.makedirs(env["TMPDIR"], exist_ok=True)
     env["OT_SWEEP_NESTED"] = "1"     # r257: a checker that drives this tool gets a refusal, not a sweep
     env.setdefault("OT_INSTRUMENT", "QQQ")   # r146: an EXPLICIT fixture symbol; config no longer guesses one
     try:

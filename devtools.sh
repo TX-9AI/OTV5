@@ -1,6 +1,15 @@
 #!/usr/bin/env bash
 # ==========================================================================
-# devtools.sh  v5.1  — OTV5 box menu
+# devtools.sh  v5.2  — OTV5 box menu
+# v5.2  2026-10-25  (MENU.1, BOX.13) — THE OPEN SCAN LABEL FITS 54 COLUMNS, AND THE MENU'S SCRATCH PURGE ARCHIVES, NEVER
+#       DELETES. MENU.1: "OPEN SCAN  today's 09:35 + 09:45 reports" rendered 56 columns against the 54-column phone limit;
+#       it now reads "today's 09:35/09:45 reports" (54). Gate tests/check_devtools_menu_width.py W1-W3 checks every label.
+#       BOX.13: _claude_purge_scratch ran `rm -rf /tmp/claude-<uid>/*`, where OTV4TEST r70's ruling (and
+#       tools/claude_boot.py's purge_scratch) says ARCHIVE - an unlanded revision in a handed-off scratchpad is
+#       destroyed by a deleting purge. It now MOVES each entry to ~/claude_scratch_archive (ext4, so tmpfs is still freed)
+#       as <stamp>-<pid>-<name>, adding .1, .2 ... while that name exists, so two purges in one second never collide or
+#       nest; a move that fails leaves the entry in place. Retention stays claude_boot's 14-day sweep. Gate
+#       tests/check_claude_purge.py P12-P13.
 # v5.1  2026-10-25  OTV5 r13 (BOOT.12) — CLAUDE CODE gains AT BOOT: turns the boot raise ON (deploy/install_claude_boot.sh:
 #       install and enable optbot-claude-boot; nothing is raised now) or OFF (disable the unit; a session running now is
 #       left running). The operator, 2026-10-25: the Claude-at-boot switch belongs in devtools, not configure.sh, and
@@ -495,7 +504,7 @@ _claude_guard() {
 CLAUDE_ENV="env -u ANTHROPIC_API_KEY -u ANTHROPIC_AUTH_TOKEN -u CLAUDE_API_KEY -u ANTHROPIC_BASE_URL"
 
 _claude_purge_scratch() {
-  local uid root before after
+  local uid root before after arch stamp p name dst i moved=0
   uid="$(id -u)"; root="/tmp/claude-${uid}"
   # ⚠️ FAIL CLOSED ON THE PATH. A cleanup that globs wrong is worse than none;
   # the shape is pinned and an unexpected value REFUSES rather than deleting.
@@ -504,10 +513,25 @@ _claude_purge_scratch() {
     *) echo "  scratch purge REFUSED — unexpected path '$root'"; return 1 ;;
   esac
   if [ ! -d "$root" ]; then echo "  scratch: nothing to purge"; return 0; fi
+  # 🔴 v5.2 (BOX.13) — IT ARCHIVES; IT NEVER DELETES (OTV4TEST r70's ruling, the
+  # same rule as tools/claude_boot.py purge_scratch). The harness tells every
+  # agent to keep its working files in the scratchpad, so a handed-off session's
+  # scratchpad can hold an unlanded revision. Bytes move to ext4, which still
+  # frees the tmpfs; the archive's 14-day retention sweep is the only deleting
+  # path. <stamp>-<pid>-<name>, suffixed while taken: two purges inside one
+  # second must not collide or nest one inside the other.
+  arch="${HOME:?}/claude_scratch_archive"
+  mkdir -p "$arch" 2>/dev/null || { echo "  scratch purge REFUSED — cannot create $arch"; return 1; }
   before="$(df -Pm /tmp 2>/dev/null | awk 'NR==2{print $4}')"
-  rm -rf "${root:?}"/* 2>/dev/null
+  stamp="$(date +%Y%m%d-%H%M%S)"
+  for p in "${root:?}"/*; do
+    [ -e "$p" ] || continue
+    name="${p##*/}"; dst="$arch/${stamp}-$$-${name}"; i=0
+    while [ -e "$dst" ]; do i=$((i+1)); dst="$arch/${stamp}-$$-${name}.${i}"; done
+    mv -T -- "$p" "$dst" 2>/dev/null && moved=$((moved+1))
+  done
   after="$(df -Pm /tmp 2>/dev/null | awk 'NR==2{print $4}')"
-  echo "  scratch purged: /tmp free ${before}M -> ${after}M"
+  echo "  scratch archived: ${moved} entr(ies) -> $arch; /tmp free ${before}M -> ${after}M"
 }
 
 _claude_kill_all_tmux() {
@@ -736,7 +760,7 @@ MENU=(
   "ITEM|Exit replay          trail fit on real paths|r_exit_replay"
   "ITEM|Edge scan|r_edge_scan"
   "ITEM|STOP VS SPREAD       Saturday: stop vs bid-ask|r_stop_spread"
-  "ITEM|OPEN SCAN            today's 09:35 + 09:45 reports|r_open_scan"
+  "ITEM|OPEN SCAN            today's 09:35/09:45 reports|r_open_scan"
 
   "SECTION|CLAUDE CODE (these items END the menu)"
   "ITEM|HAND OFF -> fresh Claude thread, bootstrapped|mi_claude_handoff"

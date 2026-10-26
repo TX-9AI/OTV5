@@ -1,5 +1,11 @@
 """
-execution/exit_engine.py  v5.0
+execution/exit_engine.py  v5.1
+v5.1  2026-10-25  (DOC.31) — VOLT'S EXIT TEXT NAMES THE FRAME IT READ, AND _evaluate_volt'S DOCSTRING DESCRIBES THE STOP
+      AND R IT USES. Both VOLT reasons said "1m close" while the close is frame.iloc[-2] of df_5m (the operator's
+      2026-09-21 frame ruling): volt_structure_stop and volt_trail_stop now say "5m close". The docstring still described
+      `underlying_stop` as "the 3x5m structural extreme" and R as |entry-stop|; since OTV4TEST r72 the stop IS the entry
+      (a 5m close back through it) and R is the signal bar's range, read from underlying_target. Strings only; no logic
+      changes. Gate tests/check_volt_exit_text.py T1-T4.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v4.45 2026-10-24  OTV4TEST r317 (STALE.1, D1) — NO HANDOFF EXIT WHEN THE ENTRY TIME IS UNKNOWN. _entry_epoch() returns 0.0
       for a record whose entry_time is missing or unreadable, and _rejected_handoff() then asked latest_rejection(sym,
@@ -1378,13 +1384,16 @@ class ExitEngine:
                               so it is not a VOLT gate and is not up for
                               simplification.
           3. STRUCTURE STOP — last CLOSED 5m candle closes through
-                              `underlying_stop` (the 3x5m structural extreme
-                              the plan fixed). Close-based on iloc[-2] so an
-                              intrabar wick survives — the same rule and the
-                              same idiom as the ORB's structure stop.
+                              `underlying_stop`, which IS THE ENTRY (OTV4TEST
+                              r72: "a close beyond where the trade opened is a
+                              dead thesis"), and only a bar newer than the
+                              entry counts (r75). Close-based on iloc[-2] so an
+                              intrabar wick survives.
           4. R-TRAIL        — arms when the UNDERLYING has travelled
-                              VOLT_TRAIL_ARM_R x R in favour, R = |entry-stop|.
-                              Once armed the floor is
+                              VOLT_TRAIL_ARM_R x R in favour on 5m closes. R is
+                              the signal bar's range, read back as
+                              |underlying_target - entry| (|entry - stop| is 0
+                              by design). Once armed the floor is
                               `entry + L x (peak - entry)` on the UNDERLYING.
 
         🔑 WHY THE TRAIL IS ON DISTANCE AND NOT PREMIUM — the operator's spec
@@ -1520,7 +1529,7 @@ class ExitEngine:
             if through:
                 decision.should_exit = True
                 decision.exit_reason = (
-                    f"volt_structure_stop: 1m close {last_close:.2f} "
+                    f"volt_structure_stop: 5m close {last_close:.2f} "
                     f"{'below' if direction == 'long' else 'above'} "
                     f"structure {stop_px:.2f}")
                 logger.info("VOLT STOP: %s %s", trade_id[:8], decision.exit_reason)
@@ -1553,7 +1562,7 @@ class ExitEngine:
         if breached:
             decision.should_exit = True
             decision.exit_reason = (
-                f"volt_trail_stop: 1m close {last_close:.2f} through the "
+                f"volt_trail_stop: 5m close {last_close:.2f} through the "
                 f"{VOLT_TRAIL_LOCK_FRAC:.0%} lock {floor:.2f} "
                 f"(armed at {VOLT_TRAIL_ARM_R:g}R, peak {peak:.2f})")
             logger.info("VOLT TRAIL: %s %s", trade_id[:8], decision.exit_reason)
