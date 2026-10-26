@@ -1,5 +1,12 @@
 """
-warehouse/s3_push.py  v5.1
+warehouse/s3_push.py  v5.2
+v5.2  2026-10-25  (WH.20) — push_series FILES EACH OBJECT UNDER ITS ROWS' OWN ET DAY, NOT THE PUSH DAY (otv4 r417's
+      pusher half, ported). `day = datetime.now(ET)` filed every batch by PUSH time, and SERIES_BATCH_ROWS caps each run,
+      so a backlog that drained after midnight landed in the NEXT day's dt= (mainline 2026-09-23: 566 of 224,336 raw
+      series objects mis-filed). The batch is now split at every ET day boundary, one object per day; the high-water
+      mark advances only if every group landed (a retry rewrites the same content-hashed keys); an unreadable
+      ts_epoch is filed under the push day, never dropped. push_candles / push_derived unchanged (mainline left
+      them: candles derive dt= from the row; push_derived is C.9). Gate tests/check_push_row_day.py R1-R4.
 v5.1  2026-10-25  OTV5 r20 (PUSH.1) — THE DERIVED STAGE RUNS IN BOUNDED MEMORY. The 2026-10-25 fleet field test measured
       the 5-minute push peaking ~700 MB on 951 MB boxes (220-430 MB into swap, 70-95 s a run) and 1.5 GB on SOFI. The cause
       was push_derived's ledger: derived_ledger.json held a 64-hex hash for EVERY row ever pushed, never pruned (147 MB on
@@ -1280,7 +1287,7 @@ def push_series(s3, bucket, db_path, ledger, me, counters=None,
 
     Same contract as push_candles: rows are append-only and keyed on
     ts_epoch, so a per-table high-water mark pushes only what is new, as ONE
-    object per table per run (capped at SERIES_BATCH_ROWS; a backlog drains
+    object per table per ET day of its rows per run (WH.20; capped at SERIES_BATCH_ROWS; a backlog drains
     over successive runs, tail-safe like every other stage). Key carries the
     batch's top ts + content hash, so a retry overwrites the same object.
 
@@ -1294,7 +1301,7 @@ def push_series(s3, bucket, db_path, ledger, me, counters=None,
         con.row_factory = sqlite3.Row
     except Exception:
         return 0, 0
-    day = datetime.now(ZoneInfo("America/New_York")).date().isoformat()
+    push_day = datetime.now(ZoneInfo("America/New_York")).date().isoformat()
     for table in (SERIES_TABLES if tables is None else tables):
         lk = "%s|%s" % (ns, table)
         hwm = float(ledger.get(lk, 0) or 0)
@@ -1306,18 +1313,50 @@ def push_series(s3, bucket, db_path, ledger, me, counters=None,
             continue                     # table absent on an older schema
         if not rows:
             continue
-        top = float(rows[-1]["ts_epoch"])
-        sha = _sha256(_canon(rows))
-        body = _wrap(table, rows, me or "UNKNOWN", day,
-                     {"n_rows": len(rows), "ts_from": float(rows[0]["ts_epoch"]),
-                      "ts_to": top})
-        key = "%s/%s/dt=%s/sym=%s/%d-%s.json" % (
-            PREFIX, table, day, me or "UNKNOWN", int(top * 1000), sha[:16])
-        if put_and_verify(s3, bucket, key, body, counters):
-            ledger[lk] = top
-            pushed += 1
-        else:
-            failed += 1
+        # ── WH.20 (otv4 r417, ported) — `dt=` IS THE ROW'S OWN ET DAY, NEVER THE PUSH DAY ──
+        # The batch is SPLIT at every ET day boundary and each group is filed
+        # under ITS day, so one object can never hold two days and no object
+        # can land in a partition its rows do not belong to. The old
+        # `day = datetime.now(ET)` filed by PUSH time, so a backlog that drained
+        # after midnight (SERIES_BATCH_ROWS caps each run) landed in the NEXT
+        # day's partition - measured on mainline 2026-09-23: 566 of 224,336 raw
+        # series objects in the wrong dt=.
+        groups = {}
+        for r in rows:
+            try:
+                d = datetime.fromtimestamp(
+                    float(r["ts_epoch"]),
+                    ZoneInfo("America/New_York")).date().isoformat()
+            except (TypeError, ValueError, OSError, OverflowError):
+                # ⚠️ AN UNREADABLE ts_epoch IS FILED UNDER THE PUSH DAY AND NOT
+                # DROPPED: mis-filing one row beats losing it, and the old
+                # behaviour filed EVERY row this way.
+                d = push_day
+            groups.setdefault(d, []).append(r)
+        # ⚠️ THE HIGH-WATER MARK ADVANCES ONLY IF EVERY GROUP LANDED. A partial
+        # batch that advanced the mark would skip the unwritten rows FOREVER -
+        # the box deletes them on its retention clock and S3 is the only durable
+        # home. A re-push writes the same key (the name carries the content hash
+        # of the SAME rows), so the retry is idempotent.
+        all_ok = True
+        for d in sorted(groups):
+            grp = groups[d]
+            top_g = float(grp[-1]["ts_epoch"])
+            sha = _sha256(_canon(grp))
+            body = _wrap(table, grp, me or "UNKNOWN", d,
+                         {"n_rows": len(grp),
+                          "ts_from": float(grp[0]["ts_epoch"]),
+                          "ts_to": top_g})
+            key = "%s/%s/dt=%s/sym=%s/%d-%s.json" % (
+                PREFIX, table, d, me or "UNKNOWN", int(top_g * 1000), sha[:16])
+            if put_and_verify(s3, bucket, key, body, counters):
+                pushed += 1
+            else:
+                failed += 1
+                all_ok = False
+                break
+        if all_ok:
+            ledger[lk] = float(rows[-1]["ts_epoch"])
     con.close()
     return pushed, failed
 

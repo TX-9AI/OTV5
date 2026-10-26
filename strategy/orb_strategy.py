@@ -1,5 +1,8 @@
 """
-strategy/orb_strategy.py  v5.0
+strategy/orb_strategy.py  v5.1
+v5.1  2026-10-25  (MEAS.3) — FED_DAY_ORB_BOOST IS REMOVED. A Fed day adds a note to the signal and nothing to its
+      conviction: macro_data's detector is fixed (it always returned False), and the operator's 2026-10-03 ruling
+      is that trading must not change on Fed days. Record only. Gate tests/check_fed_day_record.py.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v4.9  2026-09-24  OTV4TEST r131 — COMMENT ONLY. The GATES note described the retest body as
       `body_low >= orb_high`; analysis/orb_engine.py v4.15 makes it STRICT (operator:
@@ -150,7 +153,7 @@ from analysis.market_state import MarketState
 from analysis.volatility_engine import VolatilityState
 from data.options_chain import OptionsChain
 from data.macro_data import MacroSnapshot
-from config import FED_DAY_ORB_BOOST, MAX_LOSS_PCT
+from config import MAX_LOSS_PCT
 
 logger = logging.getLogger(__name__)
 
@@ -338,9 +341,11 @@ class ORBStrategy(BaseOptionsStrategy):
         elif direction == "short" and _vwap == "BELOW":
             self._add_confluence(signal, "Below VWAP — bearish bias")
         if getattr(macro, "is_fed_day", False):
+            # MEAS.3 — a NOTE only. FED_DAY_ORB_BOOST is removed: the detector now
+            # works, and the operator's 2026-10-03 ruling is that trading must not
+            # change on Fed days.
             self._add_confluence(signal, f"Fed day: {getattr(macro, 'fed_event_name', '')} "
-                                         f"(+confluence)")
-            signal.conviction += FED_DAY_ORB_BOOST
+                                         f"(recorded)")
         signal.adx_at_signal = float(getattr(ms, "adx", 0.0) or 0.0) if ms is not None else 0.0
         signal.flat_angle_deg = float(getattr(ms, "flat_angle_deg", 0.0) or 0.0) if ms is not None else 0.0
 

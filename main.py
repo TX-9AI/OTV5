@@ -1,5 +1,12 @@
 """
-main.py  v5.0
+main.py  v5.2
+v5.2  2026-10-25  (MEAS.3) — COMMENT ONLY: the dispatch note no longer says a Fed day boosts ORB conviction
+      (FED_DAY_ORB_BOOST is removed; the Fed-day flag is record only).
+v5.1  2026-10-25  (MEAS.4) — adx_at_entry IS STAMPED FOR EVERY STRATEGY. _stamp_adx copies ctx["trend"].primary_adx
+      (the field assemble_market_state puts on MarketState.adx, which ORB's own stamp reads) onto the signal right
+      after _stamp_vix in both executors, when the strategy did not set it. Only ORB ever did, so adx_at_entry was 0.0
+      on every non-ORB row (27 of 34 at MEAS.4's count). Record only: nothing gates on the field. Gate
+      tests/check_adx_stamp.py.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v4.118  2026-10-24  CD.3 (DISC.4) - the gap measure is given the instrument and the day, so analysis/gap_measure reads
       the prior session's 1d bar and today's 09:30 bar from the feed store instead of hoping the 5m frame reaches
@@ -2909,6 +2916,22 @@ def _stamp_vix(signal, ctx) -> None:
         logger.debug("vix stamp skipped: %s", exc)
 
 
+def _stamp_adx(signal, ctx) -> None:
+    """MEAS.4 — ADX AT ENTRY, FOR EVERY STRATEGY, BESIDE THE VIX STAMP. Only ORBStrategy set
+    `signal.adx_at_signal` (from MarketState.adx), so every other row stored adx_at_entry = 0.0.
+    Same source ORB used: MarketState.adx IS ctx["trend"].primary_adx (assemble_market_state),
+    so this reads that one field. A value a strategy set itself is KEPT. No trend, or no ADX: it
+    stays 0.0. Record only - nothing gates on the field. Never raises."""
+    try:
+        if float(getattr(signal, "adx_at_signal", 0.0) or 0.0) > 0:
+            return
+        adx = float(getattr((ctx or {}).get("trend"), "primary_adx", 0.0) or 0.0)
+        if adx > 0:
+            signal.adx_at_signal = adx
+    except Exception as exc:                                    # noqa: BLE001
+        logger.debug("adx stamp skipped: %s", exc)
+
+
 def _execute_condor_leg(signal: "OptionsSignal", state: BotState,
                         ctx: dict = None):
     """
@@ -2925,6 +2948,7 @@ def _execute_condor_leg(signal: "OptionsSignal", state: BotState,
     single CREDIT limit order via TastyTrade (same SDK pattern as entry_engine).
     """
     _stamp_vix(signal, ctx)                                     # r200: before the record is built
+    _stamp_adx(signal, ctx)                                     # MEAS.4: beside it, same rule
     # r303 (PSTATE.1) — THE CREDIT DOOR. A LOG plan's vertical is recorded and never executed; r254's three
     # doors were all on the debit side, so nothing stopped a credit signal before this line. (After the VIX
     # stamp, which only annotates the signal: check_vix_stamp V4 pins it as the first statement.)
@@ -4881,9 +4905,9 @@ def attempt_new_entry(ctx: dict, ms: MarketState, state: BotState):
     # wanted in v4 it must be REBUILT from structure, not resurrected by
     # name. _sweep_setup stays 0.0 — honest about what is measured: nothing.
     # Priority 3: Butterfly (Ranging/Compression — requires GEX PINNING)
-    # Fed days allowed — bot reaction time is faster and more systematic
-    # than manual trading on a volatile FOMC day. Fed day boosts ORB
-    # conviction instead of blocking entries.
+    # Fed days allowed — and since MEAS.3 a Fed day changes NO trading: the
+    # flag is recorded only (the ORB conviction boost is removed; operator,
+    # 2026-10-03: "I don't want trading behavior to change on fed days").
     # ── PER-TICK CONDOR TRIGGER MAP (v4.3) ──────────────────────────────────
     # Recomputes fork tine positions (1h + 1d) from the live rails this tick.
     # Fork tines move with time+slope — a plan from 11am reads the 11am rail;
@@ -5557,6 +5581,7 @@ def _execute_entry_signal(signal, ctx, ms, state, _sigj=None, *, additive: bool 
     `additive=True` APPENDS the record (add_open_position); False replaces,
     exactly as attempt_new_entry always did."""
     _stamp_vix(signal, ctx)                                     # r200: before the record is built
+    _stamp_adx(signal, ctx)                                     # MEAS.4: beside it, same rule
     # r254 (OBS.1) - THE LAST LOCK, right after the VIX stamp (which only annotates the
     # signal) and before ANY sizing, risk or order work. `_fire` and the hunt's door already
     # refuse an observed signal; this one means no path added later can carry one further.

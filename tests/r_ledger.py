@@ -1,6 +1,12 @@
 #!/usr/bin/env python3
 """
-tests/r_ledger.py  v5.0
+tests/r_ledger.py  v5.1
+v5.1  2026-10-25  (MEAS.6 / RPT.26 / PRE.2) — is_credit(): the flag first, credit_received > 0 as the fallback
+(otv4 r344, ported). No OTV5 entry path writes is_short_position (only broker_reconcile, for an adopted short), so
+every credit trade's MFE and MAE were exchanged in position_dollars and in everything reading it (capture,
+giveback, the never-favourable split, stop_sweep). The credit is the row's own evidence, so the book re-reads
+without rewriting a row; debits are untouched. The r343 writer half is NOT ported (the flag has live readers here).
+Gate tests/check_credit_sign_history.py.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.6  2026-09-07  r301 - the --all-history help no longer HARDCODES the epoch
 date. A second copy of a constant in a help string is a copy that goes stale
@@ -144,11 +150,33 @@ def _f(v):
     return None if f != f else f
 
 
+def is_credit(row: dict) -> bool:
+    """Is this a SHORT/credit position? The flag first, the credit as fallback.
+
+    MEAS.6 / RPT.26 (otv4 r344, ported) — `is_short_position` is written only by
+    broker_reconcile for an ADOPTED short leg (live only); no OTV5 entry path
+    writes it, so every credit row carries the schema default 0 and reading the
+    flag alone exchanges its MFE and MAE (a credit position's favourable move is
+    the premium FALLING, so its MFE comes off `mae_premium`).
+    🔑 `credit_received > 0` IS THE ROW'S OWN EVIDENCE: it is written at every
+    credit entry site (main.py's credit vertical, condor_roll) and nowhere else,
+    so the history re-reads correctly WITHOUT REWRITING A ROW.
+    ⚠️ THE FLAG STILL WINS WHEN IT IS SET, and a debit (no credit) keeps the long
+    branch exactly as before.
+    """
+    if row.get("is_short_position"):
+        return True
+    return (_f(row.get("credit_received")) or 0.0) > 0.0
+
+
 def position_dollars(row: dict):
     """(mfe_usd, mae_usd) in POSITION dollars, sign-aware, or (None, None).
 
     Long/debit: favourable = premium UP  -> mfe$ = (mfe_prem − entry)·100·k
     Short/credit: favourable = premium DOWN -> mfe$ = (entry − mae_prem)·100·k
+
+    MEAS.6 — the side comes from `is_credit()`, which falls back to
+    `credit_received > 0` because no OTV5 entry path writes the flag.
     ⚠️ For a short position the tracker's *premium* mfe (highest premium seen)
     is the ADVERSE extreme — the mapping below is the whole reason this helper
     exists, and the selftest plants both directions.
@@ -159,7 +187,7 @@ def position_dollars(row: dict):
     k = _f(row.get("contracts")) or 1
     if entry is None:
         return None, None
-    short = bool(row.get("is_short_position"))
+    short = is_credit(row)
     lot = 100.0 * k
     if short:
         mfe = (entry - mae_p) * lot if mae_p is not None else None

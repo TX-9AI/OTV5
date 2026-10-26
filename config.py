@@ -1,5 +1,8 @@
 """
-config.py  v5.0
+config.py  v5.1
+v5.1  2026-10-25  (MEAS.3) — FED_DAY_ORB_BOOST IS REMOVED. macro_data's Fed-day detector is fixed (it had always
+      returned False), and its one behavioural reader was ORB's conviction boost; the operator's 2026-10-03 ruling is
+      that trading must not change on Fed days, so the flag is record only. Gate tests/check_fed_day_record.py.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v4.72  2026-10-24  CD.1 - RENT.2/RENT.3 SCRAPPED: OT_REENTRY_GATE / REENTRY_GATE_MODE / REENTRY_GATE_ENV_REFUSED removed (the operator,
       2026-10-24: "The 20 seconds is arbitrary ... It has zero value. Scrap it."). analysis/reentry.py is deleted.
@@ -1946,7 +1949,7 @@ def is_cash_index(symbol: str = None) -> bool:
     sym = (symbol if symbol is not None else INSTRUMENT) or ""
     return sym.strip().upper().lstrip("$") in CASH_INDEX_SYMBOLS
 
-FED_DAY_ORB_BOOST           = 0.20
+# MEAS.3 — FED_DAY_ORB_BOOST (0.20) REMOVED: a Fed day changes no trading (operator, 2026-10-03).
 
 # including UNKNOWN and SWEEP_REVERSAL. The ORB engine's break+retest is self-
 # validating (the classifier does not even test for it), so the label is not

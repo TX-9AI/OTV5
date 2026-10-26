@@ -1,5 +1,12 @@
 """
-data/macro_data.py  v5.0
+data/macro_data.py  v5.1
+v5.1  2026-10-25  (MEAS.3) — THE FED-DAY FLAG IS RECORDED CORRECTLY, AND ONLY RECORDED. _check_fed_day had always
+      returned False: the live calendar sends ISO dates ("2026-09-16T14:00:00-04:00") and the parser wanted
+      "Jun 21, 2026" (ValueError -> bare continue on every event), and it read `currency` where the payload says
+      `country`. _event_et_date reads ISO (to ET) with the old form as fallback; the currency is `country`, then
+      `currency`; unreadable dates are counted and logged. The Fed-day `butterfly_allowed = False` line is removed
+      (nothing reads it, and the operator's 2026-10-03 ruling is that trading must not change on Fed days).
+      Gate tests/check_fed_day_record.py.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v4.2  2026-08-25  r65 EXORCISM: every mention of the retired classification
       system removed - identifiers, comments, docstrings, schema. The word
@@ -124,9 +131,12 @@ class MacroManager:
         snap.is_fed_day     = is_fed
         snap.fed_event_name = event_name
         if is_fed:
-            # Fed days: disable butterfly (explosive moves expected)
-            snap.butterfly_allowed = False
-            logger.info(f"FED DAY detected: {event_name} — butterfly disabled")
+            # MEAS.3 — RECORD ONLY. This used to set butterfly_allowed = False; that
+            # line never ran (the detector always returned False) and nothing reads
+            # butterfly_allowed, but the operator's ruling (2026-10-03: "I don't want
+            # trading behavior to change on fed days") means a fixed detector must
+            # not arm it. The flag is stamped on the snapshot and the rows, no more.
+            logger.info(f"FED DAY detected: {event_name} (recorded only)")
 
         logger.info(
             f"Macro snapshot: VIX={snap.vix:.1f} [{snap.vix_band}] "
@@ -189,12 +199,11 @@ class MacroManager:
             today_str  = _t.strftime("%m/%d/%Y")  # FF format
             today_date = _t
 
+            unparsed = 0
             for event in events:
-                # FF dates: "Jun 21, 2026" format — normalize
-                ev_date_str = event.get("date", "")
-                try:
-                    ev_date = datetime.strptime(ev_date_str, "%b %d, %Y").date()
-                except ValueError:
+                ev_date = _event_et_date(event.get("date", ""))
+                if ev_date is None:
+                    unparsed += 1
                     continue
 
                 if ev_date != today_date:
@@ -202,7 +211,10 @@ class MacroManager:
 
                 title    = event.get("title", "")
                 impact   = event.get("impact", "")
-                currency = event.get("currency", "")
+                # MEAS.3 — the live payload names the currency `country`
+                # (measured 2026-09-16: keys title/country/date/impact/forecast/
+                # previous); `currency` is kept as a fallback only.
+                currency = event.get("country") or event.get("currency") or ""
 
                 if currency != "USD":
                     continue
@@ -214,10 +226,41 @@ class MacroManager:
                         logger.info(f"Fed event found: '{title}' impact={impact}")
                         return True, title
 
+            if unparsed:
+                # MEAS.3 — never silent again: an undated event used to vanish
+                # in a bare `continue` and the flag read False forever.
+                logger.warning(f"Fed calendar: {unparsed} of {len(events)} event "
+                               f"date(s) unreadable — skipped")
+
         except Exception as e:
             logger.warning(f"Fed calendar fetch failed: {e}")
 
         return False, ""
+
+
+def _event_et_date(ev_date_str) -> Optional[date]:
+    """MEAS.3 — the calendar event's ET date, or None when unreadable.
+
+    The live feed sends ISO 8601 with an offset ("2026-09-16T14:00:00-04:00");
+    the v3 parser expected "Jun 21, 2026" only, raised ValueError on every event
+    and so never reached the impact test. ISO is read first and converted to ET
+    (an offset-less ISO value is taken as ET); the old form is kept as a fallback.
+    """
+    s = str(ev_date_str or "").strip()
+    if not s:
+        return None
+    try:
+        dt = datetime.fromisoformat(s.replace("Z", "+00:00"))
+        if dt.tzinfo is not None:
+            from zoneinfo import ZoneInfo
+            dt = dt.astimezone(ZoneInfo("America/New_York"))
+        return dt.date()
+    except ValueError:
+        pass
+    try:
+        return datetime.strptime(s, "%b %d, %Y").date()
+    except ValueError:
+        return None
 
 
 # Singleton
