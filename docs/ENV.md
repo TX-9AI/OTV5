@@ -128,7 +128,7 @@ Unit `Environment=` lines set these; NEVER print a unit's Environment block to r
 | `OT_PF_REBUILD_MIN` | '5' | `analysis/pitchfork_observer.py:68` |
 | `OT_PIN_PROXIMITY_ACTIVE` | '1' | `config.py:1377` |
 | `OT_PIN_PROXIMITY_MIN_FRAC` | '0.32' | `config.py:1378` |
-| `OT_PLAN_BOARD_LOG_S` | '60' | `derived/plans.py:63` |
+| `OT_PLAN_BOARD_LOG_S` | '60', (set here) | `derived/plans.py:65`, `tests/check_manage_board_clears.py:25` |
 | `OT_PLAN_R_FLOOR` | '1.00' | `strategy/criteria.py:153` |
 | `OT_PLAN_R_FLOOR_STOP` | '1.00' | `strategy/criteria.py:180` |
 | `OT_PLAN_STATES_FILE` | '', (none), (set here) | `strategy/plan_state.py:217`, `strategy/plan_state.py:239`, `tests/check_foreign_symbol_board.py:146`, `tests/check_foreign_symbol_board.py:147`, `tests/check_foreign_symbol_board.py:155` |

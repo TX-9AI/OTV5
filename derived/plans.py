@@ -1,5 +1,7 @@
 """
-derived/plans.py  v5.0
+derived/plans.py  v5.1
+v5.1  2026-10-26  OTV5 r35 (PLN.3) — the board line is built after close_tick and BEFORE begin_tick, while
+      wrote_this_tick() still names the tick just closed, so board_line can leave off a /manage plan that did not run.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v2.1  2026-09-05  r269 — provenance citation redirected to `docs/PLAN_SPEC.md`
       §8, which holds the as-built record; the r146 handoff that requested the
@@ -83,11 +85,12 @@ class PlanEngine(DerivedEngine):
 
     def derive(self, ctx: dict) -> int:
         n = _plan.close_tick(self._store, self.symbol)
-        _plan.begin_tick(time.time())
         now = time.time()
+        line = ""
         if PLAN_BOARD_LOG_S and now - self._last_board_log >= PLAN_BOARD_LOG_S:
-            line = _plan.board_line()
-            if line:
-                logger.info("[plans] %s", line)
+            line = _plan.board_line()                  # r35: before begin_tick, so "this tick" is the one just closed
             self._last_board_log = now
+        _plan.begin_tick(time.time())
+        if line:
+            logger.info("[plans] %s", line)
         return n

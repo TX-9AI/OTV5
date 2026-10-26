@@ -1,5 +1,10 @@
 """
-strategy/plan.py  v5.1
+strategy/plan.py  v5.2
+v5.2  2026-10-26  OTV5 r35 (PLN.3) — A CLOSED POSITION'S MANAGE VERDICT LEAVES THE [plans] LINE. A /manage plan runs
+      only while its position is open (r303's condition gate), so after the close nothing reset its last verdict and
+      board_line printed it for the rest of the day: SPX's "RunawayContinuation/manage=CLOSE(... -34%)" stood from
+      09:40 to 16:02 on 2026-10-26, and 12 of 14 boxes showed the same. board_line now skips a /manage plan that did
+      not write this tick - the heartbeat's rule since r303. Display only: no trading path reads the line.
 v5.1  2026-10-25  (PLN.R) — THE ECONOMICS NO LONGER OVERWRITE A STRATEGY'S OWN R VERDICT. credit_spread, debit_directional and
       butterfly wrote check("r", premium R, None) and set self.r AFTER Breakout had judged its own price R
       (breakout_plan: t.check("r", prep.r, B.accepts(...))), so the stored row showed the premium R with no verdict
@@ -1325,6 +1330,8 @@ def board_line() -> str:
     for name, plan in sorted(REGISTRY.items()):
         if _dormant(name):
             continue
+        if name.endswith("/manage") and not plan.wrote_this_tick():
+            continue        # r35 (PLN.3): its position is closed (not run this tick) - off the line, as the heartbeat
         _, v, why = plan.last()
         if name in _MANAGEMENT_PLANS:
             # both condor plans check "legs" on every tick they run; a flat book reads INACTIVE
