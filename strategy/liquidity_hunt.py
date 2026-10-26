@@ -1,5 +1,11 @@
 """
-strategy/liquidity_hunt.py  v5.0
+strategy/liquidity_hunt.py  v5.1
+v5.1  2026-10-26  OTV5 r33 (HUNT.14) — THE RUNWAY IS SIGNED: A PRICE AT OR THROUGH ITS TARGET IS REFUSED. The runway was
+      abs(target - price_now), so a price already past the target still had positive runway and the guard "price is
+      already at/through the target" could never trip. GOOGL 2026-10-26 (33dc832f) entered short at 318.07, 0.20 through
+      its 318.27 target, and lost $148; AVGO showed the same at 09:38-09:39. Now _runway(bias, target, price) is
+      target - price for a long and price - target for a short; <= 0 is structural, as the guard always said. The
+      HUNT.9 re-arm record carries the same signed figure. Nothing else changes.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.14 2026-10-24  OTV4TEST r316 (HUNT.13) — NO HUNT ON A SIDE AFTER A LOSING BREAKOUT ON THAT SIDE, FOR THE REST OF THE DAY.
       The operator, 2026-10-24 13:45 ET: "on a losing breakout trade, forbid a liquidity hunt on the same side for the
@@ -129,6 +135,12 @@ CUTOFF_ET      = config.HUNT_CUTOFF_ET          # r148: no literal fallback
 MAX_LOSS_PCT   = float(config.HUNT_MAX_LOSS_PCT)
 
 FINISHED: set = set()          # (direction, boundary) this process has hunted - a CACHE since r297; trades.db decides
+
+
+def _runway(bias: str, target: float, price: float) -> float:
+    """r33 (HUNT.14) - the distance still to travel TO the target in the trade's direction: target - price for a
+    long, price - target for a short. Zero or negative means price is already at or through the target."""
+    return (target - price) if bias == "long" else (price - target)
 
 
 def release_break(direction: str, boundary) -> bool:
@@ -509,7 +521,7 @@ class LiquidityHunt:
                 _record_hunt_rearm({"symbol": _symbol_of(), "direction": bias, "entry": entry,
                                     "boundary": round(boundary, 2), "reasserted_bar": _rs, "signal_bar": bar_ts,
                                     "price_now": price_now, "target": target,
-                                    "runway": round(abs(target - price_now), 4)})
+                                    "runway": round(_runway(bias, target, price_now), 4)})
                 t.hold(f"{head}. {entry} re-armed by a return to the range — RECORDED ONLY (HUNT.9); "
                        f"this break already had its hunt — one per break")
                 return prep
@@ -540,7 +552,7 @@ class LiquidityHunt:
                            f"${_bf[1]:,.2f} today; no {bias} Hunt for the rest of the day (HUNT.13)")
                     return prep
         t.anchor(trigger=boundary, invalidation=boundary)
-        runway = abs(target - price_now)
+        runway = _runway(bias, target, price_now)        # r33 (HUNT.14): signed, so a price through its target refuses
         prep.runway = runway
         t.check("runway", round(runway, 4), runway > 0)
         if runway <= 0:
