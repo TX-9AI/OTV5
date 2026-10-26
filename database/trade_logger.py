@@ -1,5 +1,10 @@
 """
-database/trade_logger.py  v5.2
+database/trade_logger.py  v5.3
+v5.3  2026-10-26  OTV5 r34 (SCHEMA.2) — is_liquidity_hunt IS A COLUMN. EntryEngine.enter has always put it in the record
+      (r12), but the trades table had no column, so log_entry dropped it from every insert with a "[schema] ... DROPPED"
+      WARNING: all 54 trades of 2026-10-26 lost it (the readers fall back to strategy == "LiquidityHunt"). Now it is in
+      the CREATE and the migration adds, and the boot that ADDS it to an existing store backfills it exactly as the writer
+      would have (1 where strategy = 'LiquidityHunt', the only strategy that sets it), once, at the add.
 v5.2  2026-10-25  OTV5 r15 (SCHEMA.1) — NO COLUMN OR TABLE IS EVER DROPPED AT BOOT, AND tape_band IS A COLUMN. The boot migration
       dropped, by difference, every trades column and every table outside this tree's shape. The legacy fleet's trades
       (mainline otv4 r499) carry tape_band, which this tree lacked, so a repoint to OTV5 (NVDA, preflight 2026-10-25) would
@@ -373,6 +378,7 @@ class TradeLogger:
         direction         TEXT,
         option_side       TEXT,
         is_butterfly      INTEGER DEFAULT 0,
+        is_liquidity_hunt INTEGER DEFAULT 0,
         strike            REAL,
         lower_strike      REAL,
         center_strike     REAL,
@@ -625,10 +631,14 @@ class TradeLogger:
             # "order_id", "last_order_id"}. NULL otherwise. Written only by
             # exit_engine._exit_state_save.
             ("live_exit_state",        "TEXT"),
+            # OTV5 r34 (SCHEMA.2) — EntryEngine.enter's hunt flag; backfilled at the add, below.
+            ("is_liquidity_hunt",      "INTEGER DEFAULT 0"),
         ]
         for col, definition in _MIGRATION_ADDS:
             try:
                 conn.execute(f"ALTER TABLE trades ADD COLUMN {col} {definition}")
+                if col == "is_liquidity_hunt":      # r34: what the writer would have put there (liquidity_hunt sets it)
+                    conn.execute("UPDATE trades SET is_liquidity_hunt = 1 WHERE strategy = 'LiquidityHunt'")
                 conn.commit()
             except sqlite3.OperationalError:
                 pass  # Column already exists

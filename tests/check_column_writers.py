@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_column_writers.py  v5.0
+tests/check_column_writers.py  v5.1
+v5.1  2026-10-26  OTV5 r34 (SCHEMA.2) — is_liquidity_hunt joins WRITERS (EntryEngine.enter): it is now a column.
 v5.0  2026-10-25  OTV5 r15 (SCHEMA.1) — new. EVERY trades COLUMN HAS A NAMED, DEDICATED WRITER. The operator, 2026-10-25,
       approving r15 (no column is ever dropped at boot): "make sure every column has a dedicated writer". A read-only
       audit of r14 found a production write site for all 102 columns (tape_band's value is produced by
@@ -54,7 +55,7 @@ WRITERS = {
     "trade_id": _ENTER, "symbol": _RKW, "option_symbol": _RKW, "strategy": _RKW, "setup_type": _RKW,
     "direction": _RKW, "underlying_entry": _RKW, "underlying_stop": _RKW, "underlying_target": _RKW,
     "vix_at_entry": _RKW, "is_fed_day": _RKW,
-    "setup_grade": _ENTER, "setup_score": _ENTER, "option_side": _ENTER, "is_butterfly": _ENTER, "strike": _ENTER,
+    "setup_grade": _ENTER, "setup_score": _ENTER, "option_side": _ENTER, "is_butterfly": _ENTER, "is_liquidity_hunt": _ENTER, "strike": _ENTER,
     "expiry": _ENTER, "contracts": _ENTER, "entry_premium": _ENTER, "total_cost": _ENTER, "max_loss": _ENTER,
     "stop_premium": _ENTER, "trail_activation": _ENTER, "target_premium": _ENTER, "adx_at_entry": _ENTER,
     "flat_angle_deg": _ENTER, "swept_level_name": _ENTER, "level_strength": _ENTER, "order_id": _ENTER,

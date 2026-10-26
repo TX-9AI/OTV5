@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """
-tests/check_schema_keeps.py  v5.0
+tests/check_schema_keeps.py  v5.1
+v5.1  2026-10-26  OTV5 r34 (SCHEMA.2) — K5-K6: is_liquidity_hunt. EntryEngine.enter wrote it into every record and
+      log_entry dropped it for want of a column (all 54 trades of 2026-10-26). BORN RED on 98eded7 at K5 and K6.
 v5.0  2026-10-25  OTV5 r15 (SCHEMA.1) — new. A REPOINTED BOX KEEPS EVERY COLUMN, TABLE AND VALUE IT HAD.
       trade_logger's boot migration dropped, by difference, every trades column and table outside this tree's shape,
       and this tree lacked mainline r499's tape_band: NVDA's repoint preflight (2026-10-25) found its first OTV5 start
@@ -14,6 +16,10 @@ DRIVEN through the real TradeLogger on scratch stores (OT_TRADES_DB is never the
   K2  every legacy column is in this tree's shape (the CREATE + the migration adds), so a repoint never lacks one.
   K3  tape_band: a fresh store has the column, and log_entry persists a record's tape_band.
   K4  a second boot on the K1 store changes nothing (idempotent).
+  K5  is_liquidity_hunt: a fresh store has the column, log_entry persists a hunt record's flag as 1, and no
+      "[schema] ... DROPPED" warning names it.
+  K6  a store WITHOUT the column (2026-10-26's shape) gains it at boot, backfilled from the strategy: the LiquidityHunt
+      row reads 1, the Breakout row 0; a second boot leaves both alone.
 """
 import os
 import sqlite3
@@ -215,6 +221,62 @@ except Exception as exc:                                        # noqa: BLE001
     tb = "%s: %s" % (type(exc).__name__, exc)
 check("K3 tape_band is a column on a fresh store and log_entry persists it",
       "tape_band" in fresh and tb == (0.25,), "fresh_has=%s stored=%s" % ("tape_band" in fresh, tb))
+
+# ── K5 / K6 (r34, SCHEMA.2) ─────────────────────────────────────────────────
+import logging
+class _Cap(logging.Handler):
+    def __init__(self): super().__init__(); self.msgs = []
+    def emit(self, r): self.msgs.append(r.getMessage())
+_cap = _Cap(); logging.getLogger().addHandler(_cap); logging.getLogger().setLevel(logging.DEBUG)
+db5 = os.path.join(_tmp, "hunt.db")
+lg5 = tl.TradeLogger(db5)
+c = sqlite3.connect(db5)
+fresh5 = [r[1] for r in c.execute("PRAGMA table_info(trades)")]
+c.close()
+try:
+    lg5.log_entry(tl.make_record(trade_id="LH-1", symbol="GOOGL", strategy="LiquidityHunt", direction="short",
+                                 paper_trade=1, is_liquidity_hunt=True))
+    c = sqlite3.connect(db5)
+    lh = c.execute("SELECT is_liquidity_hunt FROM trades WHERE trade_id='LH-1'").fetchone()
+    c.close()
+except Exception as exc:                                        # noqa: BLE001
+    lh = "%s: %s" % (type(exc).__name__, exc)
+dropped = [m for m in _cap.msgs if "is_liquidity_hunt" in m and "DROPPED" in m]
+check("K5 is_liquidity_hunt is a column on a fresh store, persisted as 1, never DROPPED",
+      "is_liquidity_hunt" in fresh5 and lh == (1,) and not dropped,
+      "fresh_has=%s stored=%s dropped=%d" % ("is_liquidity_hunt" in fresh5, lh, len(dropped)))
+
+db6 = os.path.join(_tmp, "pre_r34.db")
+c = sqlite3.connect(db6)
+c.executescript(tl.TradeLogger.SCHEMA)
+_cols6 = [r[1] for r in c.execute("PRAGMA table_info(trades)")]
+if "is_liquidity_hunt" in _cols6:                               # build the 10-26 shape: the table without the column
+    _keep = [n for n in _cols6 if n != "is_liquidity_hunt"]
+    c.execute("CREATE TABLE t2 AS SELECT %s FROM trades" % ", ".join(_keep))
+    c.execute("DROP TABLE trades"); c.execute("ALTER TABLE t2 RENAME TO trades")
+c.execute("INSERT INTO trades (trade_id, symbol, strategy) VALUES ('H-1', 'GOOGL', 'LiquidityHunt')")
+c.execute("INSERT INTO trades (trade_id, symbol, strategy) VALUES ('B-1', 'GOOGL', 'Breakout')")
+c.commit(); c.close()
+def _flags6():
+    c = sqlite3.connect(db6)
+    try:
+        return dict(c.execute("SELECT trade_id, is_liquidity_hunt FROM trades ORDER BY trade_id"))
+    except sqlite3.OperationalError as exc:
+        return str(exc)
+    finally:
+        c.close()
+tl.TradeLogger(db6)
+f1 = _flags6()
+c = sqlite3.connect(db6)
+try:
+    c.execute("UPDATE trades SET is_liquidity_hunt = 0 WHERE trade_id = 'H-1'"); c.commit()
+except sqlite3.OperationalError:                                # no column: K6 fails below, by name
+    pass
+c.close()
+tl.TradeLogger(db6)
+f2 = _flags6()
+check("K6 a store without the column gains it, backfilled once from the strategy (hunt 1, breakout 0)",
+      f1 == {"B-1": 0, "H-1": 1} and f2 == {"B-1": 0, "H-1": 0}, "first boot=%s second boot=%s" % (f1, f2))
 
 print("\n%s — %d checks, %d failed" % ("GREEN" if not FAILED else "RED", len(RAN), len(FAILED)))
 if FAILED:
