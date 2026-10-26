@@ -1,4 +1,7 @@
-"""tests/check_feed_log_noise.py — v5.0
+"""tests/check_feed_log_noise.py — v5.1
+v5.1  2026-10-26  OTV5 (FEED.4, journal half) — L8-L10: the kept parse failures are RATE-LIMITED with their count.
+      On 2026-10-26 every one of hundreds of thousands a box went to the journal and pushed the morning out of it.
+      Born red on 288297b at L8, L9 and L10 (every line passed).
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.1  2026-09-26  OTV4TEST r146 — L7 re-pointed to adjacency: main() now opens with the UNSET guard, so basicConfig is no longer the first call; the property - the filter installed on the very next statement, before anything logs - is pinned unchanged.
 THE FEED'S JOURNAL CARRIES THE FEED, NOT THE SDK'S WEBSOCKET FRAMES — AND
@@ -20,6 +23,9 @@ v1.0  2026-09-24 — OTV4TEST r134. tastytrade 13.2.3 hard-sets its logger to
       chatter absent from the output, the parse failure present
   L6  installing twice adds ONE filter per handler
   L7  main() installs it immediately after basicConfig (AST)
+  L8  1,000 parse failures inside one 60 s window pass ONE line (the first)
+  L9  the first one after the window passes and carries "+999 more like it", so the count survives
+  L10 the window resets: the next one inside the new window is suppressed; chatter still dropped, WARNING kept
 """
 from __future__ import annotations
 
@@ -135,6 +141,34 @@ def _l7():
 
 
 check("L7 main() installs the filter immediately after basicConfig", _l7())
+
+def _l8():
+    g = F()
+    t = [1000.0]
+    g._clock = lambda: t[0]
+    pf = "Failed to parse event: 1 validation error for TimeAndSale, skipping"
+    passed = []
+    for i in range(1000):
+        r = _rec("tastytrade.streamer", logging.DEBUG, pf)
+        if g.filter(r):
+            passed.append(r.getMessage())
+        t[0] += 0.05                                         # 1,000 in 50 s
+    t[0] = 1061.0
+    r = _rec("tastytrade.streamer", logging.DEBUG, pf)
+    after = r.getMessage() if g.filter(r) else None
+    t[0] = 1062.0
+    nxt = g.filter(_rec("tastytrade.streamer", logging.DEBUG, pf))
+    chat = g.filter(_rec("tastytrade.streamer", logging.DEBUG, "sending keepalive message"))
+    warn = g.filter(_rec("tastytrade.streamer", logging.WARNING, "reconnecting"))
+    return passed, after, nxt, chat, warn
+
+
+passed, after, nxt, chat, warn = _l8()
+check("L8 1,000 parse failures in one window pass one line", len(passed) == 1, "%d passed" % len(passed))
+check("L9 the first after the window passes with '+999 more like it'",
+      after is not None and "+999 more like it" in after and after.startswith("Failed to parse event"), repr(after)[:160])
+check("L10 the window resets; chatter dropped, WARNING kept", nxt is False and chat is False and warn is True,
+      "next=%s chatter=%s warning=%s" % (nxt, chat, warn))
 
 print()
 if FAILED:

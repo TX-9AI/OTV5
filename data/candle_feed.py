@@ -1,5 +1,11 @@
 """
-data/candle_feed.py  v5.3
+data/candle_feed.py  v5.4
+v5.4  2026-10-26  (FEED.4, journal half) — THE SDK'S PARSE FAILURES ARE COUNTED, ONE LINE A MINUTE, NOT ONE LINE EACH.
+      r134 kept every "Failed to parse event" line so dropped prints stay visible; during RTH that is hundreds of
+      thousands a box, and on 2026-10-26 it pushed the morning out of the journal (GOOGL's journal began at 14:30).
+      _TTNoiseFilter now passes the first in each 60 s window and suppresses the rest, and the next one passed
+      carries "[FEED.4: +N more like it in the last Ss, suppressed]", so the count is still in the record. Chatter
+      is dropped and WARNING+ kept as before. The prints themselves are still lost (FEED.4 stays open for that).
 v5.3  2026-10-25  (TTS.1) — EACH RECONNECT WAIT CARRIES BOUNDED RANDOM JITTER. The streamer's backoff was a fixed 3 -> 6 ->
       ... -> 60 s ladder, so after one server-side DXLink break (2026-09-29 09:30:10 ET, six boxes at once) every box
       retried on the same schedule against the shared TastyTrade session ceiling and the last one in stayed blind
@@ -2203,11 +2209,29 @@ class _TTNoiseFilter(logging.Filter):
     (tastytrade.streamer), and a filter on the parent never sees their records."""
 
     KEEP = ("Failed to parse event",)
+    WINDOW_S = 60.0                      # FEED.4 (v5.4): at most one kept line per window, carrying the count
+    _clock = staticmethod(_time.monotonic)
+
+    def __init__(self, name: str = "") -> None:
+        super().__init__(name)
+        self._t0 = None                  # when the last kept line passed
+        self._n = 0                      # suppressed since then
 
     def filter(self, record: logging.LogRecord) -> bool:
         if record.levelno > logging.DEBUG or not record.name.startswith("tastytrade"):
             return True
-        return record.getMessage().startswith(self.KEEP)
+        msg = record.getMessage()
+        if not msg.startswith(self.KEEP):
+            return False
+        now = self._clock()
+        if self._t0 is not None and now - self._t0 < self.WINDOW_S:
+            self._n += 1
+            return False
+        if self._n:
+            record.msg, record.args = (f"{msg} [FEED.4: +{self._n} more like it in the last "
+                                       f"{now - self._t0:.0f}s, suppressed]"), None
+        self._t0, self._n = now, 0
+        return True
 
 
 def _install_tt_noise_filter() -> None:
