@@ -6,7 +6,7 @@ the canary fails on drift (WORKING_AGREEMENT 33).
 
 495 Python modules across 12 local packages.
 
-**Reached by:** 134 imported · 26 declared entry points · 216 referenced from a script, unit or doc but never imported · **119 by nothing here**.
+**Reached by:** 134 imported · 26 declared entry points · 217 referenced from a script, unit or doc but never imported · **118 by nothing here**.
 
 ⚠️ The last group is a REVIEW LIST, not a delete list. A
 `land.spec CHECK` line ships inside a tarball and is never
@@ -599,7 +599,7 @@ Change these with the most care; a break here reaches everything downstream.
 
 ### `tests/check_atr_units.py`
 - **calls:** `analysis/volatility_engine.py`, `strategy/orb_strategy.py`, `strategy/runaway_continuation.py`, `strategy/sweep_credit_spread.py`
-- **called by:** (not imported) — referenced in `docs/BACKLOG.md`
+- **called by:** (nothing — no importer and no mention in any script, unit or doc here)
 
 ### `tests/check_attr_fidelity.py`
 - **calls:** `config.py`
@@ -715,7 +715,7 @@ Change these with the most care; a break here reaches everything downstream.
 
 ### `tests/check_cap_counterfactual.py`
 - **calls:** `database/trade_logger.py`, `risk/risk_manager.py`
-- **called by:** (not imported) — referenced in `docs/ENV.md`
+- **called by:** (not imported) — referenced in `docs/BACKLOG.md`, `docs/ENV.md`
 
 ### `tests/check_cap_fly_exempt.py`
 - **calls:** `config.py`, `database/trade_logger.py`, `execution/__init__.py`, `execution/position_manager.py`, `main.py`, `strategy/__init__.py`, `strategy/gex_pin_butterfly.py`
@@ -1307,7 +1307,7 @@ Change these with the most care; a break here reaches everything downstream.
 
 ### `tests/check_orb_sequence.py`
 - **calls:** `analysis/orb_engine.py`, `execution/__init__.py`, `execution/resting_orders.py`, `strategy/__init__.py`, `strategy/orb_strategy.py`, `strategy/plan.py`
-- **called by:** (not imported) — referenced in `docs/BACKLOG.md`, `docs/PLAN_SPEC.md`
+- **called by:** (not imported) — referenced in `docs/PLAN_SPEC.md`
 
 ### `tests/check_orb_window.py`
 - **calls:** `config.py`
@@ -1467,7 +1467,7 @@ Change these with the most care; a break here reaches everything downstream.
 
 ### `tests/check_rebuild_1m.py`
 - **calls:** `data/candle_feed.py`, `utils/__init__.py`, `utils/instrument.py`
-- **called by:** (not imported) — referenced in `docs/BACKLOG.md`, `docs/ENV.md`
+- **called by:** (not imported) — referenced in `docs/ENV.md`
 
 ### `tests/check_reclaim_paths.py`
 - **calls:** `warehouse/__init__.py`, `warehouse/retention_purge.py`, `warehouse/s3_push.py`
@@ -1619,7 +1619,7 @@ Change these with the most care; a break here reaches everything downstream.
 
 ### `tests/check_store_paths.py`
 - **calls:** `analysis/entry_snapshot.py`, `config.py`, `data/candle_feed.py`, `data/derived_store.py`, `data/options_chain.py`, `execution/resting_orders.py`, `strategy/__init__.py`, `strategy/breakout_plan.py`, `utils/__init__.py`, `utils/paths.py`
-- **called by:** (nothing — no importer and no mention in any script, unit or doc here)
+- **called by:** (not imported) — referenced in `docs/BACKLOG.md`
 
 ### `tests/check_strike_beyond.py`
 - **calls:** `strategy/sweep_credit_spread.py`, `strategy/sweep_plan.py`
@@ -1627,7 +1627,7 @@ Change these with the most care; a break here reaches everything downstream.
 
 ### `tests/check_strike_ladder.py`
 - **calls:** `analysis/orb_engine.py`, `data/options_chain.py`, `strategy/gex_pin_butterfly.py`, `utils/math_utils.py`
-- **called by:** (nothing — no importer and no mention in any script, unit or doc here)
+- **called by:** (not imported) — referenced in `docs/BACKLOG.md`
 
 ### `tests/check_structure_stop_ramp.py`
 - **calls:** `config.py`, `execution/exit_engine.py`, `risk/risk_manager.py`, `strategy/base_strategy.py`
