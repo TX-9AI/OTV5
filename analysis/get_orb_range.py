@@ -1,5 +1,15 @@
 """
-analysis/get_orb_range.py  v5.0
+analysis/get_orb_range.py  v5.1
+v5.1  2026-10-27  OTV5 r40 (ORP.2) — ESTABLISHED ONLY FROM A CLOSED OPENING RANGE: THE FIVE 1m BARS, THE OFFICIAL PRINT.
+      Until now the range was ESTABLISHED the moment the clock passed 09:34:59 and a 09:30 5m row existed - but the
+      feed store writes FORMING bars, so that row could still be moving. CRM 2026-10-26 froze H=250.14 at 09:35:01 ET;
+      the 09:34 minute closed at its high of 250.38, and both CRM longs fired on a break the official range does not
+      show (-$85). The docstring always said "the candle is closed", and ORP.1's ruling (OTV4TEST r222, 2026-10-03) is
+      the high and low of the five 1m bars 09:30-09:34, only when all five are on the feed. Now: ESTABLISHED from those
+      five bars once a 1m row at 09:35 or later exists (proof the 09:34 bar is done) and the clock is SETTLE_S past
+      09:35:00; failing the five 1m bars, from the 09:30 5m row once a later 5m row exists and a full minute has
+      passed (the old source, with proof it closed). Otherwise IN_PROGRESS (exit 2), carrying the last valid range;
+      main._fetch_orb_range retries on the next tick, so establishment slips by about one tick.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v4.2  2026-10-11  OTV4TEST r269 (OPS.22, mirror of otv4 r479) - the zone NAME is "America/New_York", the zone the legacy link
       US/Eastern pointed to: identical rules, no behaviour change. tzdata 2026c moved the US/* links into tzdata-legacy;
@@ -105,12 +115,32 @@ def _candle_to_range(ts, row, status: str, symbol: str, now: datetime) -> dict:
     }
 
 
-def resolve_orb_range(symbol: str) -> dict:
+SETTLE_S = 10          # r40 (ORP.2): seconds past 09:35:00 before the 09:34 bar is taken as final
+
+
+def _closed_print(df_1m, today, now):
+    """r40 (ORP.2) — (high, low) of TODAY's five 1m bars 09:30-09:34 (main._official_print's rule), or None unless
+    all five are present, a 1m row at 09:35 or later exists (the store writes forming bars, so a later row is the
+    proof the 09:34 bar is done) and the clock is SETTLE_S past 09:35:00."""
+    if df_1m is None or getattr(df_1m, "empty", True):
+        return None
+    if (now.hour, now.minute, now.second) < (9, 35, SETTLE_S):
+        return None
+    day = [t for t in df_1m.index if t.date() == today]
+    win = [t for t in day if t.hour == 9 and 30 <= t.minute <= 34]
+    if len({t.minute for t in win}) != 5 or not any((t.hour, t.minute) >= (9, 35) for t in day):
+        return None
+    rows = df_1m.loc[win]
+    hi, lo = float(rows["high"].max()), float(rows["low"].min())
+    return (hi, lo) if hi > lo > 0 else None
+
+
+def resolve_orb_range(symbol: str, now: datetime = None) -> dict:
     """Return the last valid opening range tagged with its state.
 
     Raises ValueError only when there is no usable data at all.
     """
-    now = datetime.now(ET)
+    now = now or datetime.now(ET)
     today = now.date()
     # Today's opening candle is forming during 09:30:00-09:34:59 ET.
     in_opening_window = (now.hour == 9 and 30 <= now.minute <= 34)
@@ -138,12 +168,22 @@ def resolve_orb_range(symbol: str) -> dict:
             raise ValueError("no prior valid opening range to carry (IN_PROGRESS)")
         return _candle_to_range(pv[0], pv[1], STATUS_IN_PROGRESS, symbol, now)
 
-    # ── ESTABLISHED: past the window and today's candle is present + valid ──
+    # ── ESTABLISHED: past the window and today's opening range is CLOSED (r40, ORP.2) ──
     if todays:
         ts, row = todays[-1]
-        if float(row["high"]) > float(row["low"]):
+        df1 = fetch_candles(symbol, "1m", 400)
+        pr = _closed_print(df1, today, now)
+        if pr is not None:
+            return _candle_to_range(ts, {"high": pr[0], "low": pr[1]}, STATUS_ESTABLISHED, symbol, now)
+        # the five 1m bars are not all on the feed: the 5m row, once a later 5m row proves it closed
+        later_5m = any(t.date() == today and (t.hour, t.minute) >= (9, 35) for t in df.index)
+        if later_5m and (now.hour, now.minute) >= (9, 36) and float(row["high"]) > float(row["low"]):
             return _candle_to_range(ts, row, STATUS_ESTABLISHED, symbol, now)
-        # Today's candle present but degenerate — fall through to EXPIRED.
+        # today's opening range is not proven closed yet: carry the last valid one and retry next tick
+        pv = last_valid_prior()
+        if pv is not None:
+            return _candle_to_range(pv[0], pv[1], STATUS_IN_PROGRESS, symbol, now)
+        # no prior to carry either - fall through to EXPIRED's error.
 
     # ── EXPIRED: pre-open, or today's candle not on the feed yet ──
     pv = last_valid_prior()
