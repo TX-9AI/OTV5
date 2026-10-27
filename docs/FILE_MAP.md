@@ -850,7 +850,7 @@ Change these with the most care; a break here reaches everything downstream.
 - **called by:** (nothing — no importer and no mention in any script, unit or doc here)
 
 ### `tests/check_data_capture.py`
-- **calls:** `warehouse/s3_push.py`
+- **calls:** `utils/instrument.py`, `warehouse/s3_push.py`
 - **called by:** (not imported) — referenced in `deploy/data_capture.sh`, `docs/BACKLOG.md`, `docs/ENV.md`
 
 ### `tests/check_db_handles.py`
@@ -2079,7 +2079,7 @@ Change these with the most care; a break here reaches everything downstream.
 
 ### `utils/instrument.py`
 - **calls:** (none)
-- **called by:** `analysis/get_orb_range.py`, `tests/check_clean_deploy.py`, `tests/check_instrument_unset.py`, `tests/check_level_tape.py`, `tests/check_rebuild_1m.py`, `tests/check_seed_candles.py`, `tools/claude_boot.py`, `tools/eod_summary.py`, `tools/manifold_health.py`, `tools/open_scan.py`, `tools/prime_ramp.py`, `tools/rebuild_1m_from_last_trade.py`, `tools/seed_candles_from_warehouse.py`, `warehouse/s3_push.py`, `warehouse/self_close.py`
+- **called by:** `analysis/get_orb_range.py`, `tests/check_clean_deploy.py`, `tests/check_data_capture.py`, `tests/check_instrument_unset.py`, `tests/check_level_tape.py`, `tests/check_rebuild_1m.py`, `tests/check_seed_candles.py`, `tools/claude_boot.py`, `tools/eod_summary.py`, `tools/manifold_health.py`, `tools/open_scan.py`, `tools/prime_ramp.py`, `tools/rebuild_1m_from_last_trade.py`, `tools/seed_candles_from_warehouse.py`, `warehouse/s3_push.py`, `warehouse/self_close.py`
 
 ### `utils/market_calendar.py`
 - **calls:** (none)

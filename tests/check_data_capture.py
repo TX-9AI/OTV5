@@ -1,4 +1,9 @@
-"""tests/check_data_capture.py — v5.0
+"""tests/check_data_capture.py — v5.1
+v5.1  2026-10-27  OTV5 r41 (GATE.8) — D5c STUBS THE BOT UNIT, AND D5d PINS CD.1'S ORDER. D5c expected the OHLC file to be the
+      fallback with OT_INSTRUMENT unset, but CD.1 (own_symbol reads the bot unit's instrument before any file) made the
+      LIVE box's unit answer instead, so D5c passed only on QQQ and was a standing red in every other box's boot sweep
+      (SOFI and AMD read their own symbols, 2026-10-26). D5c now stubs the unit away; D5d: a unit symbol wins over a
+      stale file. Test-only; own_symbol unchanged.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 
 v1.10 2026-10-24 — CD.1. D7 RE-POINTED (section 38.4): an install always applies STANDALONE through
@@ -316,17 +321,25 @@ def _d5c():
         os.environ["OT_INSTRUMENT"] = "SOFI"
         with_env = sp.own_symbol()
         os.environ.pop("OT_INSTRUMENT", None)
-        without_env = sp.own_symbol()
+        import utils.instrument as _ui
+        _real_unit = _ui._from_bot_unit
+        try:
+            _ui._from_bot_unit = lambda: ""            # r41: no bot unit, so the file is the fallback (CD.1 order)
+            without_env = sp.own_symbol()
+            _ui._from_bot_unit = lambda: "AMD"         # D5d: the unit's symbol wins over a stale file
+            unit_wins = sp.own_symbol()
+        finally:
+            _ui._from_bot_unit = _real_unit
     finally:
         sp.OHLC_ROOT = real_root
         if real_env is None:
             os.environ.pop("OT_INSTRUMENT", None)
         else:
             os.environ["OT_INSTRUMENT"] = real_env
-    return with_env == "SOFI" and without_env == "QQQ", (with_env, without_env)
+    return with_env == "SOFI" and without_env == "QQQ" and unit_wins == "AMD", (with_env, without_env, unit_wins)
 
 
-guard("D5c own_symbol: OT_INSTRUMENT wins over a stale QQQ OHLC file; the file is the fallback",
+guard("D5c own_symbol: OT_INSTRUMENT wins over a stale QQQ OHLC file, then the bot unit (D5d), then the file",
       lambda: _d5c()[0], lambda: str(_d5c()[1]))
 
 # ── D6 purge clamp ───────────────────────────────────────────────────────────
