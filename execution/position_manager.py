@@ -1,5 +1,8 @@
 """
-execution/position_manager.py  v5.24
+execution/position_manager.py  v5.25
+v5.25 2026-10-27  OTV5 r42 (EOD.3) — THE CLOSE LINE LOGS THE BOOKED FILL. "✅ Position closed ... exit=" printed the mark it
+      was handed (current_premium), not the fill that pnl was computed from: CVX 006f6eca logged exit=$4.28 while the
+      ledger booked 1.25. It now prints exit=<fill> mark=<mark>. Log text only. Gate tests/check_eod_expiry_value.py E5.
 v5.24 2026-10-26  OTV5 r36 (EOD.2) — AN INTENDED EOD HOLD IS ONE INFO LINE, NOT AN ERROR EVERY TICK. The paper EOD
       close (EOD.1) is held from 15:45 to the 15:55 cross by design, and every manage tick logged it as
       "Exit NOT confirmed ... will retry" at ERROR: AMD 2026-10-26 wrote 60 such lines for f819b0bd. A fill with
@@ -1521,9 +1524,13 @@ class PositionManager:
             except Exception as e:
                 logger.warning(f"Could not re-arm ORB engine: {e}")
 
+        # EOD.3 (r42) — exit= is the BOOKED fill, the price pnl was computed from.
+        # It printed current_premium (the mark): CVX 006f6eca 2026-10-27 logged
+        # exit=$4.28 while the ledger booked 1.25.
+        _mk = f" mark=${float(current_premium):.2f}" if current_premium is not None else ""
         logger.info(
             f"✅ Position closed: {trade_id[:8]} "
-            f"exit=${current_premium:.2f} "
+            f"exit=${fill_price:.2f}{_mk} "
             f"pnl=${pnl_usd:+.2f} "
             f"reason={decision.exit_reason}"
         )

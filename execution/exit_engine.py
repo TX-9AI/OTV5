@@ -1,5 +1,12 @@
 """
-execution/exit_engine.py  v5.2
+execution/exit_engine.py  v5.3
+v5.3  2026-10-27  OTV5 r42 (EOD.3) — THE 15:55 ESTIMATE PRICES EACH LEG TO ITS OWN EXPIRY. _eod_best_case gave every leg
+      the 5 minutes left to TODAY's 16:00, so a leg expiring on a later day was priced at its intrinsic value. CVX
+      2026-10-27 (006f6eca, Breakout long 8 x 10-30 230P): valued 1.26 at spot 228.74, _eod_determined called that
+      "settled", and paper booked 1.25 against a 3.70 / 4.85 quote: -$1,448 instead of about +$976 at the mark. Each
+      leg now gets the days to its own expiry plus those 5 minutes, so a multi-day long keeps its time value, is not
+      "settled", and books at the mark (EOD.1's rule). 0DTE pricing is unchanged. The bug was born at OTV4TEST r149
+      (2509cc7, 2026-09-26). Gate tests/check_eod_expiry_value.py E1-E5.
 v5.2  2026-10-26  OTV5 r36 (EOD.2) — FillResult.held: the paper EOD close HELD to the 15:55 cross says so (held=True), so
       the position manager can tell an intended hold from a failed exit. The hold itself is unchanged.
 v5.1  2026-10-25  (DOC.31) — VOLT'S EXIT TEXT NAMES THE FRAME IT READ, AND _evaluate_volt'S DOCSTRING DESCRIBES THE STOP
@@ -806,7 +813,7 @@ import time
 from dataclasses import dataclass
 from decimal import Decimal
 from typing import Optional, List, Tuple
-from datetime import datetime
+from datetime import date, datetime
 
 import pandas as pd
 
@@ -3847,12 +3854,24 @@ class ExitEngine:
             from config import EOD_CROSS_AT_ET as _X
             import math
             mins_left = max(0.0, 16 * 60 - (_X[0] * 60 + _X[1]))          # 5 at 15:55
-            t_yrs = mins_left / (365.0 * 24 * 60)
+            # 🔴 EOD.3 (r42) — EACH LEG IS PRICED TO ITS OWN EXPIRY, not to today's 16:00.
+            # The 5 minutes above are only the time left on a 0DTE leg. A leg expiring
+            # on a later day keeps those days of time value: CVX 2026-10-27, a 10-30
+            # 230P priced with 5 minutes left came out at its intrinsic 1.26, was judged
+            # "settled", and paper booked it at 1.25 against a 3.70 bid (-$1,448
+            # instead of about +$976 at the mark).
+            _today = now_et().date()
+            def _t_yrs(exp_iso):
+                try:
+                    days = (date.fromisoformat(str(exp_iso)[:10]) - _today).days
+                except (TypeError, ValueError):
+                    days = 0
+                return (max(0, days) * 24 * 60 + mins_left) / (365.0 * 24 * 60)
             ivs = record.get("_eod_iv") or {}
             iv_default = float(record.get("_eod_iv_atm") or 0.0)
             def _n(x):
                 return 0.5 * (1.0 + math.erf(x / math.sqrt(2.0)))
-            def _px(k, call, iv):
+            def _px(k, call, iv, t_yrs):
                 intrinsic = max(spot - k, 0.0) if call else max(k - spot, 0.0)
                 if iv <= 0 or t_yrs <= 0:
                     return intrinsic
@@ -3868,7 +3887,8 @@ class ExitEngine:
                     return None
                 iv = float(ivs.get(sym, 0.0) or 0.0) or iv_default
                 used_iv.append(iv)
-                val += q * _px(float(o["strike"]), o["option_side"] == "call", iv)
+                val += q * _px(float(o["strike"]), o["option_side"] == "call", iv,
+                               _t_yrs(o.get("expiry")))
             tick = cls._tick_for(record)
             if val <= 0:          # we are net SHORT: buy it back
                 cost = -val
