@@ -1,5 +1,12 @@
 """
-execution/position_manager.py  v5.25
+execution/position_manager.py  v5.26
+v5.26 2026-10-27  OTV5 r46 (PARC.1) — PARC JOINS THE ADMISSION TABLE, AND A CREDIT VERTICAL'S P&L SIGN IS READ FROM ITS
+      STRUCTURE. The operator, 2026-10-27: "Call it PARC"; "No shadow mode. We're paper. It trades tomorrow." PARC:
+      ENTRY_WINDOWS["PARC"] (11:01-11:03), one open, one try per session, cap-exempt - PARK's rule. _execute_exit's
+      credit_signed adds structure.is_credit_vertical(record): PARC is a credit vertical with is_condor_leg = 0 (it pairs
+      with nothing, so the pairing gate, the sibling probe and the roll never see it), and the old test read
+      is_condor_leg / IronCondorStrategy / is_short_position only. Every row it already signed it still signs (each is
+      is_condor_leg = 1). (credit - exit) x contracts x 100. Gate tests/check_parc.py.
 v5.25 2026-10-27  OTV5 r42 (EOD.3) — THE CLOSE LINE LOGS THE BOOKED FILL. "✅ Position closed ... exit=" printed the mark it
       was handed (current_premium), not the fill that pnl was computed from: CVX 006f6eca logged exit=$4.28 while the
       ledger booked 1.25. It now prints exit=<fill> mark=<mark>. Log text only. Gate tests/check_eod_expiry_value.py E5.
@@ -344,6 +351,7 @@ GEXFLY = "GEXPinButterfly"
 ATPFLY = "ATPButterfly"
 ORCS = "OpeningRangeCreditSpread"     # r204
 PARK = "PARK"                         # r288 (PARK.1): the 11:00 first-hour continuation
+PARC = "PARC"                         # OTV5 r46 (PARC.1): PARK's entry, a credit spread on the safer side
 # r72 — VOLT (VOLume Trade), THE CONTROL ARM. Two gates and nothing else, in
 # the same window as the morning four, blocking nothing and blocked by nothing.
 # Its purpose is to make the OTHER strategies' gates measurable: if VOLT keeps
@@ -477,6 +485,8 @@ _DEFAULT_RULES = {
     # r288 (PARK.1) — one per session, and its own budget: the cap neither refuses it nor counts its P&L
     # (config.CAP_EXCLUDED_STRATEGIES).
     PARK:    AdmissionRule(config.ENTRY_WINDOWS[PARK], max_open_of_type=1, max_tries_per_session=1, cap_exempt=True),
+    # OTV5 r46 (PARC.1) — PARK's rule: one per session, its own budget (CAP_EXCLUDED_STRATEGIES), cap-exempt.
+    PARC:    AdmissionRule(config.ENTRY_WINDOWS[PARC], max_open_of_type=1, max_tries_per_session=1, cap_exempt=True),
 }
 
 
@@ -1430,7 +1440,8 @@ class PositionManager:
         # adopted short leg (is_short_position) discovered at the broker.
         credit_signed = (bool(record.get("is_condor_leg"))
                          or record.get("strategy") == "IronCondorStrategy"
-                         or bool(record.get("is_short_position")))
+                         or bool(record.get("is_short_position"))
+                         or _is_credit_vertical(record))          # r46 (PARC.1): a credit vertical by structure
         if credit_signed:
             pnl_per_share = entry_prem - fill_price
         else:

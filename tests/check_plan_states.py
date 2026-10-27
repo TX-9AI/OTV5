@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """
-tests/check_plan_states.py  v5.1
+tests/check_plan_states.py  v5.2
+v5.2  2026-10-27  OTV5 r46 (PARC.1) — S1 RE-POINTED (WA section 38.4): PARC is a new plan, ACTIVE by default (OT_PARC unset =
+      1, the operator: "No shadow mode. We're paper. It trades tomorrow."), so the ruled active roster names it; S3 adds
+      OT_PARC=0 -> dormant and OT_PARC=log -> log. Nothing else changed.
 v5.1  2026-10-25  OTV5 r19 (VIEW.2) — D8 RE-POINTED (WA section 38.4): the plans panel now HIDES a switched-off plan
       (the operator: "Can we suppress retired or paused plans from displaying here?"), so a DORMANT plan must not appear
       in the panel at all - and so never as STALE or NOT RUNNING - and the panel says how many are hidden.
@@ -66,7 +69,7 @@ for _k, _v in (("OT_TRADES_DB", "t.db"), ("OT_DERIVED_DB", "d.db"), ("OT_FEED_DB
     os.environ[_k] = os.path.join(_TD, _v)
 os.environ.setdefault("OT_INSTRUMENT", "QQQ")
 SWITCHES = ("OT_VOLT", "OT_ORB_TRADE", "OT_ATP_BUTTERFLY", "OT_ORCS", "OT_SWEEP_CS", "OT_TCS_ACTIVE",
-            "OT_GEX_BUTTERFLY", "OT_PARK", "OT_RUNAWAY", "OT_BREAKOUT", "OT_HUNT")
+            "OT_GEX_BUTTERFLY", "OT_PARK", "OT_PARC", "OT_RUNAWAY", "OT_BREAKOUT", "OT_HUNT")
 for _k in SWITCHES:
     os.environ.pop(_k, None)
 ET = ZoneInfo("America/New_York")
@@ -130,8 +133,8 @@ def main():
     dc = store.conn
 
     # ── S1-S3: the states, read in fresh interpreters (config reads several switches at import) ──
-    ruled_active = ["Breakout", "CondorManagement", "CreditRoll", "GEXPinButterfly", "LiquidityHunt", "PARK",
-                    "RunawayContinuation"]
+    ruled_active = ["Breakout", "CondorManagement", "CreditRoll", "GEXPinButterfly", "LiquidityHunt", "PARC",
+                    "PARK", "RunawayContinuation"]
     ruled_dormant = ["ATPButterfly", "IronCondorStrategy", "ORBStrategy", "OpeningRangeCreditSpread",
                      "SweepCreditSpread", "TrendCreditSpread", "VOLT"]
     st = fresh("import json\nfrom strategy import plan_state as S\n"
@@ -157,6 +160,7 @@ def main():
              ("GEXPinButterfly", {"OT_GEX_BUTTERFLY": "0"}, "dormant"),
              ("GEXPinButterfly", {"OT_GEX_BUTTERFLY": "log"}, "log"),
              ("PARK", {"OT_PARK": "off"}, "dormant"), ("PARK", {"OT_PARK": "log"}, "log"),
+             ("PARC", {"OT_PARC": "0"}, "dormant"), ("PARC", {"OT_PARC": "log"}, "log"),
              ("RunawayContinuation", {"OT_RUNAWAY": "off"}, "dormant"),
              ("RunawayContinuation", {"OT_RUNAWAY": "log"}, "log"),
              ("OpeningRangeCreditSpread", {"OT_ORCS": "1"}, "active"),

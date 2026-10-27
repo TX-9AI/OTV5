@@ -1,5 +1,14 @@
 """
-config.py  v5.1
+config.py  v5.2
+v5.2  2026-10-27  OTV5 r46 (PARC.1) — PARC, THE 11:00 CREDIT SPREAD ON THE SAFER SIDE. The operator: "under identical entry
+      conditions the PARK trade sells a credit spread ATM nearest the strike on the safer side (1st mark below the current
+      price for a long: put spread, or 1st mark above current price for a short: call spread) ... adopt the same scaling
+      model we use for breakout, meaning the stop distance will determine our position size. Get rid of the delta stop.
+      This will be a hold to 1550 or stop on structure ... also add a nickel close"; "Call it PARC"; "I want 1050 to be
+      the floor & use the same ramp in configure.sh (most are set to $2500)"; "No shadow mode. We're paper. It trades
+      tomorrow." OT_PARC 1|log|0 (UNSET = 1, trade; PARC_MODE trade|log|off; an unknown value keeps the default and is
+      named in PARC_ENV_REFUSED), PARC_MIN_CREDIT 0.20 (4 x CONDOR_NICKEL_CLOSE), ENTRY_WINDOWS["PARC"] = 11:01-11:03,
+      CAP_EXCLUDED_STRATEGIES = ("PARK", "PARC"). Gate tests/check_parc.py.
 v5.1  2026-10-25  (MEAS.3) — FED_DAY_ORB_BOOST IS REMOVED. macro_data's Fed-day detector is fixed (it had always
       returned False), and its one behavioural reader was ORB's conviction boost; the operator's 2026-10-03 ruling is
       that trading must not change on Fed days, so the flag is record only. Gate tests/check_fed_day_record.py.
@@ -1013,7 +1022,27 @@ PARK_CLOSE_ET = (15, 45)
 # a PARK close never counts toward the cap's realized P&L, and the cap never refuses
 # PARK (position_manager: cap_exempt). Sizing is the box's own RISK_PER_TRADE_USD,
 # flat: floor(risk / (ask x 100)).
-CAP_EXCLUDED_STRATEGIES = ("PARK",)
+CAP_EXCLUDED_STRATEGIES = ("PARK", "PARC")     # r46 (PARC.1): PARC has its own budget too
+# ── OTV5 r46 (PARC.1) — PARC: PARK'S ENTRY, A CREDIT SPREAD ON THE SAFER SIDE ──────
+# The operator, 2026-10-27: "under identical entry conditions the PARK trade sells a
+# credit spread ATM nearest the strike on the safer side ... Call it PARC"; "No shadow
+# mode. We're paper. It trades tomorrow." The read is PARK's (PARK_MOVE_PCT, the bars,
+# GATE-G); the spread, its 5m structure stop, the Breakout ramp and the exits are
+# strategy/parc.py's. OT_PARC 1 | log | 0 (also trade/active/on, off/dormant), UNSET =
+# 1 (trade). log: the plan runs and a would-be fire is recorded, never ordered; 0: not
+# asked. An unknown value keeps the default (trade) and is named (PSTATE.1's rule).
+PARC_ENV_REFUSED = ""
+_pc_raw = os.environ.get("OT_PARC", "1").strip().lower()
+if _pc_raw in ("1", "trade", "active", "on", ""):
+    PARC_MODE = "trade"
+elif _pc_raw == "log":
+    PARC_MODE = "log"
+elif _pc_raw in ("0", "off", "dormant"):
+    PARC_MODE = "off"
+else:
+    PARC_MODE = "trade"
+    PARC_ENV_REFUSED = _pc_raw
+PARC_MIN_CREDIT = 0.20               # = 4 x CONDOR_NICKEL_CLOSE (0.05): a thinner credit is no trade
 # ── r288 (BRK.13) — BREAKOUT'S DELTA FLOOR ──────────────────────────────────────
 # trade | log | off, UNSET = trade (the operator, 2026-10-17 19:12 ET: "A is fine", to
 # "trade it on QQQ-TEST with a counterfactual"). Breakout exits when |delta| <=
@@ -1085,6 +1114,7 @@ ENTRY_WINDOWS = {
     "ATPButterfly":         ((13, 0),  (15, 0)),   # r273 (BFLY.10): was 12:00. r179: was 11:30 here while the plan itself stayed dormant until 12:00; the operator, 2026-09-30: "12:00 is fine"
     "OpeningRangeCreditSpread": ((9, 45), (10, 30)),  # r204 (ORCS): 09:45 beat 09:36; positive to 10:30, gone from 11:00 (X6/X7)
     "PARK":                 ((11, 1),  (11, 3)),   # r288 (PARK.1): the ask 11:01-11:02 after the 11:00 bar closes
+    "PARC":                 ((11, 1),  (11, 3)),   # OTV5 r46 (PARC.1): PARK's window, the credit side
 }
 
 

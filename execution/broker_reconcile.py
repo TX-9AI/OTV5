@@ -1,5 +1,8 @@
 """
-execution/broker_reconcile.py  v5.0
+execution/broker_reconcile.py  v5.1
+v5.1  2026-10-27  OTV5 r46 (PARC.1) — phantom_pnl's credit sign and leg_roles' short/long split also read
+      structure.is_credit_vertical(record), the same test position_manager._execute_exit now uses: PARC is a credit
+      vertical with is_condor_leg = 0 (the operator, 2026-10-27: "Call it PARC"). Every row already signed is still signed.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v4.2  2026-10-04  OTV4TEST r243 (LIVE.1 B1, MIRROR OF otv4 r465 7562317, WA 38.2) — reconcile reads ONLY this box's instrument family (SPX = SPX+SPXW; '*' = the whole account) and checks EVERY leg at its QUANTITY (summed across rows sharing a leg); a missing leg or a count off the broker is REPORTED (plan.mismatch + an alert), rows are never dropped, the phantom rule unchanged. The operator, 2026-10-04: 'multiple boxes will trade that account but never duplicate symbols ever.' Code hunks applied verbatim from 7562317.
 v4.1  2026-09-27  OTV4TEST r165 (EXP.1) — AN EXPIRED POSITION IS BOOKED AT ITS SETTLEMENT VALUE,
@@ -275,8 +278,10 @@ def leg_roles(record: dict) -> tuple:
     the short, wings are long), adopted shorts (is_short_position), and plain
     long singles. Returns (set, set)."""
     short, long = set(), set()
+    from strategy.structure import is_credit_vertical as _icv        # r46 (PARC.1)
     is_condor = (bool(record.get("is_condor_leg"))
-                 or record.get("strategy") == "IronCondorStrategy")
+                 or record.get("strategy") == "IronCondorStrategy"
+                 or (_icv(record) and bool(record.get("short_symbol"))))
     if is_condor:
         if record.get("short_symbol"):
             short.add(record["short_symbol"])
@@ -431,8 +436,10 @@ def phantom_pnl(record: dict, net_price: float, closed_qty: float = None) -> flo
     entry     = float(record.get("entry_premium", 0.0) or 0.0)
     contracts = float(closed_qty if closed_qty is not None
                       else record.get("contracts", 0) or 0)
+    from strategy.structure import is_credit_vertical as _icv        # r46 (PARC.1)
     credit_signed = (bool(record.get("is_condor_leg"))
                      or record.get("strategy") == "IronCondorStrategy"
-                     or bool(record.get("is_short_position")))
+                     or bool(record.get("is_short_position"))
+                     or _icv(record))
     per_share = (entry - net_price) if credit_signed else (net_price - entry)
     return round(per_share * contracts * CONTRACT_MULTIPLIER, 2)

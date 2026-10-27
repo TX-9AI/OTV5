@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 # ==========================================================================
-# configure.sh  v5.2
+# configure.sh  v5.3
+# v5.3  2026-10-27  OTV5 r46 (PARC.1) — ITEM 15 IS PARC (OT_PARC 1|log|0, UNSET = 1, trade); Done moves to 16. The
+#       operator, 2026-10-27: "Call it PARC"; "I want 1050 to be the floor & use the same ramp in configure.sh (most are
+#       set to $2500)"; "No shadow mode. We're paper. It trades tomorrow." PARC sizes on items 2 (ramp MIN) and 8 (ramp
+#       TOP), the Breakout ramp; this item only switches it. The label reads config.PARC_MODE (the consumer), never a
+#       copy of its rule; a value config would not take is refused, nothing written. The summary shows it.
 # v5.2  2026-10-25  OTV5 r16 (PRIME.1) — THE HISTORY COMES FROM TASTYTRADE THROUGH THE FEED, NOT FROM S3. candle-feed v5.1
 #       primes a symbol the store has never held PRIME_DAYS deep and backfills a held one as before; tools/prime_ramp.py
 #       v5.1 waits for that backfill and reports it (no S3, no writes). The first start's and item 1's messages say so.
@@ -419,6 +424,7 @@ show_config() {
     echo -e "  Breakout end:   ${BOLD}$(breakout_end_label)${RESET}"
     echo -e "  BRK no-progress:${BOLD}$(brk_noprog_label)${RESET}"
     echo -e "  Resting stop:   ${BOLD}$(resting_stop_label)${RESET}"
+    echo -e "  PARC:           ${BOLD}$(parc_label)${RESET}"
     echo -e "  Data capture:   ${BOLD}$(data_capture_label)${RESET}"
     echo -e "  Trading mode:   $(echo -e $mode_label)"
     local rec_pin rec_label
@@ -768,6 +774,49 @@ change_resting_stop() {
     set_env "OT_RESTING_STOP" "$val"
     reload_daemon
     echo "  Resting stop set to $val."
+}
+
+# ── OTV5 r46 (PARC.1) — PARC: 1 (trade) | log | 0 (off), UNSET = 1 ─────────────
+parc_label() {
+    local v got
+    v=$(get_env "OT_PARC")
+    got=$(cd "$BOT_DIR" && OT_PARC="$v" python3 -c \
+        "import config; print(config.PARC_MODE + (' (set to ' + config.PARC_ENV_REFUSED + ' - REFUSED)' if config.PARC_ENV_REFUSED else ''))")
+    if [[ -z "$v" ]]; then
+        printf 'not set (code default: %s)' "${got:-UNREADABLE - config.py did not import}"
+    else
+        printf '%s' "${got:-UNREADABLE - config.py did not import}"
+    fi
+}
+
+change_parc() {
+    local val
+    echo ""
+    echo "  PARC: $(parc_label)"
+    echo ""
+    echo "  PARK's 11:01 entry, sold as a credit spread on the safer side (a long"
+    echo "  sells the first put spread below price, a short the first call spread"
+    echo "  above). Sized on the ramp (items 2 and 8); exits: the 5m structure"
+    echo "  stop, the nickel close, else the end-of-day close."
+    echo "  1   - trade it."
+    echo "  log - record what it would sell; trade nothing."
+    echo "  0   - off: not asked."
+    echo ""
+    read -p "    Mode (1 / log / 0, blank to clear): " val
+    val="${val// /}"; val="${val,,}"
+    if [[ -z "$val" ]]; then
+        drop_env "OT_PARC"
+        reload_daemon
+        echo "  PARC cleared - $(parc_label)."
+        return
+    fi
+    if [[ "$val" != "1" && "$val" != "log" && "$val" != "0" ]]; then
+        print_warn "REFUSED - '$val' is not 1, log or 0. Nothing written."
+        return
+    fi
+    set_env "OT_PARC" "$val"
+    reload_daemon
+    echo "  PARC set to $val - $(parc_label)."
 }
 
 # ── r136 — DATA CAPTURE: managed (the conductor owns this box's data) or
@@ -1177,9 +1226,10 @@ while true; do
     echo -e "  ${BOLD}12.${RESET} Breakout no-progress (currently: $(brk_noprog_label))"
     echo -e "  ${BOLD}13.${RESET} Resting stop        (currently: $(resting_stop_label))"
     echo -e "  ${BOLD}14.${RESET} Data capture        (currently: $(data_capture_label))"
-    echo -e "  ${BOLD}15.${RESET} Done"
+    echo -e "  ${BOLD}15.${RESET} PARC                (currently: $(parc_label))"
+    echo -e "  ${BOLD}16.${RESET} Done"
     echo ""
-    read -p "    Select [1-15]: " menu_choice
+    read -p "    Select [1-16]: " menu_choice
 
     case "$menu_choice" in
         1) change_instrument; CHANGED=true ;;
@@ -1196,8 +1246,9 @@ while true; do
         12) change_brk_noprog;    CHANGED=true ;;
         13) change_resting_stop;  CHANGED=true ;;
         14) change_data_capture ;;
-        15) break ;;
-        *) print_warn "Please enter a number between 1 and 15." ;;
+        15) change_parc;          CHANGED=true ;;
+        16) break ;;
+        *) print_warn "Please enter a number between 1 and 16." ;;
     esac
     echo ""
 done

@@ -1,5 +1,8 @@
 """
-strategy/plan_state.py  v5.0
+strategy/plan_state.py  v5.1
+v5.1  2026-10-27  OTV5 r46 (PARC.1) — PARC joins the table: ("OT_PARC", ACTIVE, HOUR), its state read from
+      config.PARC_MODE as PARK's is from PARK_MODE (trade -> active, log -> log, off -> dormant). The operator,
+      2026-10-27: "Call it PARC"; "No shadow mode. We're paper. It trades tomorrow." Gate tests/check_parc.py.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 EVERY PLAN HAS ONE OF THREE STATES - ACTIVE, LOG ONLY, DORMANT - AND ONE GATING CATEGORY (PSTATE.1).
 
@@ -24,7 +27,7 @@ THE SWITCH. Each plan keeps the env key it already had; the values are active | 
 keep their meaning: "1" (and "trade") = active; for a default-OFF trade anything but active/log stays dormant,
 exactly as "only the literal 1" did; for a default-ON plan "0" / "off" = dormant. A value nobody recognises
 leaves the plan at its DEFAULT state and is named (refused()), never silently obeyed. PARK keeps
-config.PARK_MODE (trade -> active, log -> log, off -> dormant). The config flags (ORCS_ENABLED,
+config.PARK_MODE (trade -> active, log -> log, off -> dormant); PARC (OTV5 r46) reads config.PARC_MODE the same way. The config flags (ORCS_ENABLED,
 SWEEP_CS_ENABLED, TREND_CREDIT_ACTIVE, ATP_BUTTERFLY_ENABLED, GEX_BUTTERFLY_ENABLED) still decide ACTIVE, so a
 checker that flips one still flips the trade; "log" is read from the same key at call time.
 
@@ -60,6 +63,7 @@ TABLE: Dict[str, Tuple[str, str, str]] = {
     "Breakout":                 ("OT_BREAKOUT",       ACTIVE,  HOUR),
     "LiquidityHunt":            ("OT_HUNT",           ACTIVE,  HOUR),
     "PARK":                     ("OT_PARK",           ACTIVE,  HOUR),
+    "PARC":                     ("OT_PARC",           ACTIVE,  HOUR),     # OTV5 r46 (PARC.1)
     "GEXPinButterfly":          ("OT_GEX_BUTTERFLY",  ACTIVE,  HOUR),
     "ATPButterfly":             ("OT_ATP_BUTTERFLY",  DORMANT, HOUR),
     "VOLT":                     ("OT_VOLT",           DORMANT, HOUR),
@@ -154,6 +158,9 @@ def state(name: str) -> str:
         if n == "PARK":
             import config as _c
             return {"trade": ACTIVE, "log": LOG, "off": DORMANT}.get(str(getattr(_c, "PARK_MODE", "trade")), ACTIVE)
+        if n == "PARC":                                         # OTV5 r46 (PARC.1): config.PARC_MODE decides
+            import config as _c
+            return {"trade": ACTIVE, "log": LOG, "off": DORMANT}.get(str(getattr(_c, "PARC_MODE", "trade")), ACTIVE)
         raw = _raw(key)
         if n in _FLAG:
             import config as _c

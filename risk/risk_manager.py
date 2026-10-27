@@ -1,5 +1,15 @@
 """
-risk/risk_manager.py  v5.0
+risk/risk_manager.py  v5.1
+v5.1  2026-10-27  OTV5 r46 (PARC.1) — size_for("parc") -> _size_parc, rule "parc_ramp": BREAKOUT'S configure.sh RAMP FOR A
+      CREDIT SPREAD. The operator, 2026-10-27: "adopt the same scaling model we use for breakout, meaning the stop
+      distance will determine our position size"; "I want 1050 to be the floor & use the same ramp in configure.sh (most
+      are set to $2500)". Per spread: max_loss = (width - credit) x 100; loss_at_stop = (the spread's estimated value
+      with the underlying AT the structure stop - credit) x 100, capped at max_loss (no value - no IV - or a value at or
+      under the credit -> max_loss, never a smaller invented number). by_risk = floor(risk per trade [OT_RISK_USD, the
+      ramp START/MIN] / loss_at_stop), by_top = floor(ORB_BUDGET_USD [OT_ORB_BUDGET_USD, the ramp TOP] / max_loss),
+      contracts = max(1, min(by_risk, by_top)); one spread's max_loss over the TOP is REFUSED (as _size_geometry's
+      orb_budget refusal). The CAP_EXCLUDED_STRATEGIES getattr defaults name ("PARK", "PARC"), config's value.
+      Gate tests/check_parc.py P4.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v4.14 2026-10-18  OTV4TEST r298 (CAP.4) — the restart seed (_ensure_seeded) takes the CAP's number, realized_pnl_today
       with CAP_EXCLUDED_STRATEGIES, not today_summary's all-strategy total: a boot after a PARK loss past the limit read
@@ -322,7 +332,7 @@ class RiskManager:
         try:
             from database.trade_logger import get_trade_logger
             return float(get_trade_logger().realized_pnl_today(
-                exclude_strategies=getattr(config, "CAP_EXCLUDED_STRATEGIES", ("PARK",))))   # r298: default = config's
+                exclude_strategies=getattr(config, "CAP_EXCLUDED_STRATEGIES", ("PARK", "PARC"))))   # r298: default = config's
         except Exception:
             # If the DB is briefly unavailable, fall back to the in-memory tally.
             return float(self._session_pnl_usd)
@@ -340,7 +350,8 @@ class RiskManager:
                  orb_stop_distance: float = 0.0,
                  budget_usd=None,
                  noise_floor: float = 0.0,
-                 scaled: bool = True) -> SizingResult:
+                 scaled: bool = True,
+                 value_at_stop=None) -> SizingResult:
         """THE single entry point for position size. Dispatches on STRUCTURE.
 
         🔑 EVERY RULE RETURNS A SizingResult, AND THE ORDER READS ONLY
@@ -360,6 +371,8 @@ class RiskManager:
         does not get added to a list somewhere that later rots.
         """
         st = (structure or "").strip().lower()
+        if st == "parc":                                    # OTV5 r46 (PARC.1): the Breakout ramp, a credit spread
+            return self._size_parc(spread_width, credit, value_at_stop, grade=grade, budget_usd=budget_usd)
         if st == "vertical":
             return self._size_vertical(spread_width, credit, grade)
         if st == "butterfly":
@@ -689,6 +702,65 @@ class RiskManager:
         )
         return result
 
+    def _size_parc(self, spread_width: float, credit: float, value_at_stop=None,
+                   grade: str = "B", budget_usd=None) -> SizingResult:
+        """OTV5 r46 (PARC.1) — PARC's size: Breakout's ramp (configure.sh items 2 and 8) on a credit spread.
+
+        max_loss     = (width - credit) x 100                       one spread through both strikes
+        loss_at_stop = (value_at_stop - credit) x 100, <= max_loss  one spread at the structure stop
+        by_risk      = floor(risk per trade / loss_at_stop)         the ramp START (MIN), OT_RISK_USD
+        by_top       = floor(ORB_BUDGET_USD / max_loss)             the ramp TOP (MAX), OT_ORB_BUDGET_USD
+        contracts    = max(1, min(by_risk, by_top))
+
+        A tight stop risks little per spread, so the TOP binds and the size is the most the top allows; a wide stop
+        binds on the risk, down to one lot. ⚠️ value_at_stop None (a leg had no IV) or at/under the credit (nothing
+        measured to lose) is NOT a small loss: loss_at_stop = max_loss, said. ⚠️ ONE spread whose max_loss exceeds
+        the TOP is REFUSED, never floored to one (_size_geometry's orb_budget rule)."""
+        result = SizingResult(grade=grade)
+        result.rule = "parc_ramp"
+        w, c = float(spread_width or 0.0), float(credit or 0.0)
+        max_loss = (w - c) * CONTRACT_MULTIPLIER
+        if max_loss <= 0 or c <= 0:
+            result.allowed = False
+            result.reject_reason = f"parc_ramp: no risk geometry (width {w:.2f}, credit {c:.2f})"
+            logger.warning("[size] parc_ramp REFUSED: width %.2f credit %.2f - no max loss to size on", w, c)
+            return result
+        top = float(budget_usd if budget_usd is not None else ORB_BUDGET_USD)
+        risk = float(self._risk_per_trade)
+        if max_loss > top:
+            result.allowed = False
+            result.reject_reason = (f"parc_budget: one spread's max loss ${max_loss:.0f} exceeds the ramp top "
+                                    f"${top:.0f}")
+            logger.warning("[size] parc_ramp REFUSED: 1 spread max loss $%.0f exceeds the $%.0f ramp top",
+                           max_loss, top)
+            return result
+        try:
+            v = None if value_at_stop is None else float(value_at_stop)
+        except (TypeError, ValueError):
+            v = None
+        if v is None or v != v or (v - c) * CONTRACT_MULTIPLIER <= 0:
+            loss_at_stop, basis = max_loss, ("max loss (no value at the stop: a leg had no IV)" if v is None
+                                             else f"max loss (value at the stop {v:.2f} <= credit {c:.2f})")
+        else:
+            loss_at_stop, basis = min((v - c) * CONTRACT_MULTIPLIER, max_loss), f"value at the stop {v:.2f}"
+        by_risk = int(risk // loss_at_stop)
+        by_top = int(top // max_loss)
+        count = max(1, min(by_risk, by_top))
+        _bound = "TOP" if by_top < by_risk else ("risk" if by_risk >= 1 else "one-lot floor")
+        result.contracts = count
+        result.cost_per_contract = max_loss
+        result.risk_per_contract = loss_at_stop
+        result.total_cost = count * max_loss
+        result.max_loss = count * max_loss
+        result.geometry_wanted = by_risk
+        result.budget_allowed = by_top
+        result.allowed = True
+        logger.info("[size] parc_ramp: width %.2f credit %.2f -> max loss $%.0f, at the stop $%.0f (%s); risk %d "
+                    "($%.0f / $%.0f), top %d ($%.0f / $%.0f) -> %d spread(s) = $%.0f max loss, $%.0f at the stop  "
+                    "[%s binds]", w, c, max_loss, loss_at_stop, basis, by_risk, risk, loss_at_stop, by_top, top,
+                    max_loss, count, count * max_loss, count * loss_at_stop, _bound)
+        return result
+
     def _size_vertical(self, spread_width: float, credit: float,
                                  grade: str = "B") -> SizingResult:
         """Size ONE condor vertical (credit spread) at the FULL grade budget.
@@ -772,7 +844,7 @@ class RiskManager:
             # honest; the production logger always has realized_pnl_today.
             _rp = getattr(_tl, "realized_pnl_today", None)
             if callable(_rp):
-                pnl = float(_rp(exclude_strategies=getattr(config, "CAP_EXCLUDED_STRATEGIES", ("PARK",))))
+                pnl = float(_rp(exclude_strategies=getattr(config, "CAP_EXCLUDED_STRATEGIES", ("PARK", "PARC"))))
             self._session_pnl_usd = pnl
             if self._session_pnl_usd <= -self._daily_loss_limit:
                 self._session_halted = True

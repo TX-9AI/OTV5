@@ -1,5 +1,11 @@
 """
-strategy/park_plan.py  v5.0
+strategy/park_plan.py  v5.1
+v5.1  2026-10-27  OTV5 r46 (PARC.1) — THE FIRST-HOUR READ IS ONE FUNCTION, SHARED WITH PARC. The operator, 2026-10-27:
+      "under identical entry conditions the PARK trade sells a credit spread ... Call it PARC"; "No shadow mode. We're
+      paper. It trades tomorrow." read_first_hour() is the block ParkPlan.prepare ran inline - the store read, the
+      starved inputs, the prior-close source, the move, the direction and GATE-G, every plan check in the same order -
+      moved verbatim so strategy/parc_plan.py asks the SAME code. PARK's decisions and rows are byte-identical
+      (tests/check_park.py, tests/check_parc.py P10).
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.0  2026-10-18  OTV4TEST r288 (PARK.1) — PARK'S PLAN: READS THE FIRST HOUR, PICKS THE CONTRACT, BUILDS THE
       SIGNAL. The specification - what must be true - is strategy/park.py; this file is the search (the
@@ -85,6 +91,42 @@ def first_hour_bars(symbol: str, day):
             "close_1030": float(b1030[1]) if b1030 else None,
             "spot_1100": float(b1100[1]) if b1100 else None,
             "prior_close": prior}
+
+
+def read_first_hour(t, cond, *, symbol: str, day, prior_close=None):
+    """THE FIRST-HOUR READ (PARK.1), shared by PARK and PARC (OTV5 r46). Reads the store, writes the plan checks
+    in PARK's order on tick `t`, asks `cond` for first_hour_move and gate_g, and returns {"move_pct", "spot",
+    "direction", "gap"} - or None when the tick STARVED (it has already said so on `t`). Moved verbatim from
+    ParkPlan.prepare: the starved inputs, the prior-close source note, the move and the direction rule
+    (up first hour = long), GATE-G (a long needs gap >= 0, a short gap <= 0)."""
+    bars = first_hour_bars(symbol, day)
+    if isinstance(bars, str):
+        t.note(bars)
+        t.starved("first_hour_bars")
+        return None
+    missing = [k for k in ("open_0930", "close_1030", "spot_1100") if bars.get(k) is None]
+    if missing:
+        t.starved(*missing)
+        return None
+    o, c1030, spot = bars["open_0930"], bars["close_1030"], bars["spot_1100"]
+    prev, src = bars.get("prior_close"), "store"
+    if prev is None:
+        prev, src = _f(prior_close), "caller"
+    if prev is None:
+        t.starved("prior_close")
+        return None
+    for k, v in (("open_0930", o), ("close_1030", c1030), ("spot_1100", spot), ("prior_close", prev)):
+        t.check(k, v, None)
+    t.note(f"prior close from the {src}")
+
+    move = (c1030 / o - 1.0) * 100.0
+    t.check("move_pct", move, None)
+    cond("first_hour_move", abs(move), abs(move) >= config.PARK_MOVE_PCT)
+    direction = "long" if move > 0 else "short" if move < 0 else ""
+    gap = o - prev
+    t.check("gap", gap, None)
+    cond("gate_g", gap, bool(direction) and ((gap >= 0) if direction == "long" else (gap <= 0)))
+    return {"move_pct": move, "spot": spot, "direction": direction, "gap": gap}
 
 
 def _record_would_fire(prep) -> None:
@@ -190,41 +232,19 @@ class ParkPlan:
             return prep
         prep.cond("entry_window", None, True)
 
-        # ── the first hour, from the store ────────────────────────────────
+        # ── the first hour, from the store (r46: one read, shared with PARC) ──
         if day is None:
             from utils.time_utils import now_et as _now
             day = _now().date()
-        bars = first_hour_bars(symbol or self._symbol(), day)
-        if isinstance(bars, str):
-            t.note(bars)
-            t.starved("first_hour_bars")
+        fh = read_first_hour(t, prep.cond, symbol=symbol or self._symbol(), day=day, prior_close=prior_close)
+        if fh is None:
             return prep
-        missing = [k for k in ("open_0930", "close_1030", "spot_1100") if bars.get(k) is None]
-        if missing:
-            t.starved(*missing)
-            return prep
-        o, c1030, spot = bars["open_0930"], bars["close_1030"], bars["spot_1100"]
-        prev, src = bars.get("prior_close"), "store"
-        if prev is None:
-            prev, src = _f(prior_close), "caller"
-        if prev is None:
-            t.starved("prior_close")
-            return prep
-        for k, v in (("open_0930", o), ("close_1030", c1030), ("spot_1100", spot), ("prior_close", prev)):
-            t.check(k, v, None)
-        t.note(f"prior close from the {src}")
-
-        move = (c1030 / o - 1.0) * 100.0
-        prep.move_pct, prep.spot = move, spot
-        t.check("move_pct", move, None)
-        prep.cond("first_hour_move", abs(move), abs(move) >= config.PARK_MOVE_PCT)
-        direction = "long" if move > 0 else "short" if move < 0 else ""
+        spot = fh["spot"]
+        prep.move_pct, prep.spot = fh["move_pct"], spot
+        direction = fh["direction"]
         prep.direction = direction
         prep.side = "call" if direction == "long" else "put" if direction == "short" else ""
-        gap = o - prev
-        prep.gap = gap
-        t.check("gap", gap, None)
-        prep.cond("gate_g", gap, bool(direction) and ((gap >= 0) if direction == "long" else (gap <= 0)))
+        prep.gap = fh["gap"]
         if prep.unmet:
             t.refuse(prep.unmet[0], "not this session — " + ", ".join(prep.unmet))
             return prep
