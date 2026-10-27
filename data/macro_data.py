@@ -1,5 +1,15 @@
 """
-data/macro_data.py  v5.1
+data/macro_data.py  v5.2
+v5.2  2026-10-27  OTV5 r43 (MACRO.1) — A RATE-LIMITED VIX FETCH IS RETRIED, AND A DEFAULTED SNAPSHOT IS RE-FETCHED SOON.
+      At the 09:15 ET wake on 2026-10-27 all 14 boxes asked TastyTrade GET /market-data/Index/VIX in the same second;
+      CRM, GOOGL and NFLX got HTTP 429 at 13:15:36 UTC and logged "Could not fetch VIX — defaulting to 20
+      (conservative)". 20 equals VIX_BUTTERFLY_DISABLE, so those boxes ran butterfly_allowed False / RISK_OFF for the
+      full MACRO_FETCH_INTERVAL_MIN (60 min) while the real VIX was 17.88-18.04; nine trade rows carry vix_at_entry 20.0.
+      _fetch_vix now retries a failed fetch (exception, None or <= 0) VIX_RETRIES (2) more times after a jittered
+      0.5-2.0 s sleep, the total wait capped at VIX_RETRY_MAX_WAIT_S (5 s), each retry logged once at INFO; the WARNING
+      on the final fallback is unchanged. A snapshot built on the default carries vix_is_default True and get()
+      re-fetches it after MACRO_DEFAULT_REFETCH_MIN (2 min); a measured snapshot keeps the 60-minute interval. The
+      thresholds and the conservative default 20 are unchanged. Gate tests/check_macro_vix_retry.py V1-V4.
 v5.1  2026-10-25  (MEAS.3) — THE FED-DAY FLAG IS RECORDED CORRECTLY, AND ONLY RECORDED. _check_fed_day had always
       returned False: the live calendar sends ISO dates ("2026-09-16T14:00:00-04:00") and the parser wanted
       "Jun 21, 2026" (ValueError -> bare continue on every event), and it read `currency` where the payload says
@@ -46,6 +56,7 @@ YAHOO-FINANCE PURGE / data stream mapping optimization. VIX now
 
 import logging
 import json
+import random
 import time
 from dataclasses import dataclass
 from datetime import date, datetime
@@ -60,6 +71,12 @@ from config import (
 )
 
 logger = logging.getLogger(__name__)
+
+# MACRO.1 — a failed VIX fetch (the 09:15 wake's 429 burst) is retried before the default.
+VIX_RETRIES               = 2            # extra attempts after the first
+VIX_RETRY_SLEEP_S         = (0.5, 2.0)   # jittered sleep before each retry
+VIX_RETRY_MAX_WAIT_S      = 5.0          # total sleep bound across the retries
+MACRO_DEFAULT_REFETCH_MIN = 2            # a snapshot on the default VIX is re-fetched this soon
 
 
 @dataclass
@@ -80,6 +97,7 @@ class MacroSnapshot:
     new_entries_allowed: bool = True
 
     fetched_at: float = 0.0
+    vix_is_default: bool = False        # MACRO.1 — vix is the conservative default, not a measurement
 
 
 class MacroManager:
@@ -91,10 +109,15 @@ class MacroManager:
     def __init__(self):
         self._snapshot: Optional[MacroSnapshot] = None
         self._last_fetch: float = 0
+        self._vix_defaulted: bool = False
 
     def get(self, force: bool = False) -> MacroSnapshot:
         elapsed_min = (time.time() - self._last_fetch) / 60
-        if force or self._snapshot is None or elapsed_min >= MACRO_FETCH_INTERVAL_MIN:
+        # MACRO.1 — a defaulted snapshot is re-fetched after a short interval, not the full hour.
+        interval = (MACRO_DEFAULT_REFETCH_MIN
+                    if self._snapshot is not None and self._snapshot.vix_is_default
+                    else MACRO_FETCH_INTERVAL_MIN)
+        if force or self._snapshot is None or elapsed_min >= interval:
             self._snapshot = self._fetch()
             self._last_fetch = time.time()
         return self._snapshot
@@ -104,6 +127,7 @@ class MacroManager:
 
         # ── VIX ───────────────────────────────────────────────────────────────
         snap.vix = self._fetch_vix()
+        snap.vix_is_default = self._vix_defaulted
         snap.vix_band = self._classify_vix(snap.vix)
 
         # Derive gates from VIX
@@ -143,6 +167,7 @@ class MacroManager:
             f"butterfly={'YES' if snap.butterfly_allowed else 'NO'} "
             f"fed_day={snap.is_fed_day} "
             f"entries={'YES' if snap.new_entries_allowed else 'NO'}"
+            + (" (VIX DEFAULT)" if snap.vix_is_default else "")
         )
         return snap
 
@@ -153,22 +178,40 @@ class MacroManager:
         TastyTrade REST market-data second — see v3.0 header for the
         entitlement flag). Falls back to stale value, then conservative
         default, fail-loud at each step.
+
+        MACRO.1 — a failed attempt is retried VIX_RETRIES more times after a
+        jittered sleep (total bounded by VIX_RETRY_MAX_WAIT_S) before falling
+        back. Sets self._vix_defaulted when the value returned is the default.
         """
-        try:
-            from data.market_data import fetch_quote
-            val = fetch_quote("VIX")
-            if val is not None and float(val) > 0:
-                logger.debug(f"VIX fetched via shared feed: {val:.2f}")
-                return float(val)
-        except Exception as e:
-            logger.warning(f"shared-feed VIX fetch failed: {e}")
+        self._vix_defaulted = False
+        waited = 0.0
+        for attempt in range(1 + VIX_RETRIES):
+            why = "no value"
+            try:
+                from data.market_data import fetch_quote
+                val = fetch_quote("VIX")
+                if val is not None and float(val) > 0:
+                    logger.debug(f"VIX fetched via shared feed: {val:.2f}")
+                    return float(val)
+            except Exception as e:
+                why = str(e) or type(e).__name__
+            if attempt >= VIX_RETRIES:
+                logger.warning(f"shared-feed VIX fetch failed: {why}")
+                break
+            pause = min(random.uniform(*VIX_RETRY_SLEEP_S), max(0.0, VIX_RETRY_MAX_WAIT_S - waited))
+            logger.info(f"VIX fetch attempt {attempt + 1} failed ({why}) — retrying in {pause:.1f}s")
+            if pause > 0:
+                time.sleep(pause)
+                waited += pause
 
         # Use stale value if available
         if self._snapshot and self._snapshot.vix > 0:
             logger.warning("VIX unavailable from feed — using stale snapshot value")
+            self._vix_defaulted = bool(self._snapshot.vix_is_default)
             return self._snapshot.vix
 
         logger.warning("Could not fetch VIX — defaulting to 20 (conservative)")
+        self._vix_defaulted = True
         return 20.0
 
     def _classify_vix(self, vix: float) -> str:

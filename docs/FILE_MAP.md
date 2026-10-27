@@ -4,9 +4,9 @@
 Do not edit by hand: the generator runs inside the land command and
 the canary fails on drift (WORKING_AGREEMENT 33).
 
-516 Python modules across 12 local packages.
+517 Python modules across 12 local packages.
 
-**Reached by:** 136 imported · 25 declared entry points · 240 referenced from a script, unit or doc but never imported · **115 by nothing here**.
+**Reached by:** 136 imported · 25 declared entry points · 241 referenced from a script, unit or doc but never imported · **115 by nothing here**.
 
 ⚠️ The last group is a REVIEW LIST, not a delete list. A
 `land.spec CHECK` line ships inside a tarball and is never
@@ -42,7 +42,7 @@ execution.exit_engine); every such edge is listed below like any other.
 - `analysis/market_state.py` - the structural state assembly.
   **Carries the vocabulary, classifies nothing.**
 
-**Where the evidence lives:** `tests/` holds 316 standing
+**Where the evidence lives:** `tests/` holds 317 standing
 checks (`check_*.py`, all run by `tools/boot_sweep.py` at boot)
 plus the studies that produced every threshold in
 `docs/TRADES.md`. **A number in a strategy file should be
@@ -211,11 +211,11 @@ Change these with the most care; a break here reaches everything downstream.
 
 ### `data/macro_data.py`
 - **calls:** `config.py`, `data/market_data.py`, `utils/time_utils.py`
-- **called by:** `main.py`, `risk/session_guard.py`, `strategy/iron_condor_strategy.py`, `strategy/orb_strategy.py`, `tests/check_fed_day_record.py`
+- **called by:** `main.py`, `risk/session_guard.py`, `strategy/iron_condor_strategy.py`, `strategy/orb_strategy.py`, `tests/check_fed_day_record.py`, `tests/check_macro_vix_retry.py`
 
 ### `data/market_data.py`
 - **calls:** `config.py`, `data/candle_feed.py`, `data/tasty_client.py`, `utils/time_utils.py`
-- **called by:** `analysis/get_orb_range.py`, `data/data_cache.py`, `data/macro_data.py`, `derived/indicators.py`, `main.py`, `query.py`, `tests/check_bfly_vwap_band.py`, `tests/check_db_handles.py`, `tests/check_half_day.py`, `tests/check_vwap_closed_bars.py`
+- **called by:** `analysis/get_orb_range.py`, `data/data_cache.py`, `data/macro_data.py`, `derived/indicators.py`, `main.py`, `query.py`, `tests/check_bfly_vwap_band.py`, `tests/check_db_handles.py`, `tests/check_half_day.py`, `tests/check_macro_vix_retry.py`, `tests/check_vwap_closed_bars.py`
 
 ### `data/open_interest.py`
 - **calls:** `data/__init__.py`, `data/tasty_client.py`
@@ -1200,6 +1200,10 @@ Change these with the most care; a break here reaches everything downstream.
 ### `tests/check_low_price_symbols.py`
 - **calls:** `config.py`, `strategy/__init__.py`, `strategy/orb_plan.py`, `utils/__init__.py`, `utils/math_utils.py`
 - **called by:** (nothing — no importer and no mention in any script, unit or doc here)
+
+### `tests/check_macro_vix_retry.py`
+- **calls:** `data/macro_data.py`, `data/market_data.py`
+- **called by:** (not imported) — referenced in `docs/BACKLOG.md`
 
 ### `tests/check_manage_board_clears.py`
 - **calls:** `derived/__init__.py`, `derived/plans.py`, `strategy/__init__.py`, `strategy/plan.py`
