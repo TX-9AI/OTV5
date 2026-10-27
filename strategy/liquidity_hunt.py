@@ -1,5 +1,9 @@
 """
-strategy/liquidity_hunt.py  v5.1
+strategy/liquidity_hunt.py  v5.2
+v5.2  2026-10-27  OTV5 r44 (BAR.1) — THE CLOSED BAR IS THE LAST BAR CLOSED BY TIME. break_state and the fake-fail walk read
+      df_1m.iloc[-2], one bar stale on a tick before the new minute's first row exists (META 2026-10-27 3f2b1372: a Breakout short fired 10:10:00 ET on the 10:08 bar while 10:09 had already closed back inside the 623.20 edge). They now read
+      utils.time_utils.closed_pos(df_1m, now_et); unchanged when the forming row is present. SOFI 2026-10-26 87de220f
+      (A1 long 09:40:00) read 09:38 for 09:39 - both above the range, same decision. GATE tests/check_last_closed_bar.py.
 v5.1  2026-10-26  OTV5 r33 (HUNT.14) — THE RUNWAY IS SIGNED: A PRICE AT OR THROUGH ITS TARGET IS REFUSED. The runway was
       abs(target - price_now), so a price already past the target still had positive runway and the guard "price is
       already at/through the target" could never trip. GOOGL 2026-10-26 (33dc832f) entered short at 318.07, 0.20 through
@@ -288,6 +292,7 @@ def _record_hunt_rearm(row: dict) -> None:
 
 
 from utils.time_utils import parse_hm as _hm      # r220 (TIME.1): the one parser
+from utils.time_utils import closed_pos as _closed_pos   # r44 (BAR.1): the last CLOSED bar, by time
 
 
 class HuntPreparation:
@@ -459,7 +464,8 @@ class LiquidityHunt:
         # the closed bar: where is price relative to the range, and did a fake fail?
         if df_1m is None or len(df_1m) < 2:
             prep.starved.append("df_1m"); t.starved("df_1m"); return prep
-        bar = df_1m.iloc[-2]; bar_ts = str(df_1m.index[-2])
+        _cp = _closed_pos(df_1m, now_et)                        # r44 (BAR.1): by time, was iloc[-2]
+        bar = df_1m.iloc[_cp]; bar_ts = str(df_1m.index[_cp])
         close = float(bar["close"])
         new_bar = bar_ts != self._last_bar_ts
         self._last_bar_ts = bar_ts

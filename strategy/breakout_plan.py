@@ -1,5 +1,13 @@
 """
-strategy/breakout_plan.py  v5.0
+strategy/breakout_plan.py  v5.1
+v5.1  2026-10-27  OTV5 r44 (BAR.1) — THE BREAK BAR IS THE LAST BAR CLOSED BY TIME, NOT df_1m.iloc[-2]. "THE BREAK: a CLOSED
+      bar's CLOSE beyond the edge (r5)" read iloc[-2], which on a tick in the first instant of a minute (before that
+      minute's first row exists) is one bar stale. META 2026-10-27 3f2b1372: Breakout short fired 10:10:00 ET on the
+      10:08 bar (close 623.01 < edge 623.20; plan line "1m stop 623.57" = 10:08's high 623.5659) while 10:09 had already
+      closed back inside at 623.21 - a break the market had undone. The break bar, its stop, the 5m-swing bound, and the
+      signal-bar stamp the fresh-break / re-fire / shadow gates read now all use utils.time_utils.closed_pos(df_1m,
+      now_et): the newest row when it has closed, else the row before it (unchanged when the forming row is present).
+      GATE tests/check_last_closed_bar.py C2/C3.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.18 2026-10-24  OTV4TEST r316 (BRK.15) — A SIDE RE-ARMS ON EVERY RETURN TO THE RANGE; THE NEW-EXTREME RULE IS DROPPED.
       The operator, 2026-10-24 13:45 ET: "The new session high/low rule needs to be dropped. You established that the
@@ -198,6 +206,7 @@ def _f(v) -> Optional[float]:
 
 
 from utils.time_utils import parse_hm as _hm      # r220 (TIME.1): the one parser
+from utils.time_utils import closed_pos as _closed_pos   # r44 (BAR.1): the last CLOSED bar, by time
 
 
 def _et(s: str):
@@ -755,7 +764,10 @@ class BreakoutPlan:
         prep.cond("range_clean", _rc, B.accepts("range_clean", _rc))
 
         # ── THE BREAK: a CLOSED bar's CLOSE beyond the edge (r5) ───────────
-        bar = df_1m.iloc[-2]
+        # r44 (BAR.1) - the last bar CLOSED BY TIME; iloc[-2] was a minute stale on a
+        # tick before the new minute's first row (META 10-27 10:10:00 fired on 10:08)
+        cp = _closed_pos(df_1m, now_et)
+        bar = df_1m.iloc[cp]
         bc = _f(bar.get("close") if hasattr(bar, "get") else bar["close"])
         direction = ("long" if (hi and bc and bc > hi)
                      else "short" if (lo and bc and bc < lo) else "")
@@ -811,7 +823,7 @@ class BreakoutPlan:
         # extreme and the last closed 5m bars' (never tighter than the 1m stop).
         _mode = getattr(config, "BRK_STOP5M_MODE", "trade")
         if direction and prep.stop and _mode != "off":
-            _sts = _bar_stamp(df_1m, -2)
+            _sts = _bar_stamp(df_1m, cp)
             sw = (swing_5m_stop(symbol or self._symbol(), _sts.date(),
                                 int(_sts.timestamp() * 1000) + 60_000, direction,
                                 int(getattr(config, "BRK_STOP5M_BARS", 3)))
@@ -855,11 +867,11 @@ class BreakoutPlan:
         # The operator, 2026-10-24: *"The new session high/low rule needs to be dropped"*; *"For now, rearm
         # it on every reentry"*. OT_BRK_REFIRE=extreme restores r131 (the block below it, unchanged).
         if getattr(config, "BRK_REFIRE_MODE", "rearm") == "extreme":
-            if not self._new_extreme(t, B, direction, df_1m, bc, symbol, edge=prep.edge):
-                self._refire_shadow(direction, df_1m, bc, symbol, prep.edge, decided=False)
+            if not self._new_extreme(t, B, direction, df_1m, bc, symbol, edge=prep.edge, cp=cp):
+                self._refire_shadow(direction, df_1m, bc, symbol, prep.edge, decided=False, cp=cp)
                 return prep
-            self._refire_shadow(direction, df_1m, bc, symbol, prep.edge, decided=True)
-        elif not self._refire(t, B, direction, df_1m, bc, symbol, edge=prep.edge):
+            self._refire_shadow(direction, df_1m, bc, symbol, prep.edge, decided=True, cp=cp)
+        elif not self._refire(t, B, direction, df_1m, bc, symbol, edge=prep.edge, cp=cp):
             return prep
         # ══ r131 — A RE-FIRE ON A SIDE NEEDS A NEW SESSION EXTREME (OT_BRK_REFIRE=extreme only, since r316) ══
         # Operator, 2026-09-24: *"A new reclaimed level has to happen before it
@@ -920,7 +932,7 @@ class BreakoutPlan:
         return prep
 
     # ── r131: the re-fire gate ─────────────────────────────────────────────
-    def _refire(self, t, B, direction, df_1m, bc, symbol, edge=None) -> bool:
+    def _refire(self, t, B, direction, df_1m, bc, symbol, edge=None, cp: int = -2) -> bool:
         """r316 (BRK.15) - True when this side may fire: the signal bar is a FRESH break (the first 1m close
         beyond the edge since 09:35 or since the side's latest close back inside it) and it is not a bar that
         already fired. Refuses at `B.FRESH_BREAK` otherwise. r131's new-extreme verdict is computed beside it,
@@ -930,7 +942,7 @@ class BreakoutPlan:
         session's closes from the feed store. Either unreadable FAILS CLOSED.
         """
         gate = B.FRESH_BREAK
-        sig_ts = _bar_stamp(df_1m, -2)
+        sig_ts = _bar_stamp(df_1m, cp)                          # r44 (BAR.1): prepare's closed bar
         if sig_ts is None or edge is None:
             t.refuse(gate, "the signal bar carries no timestamp or the side no edge, so the session's "
                            "closes cannot be bounded - failing closed")
@@ -970,14 +982,15 @@ class BreakoutPlan:
             t.refuse(gate, f"the {direction} break began at {_rt} and has not closed back inside "
                            f"{float(edge):.2f} since - a close back inside re-arms the side")
         self._refire_shadow(direction, df_1m, bc, symbol, edge, decided=ok, rearm=(ok, run),
-                            fired=len(ents))
+                            fired=len(ents), cp=cp)
         return ok
 
-    def _refire_shadow(self, direction, df_1m, bc, symbol, edge, *, decided, rearm=None, fired=None) -> None:
+    def _refire_shadow(self, direction, df_1m, bc, symbol, edge, *, decided, rearm=None, fired=None,
+                       cp: int = -2) -> None:
         """r316 (BRK.15) - the OTHER rule's verdict on this signal bar, written to breakout_refire.jsonl when it
         disagrees with the one that decided. NEVER raises and touches no tick record."""
         try:
-            sig_ts = _bar_stamp(df_1m, -2)
+            sig_ts = _bar_stamp(df_1m, cp)                      # r44 (BAR.1)
             if sig_ts is None or edge is None or bc is None:
                 return
             day, sym, sig_ms = sig_ts.date(), (symbol or self._symbol()), int(sig_ts.timestamp() * 1000)
@@ -1008,7 +1021,7 @@ class BreakoutPlan:
         except Exception as exc:                                # noqa: BLE001
             logger.debug("[breakout] re-fire shadow not computed: %s", exc)
 
-    def _new_extreme(self, t, B, direction, df_1m, bc, symbol, edge=None) -> bool:
+    def _new_extreme(self, t, B, direction, df_1m, bc, symbol, edge=None, cp: int = -2) -> bool:
         """True when this side may fire. Refuses at `B.NEW_EXTREME` otherwise.
 
         ⚠️ EVERY FACT IT DECIDES ON IS READ FROM A BOOK, NEVER HELD HERE: the
@@ -1016,7 +1029,7 @@ class BreakoutPlan:
         A fresh plan object (a restart, a bake) reaches the same verdict.
         """
         gate = B.NEW_EXTREME
-        sig_ts = _bar_stamp(df_1m, -2)
+        sig_ts = _bar_stamp(df_1m, cp)                          # r44 (BAR.1)
         day = sig_ts.date() if sig_ts is not None else _today_et()
         ents = side_entries_today(direction, day)
         fired = None if ents is None else len(ents)

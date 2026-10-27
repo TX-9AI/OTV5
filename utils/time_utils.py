@@ -1,5 +1,14 @@
 """
-utils/time_utils.py  v5.0
+utils/time_utils.py  v5.1
+v5.1  2026-10-27  OTV5 r44 (BAR.1) — THE LAST CLOSED BAR IS FOUND BY TIME, NOT BY POSITION. closed_pos(df, now, bar_s) /
+      closed_part(df, now, bar_s): every strategy, engine and exit read "the last CLOSED 1m bar" as iloc[-2], assuming
+      the frame's newest row is the still-forming minute. On a tick in the first instant of a minute, before that
+      minute's first row exists, the newest row IS the just-closed bar and iloc[-2] is one minute stale. META 2026-10-27
+      (3f2b1372): Breakout short fired 10:10:00 ET on the 10:08 bar (close 623.01, "1m stop 623.57" = its high 623.5659)
+      while 10:09 had already closed back inside the 623.20 edge (623.21). The newest row is closed when its start +
+      bar_s <= now; then it is the answer (-1), else the row before it (-2, today's reading). A frame that is not live
+      (its newest row started LIVE_FRAME_BARS = 3 bar-lengths or more before now: a stalled feed, a replay, a fixture -
+      the width market_data already calls stale) and anything unreadable keep -2. GATE tests/check_last_closed_bar.py.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v4.8  2026-10-11  OTV4TEST r269 (OPS.22, mirror of otv4 r479) - the zone NAME is "America/New_York", the zone the legacy link
       US/Eastern pointed to: identical rules, no behaviour change. tzdata 2026c moved the US/* links into tzdata-legacy;
@@ -96,6 +105,73 @@ def now_utc() -> datetime:
 
 def now_et() -> datetime:
     return datetime.now(ET)
+
+
+# ══ r44 (BAR.1) — THE LAST CLOSED BAR, BY TIME ══════════════════════════════
+# A frame's index is each bar's START. The feed writes the forming minute as a
+# row, so the newest row is USUALLY still forming and iloc[-2] is the last closed
+# bar - but not in the first instant of a minute, before the new minute's first
+# row exists: then the newest row has closed and iloc[-2] is a minute stale
+# (META 2026-10-27 10:10:00 ET fired a Breakout on 10:08 while 10:09 had closed
+# back inside the range). The newest row is closed once start + bar_s <= now.
+# ⚠️ A FRAME THAT IS NOT LIVE KEEPS TODAY'S READING. When the newest row started
+# LIVE_FRAME_BARS bar-lengths or more before `now` (the width data/market_data
+# calls a stale frame: a stalled feed, a replay, a fixture) the boundary race
+# this fixes cannot be told from a dead tape, so -2 stands, exactly as before.
+LIVE_FRAME_BARS = 3.0
+
+
+def _epoch_s(v) -> Optional[float]:
+    """Epoch seconds of a datetime/Timestamp (naive is read as ET) or a number;
+    None for anything else (a "HH:MM" string, None, NaT)."""
+    if v is None or isinstance(v, bool):
+        return None
+    if isinstance(v, (int, float)):
+        return float(v)
+    if isinstance(v, datetime):
+        try:
+            if v.tzinfo is None:
+                v = ET.localize(v)
+            out = v.timestamp()
+            return None if out != out else float(out)
+        except Exception:                                       # noqa: BLE001
+            return None
+    return None
+
+
+def closed_pos(df, now=None, bar_s: float = 60.0) -> int:
+    """r44 (BAR.1) — the position (-1 or -2) of the frame's newest CLOSED bar.
+
+    -1 when the newest row has closed by `now` (start + bar_s <= now) on a live
+    frame; -2 otherwise - the reading every caller made before r44. `now` is a
+    datetime / Timestamp / epoch seconds; anything else (None, a "HH:MM" string)
+    reads the clock, now_et(). bar_s is the frame's bar length (300 for 5m).
+    Never raises; an empty, short or untimed frame answers -2, so each caller's
+    own length guard behaves exactly as it did."""
+    try:
+        if df is None or len(df) == 0:
+            return -2
+        start = df.index[-1]
+        if not isinstance(start, datetime):
+            return -2
+        s0 = _epoch_s(start)
+        t = _epoch_s(now)
+        if t is None:
+            t = _epoch_s(now_et())
+        if s0 is None or t is None:
+            return -2
+        b = float(bar_s)
+        return -1 if (s0 + b <= t < s0 + LIVE_FRAME_BARS * b) else -2
+    except Exception:                                           # noqa: BLE001
+        return -2
+
+
+def closed_part(df, now=None, bar_s: float = 60.0):
+    """r44 (BAR.1) — the frame's CLOSED bars: `df` itself when its newest row has
+    closed (closed_pos -1), else df.iloc[:-1] (the reading before r44)."""
+    if df is None:
+        return df
+    return df if closed_pos(df, now, bar_s) == -1 else df.iloc[:-1]
 
 
 def fmt_et_short(dt: Optional[datetime] = None) -> str:

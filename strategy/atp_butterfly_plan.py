@@ -1,5 +1,9 @@
 """
-strategy/atp_butterfly_plan.py  v5.0
+strategy/atp_butterfly_plan.py  v5.1
+v5.1  2026-10-27  OTV5 r44 (BAR.1) — settled_run COUNTS THE BARS CLOSED BY TIME. It took df_1m.iloc[:-1] as the closed bars,
+      which drops a CLOSED bar on a tick before the new minute's first row exists (META 2026-10-27 3f2b1372: a Breakout short fired 10:10:00 ET on the 10:08 bar while 10:09 had already closed back inside the 623.20 edge). It reads
+      utils.time_utils.closed_part(df_1m, now) (now defaults to the clock); unchanged when the forming row is present.
+      GATE tests/check_last_closed_bar.py.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.5  2026-10-19  OTV4TEST r303 (PSTATE.1) — the `enabled` condition is met when the plan is ACTIVE (ENABLED, as before)
       or switched to LOG (OT_ATP_BUTTERFLY=log): LOG reaches take(), which records LOG-ONLY. DORMANT is never asked.
@@ -93,6 +97,7 @@ from strategy import gex_pin_butterfly as _gpb
 from strategy.criteria import stop_survivable, R_FLOOR, STOP_VS_SPREAD_MIN
 from strategy.plan import Plan
 from utils.math_utils import safe_float
+from utils.time_utils import closed_part as _closed_part   # r44 (BAR.1): the CLOSED bars, by time
 
 logger = logging.getLogger(__name__)
 
@@ -121,14 +126,14 @@ def _nr(v):
     return "n/a" if v is None else f"{v:.2f}"
 
 
-def settled_run(df_1m, pin: float, band: float) -> Optional[int]:
+def settled_run(df_1m, pin: float, band: float, now=None) -> Optional[int]:
     """Consecutive CLOSED 1m bars, counting back from now, that closed within ±band
     of the pin. None when there are no closed bars to read (the forming bar, the
-    last row, is never counted)."""
+    last row, is never counted). r44 (BAR.1): the closed bars BY TIME."""
     try:
         if df_1m is None or len(df_1m) < 2:
             return None
-        closes = [float(c) for c in df_1m["close"].iloc[:-1]]
+        closes = [float(c) for c in _closed_part(df_1m, now)["close"]]
     except Exception:                                           # noqa: BLE001
         return None
     n = 0
@@ -276,7 +281,7 @@ class ATPButterflyPlan:
             prep.dist = abs(price_now - pin)
             prep.cond("at_pin", prep.dist, f"<= {band:.2f} ({AT_PIN_EM_FRAC:.2f}x EM {em:.2f})",
                       prep.dist <= band)
-            prep.settled = settled_run(df_1m, pin, band)
+            prep.settled = settled_run(df_1m, pin, band, now=now_et)
             prep.cond("settled", None if prep.settled is None else float(prep.settled),
                       f">= {SETTLED_BARS} closed 1m bars within ±{band:.2f} of the pin"
                       + ("" if prep.settled is not None else " (no closed bars to read)"),

@@ -1,5 +1,9 @@
 """
-strategy/volt_plan.py  v5.0
+strategy/volt_plan.py  v5.1
+v5.1  2026-10-27  OTV5 r44 (BAR.1) — THE COMPLETED BARS ARE THE BARS CLOSED BY TIME. bars[:-1] dropped a CLOSED bar on a tick
+      before the new minute's first row exists (META 2026-10-27 3f2b1372: a Breakout short fired 10:10:00 ET on the 10:08 bar while 10:09 had already closed back inside the 623.20 edge). It keeps the newest row when
+      utils.time_utils.closed_pos(df_1m) says it has closed; unchanged when the forming row is present. VOLT is OFF by
+      ruling (2026-10-02); fixed so OT_VOLT=active/log reads the right bar. GATE tests/check_last_closed_bar.py.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.7  2026-10-19  OTV4TEST r303 (PSTATE.1) — the switch is strategy/plan_state.py's: OT_VOLT=active|log|off ("1" still = active).
       DORMANT (the default) writes its row only if asked - main._safe_strategy no longer asks it; LOG evaluates
@@ -150,6 +154,7 @@ CONTRACT_MULT = int(getattr(config, "CONTRACT_MULTIPLIER", 100))
 
 
 from utils.time_utils import parse_hm as _hhmm    # r220 (TIME.1): the one parser
+from utils.time_utils import closed_pos as _closed_pos   # r44 (BAR.1): the last CLOSED bar, by time
 
 
 def select_contract(chain, direction: str, target_strike: float, otm_from=None):
@@ -315,7 +320,8 @@ class VoltPlan:
         bars = _bars_1m(df_1m)
         # completed bars only — the forming bar's volume is a partial count and
         # gating on it would fire early on a bar that ends up ordinary.
-        completed = bars[:-1] if len(bars) >= 1 else []
+        # r44 (BAR.1): BY TIME - the newest row is kept when it has already closed
+        completed = (bars if _closed_pos(df_1m) == -1 else bars[:-1]) if len(bars) >= 1 else []
 
         # ── the window: OUTSIDE IT THE PLAN OBSERVES AND DOES NOT WRITE ────
         hm = _hhmm(now_hhmm)

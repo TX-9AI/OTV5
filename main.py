@@ -1,5 +1,8 @@
 """
-main.py  v5.2
+main.py  v5.3
+v5.3  2026-10-27  OTV5 r44 (BAR.1) — _supervise_offers hands the resting-offer supervisor the last 1m close BY TIME
+      (utils.time_utils.closed_pos), not df_1m.iloc[-2], which was one bar stale on a tick before the new minute's first
+      row exists (META 2026-10-27 3f2b1372: a Breakout short fired 10:10:00 ET on the 10:08 bar while 10:09 had already closed back inside the 623.20 edge). Unchanged when the forming row is present. GATE tests/check_last_closed_bar.py.
 v5.2  2026-10-25  (MEAS.3) — COMMENT ONLY: the dispatch note no longer says a Fed day boosts ORB conviction
       (FED_DAY_ORB_BOOST is removed; the Fed-day flag is record only).
 v5.1  2026-10-25  (MEAS.4) — adx_at_entry IS STAMPED FOR EVERY STRATEGY. _stamp_adx copies ctx["trend"].primary_adx
@@ -4158,7 +4161,8 @@ def _supervise_offers(ctx: dict, state: BotState) -> None:
         _df = ctx.get("df_1m")
         _last = None
         if _df is not None and len(_df) >= 2:
-            _last = float(_df.iloc[-2]["close"])
+            from utils.time_utils import closed_pos as _closed_pos     # r44 (BAR.1): by time, was iloc[-2]
+            _last = float(_df.iloc[_closed_pos(_df, now_et())]["close"])
         _ro.supervise(
             price=float(ctx.get("price") or 0.0),
             last_1m_close=_last,

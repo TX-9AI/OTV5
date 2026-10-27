@@ -1,5 +1,9 @@
 """
-strategy/condor_roll.py  v5.0
+strategy/condor_roll.py  v5.1
+v5.1  2026-10-27  OTV5 r44 (BAR.1) — THE CLOSED BAR IS THE LAST BAR CLOSED BY TIME. classify_tested's wick test and
+      _tent_breached's close read df_1m.iloc[-2], one bar stale on a tick before the new minute's first row exists
+      (META 2026-10-27 3f2b1372: a Breakout short fired 10:10:00 ET on the 10:08 bar while 10:09 had already closed back inside the 623.20 edge). Both read utils.time_utils.closed_pos(df_1m) (the clock); unchanged when the forming row is present.
+      GATE tests/check_last_closed_bar.py.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v4.12 2026-10-20  OTV4TEST r309 (B4, MIRROR OF otv4 r495 81cc63c, WA 38.2) — the roll and the tent ask
       order_guard.clear_to_post BEFORE their first leg on LIVE (found by this tree's r495 critique,
@@ -145,6 +149,7 @@ from typing import Optional, List, Tuple
 
 from config import STRIKE_INCREMENT, CONTRACT_MULTIPLIER
 from utils.time_utils import fmt_et_short
+from utils.time_utils import closed_pos as _closed_pos   # r44 (BAR.1): the last CLOSED bar, by time
 from strategy.plan import Plan
 
 logger = logging.getLogger(__name__)
@@ -192,7 +197,7 @@ def classify_tested(legs: List[dict], current_price: float,
 
     try:
         if df_1m is not None and len(df_1m) >= 2:
-            bar = df_1m.iloc[-2]
+            bar = df_1m.iloc[_closed_pos(df_1m)]                # r44 (BAR.1): by time, was iloc[-2]
             hi, lo, close = float(bar["high"]), float(bar["low"]), float(bar["close"])
             ck, pk = float(call_leg["short_strike"]), float(put_leg["short_strike"])
             if hi >= ck and close <= ck:
@@ -672,7 +677,7 @@ def _tent_breached(df_1m, legs: List[dict]) -> Optional[dict]:
     try:
         if df_1m is None or len(df_1m) < 2:
             return None
-        last_close = float(df_1m["close"].iloc[-2])   # newest CLOSED bar
+        last_close = float(df_1m["close"].iloc[_closed_pos(df_1m)])   # newest CLOSED bar (r44 BAR.1: by time)
     except Exception:                                          # noqa: BLE001
         return None
     for leg in legs:

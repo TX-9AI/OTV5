@@ -1,5 +1,13 @@
 """
-analysis/orb_engine.py  v5.0
+analysis/orb_engine.py  v5.1
+v5.1  2026-10-27  OTV5 r44 (BAR.1) — THE ENGINE ADVANCES ON THE LAST BAR CLOSED BY TIME. Every latch, the break, the
+      retest, the 50% acceptance, AWAITING_RANGE_REENTRY and _closed_inside read df_1m.iloc[-2] (iloc[-3] for the
+      previous close), one bar stale on a tick before the new minute's first row exists (META 2026-10-27 3f2b1372: a
+      Breakout short fired 10:10:00 ET on 10:08 while 10:09 had closed back inside the 623.20 low). They read
+      self._cp(df_1m) = utils.time_utils.closed_pos(df_1m, as-of), the as-of pinned once per update() to now_et() so
+      one tick reads one bar. rebuild_from_tape() pins the as-of to each replay slice's newest bar START, so the
+      replay still reads iloc[-2] exactly as before (r95: replay equals the live loop). GATE
+      tests/check_last_closed_bar.py.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v4.17  2026-10-03  OTV4TEST r222 (ORP.1) — correct_range(): THE OFFICIAL PRINT CAN REPLACE A RANGE FROZEN FROM AN INCOMPLETE OPEN.
       On 2026-09-29 the feed was blind at the open and the range was frozen from a partial candle (low
@@ -518,6 +526,7 @@ from datetime import datetime
 import pandas as pd
 
 from utils.time_utils import now_et
+from utils.time_utils import closed_pos as _closed_pos   # r44 (BAR.1): the last CLOSED bar, by time
 from zoneinfo import ZoneInfo as _ZoneInfo
 _ET = _ZoneInfo("America/New_York")
 _RANGE_END_ET = __import__("datetime").time(9, 34)   # r131b: first bar the live loop reads
@@ -660,6 +669,14 @@ class ORBEngine:
         # exists in bot.log is not a countable population, and the operator
         # reads PLANS, not the log.
         self._last_missed = None
+        # r44 (BAR.1) - the clock `_cp` judges "closed" against: None = now_et();
+        # update() pins it for one tick, rebuild_from_tape() per replay slice.
+        self._asof = None
+
+    def _cp(self, df_1m) -> int:
+        """r44 (BAR.1) - the position (-1/-2) of the newest CLOSED bar in df_1m."""
+        _a = getattr(self, "_asof", None)
+        return _closed_pos(df_1m, _a if _a is not None else now_et())
 
     @property
     def data(self) -> ORBData:
@@ -783,6 +800,14 @@ class ORBEngine:
         now = now_et()
         past_orb_cutoff = (now.hour, now.minute) >= ORB_NO_ENTRY_AFTER_ET
         d.entries_expired = past_orb_cutoff
+        self._asof = now                    # r44 (BAR.1): one tick, one closed bar
+        try:
+            return self._update_at(d, df_1m, ms, past_orb_cutoff)
+        finally:
+            self._asof = None
+
+    def _update_at(self, d, df_1m, ms, past_orb_cutoff) -> ORBData:
+        """r44 (BAR.1) - update()'s body, unchanged, run under the pinned as-of."""
 
         # Maintain the session break latches on EVERY tick, in EVERY state, the
         # moment the range is established — a break is a session-level fact, not
@@ -838,7 +863,7 @@ class ORBEngine:
             # anyway — this state stops the engine CLAIMING otherwise, and
             # flips the moment a closed bar is back inside the range.
             if df_1m is not None and len(df_1m) >= 2:
-                _c = float(df_1m.iloc[-2]["close"])
+                _c = float(df_1m.iloc[self._cp(df_1m)]["close"])   # r44 (BAR.1)
                 if d.orb_low < _c < d.orb_high:     # r131b: strictly between
                     d.state = ORBState.WAITING_FOR_BREAK
                     logger.info("ORB: price back inside %.2f-%.2f — watching "
@@ -894,10 +919,13 @@ class ORBEngine:
         session latches and the `>=`/`<=` break test.
         """
         d = self._data
-        if (df_1m is None or len(df_1m) < back
+        # r44 (BAR.1): `back` counts from the forming row as before (2 = the closed bar,
+        # 3 = the one before it), anchored on the closed bar found by time
+        pos = self._cp(df_1m) - (back - 2) if df_1m is not None else -back
+        if (df_1m is None or len(df_1m) < -pos
                 or d.orb_high <= 0 or d.orb_low <= 0):
             return False
-        c = float(df_1m.iloc[-back]["close"])
+        c = float(df_1m.iloc[pos]["close"])
         return d.orb_low < c < d.orb_high
 
     # ── r103 — THE STATE FILE IS AUTHORITATIVE ───────────────────────────────
@@ -1179,21 +1207,27 @@ class ORBEngine:
             # them, one tick at a time.
             replayed = 0
             confirm_ts = None
-            for i in range(2, len(sess) + 1):
-                sub = sess.iloc[:i]
-                self._update_break_latches(sub)      # same order as update()
-                was = self._data.state
-                self._advance_state(sub, ms)
-                if (was not in (ORBState.OPEN_LONG, ORBState.OPEN_SHORT)
-                        and self._data.state in (ORBState.OPEN_LONG,
-                                                 ORBState.OPEN_SHORT)):
-                    # The CONFIRMING bar is the one the state machine just read,
-                    # i.e. iloc[-2] — not the newest bar in the frame. Measuring
-                    # from the frame's end would report the age of the REPLAY
-                    # rather than the age of the SETUP, which is the number that
-                    # matters and the one that would quietly read ~0 forever.
-                    confirm_ts = sub.index[-2]
-                replayed += 1
+            try:                                     # r44 (BAR.1): the as-of never outlives the replay
+                for i in range(2, len(sess) + 1):
+                    sub = sess.iloc[:i]
+                    # r44 (BAR.1): the replay's as-of is the slice's newest bar START, so that
+                    # bar is the forming one and _cp reads iloc[-2], exactly as before
+                    self._asof = sub.index[-1]
+                    self._update_break_latches(sub)      # same order as update()
+                    was = self._data.state
+                    self._advance_state(sub, ms)
+                    if (was not in (ORBState.OPEN_LONG, ORBState.OPEN_SHORT)
+                            and self._data.state in (ORBState.OPEN_LONG,
+                                                     ORBState.OPEN_SHORT)):
+                        # The CONFIRMING bar is the one the state machine just read,
+                        # i.e. iloc[-2] — not the newest bar in the frame. Measuring
+                        # from the frame's end would report the age of the REPLAY
+                        # rather than the age of the SETUP, which is the number that
+                        # matters and the one that would quietly read ~0 forever.
+                        confirm_ts = sub.index[self._cp(sub)]
+                    replayed += 1
+            finally:
+                self._asof = None
 
             self._rebuilt_date = today
             self._rebuild_owed = False
@@ -1485,7 +1519,7 @@ class ORBEngine:
             return                      # range not established — nothing to latch
         if df_1m is None or len(df_1m) < 2:
             return
-        close  = float(df_1m.iloc[-2]["close"])
+        close  = float(df_1m.iloc[self._cp(df_1m)]["close"])   # r44 (BAR.1): by time
         # (v3.5) Buffer removed here too, to preserve this method's stated invariant:
         # the latch must use the SAME break threshold as _check_for_break(). The latch
         # is deliberately CLOSE-ONLY and does NOT apply the opens_inside origin gate —
@@ -1535,7 +1569,7 @@ class ORBEngine:
             return
         if df_1m is None or len(df_1m) < 2:
             return
-        close = float(df_1m.iloc[-2]["close"])
+        close = float(df_1m.iloc[self._cp(df_1m)]["close"])    # r44 (BAR.1): by time
         # ⚠️ `break_direction` IS EXACTLY "long"/"short" (set at 1275/1301) and
         # the rest of this file compares it with `== "long"`. Matching that
         # convention rather than a `startswith("L")` shortcut: the shortcut
@@ -1582,7 +1616,8 @@ class ORBEngine:
         d = self._data
         if df_1m is None or len(df_1m) < 2:
             return
-        candle = df_1m.iloc[-2]
+        cp = self._cp(df_1m)                                   # r44 (BAR.1): by time
+        candle = df_1m.iloc[cp]
         close  = float(candle["close"])
         open_  = float(candle["open"])
         high_  = float(candle["high"])
@@ -1628,7 +1663,7 @@ class ORBEngine:
         # Bars before 09:34 ET are therefore not judged, which keeps the
         # replay equal to the live loop (r95). Untimed frames are not judged.
         try:
-            _ts = df_1m.index[-2]
+            _ts = df_1m.index[cp]
             if getattr(_ts, "tzinfo", None) is not None:
                 _ts = _ts.tz_convert(_ET)
             if hasattr(_ts, "time") and _ts.time() < _RANGE_END_ET:
@@ -1653,7 +1688,7 @@ class ORBEngine:
             _refuse = (f"break candle's high {high_:.2f} is outside the range "
                        f"(below {d.orb_low:.2f}) — not a valid setup")
         if _refuse:
-            d.break_refusal = f"{df_1m.index[-2]}: {_refuse}"
+            d.break_refusal = f"{df_1m.index[cp]}: {_refuse}"
             logger.info("ORB break REFUSED: %s", d.break_refusal)
             return
 
@@ -1671,7 +1706,7 @@ class ORBEngine:
             d.break_candle_high  = high_
             d.break_candle_low   = low_
             d.bars_since_break   = 0
-            d.last_retest_bar_ts = str(df_1m.index[-2])  # break candle excluded from stale count
+            d.last_retest_bar_ts = str(df_1m.index[cp])  # break candle excluded from stale count
             d.target_100pct      = d.orb_high + d.orb_width
             d.target_50pct       = d.orb_high + d.orb_width * 0.5
             d.stop_level         = d.break_candle_low
@@ -1696,7 +1731,7 @@ class ORBEngine:
             d.break_candle_high  = high_
             d.break_candle_low   = low_
             d.bars_since_break   = 0
-            d.last_retest_bar_ts = str(df_1m.index[-2])  # break candle excluded from stale count
+            d.last_retest_bar_ts = str(df_1m.index[cp])  # break candle excluded from stale count
             d.target_100pct      = d.orb_low - d.orb_width
             d.target_50pct       = d.orb_low - d.orb_width * 0.5
             d.stop_level         = d.break_candle_high
@@ -1731,14 +1766,15 @@ class ORBEngine:
         #   (2) it was TERMINAL (never re-armed), so an expired stale attempt
         #       left the engine blind to SMH's fresh 10:06 break + 10:07
         #       textbook confirm. Now: real bars, and expiry re-arms.
-        candle_ts = str(df_1m.index[-2])
+        cp = self._cp(df_1m)                                   # r44 (BAR.1): by time
+        candle_ts = str(df_1m.index[cp])
         if candle_ts != d.last_retest_bar_ts:
             d.last_retest_bar_ts = candle_ts
             d.bars_since_break += 1
         # v4.12 (OTV4TEST r2) — NO STALE TIMEOUT. The count above is a record;
         # the armed setup lives until a retest, a runaway or a close inside.
 
-        candle    = df_1m.iloc[-2]
+        candle    = df_1m.iloc[cp]
         close     = float(candle["close"])
         open_     = float(candle["open"])
         high      = float(candle["high"])

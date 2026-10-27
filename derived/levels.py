@@ -1,5 +1,9 @@
 """
-derived/levels.py  v5.7
+derived/levels.py  v5.8
+v5.8  2026-10-27  OTV5 r44 (BAR.1) — THE BOOK'S BAR KEY AND THE RAIL JUDGEMENT USE THE LAST BAR CLOSED BY TIME. Both read
+      d1.index[-2] / d1.iloc[-2], one bar stale on a tick before the new minute's first row exists (META 2026-10-27 3f2b1372: a Breakout short fired 10:10:00 ET on the 10:08 bar while 10:09 had already closed back inside the 623.20 edge). They read
+      utils.time_utils.closed_pos(d1, time.time()); unchanged when the forming row is present. GATE
+      tests/check_last_closed_bar.py.
 v5.7  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ... (v5.0 was already spent by this file's own history, so the reset lands at v5.7.)
 v6.10  2026-10-24  CD.2 — EVERY PUBLISHED EVENT CARRIES ITS MARKET TIME (level_event.bar_close_epoch = the judging
       bar's start + its span: 60 s for a 1m judgement, 3600 s for "1h"), so latest_event() judges by the bar, not by
@@ -424,6 +428,7 @@ import time
 from typing import Optional
 
 from derived.base import DerivedEngine
+from utils.time_utils import closed_pos as _closed_pos   # r44 (BAR.1): the last CLOSED bar, by time
 
 logger = logging.getLogger(__name__)
 
@@ -937,7 +942,8 @@ class LevelEngine(DerivedEngine):
         written = 0
         d1 = ctx.get("df_1m")
         try:
-            bar_key = str(d1.index[-2]) if d1 is not None and len(d1) >= 2 else ""
+            bar_key = (str(d1.index[_closed_pos(d1, time.time())])       # r44 (BAR.1): by time
+                       if d1 is not None and len(d1) >= 2 else "")
         except Exception:                                       # noqa: BLE001
             bar_key = ""
         if bar_key and bar_key != self._book_bar:
@@ -969,10 +975,11 @@ class LevelEngine(DerivedEngine):
         try:
             if d1 is None or len(d1) < 2:
                 return 0
-            bar_ts = str(d1.index[-2]); row = d1.iloc[-2]
+            _cp = _closed_pos(d1, time.time())                  # r44 (BAR.1): by time, was iloc[-2]
+            bar_ts = str(d1.index[_cp]); row = d1.iloc[_cp]
             bar = (0, float(row["open"]), float(row["high"]), float(row["low"]), float(row["close"]))
             import pandas as _pd
-            _b0 = _pd.Timestamp(d1.index[-2])
+            _b0 = _pd.Timestamp(d1.index[_cp])
             from zoneinfo import ZoneInfo as _Z
             _b0 = _b0.tz_localize(_Z("America/New_York")) if _b0.tzinfo is None else _b0
             bar_close_epoch = _b0.timestamp() + 60.0                # CD.2: the closed 1m bar's close

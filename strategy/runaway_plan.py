@@ -1,5 +1,10 @@
 """
-strategy/runaway_plan.py  v5.0
+strategy/runaway_plan.py  v5.1
+v5.1  2026-10-27  OTV5 r44 (BAR.1) — THE LAST CLOSED BAR IS FOUND BY TIME. fifty_held_now's "last closed 1m close", the
+      frozen strength window and the re-validation walk read df_1m.iloc[-2] / iloc[:-1], one bar stale on a tick before
+      the new minute's first row exists (META 2026-10-27 10:10:00 ET: a Breakout fired on 10:08 while 10:09 had closed
+      back inside). They now use utils.time_utils.closed_pos / closed_part(df_1m, now_et); unchanged when the forming
+      row is present. GATE tests/check_last_closed_bar.py.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.8 2026-10-18  OTV4TEST r289 (RUN.9, mirror of otv4 r492) — passes note= to gamma_leverage_pick and DECLINEs with its
      reason when the first OTM strike of the chain is not a candidate (no nearest-survivor fallback any more).
@@ -123,6 +128,7 @@ def band_for(strength: Optional[float]) -> float:
 
 
 from utils.time_utils import parse_hm as _hm      # r220 (TIME.1): the one parser
+from utils.time_utils import closed_pos as _closed_pos, closed_part as _closed_part   # r44 (BAR.1)
 
 
 def _cutoff_hm():
@@ -179,7 +185,7 @@ class RunawayPlan:
         # its last exit, so a re-validated new move is measured anew.
 
     # ── strength, measured once per break ───────────────────────────────
-    def _measure(self, key, orb, df_1m, direction):
+    def _measure(self, key, orb, df_1m, direction, now=None):
         if key in self._frozen:
             return self._frozen[key]
         out = {"strength": None, "pace": None, "acceptance": None, "band": BAND_NORMAL,
@@ -191,8 +197,10 @@ class RunawayPlan:
                 out["reason"] = "not enough bars"
             else:
                 # the closed bars since the impulsive candle (k retest bars + the
-                # candle); the frame may hold fewer — take what it has
-                bars = df_1m.iloc[-(k + 2):-1] if len(df_1m) >= k + 2 else df_1m.iloc[:-1]
+                # candle); the frame may hold fewer — take what it has.
+                # r44 (BAR.1): the closed bars BY TIME (was iloc[-(k + 2):-1])
+                _cl = _closed_part(df_1m, now)
+                bars = _cl.iloc[-(k + 1):] if len(_cl) >= k + 1 else _cl
                 ts = measure(bars, direction, min_bars=MEASURE_MIN_BARS)
                 out["pace"] = getattr(ts, "pace", None)
                 out["acceptance"] = getattr(ts, "acceptance", None)
@@ -208,7 +216,7 @@ class RunawayPlan:
         return out
 
     # ── re-validation on actual, after any exit ─────────────────────────
-    def _revalidate(self, key, tp50, direction, df_1m, last=None) -> str:
+    def _revalidate(self, key, tp50, direction, df_1m, last=None, now=None) -> str:
         """"" when the break may trade, else the reason it may not.
 
         🔴 r24 — DERIVED FROM THE BOOKS ON EVERY CALL, NOTHING REMEMBERED.
@@ -229,7 +237,7 @@ class RunawayPlan:
             if df_1m is None or len(df_1m) < 2:
                 return "break finished — waiting for the 50 to be lost and re-accepted (no bars)"
             import pandas as pd
-            closed = df_1m.iloc[:-1]
+            closed = _closed_part(df_1m, now)                    # r44 (BAR.1): by time, was iloc[:-1]
             cut = pd.Timestamp(float(last), unit="s", tz="UTC")
             idx = closed.index
             if getattr(idx, "tz", None) is None:
@@ -333,7 +341,7 @@ class RunawayPlan:
         except Exception:                                       # noqa: BLE001
             _sess = None
         last = break_last_exit(direction, prep.boundary, _sess)
-        why_not = self._revalidate(key, prep.tp50, direction, df_1m, last)
+        why_not = self._revalidate(key, prep.tp50, direction, df_1m, last, now=now_et)
         t.check("break_finished", prep.boundary, not why_not)
         if why_not:
             prep.revalidation = why_not
@@ -368,7 +376,7 @@ class RunawayPlan:
         _prev = None
         try:
             if df_1m is not None and len(df_1m) >= 2:
-                _prev = float(df_1m.iloc[-2]["close"])
+                _prev = float(df_1m.iloc[_closed_pos(df_1m, now_et)]["close"])   # r44 (BAR.1)
         except Exception:                                       # noqa: BLE001
             _prev = None
         held = runaway_confirmed(orb, price_now, _prev, direction)
@@ -379,7 +387,8 @@ class RunawayPlan:
             return prep
 
         # strength, measured once per move and frozen; the band follows it
-        m = self._measure((key, last if isinstance(last, float) else None), orb, df_1m, direction)
+        m = self._measure((key, last if isinstance(last, float) else None), orb, df_1m, direction,
+                          now=now_et)
         prep.strength, prep.pace, prep.acceptance = m["strength"], m["pace"], m["acceptance"]
         # r12 — participation READ from the prints at the boundary (RUN.6, record only
         # this revision: the composite still uses pace + acceptance)

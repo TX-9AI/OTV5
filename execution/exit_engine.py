@@ -1,5 +1,11 @@
 """
-execution/exit_engine.py  v5.3
+execution/exit_engine.py  v5.4
+v5.4  2026-10-27  OTV5 r44 (BAR.1) — EVERY CLOSED-CANDLE READ FINDS THE LAST BAR CLOSED BY TIME. BOSTracker.update, the
+      ORB/Breakout structure stop, the hunt's target wick, the runaway/hunt thesis line and its fizzle bars, and VOLT's
+      5m structure stop (bar_s 300) read iloc[-2] / iloc[:-1], one bar stale on a tick before the new bar's first row
+      exists (META 2026-10-27 3f2b1372: a Breakout short fired 10:10:00 ET on the 10:08 bar while 10:09 had already closed back inside the 623.20 edge). They read utils.time_utils.closed_pos / closed_part on this module's now_et(); unchanged when the
+      forming row is present. The fizzle's pull (lows/highs.iloc[:-1] inside the closed bars) is not a forming-bar read
+      and is untouched. GATE tests/check_last_closed_bar.py C4.
 v5.3  2026-10-27  OTV5 r42 (EOD.3) — THE 15:55 ESTIMATE PRICES EACH LEG TO ITS OWN EXPIRY. _eod_best_case gave every leg
       the 5 minutes left to TODAY's 16:00, so a leg expiring on a later day was priced at its intrinsic value. CVX
       2026-10-27 (006f6eca, Breakout long 8 x 10-30 230P): valued 1.26 at spot 228.74, _eod_determined called that
@@ -843,6 +849,7 @@ from config import (
 )
 from utils.time_utils import (is_hard_close_time, minutes_since, now_utc,
                               fmt_et_short, now_et, ts_for_db)
+from utils.time_utils import closed_pos as _closed_pos, closed_part as _closed_part   # r44 (BAR.1)
 from execution.limit_ladder import limit_at_mark, hard_close_order_mode
 # v4.21 (AUDIT F1): the binding v4.20 forgot. `is_trend_participation` was
 # called in _evaluate_condor_leg and never imported — NameError on every condor
@@ -1030,12 +1037,12 @@ class BOSTracker:
     def update(self, df_1m: pd.DataFrame) -> bool:
         """
         Update structure tracking. Returns True if BOS triggered.
-        Uses iloc[-2] \u2014 the last fully closed candle.
+        Uses the last fully closed candle - by time since r44 (BAR.1), was iloc[-2].
         """
         if df_1m is None or len(df_1m) < 3:
             return False
 
-        candle = df_1m.iloc[-2]   # last closed candle
+        candle = df_1m.iloc[_closed_pos(df_1m, now_et())]   # last closed candle (r44 BAR.1: by time)
         close  = float(candle["close"])
         high   = float(candle["high"])
         low    = float(candle["low"])
@@ -1489,6 +1496,7 @@ class ExitEngine:
         # read at all, so the trade is held on the catastrophic premium floor
         # alone. Said once per trade rather than silently.
         frame = df_5m
+        _cp5 = _closed_pos(frame, now_et(), 300.0)     # r44 (BAR.1): the newest CLOSED 5m bar, by time
         # 🔴 r75 — THE BAR MUST POSTDATE THE ENTRY. Found LIVE on 2026-09-21:
         # VOLT took SEVEN trades in 90 seconds, every one stopped in ~14s by
         # `1m close 731.22 below structure` — and 731.22 was the close of the
@@ -1509,7 +1517,7 @@ class ExitEngine:
                     _et = pd.Timestamp(_entry_ts)
                     if _et.tzinfo is not None:
                         _et = _et.tz_convert(None)
-                    _bar_ts = pd.Timestamp(frame.index[-2])
+                    _bar_ts = pd.Timestamp(frame.index[_cp5])
                     if _bar_ts.tzinfo is not None:
                         _bar_ts = _bar_ts.tz_convert(None)
                     if _bar_ts <= _et:
@@ -1529,7 +1537,7 @@ class ExitEngine:
                                "cannot be evaluated; premium floor is the only "
                                "stop this tick.", trade_id[:8])
             return decision
-        last_close = float(frame.iloc[-2]["close"])
+        last_close = float(frame.iloc[_cp5]["close"])
         entry_px = float(record.get("underlying_entry", 0.0) or 0.0)
         stop_px = float(record.get("underlying_stop", 0.0) or 0.0)
 
@@ -1705,7 +1713,7 @@ class ExitEngine:
                 # same mode rule (log/off = the boundary), read from the store each call.
                 stop_level = float(self._hunt_line(record, direction, stop_level) or stop_level)
             if stop_level > 0:
-                last_close = float(df_1m.iloc[-2]["close"])
+                last_close = float(df_1m.iloc[_closed_pos(df_1m, now_et())]["close"])   # r44 (BAR.1)
                 if direction == "long" and last_close < stop_level:
                     decision.should_exit = True
                     decision.exit_reason = (
@@ -1929,7 +1937,7 @@ class ExitEngine:
             tgt = float(record.get("underlying_target") or 0.0)
             if tgt <= 0 or df_1m is None or len(df_1m) < 2:
                 return ""
-            bar = df_1m.iloc[-2]
+            bar = df_1m.iloc[_closed_pos(df_1m, now_et())]     # r44 (BAR.1): by time, was iloc[-2]
             hi, lo, close = float(bar["high"]), float(bar["low"]), float(bar["close"])
             d = str(record.get("direction") or "")
             wicked = (hi >= tgt and close < tgt) if d == "long" else (lo <= tgt and close > tgt)
@@ -2000,7 +2008,8 @@ class ExitEngine:
                 # r285 (HUNT.8) — and no nearer than the 5m swing as of entry.
                 _hunt_old = tp50
                 tp50 = self._hunt_line(record, direction, tp50)
-            last_close = float(df_1m.iloc[-2]["close"])
+            _now_c = now_et()                                   # r44 (BAR.1): one clock for both reads
+            last_close = float(df_1m.iloc[_closed_pos(df_1m, _now_c)]["close"])
             # ══ r44 — THE LINE HAS A WIDTH, BECAUSE THE LEVEL DOES ═══════════
             # 🔴 THIS TEST HAD ZERO TOLERANCE AND IT COST A 2.68 POINT MOVE.
             # 2026-09-18: the hunt's line was 718.50, the 09:52 bar closed
@@ -2047,7 +2056,7 @@ class ExitEngine:
                         f"{tp50:.2f} (band {band:.3f})")
             # ── fizzle, on the bars since entry ──
             t0 = self._entry_epoch(record)
-            bars = df_1m.iloc[:-1]
+            bars = _closed_part(df_1m, _now_c)                  # r44 (BAR.1): by time, was iloc[:-1]
             if t0 > 0:
                 try:
                     bars = bars[bars.index.map(lambda x: x.timestamp()) >= t0]
