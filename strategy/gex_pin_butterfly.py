@@ -1,5 +1,13 @@
 """
-strategy/gex_pin_butterfly.py  v5.12
+strategy/gex_pin_butterfly.py  v5.13
+v5.13  2026-10-28  OTV5 r49 (BFLY.16) — THE WING-SEARCH LINE NAMES ITS PIN, ITS REJECTS AND THE PLAN'S VERDICT. META 2026-10-27
+      logged "wing search: 5 qualified, taking the BEST-R wing 7.50" 114 times (13:00-14:59 ET) while the plan HELD and the
+      gate said "no wing qualifies at pin 632.5". Both were true, on different ticks: the search line was the smoothed pin
+      642.5 (13:00-13:04, 13:12-13:54) or 632.5 with spot under 622.5 (14:19+), the gate line ticks at 632.5 where none of
+      the 3 wings inside spot cleared 2.0x; and on every tick pinning (TRENDING all day) and pin_concentration (0.15 < 0.25)
+      were unmet - and, at 642.5, pin_em_fraction - so no fly could fire either way. The line now reads "wing search at
+      pin P (spot S, wings within C): N qualified (a too wide, b too narrow); BEST-R wing ... - PREPARED, NOT TAKEN: the
+      plan holds on <unmet>". Log text only; no decision moves. Gate tests/check_bfly_wing_log.py.
 v5.12  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ... (v5.0 was already spent by this file's own history, so the reset lands at v5.12.)
 v5.11  2026-10-19  OTV4TEST r303 (PSTATE.1) — the `enabled` condition is met when the plan is ACTIVE (ENABLED, as before)
       or switched to LOG (OT_GEX_BUTTERFLY=log): LOG reaches take(), which records LOG-ONLY, and main refuses the
@@ -915,11 +923,29 @@ class GEXPinButterflyStrategy:
                         t.check("stop_vs_spread", _ratio)
                         t.check("stop_survivable", None, True)
                         if len(_cands) > 1:
-                            logger.info("[gex_bfly] wing search: %d qualified, "
-                                        "taking the BEST-R wing %.2f (R %.2f, stop "
-                                        "%.2fx its spread); widest was %.2f",
-                                        len(_cands), wing, r, _ratio or 0.0,
-                                        _cands[-1][0])
+                            # 🔴 OTV5 r49 (BFLY.16) — THE LINE NAMES ITS PIN AND
+                            # WHAT THE PLAN DID WITH THE WING. META 2026-10-27
+                            # 13:00:16 ET logged "5 qualified, taking the BEST-R
+                            # wing 7.50" at the smoothed pin 642.5 (wings out to
+                            # 17.50 fit inside ~18.6 of spot) while the plan HELD
+                            # on pinning (TRENDING), pin_concentration (0.15) and
+                            # pin_em_fraction (~160% of EM) - and the gate's "no
+                            # wing qualifies at pin 632.5" was a DIFFERENT tick at
+                            # a different pin. Nothing was taken; the old line
+                            # named neither the pin nor the hold. Text only - no
+                            # selection or gate reads it.
+                            _holds = list(prep.unmet) + [g for g, _w2 in prep.structural]
+                            logger.info("[gex_bfly] wing search at pin %g (spot %.2f, "
+                                        "wings within %.2f): %d qualified (%d too wide "
+                                        "for R>=%.2f, %d too narrow for a %.1fx stop); "
+                                        "BEST-R wing %.2f (R %.2f, stop %.2fx its "
+                                        "spread), widest qualified %.2f - %s",
+                                        pin, price_now, _cap_dist, len(_cands),
+                                        _rej_r, R_FLOOR, _rej_surv, STOP_VS_SPREAD_MIN,
+                                        wing, r, _ratio or 0.0, _cands[-1][0],
+                                        ("PREPARED, NOT TAKEN: the plan holds on "
+                                         + ", ".join(_holds)) if _holds else
+                                        "every condition true, handed to the strategy")
                         prep.lower, prep.center, prep.upper = lower, center, upper
                         prep.debit, prep.width, prep.r = debit, width, r
                         prep.ready = True
