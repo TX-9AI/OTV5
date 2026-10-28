@@ -1,5 +1,15 @@
 """
-utils/time_utils.py  v5.1
+utils/time_utils.py  v5.2
+v5.2  2026-10-28  OTV5 r51 (BAR.2) — A BAR IS FINAL A FEW SECONDS AFTER ITS MINUTE ENDS: THE LOOP WAITS THEM OUT.
+      r44's closed_pos calls the newest row closed the instant start + bar_s passes, but the feed is still folding the
+      minute's last prints in: CRM 2026-10-28 (98806a54) read the 09:48 bar's close as 241.78 at 09:49:00.84 ET and
+      cut its Runaway on runaway_thesis_dead (line 241.85); the final bar closed 241.93, above the line, and CRM ran to
+      243.75. Fleet-wide that day, 12 of the 38 logged 1m-close decisions made in the first 2 s of a minute read a
+      close that differs from the final bar (QQQ's 09:38 and AMZN's 10:55 ORB latches armed on such a close); 0 of 14
+      made at 2 s or later did. Before r44 the same instant read the bar before (the META 10-27 defect), so no choice
+      of row is right inside that window: bar_grace_wait(now) says how long a tick must wait for the minute's bar to
+      be final (BAR_FINAL_GRACE_S = 3.0 s after every minute boundary - every 5m boundary is one), and main_loop
+      sleeps it before each tick. closed_pos / closed_part are unchanged. GATE tests/check_bar_final_grace.py.
 v5.1  2026-10-27  OTV5 r44 (BAR.1) — THE LAST CLOSED BAR IS FOUND BY TIME, NOT BY POSITION. closed_pos(df, now, bar_s) /
       closed_part(df, now, bar_s): every strategy, engine and exit read "the last CLOSED 1m bar" as iloc[-2], assuming
       the frame's newest row is the still-forming minute. On a tick in the first instant of a minute, before that
@@ -164,6 +174,36 @@ def closed_pos(df, now=None, bar_s: float = 60.0) -> int:
         return -1 if (s0 + b <= t < s0 + LIVE_FRAME_BARS * b) else -2
     except Exception:                                           # noqa: BLE001
         return -2
+
+
+# ══ r51 (BAR.2) — THE MINUTE'S BAR IS FINAL A FEW SECONDS AFTER IT ENDS ═════
+# The feed folds a minute's last prints in after the minute ends, so for a
+# moment the just-ended row is PROVISIONAL (CRM 2026-10-28 09:49:00.84 ET read
+# 09:48 as 241.78; final 241.93). Inside that moment neither row is right: the
+# newest is provisional and the one before it is a minute stale (r44's META
+# case). So no tick runs inside it: main_loop sleeps bar_grace_wait() first.
+# 📊 MEASURED 2026-10-28, 14 boxes: 12/38 decisions at 0-2 s off the final close,
+# 0/14 at 2 s or later. Every 5m (and 15m, 1h) boundary is a minute boundary.
+BAR_FINAL_GRACE_S = 3.0
+_GRACE_MARGIN_S = 0.001     # a sleep of exactly (grace - into) can wake a float-hair short of the grace
+
+
+def bar_grace_wait(now=None, grace_s: float = BAR_FINAL_GRACE_S) -> float:
+    """r51 (BAR.2) — seconds until the minute's just-ended bar is final: grace_s
+    minus the seconds since the last minute boundary (plus a 1 ms margin) when
+    that is under grace_s, else 0.0. `now` is epoch seconds / datetime / Timestamp; anything
+    else reads the clock. Never raises (0.0: an unreadable clock never stalls)."""
+    try:
+        t = _epoch_s(now)
+        if t is None:
+            t = _epoch_s(now_et())
+        if t is None:
+            return 0.0
+        into = t % 60.0
+        g = float(grace_s)
+        return (g - into) + _GRACE_MARGIN_S if 0.0 <= into < g else 0.0
+    except Exception:                                           # noqa: BLE001
+        return 0.0
 
 
 def closed_part(df, now=None, bar_s: float = 60.0):

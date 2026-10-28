@@ -4,9 +4,9 @@
 Do not edit by hand: the generator runs inside the land command and
 the canary fails on drift (WORKING_AGREEMENT 33).
 
-525 Python modules across 12 local packages.
+526 Python modules across 12 local packages.
 
-**Reached by:** 138 imported · 25 declared entry points · 247 referenced from a script, unit or doc but never imported · **115 by nothing here**.
+**Reached by:** 138 imported · 25 declared entry points · 248 referenced from a script, unit or doc but never imported · **115 by nothing here**.
 
 ⚠️ The last group is a REVIEW LIST, not a delete list. A
 `land.spec CHECK` line ships inside a tarball and is never
@@ -42,7 +42,7 @@ execution.exit_engine); every such edge is listed below like any other.
 - `analysis/market_state.py` - the structural state assembly.
   **Carries the vocabulary, classifies nothing.**
 
-**Where the evidence lives:** `tests/` holds 323 standing
+**Where the evidence lives:** `tests/` holds 324 standing
 checks (`check_*.py`, all run by `tools/boot_sweep.py` at boot)
 plus the studies that produced every threshold in
 `docs/TRADES.md`. **A number in a strategy file should be
@@ -57,7 +57,7 @@ Change these with the most care; a break here reaches everything downstream.
 | `config.py` | 140 | alert_manager.py, anchors.py, atp_butterfly.py, atp_butterfly_plan.py |
 | `strategy/__init__.py` | 93 | atp_butterfly_plan.py, breakout_plan.py, check_age_gate_gone.py, check_anchors.py |
 | `strategy/plan.py` | 67 | atp_butterfly_plan.py, breakout_plan.py, check_anchors.py, check_atp_butterfly.py |
-| `utils/time_utils.py` | 65 | alert_manager.py, atp_butterfly_plan.py, breakout_plan.py, broker_reconcile.py |
+| `utils/time_utils.py` | 66 | alert_manager.py, atp_butterfly_plan.py, breakout_plan.py, broker_reconcile.py |
 | `database/trade_logger.py` | 59 | breakout_plan.py, check_atp_butterfly.py, check_boot_order_sweep.py, check_breakout_new_extreme.py |
 | `execution/exit_engine.py` | 48 | check_boot_order_sweep.py, check_breakout_exit_line.py, check_brk_noprog.py, check_buyback_side.py |
 | `data/derived_store.py` | 39 | anchors.py, breakout_plan.py, check_bfly_vwap_band.py, check_breakout_rearm.py |
@@ -636,6 +636,10 @@ Change these with the most care; a break here reaches everything downstream.
 ### `tests/check_bake.py`
 - **calls:** (none)
 - **called by:** (nothing — no importer and no mention in any script, unit or doc here)
+
+### `tests/check_bar_final_grace.py`
+- **calls:** `utils/__init__.py`, `utils/time_utils.py`
+- **called by:** (not imported) — referenced in `docs/BACKLOG.md`
 
 ### `tests/check_bar_referee.py`
 - **calls:** `data/candle_feed.py`
@@ -2099,7 +2103,7 @@ Change these with the most care; a break here reaches everything downstream.
 
 ### `utils/__init__.py`
 - **calls:** (none)
-- **called by:** `data/candle_feed.py`, `derived/level_book.py`, `main.py`, `tests/check_claude_boot.py`, `tests/check_eod_schedule.py`, `tests/check_half_day.py`, `tests/check_half_day_rth.py`, `tests/check_holiday_aware.py`, `tests/check_instrument_unset.py`, `tests/check_level_tape.py`, `tests/check_low_price_symbols.py`, `tests/check_market_calendar.py`, `tests/check_rebuild_1m.py`, `tests/check_shutdown_cause.py`, `tests/check_store_paths.py`, `tests/check_time_parse.py`, `tools/prime_ramp.py`, `tools/rebuild_1m_from_last_trade.py`, `tools/seed_candles_from_warehouse.py`, `utils/time_utils.py`
+- **called by:** `data/candle_feed.py`, `derived/level_book.py`, `main.py`, `tests/check_bar_final_grace.py`, `tests/check_claude_boot.py`, `tests/check_eod_schedule.py`, `tests/check_half_day.py`, `tests/check_half_day_rth.py`, `tests/check_holiday_aware.py`, `tests/check_instrument_unset.py`, `tests/check_level_tape.py`, `tests/check_low_price_symbols.py`, `tests/check_market_calendar.py`, `tests/check_rebuild_1m.py`, `tests/check_shutdown_cause.py`, `tests/check_store_paths.py`, `tests/check_time_parse.py`, `tools/prime_ramp.py`, `tools/rebuild_1m_from_last_trade.py`, `tools/seed_candles_from_warehouse.py`, `utils/time_utils.py`
 
 ### `utils/agent_status.py`
 - **calls:** (none)
@@ -2143,7 +2147,7 @@ Change these with the most care; a break here reaches everything downstream.
 
 ### `utils/time_utils.py`
 - **calls:** `config.py`, `utils/__init__.py`, `utils/market_calendar.py`
-- **called by:** `analysis/entry_snapshot.py`, `analysis/orb_engine.py`, `analysis/tenor_publish.py`, `analysis/tenor_select.py`, `analysis/trade_readiness.py`, `analysis/trend_engine.py`, `analysis/volatility_measures.py`, `data/macro_data.py`, `data/market_data.py`, `data/options_chain.py`, `database/trade_logger.py`, `derived/levels.py`, `execution/broker_reconcile.py`, `execution/entry_engine.py`, `execution/exit_engine.py`, `execution/fill_observers.py`, `execution/limit_ladder.py`, `execution/order_guard.py`, `execution/position_manager.py`, `execution/resting_orders.py`, `main.py`, `notifications/alert_manager.py`, `risk/risk_manager.py`, `risk/session_guard.py`, `strategy/atp_butterfly_plan.py`, `strategy/breakout_plan.py`, `strategy/condor_roll.py`, `strategy/credit_vertical.py`, `strategy/gex_pin_butterfly.py`, `strategy/liquidity_hunt.py`, `strategy/orb_plan.py`, `strategy/orcs_plan.py`, `strategy/parc_plan.py`, `strategy/park_plan.py`, `strategy/plan.py`, `strategy/runaway_plan.py`, `strategy/sweep_plan.py`, `strategy/tcs_plan.py`, `strategy/volt_plan.py`, `tests/check_bfly_vwap_band.py`, `tests/check_butterfly_foundational.py`, `tests/check_butterfly_legs.py`, `tests/check_butterfly_wing_grid.py`, `tests/check_condor_spec.py`, `tests/check_entry_gate.py`, `tests/check_eod_schedule.py`, `tests/check_exit_executes.py`, `tests/check_fed_day_record.py`, `tests/check_half_day.py`, `tests/check_holiday_aware.py`, `tests/check_last_closed_bar.py`, `tests/check_live_exit_paths.py`, `tests/check_manage_call.py`, `tests/check_manifold_windows.py`, `tests/check_orb_range_quiet.py`, `tests/check_orb_resume.py`, `tests/check_parc.py`, `tests/check_park.py`, `tests/check_plan_prepares.py`, `tests/check_rehearsal_toggle.py`, `tests/check_snapshot_pin.py`, `tests/check_standing_offer.py`, `tests/check_tcs_parked.py`, `tests/check_time_parse.py`, `tools/manifold_health.py`
+- **called by:** `analysis/entry_snapshot.py`, `analysis/orb_engine.py`, `analysis/tenor_publish.py`, `analysis/tenor_select.py`, `analysis/trade_readiness.py`, `analysis/trend_engine.py`, `analysis/volatility_measures.py`, `data/macro_data.py`, `data/market_data.py`, `data/options_chain.py`, `database/trade_logger.py`, `derived/levels.py`, `execution/broker_reconcile.py`, `execution/entry_engine.py`, `execution/exit_engine.py`, `execution/fill_observers.py`, `execution/limit_ladder.py`, `execution/order_guard.py`, `execution/position_manager.py`, `execution/resting_orders.py`, `main.py`, `notifications/alert_manager.py`, `risk/risk_manager.py`, `risk/session_guard.py`, `strategy/atp_butterfly_plan.py`, `strategy/breakout_plan.py`, `strategy/condor_roll.py`, `strategy/credit_vertical.py`, `strategy/gex_pin_butterfly.py`, `strategy/liquidity_hunt.py`, `strategy/orb_plan.py`, `strategy/orcs_plan.py`, `strategy/parc_plan.py`, `strategy/park_plan.py`, `strategy/plan.py`, `strategy/runaway_plan.py`, `strategy/sweep_plan.py`, `strategy/tcs_plan.py`, `strategy/volt_plan.py`, `tests/check_bar_final_grace.py`, `tests/check_bfly_vwap_band.py`, `tests/check_butterfly_foundational.py`, `tests/check_butterfly_legs.py`, `tests/check_butterfly_wing_grid.py`, `tests/check_condor_spec.py`, `tests/check_entry_gate.py`, `tests/check_eod_schedule.py`, `tests/check_exit_executes.py`, `tests/check_fed_day_record.py`, `tests/check_half_day.py`, `tests/check_holiday_aware.py`, `tests/check_last_closed_bar.py`, `tests/check_live_exit_paths.py`, `tests/check_manage_call.py`, `tests/check_manifold_windows.py`, `tests/check_orb_range_quiet.py`, `tests/check_orb_resume.py`, `tests/check_parc.py`, `tests/check_park.py`, `tests/check_plan_prepares.py`, `tests/check_rehearsal_toggle.py`, `tests/check_snapshot_pin.py`, `tests/check_standing_offer.py`, `tests/check_tcs_parked.py`, `tests/check_time_parse.py`, `tools/manifold_health.py`
 
 ### `warehouse/__init__.py`
 - **calls:** (none)

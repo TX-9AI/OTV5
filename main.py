@@ -1,5 +1,11 @@
 """
-main.py  v5.5
+main.py  v5.6
+v5.6  2026-10-28  OTV5 r51 (BAR.2) — EACH TICK WAITS OUT THE FIRST SECONDS OF A MINUTE, WHEN THE JUST-ENDED BAR IS
+      PROVISIONAL. CRM 2026-10-28 cut a Runaway at 09:49:00.84 ET on a 09:48 close of 241.78 that finished at 241.93
+      (above its 241.85 line); 12 of 38 decisions logged at 0-2 s that day read a close the final bar does not have.
+      main_loop sleeps utils.time_utils.bar_grace_wait() (BAR_FINAL_GRACE_S = 3 s after each minute boundary) before
+      tick_start, so no tick - a floor-watch wake included - reads a bar inside that window; the loop's 15 s cadence
+      then settles 3 s past the boundary. Nothing else changes. GATE tests/check_bar_final_grace.py.
 v5.5  2026-10-28  OTV5 r47 (ORB.9) — NO 5m BARS OUTSIDE RTH IS THE EXPECTED STATE, NOT A WARNING. SPX logged "ORB range fetch
       failed: ERROR: no 5m data returned for SPX" at WARNING at the 09:15 wake (2026-10-27 13:15:34 UTC) and after the
       bell (2026-10-26 20:21/20:50 UTC, 10-27 00:28 UTC), when the feed store has no usable 5m bars to give
@@ -1526,6 +1532,7 @@ _setup_logging()
 _apply_log_level()
 logger = logging.getLogger(__name__)
 
+from utils.time_utils import bar_grace_wait as _bar_grace_wait   # r51 (BAR.2)
 from utils.time_utils import (
     now_utc, now_et, fmt_et_short, minutes_since, is_rth,
     seconds_until_rth_open, is_hard_close_time, entries_open,
@@ -6247,6 +6254,10 @@ def main_loop(state: BotState):
     pos_mgr = get_position_manager(state.paper_trading)
 
     while True:
+        # r51 (BAR.2) — never tick in the first BAR_FINAL_GRACE_S of a minute: the just-ended bar is still provisional.
+        _grace = _bar_grace_wait(time.time())
+        if _grace > 0:
+            time.sleep(_grace)
         tick_start  = time.time()
         _obs_chain  = None              # r270 (FILL.2) — the chain the observing sleep reads
         state.tick_count += 1
