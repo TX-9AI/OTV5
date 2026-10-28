@@ -1,5 +1,14 @@
 """
-main.py  v5.4
+main.py  v5.5
+v5.5  2026-10-28  OTV5 r47 (ORB.9) — NO 5m BARS OUTSIDE RTH IS THE EXPECTED STATE, NOT A WARNING. SPX logged "ORB range fetch
+      failed: ERROR: no 5m data returned for SPX" at WARNING at the 09:15 wake (2026-10-27 13:15:34 UTC) and after the
+      bell (2026-10-26 20:21/20:50 UTC, 10-27 00:28 UTC), when the feed store has no usable 5m bars to give
+      (data.market_data.fetch_candles returned None - a freshly woken box's store or feed); the range was established
+      normally both sessions (10-27 ESTABLISHED at 09:35:16 ET).
+      _fetch_orb_range logs that case at INFO, naming why, whenever utils.time_utils.is_rth is False (before 09:30,
+      after the day's bell - half days included -, weekends, holidays); inside RTH it stays a WARNING, and every other
+      failure is a WARNING at any hour. Polling, return values and orb_range.json are unchanged. Gate
+      tests/check_orb_range_quiet.py.
 v5.4  2026-10-27  OTV5 r46 (PARC.1) — PARC IS ASKED BESIDE PARK AND EXECUTED THROUGH THE CREDIT-VERTICAL LADDER. The operator,
       2026-10-27: "under identical entry conditions the PARK trade sells a credit spread ATM nearest the strike on the
       safer side ..."; "Call it PARC"; "No shadow mode. We're paper. It trades tomorrow."; "I also want to make sure it
@@ -7257,6 +7266,10 @@ def _fetch_orb_range(instrument: str = "") -> bool:
     Returns True ONLY when today's range is ESTABLISHED, so callers keep polling
     across IN_PROGRESS/EXPIRED until today's candle closes — while status.py and
     the engine always have the last valid range to read in the meantime.
+
+    r47 (ORB.9): "no 5m data returned" OUTSIDE RTH (before 09:30, after the day's bell, a weekend or holiday -
+    utils.time_utils.is_rth, the calendar and the bell) is the expected state, not a fault: it logs at INFO.
+    Inside RTH it stays a WARNING; any other failure is a WARNING at any hour.
     """
     try:
         import subprocess as _sp
@@ -7277,7 +7290,12 @@ def _fetch_orb_range(instrument: str = "") -> bool:
         elif _result.returncode == 3:
             logger.debug("ORB range: EXPIRED — carrying last RTH range, awaiting today's")
         else:
-            logger.warning(f"ORB range fetch failed: {_result.stderr.strip()}")
+            _err = _result.stderr.strip()
+            if "no 5m data returned" in _err and not is_rth():    # r47 (ORB.9)
+                logger.info(f"ORB range: no 5m bars outside RTH (expected before the open and after "
+                            f"the bell; retried from the next 09:30): {_err}")
+            else:
+                logger.warning(f"ORB range fetch failed: {_err}")
         return False
     except Exception as e:
         logger.warning(f"ORB range fetch skipped: {e}")

@@ -1,5 +1,15 @@
 """
-data/candle_feed.py  v5.4
+data/candle_feed.py  v5.5
+v5.5  2026-10-28  OTV5 r47 (FEED.12) — A FRACTIONAL SHARE SIZE IS PARSED, NOT THROWN AWAY. tastytrade 13.2.3 types `size`
+      as int on TimeAndSale (int | None on Trade) and dxFeed sends fractional shares (0.419652): pydantic raised
+      int_from_float and the SDK skipped the event - MEASURED 2026-10-27 about half of QQQ's TimeAndSale events
+      (~0.3% of volume) and ~120 of SOFI's 41,645 Trades never reached `prints` / `last_trade`. At import,
+      _accept_fractional_size() retypes those fields to Decimal (Decimal | None on Trade, the SDK's own None-ness)
+      and rebuilds each model in place (model_rebuild(force=True)); Event.from_stream and DXLinkStreamer._map_message
+      both call model_validate on these same class objects, so every parse takes it. A probe validates 0.419652
+      through the rebuilt validator; FRACTIONAL_SIZE carries the result and main() logs it (WARNING if not taken).
+      prints.size / last_trade.size were already REAL and _n() stores float(v); every reader (tape_at_level,
+      order_flow, anchors.aggressor_share) sums floats. The FEED.4 filter stays for any other parse failure.
 v5.4  2026-10-26  (FEED.4, journal half) — THE SDK'S PARSE FAILURES ARE COUNTED, ONE LINE A MINUTE, NOT ONE LINE EACH.
       r134 kept every "Failed to parse event" line so dropped prints stay visible; during RTH that is hundreds of
       thousands a box, and on 2026-10-26 it pushed the morning out of the journal (GOOGL's journal began at 14:30).
@@ -299,6 +309,43 @@ from tastytrade import DXLinkStreamer           # module-level so tests can patc
 from tastytrade.dxfeed import (Candle, Greeks, Quote, Trade,
                                Summary, TimeAndSale, Underlying,
                                TheoPrice)
+
+
+# ── v5.5 (FEED.12) — A FRACTIONAL SHARE SIZE IS PARSED, NOT THROWN AWAY ──────
+# tastytrade 13.2.3 types `size` as int on TimeAndSale (int | None on Trade); dxFeed sends fractional shares
+# (0.419652), pydantic raises int_from_float and Event.from_stream / DXLinkStreamer._map_message catch the
+# ValidationError and SKIP the event: about half of QQQ's TimeAndSale events (~0.3% of volume) never reached
+# `prints`. Both parse paths call cls.model_validate on the SAME class objects imported here (streamer.MAP_EVENTS
+# holds them), so retyping the field and rebuilding the class's validator in place reaches every parse. The new
+# type is Decimal (the SDK's own type for every other size and price; prints.size / last_trade.size are REAL and
+# _n() stores float(v)), keeping the SDK's own None-ness. Only an int-typed field is touched, so an SDK that
+# fixes this itself is left alone. A probe validates 0.419652 through the rebuilt validator; the result is in
+# FRACTIONAL_SIZE and logged at start. Never raises: a failure leaves the SDK as it was (events skipped as before).
+def _accept_fractional_size() -> dict:
+    import typing
+    from decimal import Decimal
+    out = {}
+    for cls in (TimeAndSale, Trade):
+        name = cls.__name__
+        try:
+            field = cls.model_fields.get("size")
+            if field is None:
+                out[name] = "no size field"
+                continue
+            args = typing.get_args(field.annotation)
+            nullable = type(None) in args
+            if field.annotation is int or (nullable and set(args) == {int, type(None)}):
+                field.annotation = typing.Optional[Decimal] if nullable else Decimal
+                cls.model_rebuild(force=True)
+            probe = cls.__pydantic_validator__.validate_assignment(cls.model_construct(), "size", 0.419652)
+            ok = probe.size == Decimal("0.419652")
+            out[name] = "ok" if ok else f"FAILED: probe parsed {probe.size!r}"
+        except Exception as exc:                                   # noqa: BLE001
+            out[name] = f"FAILED: {type(exc).__name__}: {exc}"
+    return out
+
+
+FRACTIONAL_SIZE = _accept_fractional_size()
 
 from config import INSTRUMENT, TIMEFRAMES
 from data.tasty_client import get_session, get_loop
@@ -2255,6 +2302,10 @@ def main():
     logging.basicConfig(level=logging.INFO,
                         format="%(asctime)s %(levelname)s %(message)s")
     _install_tt_noise_filter()
+    _bad = {k: v for k, v in FRACTIONAL_SIZE.items() if v != "ok"}   # v5.5 (FEED.12)
+    (logger.warning if _bad else logger.info)(
+        "FEED.12: fractional share sizes %s (%s)", "NOT accepted - those events are still skipped" if _bad
+        else "accepted", ", ".join(f"{k} {v}" for k, v in FRACTIONAL_SIZE.items()))
     ap = argparse.ArgumentParser()
     ap.add_argument("--once", action="store_true",
                     help="backfill, flush, exit (smoke test)")
