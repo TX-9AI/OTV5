@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """
-tests/check_parc.py  v5.0
+tests/check_parc.py  v5.1
+v5.1  2026-10-28  OTV5 r50 (PARC.3) — PARC'S DEFAULT IS log (paused). P13 now expects unset -> log/log and an unknown value
+      -> log, named; the trading checks set OT_PARC=1 explicitly, as a box that opts in would. The operator: "Don't go live on the PARC tomorrow until we find a better stop placement."
 v5.0  2026-10-27  OTV5 r46 (PARC.1) — new. PARC: PARK'S ENTRY, A CREDIT SPREAD ON THE SAFER SIDE, THE BREAKOUT RAMP, THE
       STRUCTURE STOP, THE NICKEL, EOD.1, THE LADDER. The operator, 2026-10-27: "under identical entry conditions the PARK
       trade sells a credit spread ATM nearest the strike on the safer side ..."; "Call it PARC"; "I want 1050 to be the
@@ -65,6 +67,7 @@ os.environ["OT_ORB_BUDGET_USD"] = "2500"
 os.environ.setdefault("OT_INSTRUMENT", "QQQ")
 for _k in ("OT_PARC", "OT_PARK", "OT_PAPER_FILL_SLIPPAGE_PCT"):
     os.environ.pop(_k, None)
+os.environ["OT_PARC"] = "1"   # r50: the trading checks run PARC as a box that opts in; P13 probes the default
 ET = ZoneInfo("America/New_York")
 FAILED, RAN = [], []
 DAY, PREV = date(2026, 10, 28), date(2026, 10, 27)
@@ -532,9 +535,9 @@ def main():
             return r.stderr[-200:]
     m = [probe({}), probe({"OT_PARC": "log"}), probe({"OT_PARC": "0"}), probe({"OT_PARC": "yes"})]
     cfg = open(os.path.join(ROOT, "configure.sh")).read()
-    check("P13 OT_PARC unset -> trade/active; log -> log; 0 -> off/dormant; 'yes' keeps trade, named; configure.sh "
+    check("P13 OT_PARC unset -> log (r50, paused); log -> log; 0 -> off/dormant; 'yes' keeps log, named; configure.sh "
           "item 15 is PARC, Done 16",
-          m == [["trade", "", "active"], ["log", "", "log"], ["off", "", "dormant"], ["trade", "yes", "active"]]
+          m == [["log", "", "log"], ["log", "", "log"], ["off", "", "dormant"], ["log", "yes", "log"]]
           and re.search(r"^\s*15\)\s*change_parc", cfg, re.M) and re.search(r"^\s*16\)\s*break", cfg, re.M)
           and "Select [1-16]" in cfg, f"{m}")
 

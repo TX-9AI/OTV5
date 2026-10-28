@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """
-tests/check_plan_states.py  v5.2
+tests/check_plan_states.py  v5.3
+v5.3  2026-10-28  OTV5 r50 (PARC.3) — S1 RE-POINTED: PARC's default is now LOG (paused until a better stop; the operator:
+      "Don't go live on the PARC tomorrow until we find a better stop placement."), so the ruled roster names PARC as the one LOG plan; every other state is unchanged.
 v5.2  2026-10-27  OTV5 r46 (PARC.1) — S1 RE-POINTED (WA section 38.4): PARC is a new plan, ACTIVE by default (OT_PARC unset =
       1, the operator: "No shadow mode. We're paper. It trades tomorrow."), so the ruled active roster names it; S3 adds
       OT_PARC=0 -> dormant and OT_PARC=log -> log. Nothing else changed.
@@ -133,16 +135,18 @@ def main():
     dc = store.conn
 
     # ── S1-S3: the states, read in fresh interpreters (config reads several switches at import) ──
-    ruled_active = ["Breakout", "CondorManagement", "CreditRoll", "GEXPinButterfly", "LiquidityHunt", "PARC",
+    ruled_active = ["Breakout", "CondorManagement", "CreditRoll", "GEXPinButterfly", "LiquidityHunt",
                     "PARK", "RunawayContinuation"]
+    ruled_log = ["PARC"]                                   # r50 (PARC.3): paused, records only
     ruled_dormant = ["ATPButterfly", "IronCondorStrategy", "ORBStrategy", "OpeningRangeCreditSpread",
                      "SweepCreditSpread", "TrendCreditSpread", "VOLT"]
     st = fresh("import json\nfrom strategy import plan_state as S\n"
                "print(json.dumps({n: S.state(n) for n in S.TABLE}))")
     act = sorted(k for k, v in st.items() if v == "active")
     dor = sorted(k for k, v in st.items() if v == "dormant")
-    check("S1 defaults = today's roster (active / dormant as ruled; nothing LOG)",
-          act == ruled_active and dor == ruled_dormant and "log" not in st.values(), f"{st}")
+    lg = sorted(k for k, v in st.items() if v == "log")
+    check("S1 defaults = today's roster (active / dormant as ruled; PARC the one LOG plan, r50)",
+          act == ruled_active and dor == ruled_dormant and lg == ruled_log, f"{st}")
 
     try:
         from strategy import plan_state as S

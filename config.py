@@ -1,5 +1,10 @@
 """
-config.py  v5.2
+config.py  v5.3
+v5.3  2026-10-28  OTV5 r50 (PARC.3) — PARC IS PAUSED: OT_PARC UNSET = log, NOT trade. The operator, after the 10-28 backtest
+      (PARC +$47.57 gross per trade vs PARK +$155.26; 68 percent of PARC trades ended on the 5m structure stop, a median
+      0.227 percent from the 11:00 close): "Don't go live on the PARC tomorrow until we find a better stop placement." An unset (or empty, or unknown) OT_PARC now
+      means log - the plan runs and a would-be PARC is recorded, never ordered; OT_PARC=1 still trades it on a box that
+      asks. Gate tests/check_parc.py P13 (v5.1).
 v5.2  2026-10-27  OTV5 r46 (PARC.1) — PARC, THE 11:00 CREDIT SPREAD ON THE SAFER SIDE. The operator: "under identical entry
       conditions the PARK trade sells a credit spread ATM nearest the strike on the safer side (1st mark below the current
       price for a long: put spread, or 1st mark above current price for a short: call spread) ... adopt the same scaling
@@ -1032,15 +1037,15 @@ CAP_EXCLUDED_STRATEGIES = ("PARK", "PARC")     # r46 (PARC.1): PARC has its own 
 # 1 (trade). log: the plan runs and a would-be fire is recorded, never ordered; 0: not
 # asked. An unknown value keeps the default (trade) and is named (PSTATE.1's rule).
 PARC_ENV_REFUSED = ""
-_pc_raw = os.environ.get("OT_PARC", "1").strip().lower()
-if _pc_raw in ("1", "trade", "active", "on", ""):
+_pc_raw = os.environ.get("OT_PARC", "log").strip().lower()   # r50 (PARC.3): unset = log - paused until a better stop
+if _pc_raw in ("1", "trade", "active", "on"):
     PARC_MODE = "trade"
-elif _pc_raw == "log":
+elif _pc_raw in ("log", ""):
     PARC_MODE = "log"
 elif _pc_raw in ("0", "off", "dormant"):
     PARC_MODE = "off"
 else:
-    PARC_MODE = "trade"
+    PARC_MODE = "log"                  # r50: an unknown value keeps the default, now log
     PARC_ENV_REFUSED = _pc_raw
 PARC_MIN_CREDIT = 0.20               # = 4 x CONDOR_NICKEL_CLOSE (0.05): a thinner credit is no trade
 # ── r288 (BRK.13) — BREAKOUT'S DELTA FLOOR ──────────────────────────────────────

@@ -1,5 +1,7 @@
 # TRADES — the specs
 
+**`TRADES.md` v5.2 · 2026-10-28 · OTV5 r50 (PARC.3) — PARC is PAUSED: OT_PARC unset = log (records, never orders) until a better stop placement. The operator: "Don't go live on the PARC tomorrow until we find a better stop placement."**
+
 **`TRADES.md` v5.1 · 2026-10-27 · OTV5 r46 (PARC.1) — PARC: its roster row and section 10. The operator: "Call it PARC"; "No shadow mode. We're paper. It trades tomorrow."**
 
 **`TRADES.md` v5.0 · 2026-10-25 · OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...**
@@ -31,7 +33,7 @@ is its `docs/PLAN_SPEC.md` section.
 | Sweep credit spread | `SweepCreditSpread` | OFF | `OT_SWEEP_CS` | 09:35-15:40 | PLAN_SPEC §31 |
 | Trend credit spread | `TrendCreditSpread` | OFF | `OT_TCS_ACTIVE` | 11:31-15:40 | PLAN_SPEC §34 |
 | PARK | `PARK` | ON | none (`OT_PARK=log` records it, `off` stops it) | 11:01-11:03 | section 9 below |
-| PARC | `PARC` | ON | `OT_PARC` (`1` trades it, `log` records it, `0` stops it; configure.sh item 15) | 11:01-11:03 | section 10 below |
+| PARC | `PARC` | LOG (paused, r50) | `OT_PARC` (`1` trades it, `log` records it - the default since r50, `0` stops it; configure.sh item 15) | 11:01-11:03 | section 10 below |
 
 A window's end is exclusive: 10:30 means the last entry is 10:29. A switch is ACTIVE at
 `1` or `active` (r303 below). ORCS is RETIRED (r249, the operator 2026-10-04: "Retire it on this repo"; PLAN_SPEC §41.13) - OT_ORCS=1 restores it, PAPER ONLY (a live box refuses it); since r303 its plan is DORMANT with it and records nothing (the operator, 2026-10-19: "1. Yes"). The ORB trade is retired but

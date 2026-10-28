@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # ==========================================================================
-# configure.sh  v5.3
+# configure.sh  v5.4
+# v5.4  2026-10-28  OTV5 r50 (PARC.3) — PARC's code default is now log (paused until a better stop): item 15's help
+#       says so. The operator: "Don't go live on the PARC tomorrow until we find a better stop placement."
 # v5.3  2026-10-27  OTV5 r46 (PARC.1) — ITEM 15 IS PARC (OT_PARC 1|log|0, UNSET = 1, trade); Done moves to 16. The
 #       operator, 2026-10-27: "Call it PARC"; "I want 1050 to be the floor & use the same ramp in configure.sh (most are
 #       set to $2500)"; "No shadow mode. We're paper. It trades tomorrow." PARC sizes on items 2 (ramp MIN) and 8 (ramp
@@ -776,7 +778,7 @@ change_resting_stop() {
     echo "  Resting stop set to $val."
 }
 
-# ── OTV5 r46 (PARC.1) — PARC: 1 (trade) | log | 0 (off), UNSET = 1 ─────────────
+# ── OTV5 r46 (PARC.1) — PARC: 1 (trade) | log | 0 (off), UNSET = log since r50 ─────────────
 parc_label() {
     local v got
     v=$(get_env "OT_PARC")
@@ -798,8 +800,8 @@ change_parc() {
     echo "  sells the first put spread below price, a short the first call spread"
     echo "  above). Sized on the ramp (items 2 and 8); exits: the 5m structure"
     echo "  stop, the nickel close, else the end-of-day close."
-    echo "  1   - trade it."
-    echo "  log - record what it would sell; trade nothing."
+    echo "  1   - trade it (PAUSED fleet-wide since r50 until a better stop)."
+    echo "  log - record what it would sell; trade nothing (the default since r50)."
     echo "  0   - off: not asked."
     echo ""
     read -p "    Mode (1 / log / 0, blank to clear): " val
