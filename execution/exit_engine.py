@@ -1,5 +1,21 @@
 """
-execution/exit_engine.py  v5.5
+execution/exit_engine.py  v5.6
+v5.6  2026-10-28  OTV5 r48 (LIVE.7, PARC.1 nickel) — THREE LIVE EXIT-PATH EDGES FROM THE 2026-10-27 ORDER-PATH AUDIT.
+      (c) _exit_quote reads the position manager's stash only when it is FRESH: stamped by this pricing pass
+      (_exit_q_seq == the record's _px_seq) and under EXIT_QUOTE_MAX_AGE_S (10 s, under one 15 s poll) old; a stale
+      stash reads as no quote, so _exit_limit posts at the fresh mark (the pre-r105 rule) instead of walking or
+      clamping on an old quote. An unstamped stash (a hand-built record) reads as before. (Fly) _close_butterfly
+      honours the declared pricing like a single leg: a close whose _exit_policy is `walk` (the fly's stop is
+      declared `walk` in strategy/management.EXIT_PRICING) walks the exit ladder on the fly's own fresh composite
+      quote (position_manager._stash_fly_quote: wings at the bid, body at the ask) through _exit_limit(quote=...);
+      a floor reason, or no fresh quote, posts at the mark exactly as before. The 15:45 resting best case and the
+      15:55 one-tick cross are untouched (LIVE.7(a), the resting model price, is NOT changed here). (b) with no mark
+      before the cross, a resting vertical / fly whose best case cannot be estimated posts NOTHING (F3's hold:
+      _exit_nomark_hold, one "nomark" page) instead of a limit at a zero mark (a fly sale at one tick), and a tent's
+      end-of-day close with no mark rests at its best case (no best case: it declines, as before). Paper books
+      the mark it is handed and never reaches these branches: no booking change. PARC's live nickel resting from
+      entry (PARC.1) is NOT built: there is no standing exit-order machinery to reuse (see BACKLOG LIVE.7 / PARC.1).
+      Gate tests/check_live_exit_paths.py L1-L3, L5.
 v5.5  2026-10-27  OTV5 r46 (PARC.1) — PARC GETS ITS OWN EVALUATOR. The operator, 2026-10-27: "Get rid of the delta stop.
       This will be a hold to 1550 or stop on structure ... also add a nickel close — if price makes an aggressive move
       away from our spread"; "I also want to make sure it uses the ladder entry & exit"; and on the close: PARC is a
@@ -889,6 +905,39 @@ def _eod_due(record) -> bool:
     from utils.time_utils import ET as _ET
     return bool(is_hard_close_time()) and eod_close_due(has_assignment_risk(record),
                                                         now=datetime.now(_ET))
+
+
+# r48 (LIVE.7 c) — a stashed exit quote older than this (or from an earlier pricing pass) is not used to price.
+EXIT_QUOTE_MAX_AGE_S = 10.0
+
+
+def _fresh_quote(record, bid_key: str, ask_key: str) -> Tuple[float, float]:
+    """r48 (LIVE.7 c) — (bid, ask) from the record's stash, or (0, 0) when it is stale.
+
+    Fresh = written by THIS pricing pass (position_manager stamps _exit_q_seq with the record's
+    _px_seq) and under EXIT_QUOTE_MAX_AGE_S old. A stash with no stamp (a hand-built record; every
+    stash position_manager writes is stamped) is read as before."""
+    try:
+        bid = float(record.get(bid_key) or 0.0)
+        ask = float(record.get(ask_key) or 0.0)
+    except (TypeError, ValueError):
+        return (0.0, 0.0)
+    if ask <= 0 or record.get("_exit_q_mono") is None:
+        return (bid, ask)
+    try:
+        same_pass = int(record.get("_exit_q_seq") or 0) == int(record.get("_px_seq") or 0)
+        age = time.monotonic() - float(record.get("_exit_q_mono"))
+    except (TypeError, ValueError):
+        same_pass, age = False, float("inf")
+    if same_pass and 0 <= age <= EXIT_QUOTE_MAX_AGE_S:
+        return (bid, ask)
+    _tid = str(record.get("trade_id", ""))[:8]
+    if ("stale-quote", _tid) not in _telemetry_logged:
+        _telemetry_logged.add(("stale-quote", _tid))
+        logging.getLogger(__name__).info(
+            "[ladder] %s: stashed quote is stale (%s, %.1f s old) - pricing at the fresh mark",
+            _tid, "same pass" if same_pass else "an earlier pricing pass", age)
+    return (0.0, 0.0)
 
 
 def _eod_label(record) -> str:
@@ -4021,15 +4070,11 @@ class ExitEngine:
 
     @staticmethod
     def _exit_quote(record: TradeRecord) -> Tuple[float, float]:
-        """The two-sided quote position_manager stashed this tick, or (0,0)."""
-        try:
-            return (float(record.get("_exit_bid") or 0.0),
-                    float(record.get("_exit_ask") or 0.0))
-        except (TypeError, ValueError):
-            return (0.0, 0.0)
+        """The two-sided quote position_manager stashed THIS pricing pass, or (0,0) (r48: a stale one is (0,0))."""
+        return _fresh_quote(record, "_exit_bid", "_exit_ask")
 
     def _exit_limit(self, record: TradeRecord, reason: str, mark: float,
-                    side: str, structure: str) -> Tuple[float, str]:
+                    side: str, structure: str, quote=None) -> Tuple[float, str]:
         """The price to post for THIS close attempt, and why.
 
         `side` is what we are doing to the STRUCTURE: closing a short vertical
@@ -4044,7 +4089,7 @@ class ExitEngine:
             if best is not None:
                 return best[0], f"eod resting — best case {best[0]:.2f} ({best[2]})"
             return limit_at_mark(mark, floor=self._tick_for(record)), "eod resting — no spot/legs, mark"
-        bid, ask = self._exit_quote(record)
+        bid, ask = quote if quote is not None else self._exit_quote(record)   # r48: a fly passes its own
         # 🔴 TICK.2 — a SINGLE-LEG mark limit goes through the venue grid
         # (tick_size.snap via limit_at_mark's symbol), exactly as the walk path
         # and the entry side already do. Without the symbol, limit_at_mark only
@@ -4167,6 +4212,20 @@ class ExitEngine:
             return None
         return placed
 
+    def _nomark_hold(self, record, mark_price, symbol: str) -> bool:
+        """r48 (LIVE.7 b) — F3's no-mark rule for a RESTING structure: with no mark before the cross and
+        no best case to rest at, post NOTHING (page once, retry each tick); the 15:55 cross closes it."""
+        if mark_price is not None or hard_close_order_mode(now_et()) == "market":
+            return False
+        if self._eod_best_case(record) is not None:
+            return False
+        record["_exit_nomark_hold"] = 1
+        self._alert_live_exit_once(
+            record.get("trade_id", ""), "nomark",
+            f"LIVE close {str(record.get('trade_id', ''))[:8]}: NO MARK and no best case for {symbol} — "
+            f"nothing posted before the cross; retrying each tick, position stays OPEN")
+        return True
+
     def _close_single_leg(self, session, account, record, contracts,
                           mark_price: Optional[float] = None,
                           force_market: bool = False, reason: str = ""):
@@ -4263,6 +4322,8 @@ class ExitEngine:
         # exceed — guaranteed to fill, bounded, and safe.
         _policy = self._exit_policy(record, reason)
         _why = _policy
+        if _policy == "eod_resting" and self._nomark_hold(record, mark_price, short_sym):
+            return None                        # r48 (LIVE.7 b): no mark, no best case, before the cross
         if _policy == "eod_resting":
             # r149 (EOD.1) — RESTING BEST CASE, re-priced each tick, until 15:55
             # crosses (force_market). Supersedes r105's nickel-or-assignment.
@@ -4333,12 +4394,19 @@ class ExitEngine:
                          "(short=%s long=%s hedge=%s)",
                          short_sym, long_sym, hedge_sym)
             return None
-        if mark_price is None:
+        _best = (self._eod_best_case(record)
+                 if mark_price is None and "hard_close" in (reason or "").lower() else None)
+        if mark_price is None and _best is None:
             logger.warning("Tent close: no mark this pass — declining, will "
                            "retry with a fresh mark")
             return None
-        limit, _why = self._exit_limit(record, reason, float(mark_price),
-                                       "buy", "tent")
+        if _best is not None:
+            # r48 (LIVE.7 b) — the end-of-day close with no mark (flatten_all no longer hands on the
+            # entry premium): rest at the tent's best case, the price a resting tent posts anyway.
+            limit, _why = float(_best[0]), f"eod, no mark — best case {_best[0]:.2f} ({_best[2]})"
+        else:
+            limit, _why = self._exit_limit(record, reason, float(mark_price),
+                                           "buy", "tent")
         limit = self._round_to_tick(limit, record)
         record["_exit_last_limit"] = limit
         logger.info("[ladder] TENT CLOSE %s @ %.2f — %s",
@@ -4381,9 +4449,13 @@ class ExitEngine:
         # tastytrade rejects MARKET on spreads, so the cross is a limit at ONE
         # TICK of credit: the lowest price we can ask, hence maximally
         # marketable for a sale.
+        _policy = self._exit_policy(record, reason)
+        _why = _policy
         if force_market:
             limit = self._round_to_tick(tick, record)
-        elif self._exit_policy(record, reason) == "eod_resting":
+        elif _policy == "eod_resting":
+            if self._nomark_hold(record, mark_price, center_sym):
+                return None                    # r48 (LIVE.7 b): no mark, no best case, before the cross
             # r149 (EOD.1) — rest at the fly's value at expiry at current spot, less a tick.
             limit, _why = self._exit_limit(record, reason, float(mark_price or 0.0), "sell", "butterfly")
             limit = self._round_to_tick(limit, record)
@@ -4391,8 +4463,20 @@ class ExitEngine:
             logger.warning("Butterfly close: no mark to price the limit — "
                            "declining this pass, will retry with a fresh mark")
             return None
+        elif _policy == "walk":
+            # 🔴 r48 (LIVE.7) — THE DECLARATION IS HONOURED. management.EXIT_PRICING declares the fly's
+            # stop `walk` ("Clearly ladder is more advantageous", 2026-10-03) and this branch posted at
+            # the mark regardless. It walks the exit ladder now, the way a single leg does, on the fly's
+            # OWN fresh composite quote (sell the wings at the bid, buy the body at the ask); without one
+            # _exit_limit posts at the mark, as before. The walk never sells below the mark.
+            limit, _why = self._exit_limit(record, reason, float(mark_price), "sell", "butterfly",
+                                           quote=_fresh_quote(record, "_exit_fly_bid", "_exit_fly_ask"))
+            limit = self._round_to_tick(max(limit, tick), record)
         else:
             limit = self._round_to_tick(limit_at_mark(mark_price, floor=tick), record)
+        record["_exit_last_limit"] = limit
+        logger.info("[ladder] butterfly CLOSE %s @ %.2f — %s",
+                    str(record.get("trade_id", ""))[:8], limit, _why)
         legs = [
             Leg(instrument_type=InstrumentType.EQUITY_OPTION,
                 symbol=lower_sym,  action=OrderAction.SELL_TO_CLOSE, quantity=contracts),

@@ -1,5 +1,19 @@
 """
-execution/position_manager.py  v5.26
+execution/position_manager.py  v5.27
+v5.27 2026-10-28  OTV5 r48 (LIVE.7, PARC.1 nickel) — TWO LIVE EXIT-PATH EDGES FROM THE 2026-10-27 ORDER-PATH AUDIT.
+      (b) flatten_all with no live mark passed the ENTRY premium on as the mark, so live a 15:50 close could post a
+      sell limit AT ENTRY (marketable when the option is above entry). LIVE now invents no mark: it passes None and
+      the close routes the way a no-mark close already routes (LIVE.1 F3: nothing posted before the 15:55 cross, the
+      cross handles it; exit_engine v5.6 extends the hold to a resting vertical / fly that has no best case either),
+      with a WARNING naming it. PAPER keeps today's booking exactly: entry premium, "P&L approximate" WARNING.
+      (c) _stash_quote is STAMPED with the pricing pass that wrote it (_exit_q_seq = the record's _px_seq, which
+      _fetch_current_premium advances once per call) and its monotonic time (_exit_q_mono); exit_engine._exit_quote
+      ignores a stash from an earlier pass or older than EXIT_QUOTE_MAX_AGE_S, so a tick priced by the live REST
+      fallback (which stashes nothing) posts at its fresh mark instead of walking / clamping on an old quote. The
+      butterfly's composite quote is stashed for the exit ladder under its OWN keys (_exit_fly_bid / _exit_fly_ask,
+      same stamp; r195's _q_* stay record-only), so a fly close declared `walk` can walk (exit_engine v5.6). Paper
+      books the mark it is handed and never reads the stash for a price: no booking change. Gate
+      tests/check_live_exit_paths.py L1, L2, L5.
 v5.26 2026-10-27  OTV5 r46 (PARC.1) — PARC JOINS THE ADMISSION TABLE, AND A CREDIT VERTICAL'S P&L SIGN IS READ FROM ITS
       STRUCTURE. The operator, 2026-10-27: "Call it PARC"; "No shadow mode. We're paper. It trades tomorrow." PARC:
       ENTRY_WINDOWS["PARC"] (11:01-11:03), one open, one try per session, cap-exempt - PARK's rule. _execute_exit's
@@ -288,6 +302,15 @@ from config import PAPER_TRADING, CONTRACT_MULTIPLIER
 _WARNED_ONCE: set = set()     # r195: one warning per reason per process
 
 
+def _quote_stamp(record) -> None:
+    """r48 (LIVE.7 c) — stamp a stash with the pricing pass that wrote it and when."""
+    try:
+        record["_exit_q_seq"] = int(record.get("_px_seq") or 0)
+        record["_exit_q_mono"] = time.monotonic()
+    except (TypeError, ValueError, AttributeError):
+        pass
+
+
 def _stash_quote(record, bid: float, ask: float) -> None:
     """r105 — put a two-sided quote on the record for the exit ladder.
 
@@ -295,11 +318,31 @@ def _stash_quote(record, bid: float, ask: float) -> None:
     is meaningless one tick later; persisting a stale quote would be worse than
     having none. A missing stash makes the exit post at mark, which is exactly
     the pre-r105 behaviour.
+    🔴 r48 (LIVE.7 c) — AND "THE SAME TICK" IS NOW CHECKED, NOT ASSUMED. The stash
+    was never cleared, and a tick priced by the live REST fallback writes none, so
+    the walk and its clamp ran on whatever quote an earlier tick left. It is stamped
+    here (_quote_stamp) and exit_engine._exit_quote ignores it unless it was written
+    by THIS pricing pass and is under EXIT_QUOTE_MAX_AGE_S old.
     """
     try:
         if ask and ask > 0:
             record["_exit_bid"] = round(float(bid), 4)
             record["_exit_ask"] = round(float(ask), 4)
+            _quote_stamp(record)
+    except (TypeError, ValueError):
+        pass
+
+
+def _stash_fly_quote(record, bid: float, ask: float) -> None:
+    """r48 (LIVE.7) — the butterfly's composite quote FOR THE EXIT LADDER, under its own
+    keys (r195's _q_* stay record-only and _exit_bid/_exit_ask stay absent on a fly, so no
+    other reader changes). Read only by exit_engine._close_butterfly for a close whose
+    pricing is declared `walk`; same stamp and freshness rule as _stash_quote."""
+    try:
+        if ask and float(ask) > 0:
+            record["_exit_fly_bid"] = round(float(bid), 4)
+            record["_exit_fly_ask"] = round(float(ask), 4)
+            _quote_stamp(record)
     except (TypeError, ValueError):
         pass
 
@@ -929,7 +972,18 @@ class PositionManager:
                     logger.warning(f"EOD: chain IV unreadable for {trade_id[:8]} ({_ive}) — expiry value")
             reason = _eod_label(record)
             premium = self._fetch_current_premium(record, chain=chain)
-            if premium is None:
+            if premium is None and not self.paper_trading:
+                # 🔴 r48 (LIVE.7 b) — LIVE INVENTS NO MARK. The entry premium handed on as
+                # the mark made the live close post a limit AT ENTRY (a sell at entry is
+                # marketable when the option trades above it). None routes it the way a
+                # no-mark close already routes (LIVE.1 F3): nothing posted before the 15:55
+                # cross, and the cross closes it.
+                logger.warning(
+                    f"Flatten {trade_id[:8]}: no live mark — LIVE: no mark invented; routed "
+                    f"as a no-mark close (nothing posted before the 15:55 cross; the cross "
+                    f"closes it)."
+                )
+            elif premium is None:
                 premium = float(record.get("entry_premium", 0.0) or 0.0)
                 logger.warning(
                     f"Flatten {trade_id[:8]}: no live mark — booking at entry "
@@ -1114,6 +1168,12 @@ class PositionManager:
         no decision on garbage.
         """
         is_butterfly = bool(record.get("is_butterfly", False))
+        # r48 (LIVE.7 c) — one pricing pass: a stash written below carries this number; one from an earlier pass
+        # (or a pass that stashed nothing, e.g. the live REST fallback) is ignored by exit_engine._exit_quote.
+        try:
+            record["_px_seq"] = int(record.get("_px_seq") or 0) + 1
+        except (TypeError, ValueError, AttributeError):
+            pass
 
         if chain is not None:
             try:
@@ -1194,10 +1254,11 @@ class PositionManager:
                             _lo, _ce, _up = _w.get(lower_s), _w.get(center_s), _w.get(upper_s)
                             if None not in (_lo, _ce, _up):
                                 _g = lambda c, k: float(getattr(c, k, 0.0) or 0.0)
-                                _note_quote(record,
-                                            max(0.0, _g(_lo, "bid") + _g(_up, "bid") - 2 * _g(_ce, "ask")),
-                                            max(0.0, _g(_lo, "ask") + _g(_up, "ask") - 2 * _g(_ce, "bid")),
+                                _fb = max(0.0, _g(_lo, "bid") + _g(_up, "bid") - 2 * _g(_ce, "ask"))
+                                _fa = max(0.0, _g(_lo, "ask") + _g(_up, "ask") - 2 * _g(_ce, "bid"))
+                                _note_quote(record, _fb, _fa,
                                             getattr(_ce, "iv", None))   # the BODY's IV
+                                _stash_fly_quote(record, _fb, _fa)      # r48: the walk's quote, own keys
                         except Exception as _qe:                  # noqa: BLE001
                             logger.debug("fly quote not recorded: %s", _qe)
                         return lower_m + upper_m - 2 * center_m
