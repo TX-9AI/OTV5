@@ -1,5 +1,13 @@
 """
-execution/exit_engine.py  v5.6
+execution/exit_engine.py  v5.7
+v5.7  2026-10-28  OTV5 r52 (HUNT.15) — THE HUNT'S TARGET-WICK TAKE-OFF JUDGES ONLY A BAR THE TRADE LIVED THROUGH.
+      TSLA 2026-10-28 (c0e55b76): a LiquidityHunt short entered 09:38:00 ET and was closed at 09:38:15 on
+      "hunt_target_wicked: target 405.84 reached on a wick, close 406.44" - the 09:37 bar, which had closed BEFORE the
+      entry (the level book had logged that wick at 09:38:00). The 09:38 bar then closed beyond the target (405.50),
+      the case this rule calls accepted (hold), and TSLA ran to 397.18. _hunt_at_target now skips a bar whose end
+      (start + 60 s) is at or before the entry time, the "since entry" its sibling _rejected_handoff already keeps; a
+      bar that holds the entry (it ends after it) is judged as before. An unreadable entry time keeps today's reading.
+      Gate tests/check_hunt_wick_since_entry.py.
 v5.6  2026-10-28  OTV5 r48 (LIVE.7, PARC.1 nickel) — THREE LIVE EXIT-PATH EDGES FROM THE 2026-10-27 ORDER-PATH AUDIT.
       (c) _exit_quote reads the position manager's stash only when it is FRESH: stamped by this pricing pass
       (_exit_q_seq == the record's _px_seq) and under EXIT_QUOTE_MAX_AGE_S (10 s, under one 15 s poll) old; a stale
@@ -879,6 +887,7 @@ from config import (
 from utils.time_utils import (is_hard_close_time, minutes_since, now_utc,
                               fmt_et_short, now_et, ts_for_db)
 from utils.time_utils import closed_pos as _closed_pos, closed_part as _closed_part   # r44 (BAR.1)
+from utils.time_utils import _epoch_s as _bar_epoch                                 # r52 (HUNT.15)
 from execution.limit_ladder import limit_at_mark, hard_close_order_mode
 # v4.21 (AUDIT F1): the binding v4.20 forgot. `is_trend_participation` was
 # called in _evaluate_condor_leg and never imported — NameError on every condor
@@ -2070,7 +2079,13 @@ class ExitEngine:
             tgt = float(record.get("underlying_target") or 0.0)
             if tgt <= 0 or df_1m is None or len(df_1m) < 2:
                 return ""
-            bar = df_1m.iloc[_closed_pos(df_1m, now_et())]     # r44 (BAR.1): by time, was iloc[-2]
+            _pos = _closed_pos(df_1m, now_et())                    # r44 (BAR.1): by time, was iloc[-2]
+            bar = df_1m.iloc[_pos]
+            # r52 (HUNT.15) — only a bar the trade lived through: one that ended at or before the entry is history
+            _t0 = self._entry_epoch(record)
+            _s0 = _bar_epoch(df_1m.index[_pos])                   # naive index = ET, as closed_pos reads it
+            if _t0 > 0 and _s0 is not None and _s0 + 60.0 <= _t0:
+                return ""
             hi, lo, close = float(bar["high"]), float(bar["low"]), float(bar["close"])
             d = str(record.get("direction") or "")
             wicked = (hi >= tgt and close < tgt) if d == "long" else (lo <= tgt and close > tgt)
