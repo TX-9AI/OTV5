@@ -1,5 +1,15 @@
 """
-main.py  v5.6
+main.py  v5.7
+v5.7  2026-10-29  OTV5 r53 (FLY.3) — A BUTTERFLY'S ENTRY QUOTE AND GREEKS ARE THE FLY'S, NOT ITS BODY LEG'S. RECORD ONLY.
+      _capture_entry_contract matched record["option_symbol"], which on a fly is the CENTER leg, so entry_bid/ask and
+      entry_delta/gamma/theta were the body's (NVDA 2026-10-28: entry_premium 0.58 beside entry_bid/ask 0.21/0.22,
+      delta 0.164; TSLA 0.70 vs 0.10/0.11; AMZN 0.56 vs 0.27/0.29; 10-26 AMD 1.02 vs 0.40/0.43, TSLA 0.36 vs 0.21/0.22).
+      For a butterfly row it now finds all three legs (lower/center/upper_symbol, else the strike on the fly's side)
+      and writes the composite position_manager builds for the exit record: bid = lower.bid + upper.bid - 2*center.ask,
+      ask = lower.ask + upper.ask - 2*center.bid (each floored at 0), delta/gamma/theta = lower + upper - 2*center,
+      entry_iv = the BODY's IV (as _note_quote records a fly). A missing leg writes nothing ("fly-leg-not-found:<leg>").
+      Single-leg and credit-vertical rows are unchanged. Nothing reads these columns to trade. GATE
+      tests/check_fly_entry_quote.py.
 v5.6  2026-10-28  OTV5 r51 (BAR.2) — EACH TICK WAITS OUT THE FIRST SECONDS OF A MINUTE, WHEN THE JUST-ENDED BAR IS
       PROVISIONAL. CRM 2026-10-28 cut a Runaway at 09:49:00.84 ET on a 09:48 close of 241.78 that finished at 241.93
       (above its 241.85 line); 12 of 38 decisions logged at 0-2 s that day read a close the final bar does not have.
@@ -2577,25 +2587,33 @@ def _capture_entry_contract(ctx: dict, record: dict) -> bool:
     reason = ""
     try:
         chain = (ctx or {}).get("chain")
-        con = None
-        if chain is not None and occ:
-            for c in list(getattr(chain, "calls", []) or []) + \
-                     list(getattr(chain, "puts", []) or []):
-                if getattr(c, "symbol", "") == occ:
-                    con = c
-                    break
-        if con is None:
-            reason = "contract-not-found"
+        payload = None
+        if (record or {}).get("is_butterfly"):
+            # v5.7 (FLY.3) — a fly's option_symbol is its CENTER leg; matching it
+            # recorded the body's quote and greeks as the fly's. The fly's own
+            # values from its three legs, or nothing - never the body's.
+            payload, reason = _fly_entry_contract(chain, record)
         else:
-            payload = {
-                "entry_delta": getattr(con, "delta", None),
-                "entry_gamma": getattr(con, "gamma", None),
-                "entry_theta": getattr(con, "theta", None),
-                "entry_iv":    getattr(con, "iv", None),
-                "entry_bid":   getattr(con, "bid", None),
-                "entry_ask":   getattr(con, "ask", None),
-                "chain_iv_rank": getattr(chain, "iv_rank", None),
-            }
+            con = None
+            if chain is not None and occ:
+                for c in list(getattr(chain, "calls", []) or []) + \
+                         list(getattr(chain, "puts", []) or []):
+                    if getattr(c, "symbol", "") == occ:
+                        con = c
+                        break
+            if con is None:
+                reason = "contract-not-found"
+            else:
+                payload = {
+                    "entry_delta": getattr(con, "delta", None),
+                    "entry_gamma": getattr(con, "gamma", None),
+                    "entry_theta": getattr(con, "theta", None),
+                    "entry_iv":    getattr(con, "iv", None),
+                    "entry_bid":   getattr(con, "bid", None),
+                    "entry_ask":   getattr(con, "ask", None),
+                    "chain_iv_rank": getattr(chain, "iv_rank", None),
+                }
+        if payload is not None:
             if get_trade_logger().set_entry_contract(trade_id, payload):
                 return True
             reason = "write-returned-false"
@@ -2613,6 +2631,60 @@ def _capture_entry_contract(ctx: dict, record: dict) -> bool:
             "the premium-decomposition read (direction vs theta vs IV); logged "
             "once per reason per process.", reason, trade_id[:8])
     return False
+
+
+def _fly_entry_contract(chain, record: dict):
+    """v5.7 (FLY.3) — the BUTTERFLY's entry quote and greeks, built from its legs.
+
+    Returns (payload, "") or (None, reason). The same composite
+    execution/position_manager builds for a fly's exit record (r195): sell the
+    wings at their bids and buy the body back at its ask for the bid, the
+    reverse for the ask, each floored at 0. Greeks are the position's net,
+    lower + upper - 2 x center, per one fly. entry_iv is the BODY's IV, as
+    _note_quote records a fly - a fly has no IV of its own and the body is
+    the leg its value turns on.
+
+    Legs are found by their OCC symbols (lower/center/upper_symbol, persisted
+    since entry_engine v3.7), else by strike on the fly's side of the chain.
+    A leg not found writes NOTHING: three legs or no row, never the body's
+    values under the fly's name (the 2026-10-26/28 defect).
+    """
+    if chain is None:
+        return None, "fly-no-chain"
+    side = str(record.get("option_side", "") or "").lower()
+    calls = list(getattr(chain, "calls", []) or [])
+    puts = list(getattr(chain, "puts", []) or [])
+    by_sym = {getattr(c, "symbol", ""): c for c in calls + puts if getattr(c, "symbol", "")}
+    pool = calls if side == "call" else puts if side == "put" else []
+    legs = {}
+    for leg in ("lower", "center", "upper"):
+        con = by_sym.get(record.get(f"{leg}_symbol") or "")
+        if con is None:
+            k = record.get(f"{leg}_strike")
+            con = next((c for c in pool if k and getattr(c, "strike", None) == k), None)
+        if con is None:
+            return None, f"fly-leg-not-found:{leg}"
+        legs[leg] = con
+    lo, ce, up = legs["lower"], legs["center"], legs["upper"]
+
+    def _f(c, k):
+        v = getattr(c, k, None)
+        return None if v is None else float(v)
+
+    def _net(k):
+        a, b, m = _f(lo, k), _f(up, k), _f(ce, k)
+        return None if None in (a, b, m) else a + b - 2.0 * m
+
+    g = lambda c, k: float(getattr(c, k, 0.0) or 0.0)
+    return {
+        "entry_delta": _net("delta"),
+        "entry_gamma": _net("gamma"),
+        "entry_theta": _net("theta"),
+        "entry_iv":    getattr(ce, "iv", None),            # the BODY's IV
+        "entry_bid":   max(0.0, g(lo, "bid") + g(up, "bid") - 2.0 * g(ce, "ask")),
+        "entry_ask":   max(0.0, g(lo, "ask") + g(up, "ask") - 2.0 * g(ce, "bid")),
+        "chain_iv_rank": getattr(chain, "iv_rank", None),
+    }, ""
 
 
 def _capture_fire_snapshot(ctx: dict, record: dict) -> None:
