@@ -1,6 +1,12 @@
 #!/usr/bin/env python3
 """
-tests/check_brk_strike_inside.py  v5.0
+tests/check_brk_strike_inside.py  v5.1
+v5.1  2026-10-29  OTV5 r54 (BRK.16) — K1, K2, K6 RE-POINTED: STRK.2 IS RETIRED FOR BREAKOUT. The operator, 2026-10-29: "for
+      STRIKE selection, it should be the strike nearest that 1W distance we identify as the target" - SPX included, so
+      breakout_plan v5.2 calls select_contract(chain, direction, target) with no inside flag. K1 now asserts SPX takes
+      the NEAREST strike (2.21 past the target, not 2.79 inside); K2 that a chain of only past-the-target strikes is
+      NOT refused (the nearest is taken); K6 that the one call site passes no inside=. K3-K5 (select_contract's own
+      inside= rule, which stays for any other caller) are unchanged.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 ON A CASH INDEX, BREAKOUT BUYS THE NEAREST STRIKE AT OR INSIDE ITS REACH - NEVER ONE PAST IT (STRK.2).
 
@@ -10,14 +16,14 @@ v1.0  2026-10-06  OTV4TEST r259. Found on SPX-TEST 10-06: the 10:08 Breakout lon
       The operator, 2026-10-06 20:41 ET: "at or inside target".
 
   K1  the REAL BreakoutPlan.prepare on SPX (research open, a long break): with a strike 2.21 PAST the
-      reach and one 2.79 INSIDE it, the plan's contract is the INSIDE strike
-  K2  the same, on a chain whose only strikes are PAST the reach: no contract, refused, and the refusal
-      names "at or inside"
+      target and one 2.79 INSIDE it, the plan's contract is the NEAREST (past) strike (r54; was: the inside one)
+  K2  the same, on a chain whose only strikes are PAST the target: the nearest is taken, no refusal (r54; was:
+      refused naming "at or inside")
   K3  select_contract(..., inside=True), a SHORT: of a put 2.21 past (below) the reach and one 2.79 inside
       (above) it, the inside one
   K4  inside=True takes a strike exactly AT the reach
   K5  UNCHANGED - the default (ORB, VOLT, every non-index Breakout): the nearest strike, past or not
-  K6  UNCHANGED - Breakout on QQQ passes no inside flag (source of the one call site, read by AST)
+  K6  Breakout's one call site passes no inside flag on any symbol (r54; read by AST)
 
 Drives the REAL BreakoutPlan.prepare and the REAL orb_plan.select_contract. NOT RUN (exit 2), never FAIL,
 when the imports cannot load (e.g. a bare python3 with no pandas).
@@ -85,14 +91,14 @@ def main():
         chain = types.SimpleNamespace(calls=[_c(past, 0.40), _c(inside, 0.55)], puts=[])
         p1 = prep("SPX", chain)
         k1 = getattr(getattr(p1, "contract", None), "strike", None)
-        check("K1 SPX long via the REAL prepare: the strike INSIDE the reach, not the nearer one past it",
-              k1 == inside, f"reach={T} chose={k1} (past={past}, inside={inside})")
+        check("K1 SPX long via the REAL prepare: the NEAREST strike to the 1W target (2.21 past), not the inside one",
+              k1 == past, f"reach={T} chose={k1} (past={past}, inside={inside})")
         chain2 = types.SimpleNamespace(calls=[_c(past, 0.40), _c(round(T + 7.21, 2), 0.25)], puts=[])
         p2 = prep("SPX", chain2)
         last = LAST["plan"].planner.last()          # PlanTick.refuse -> _close sets the PLAN's _last (as check_brk_cash_index reads it)
         why = str(last[2]) if last else ""
-        check("K2 SPX, only strikes PAST the reach: no contract, the row reads 'contract: ... at or inside'",
-              getattr(p2, "contract", "x") is None and why.startswith("contract:") and "at or inside" in why,
+        check("K2 SPX, only strikes PAST the target: the nearest one is taken, nothing refused at 'contract'",
+              getattr(getattr(p2, "contract", None), "strike", None) == past and not why.startswith("contract:"),
               f"contract={getattr(getattr(p2, 'contract', None), 'strike', None)} last={last!r}")
 
     t = 7812.20
@@ -122,8 +128,8 @@ def main():
               and getattr(n.func, "id", getattr(n.func, "attr", "")) == "select_contract"]
     kw = [k.arg for c in calls_ for k in c.keywords]
     seg = ast.get_source_segment(src, calls_[0]) if calls_ else ""
-    check("K6 Breakout's one select_contract call passes inside= ONLY as the cash-index flag",
-          len(calls_) == 1 and kw == ["inside"] and "cash_index" in seg, f"calls={len(calls_)} kw={kw} src={seg!r}")
+    check("K6 Breakout's one select_contract call passes no inside= (nearest to the target on every symbol, r54)",
+          len(calls_) == 1 and kw == [] and "cash_index" not in seg, f"calls={len(calls_)} kw={kw} src={seg!r}")
 
     print()
     if FAILED:

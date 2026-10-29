@@ -1,6 +1,14 @@
 #!/usr/bin/env python3
 """
-tests/check_breakout_new_extreme.py  v5.1
+tests/check_breakout_new_extreme.py  v5.2
+v5.2  2026-10-29  OTV5 r54 (BRK.16) — TWO FIXTURE/RULE UPDATES FOR THE OPERATOR'S 2026-10-29 SPEC, NO RE-FIRE PROPERTY CHANGED.
+      (1) _tick's opening range is WIDER on the far side only (TST 101.00/95.00, TSS 106.00/99.00; the edge each test
+      breaks is unchanged): N3, N4c, N9b and N10b re-fire on closes 0.6-1.7 points past the edge, which on the old 1.00
+      wide range is past 1/2 W - now refused outright ("It should honestly refuse if it's already crossed 1/2W"), so
+      the re-fire rule would never be reached. Every N assertion is as before. (2) N12a-c: Breakout no longer reads the
+      level board ("purely directional without regard for levels in its path"), so an unreadable board can no longer
+      refuse it: N12a board_for is never asked and range_clean / room_to_run are not conditions (no warning); N12b the
+      break still fires; N12c with numbered dials neither is unmet (was: both refused).
 v5.1  2026-10-26  OTV5 r38 (HYG.18) — scratch no longer names dir="/var/tmp": mkdtemp honours TMPDIR, which boot_sweep and land.sh point
       at a per-run dir they remove (HYG.14), so a sweep leaves nothing behind (237 dirs had piled up on SOFI). No check changed.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
@@ -210,7 +218,8 @@ def _tick(plan, spec, sym, day, minute, keep=60):
     """Ask the plan at the START of `minute`: the last closed bar is minute-1."""
     df = _frame(sym, day, minute, keep)
     px = float(df.iloc[-1]["open"])
-    hi, lo = (100.00, 99.00) if sym in ("TSS", "TSRS") else (101.00, 100.00)
+    # r54 (BRK.16): the FAR side is wide so the re-fire closes stay inside 1/2 W of the edge each test breaks
+    hi, lo = (106.00, 99.00) if sym in ("TSS", "TSRS") else (101.00, 95.00)
     prep = plan.prepare(spec=spec, orb=_ORB(hi, lo), price_now=px, now_et=_hm(minute),
                         chain=_Chain(px), df_1m=df, flow_conn=None, symbol=sym)
     return prep, df
@@ -507,8 +516,10 @@ def main():
                 _warn.append(r.getMessage())
     _h = _H(); _lg.getLogger("strategy.breakout_plan").addHandler(_h)
     _orig_bf = _LV.board_for
+    _asked = []
 
     def _boom(*a, **k):
+        _asked.append(1)
         raise RuntimeError("derived store locked (fixture)")
     _LV.board_for = _boom
     _saved_ru = B.RESEARCH_UNTIL
@@ -519,9 +530,11 @@ def main():
         p12, _ = _tick(plan12, spec, "TSW", day, 7)          # a first long break (TST carries N9's logged entries), board unreadable
         rc12 = p12.conditions.get("range_clean") or (0.0, None, None)
         rr12 = p12.conditions.get("room_to_run") or (0.0, None, None)
-        guard("N12a an unreadable board: range_clean and room_to_run read None (not 0 inside / open air), said ONCE",
-              lambda: (rc12[0] is None and rr12[0] is None and len(_warn) == 1,
-                       f"range_clean={rc12} room_to_run={rr12} warnings={len(_warn)}"))
+        # r54 (BRK.16): Breakout reads no board - it is never asked, and neither bar is a condition any more
+        guard("N12a an unreadable board is never asked: range_clean / room_to_run are not conditions, no warning",
+              lambda: ("range_clean" not in p12.conditions and "room_to_run" not in p12.conditions
+                       and not _asked and len(_warn) == 0,
+                       f"range_clean={rc12} room_to_run={rr12} board asked={len(_asked)} warnings={len(_warn)}"))
         guard("N12b inside the research window the break still fires (no decision change before the dials get numbers)",
               lambda: (p12.ready and p12.direction == "long", _why(p12)))
         B.RESEARCH_UNTIL = "2026-01-01"                      # the dials carry numbers now
@@ -529,10 +542,10 @@ def main():
         p12c, _ = _tick(plan12c, spec, "TSR", day, 6)        # another first break, on a symbol with no logged entry
         rc12c = p12c.conditions.get("range_clean") or (0.0, None, True)
         rr12c = p12c.conditions.get("room_to_run") or (0.0, None, True)
-        guard("N12c with numbered dials an unreadable board REFUSES range_clean and room_to_run (both unmet), no fire",
-              lambda: (rc12c[2] is False and rr12c[2] is False and not p12c.ready
-                       and len(_warn) == 1,
-                       f"range_clean={rc12c} room_to_run={rr12c} ready={p12c.ready} warnings={len(_warn)}"))
+        guard("N12c with numbered dials an unreadable board refuses NOTHING: neither bar is unmet (r54, BRK.16)",
+              lambda: ("range_clean" not in p12c.unmet and "room_to_run" not in p12c.unmet
+                       and not _asked and len(_warn) == 0,
+                       f"range_clean={rc12c} room_to_run={rr12c} unmet={p12c.unmet} warnings={len(_warn)}"))
     finally:
         _LV.board_for = _orig_bf
         B.RESEARCH_UNTIL = _saved_ru

@@ -1,5 +1,18 @@
 """
-execution/exit_engine.py  v5.7
+execution/exit_engine.py  v5.8
+v5.8  2026-10-29  OTV5 r54 (BRK.16) — BREAKOUT'S TRAIL ARMS AT 0.5W, NOT AT ENTRY. The operator, 2026-10-29: "I want the
+      trailing stop activation to occur at 1/2 W." W = orb_range_high - orb_range_low on the record. Until the UNDERLYING
+      (record current_price, else the forming 1m bar's last price - management.decide's own price) reaches orb_high +
+      BRK_TRAIL_ARM_W x W (long) / orb_low - BRK_TRAIL_ARM_W x W (short), _evaluate_sweep leaves the trail, its FVG lock
+      and the post-target runner trail INERT for a Breakout (the hard stop, the 5m structure stop and every other exit
+      still protect it). The tick it is reached the trail ARMS, seeded at max(stop_premium, peak mark since entry x 0.75)
+      (peak = the best of entry, mfe_premium, max_premium_seen and this mark), and from then on today's mechanics run
+      unchanged (peak x 0.75 ratchet, FVG lock, structure floor). The arm is latched per trade; after a restart a
+      persisted trail_stop > 0 on a Breakout (only an armed trail writes one) re-arms it. A record WITHOUT a readable
+      range or direction arms from entry exactly as before r54, warned once per trade (the trail can only close a trade
+      sooner than the structure stop, never later, so an unreadable arm level must not remove it). trail_armed(record)
+      answers management.decide's r98 nearer-stop deferral. ORB (_evaluate_orb) and every other strategy unchanged.
+      GATE tests/check_brk_spec_1029.py.
 v5.7  2026-10-28  OTV5 r52 (HUNT.15) — THE HUNT'S TARGET-WICK TAKE-OFF JUDGES ONLY A BAR THE TRADE LIVED THROUGH.
       TSLA 2026-10-28 (c0e55b76): a LiquidityHunt short entered 09:38:00 ET and was closed at 09:38:15 on
       "hunt_target_wicked: target 405.84 reached on a wick, close 406.44" - the 09:37 bar, which had closed BEFORE the
@@ -1202,6 +1215,35 @@ class BOSTracker:
 STRUCTURE_TRAIL_STRATEGIES = ("ORBStrategy", "Breakout")
 
 
+# ── r54 (BRK.16) — BREAKOUT'S TRAIL ARMS AT 0.5W ────────────────────────────
+# The operator, 2026-10-29: "I want the trailing stop activation to occur at 1/2 W." Breakout ONLY: ORB is retired and
+# keeps its behaviour, and nothing else trails from a range edge.
+BRK_TRAIL_ARM_STRATEGIES = ("Breakout",)
+_BRK_ARM_UNREADABLE_SAID: set = set()          # trade_ids already warned about
+
+
+def breakout_trail_arm(record):
+    """r54 (BRK.16) - (arm_level, direction) for a Breakout record: orb_range_high + BRK_TRAIL_ARM_W x W for a long,
+    orb_range_low - BRK_TRAIL_ARM_W x W for a short (W = high - low). A string naming why when the record carries no
+    usable range (0.0 is the column default) or no direction (`direction`, else the option side). Never raises."""
+    try:
+        hi = float(record.get("orb_range_high") or 0.0)
+        lo = float(record.get("orb_range_low") or 0.0)
+    except (TypeError, ValueError, AttributeError):
+        return "orb_range_high/low unreadable"
+    if not (hi > 0 and lo > 0 and hi > lo and hi == hi and lo == lo):
+        return f"no opening range on the record (orb_range_high={hi:g}, orb_range_low={lo:g})"
+    d = str(record.get("direction") or "").lower()
+    if d not in ("long", "short"):
+        sd = str(record.get("option_side") or "").lower()
+        d = "long" if sd.startswith("c") else "short" if sd.startswith("p") else ""
+    if d not in ("long", "short"):
+        return "no direction on the record"
+    k = float(_cfg.BRK_TRAIL_ARM_W)
+    w = hi - lo
+    return ((hi + k * w) if d == "long" else (lo - k * w)), d
+
+
 def _is_structure_trail(record) -> bool:
     """True when this trade's stop_premium is structural, not a percentage."""
     try:
@@ -1233,6 +1275,7 @@ class ExitEngine:
         self._trail_active: dict = {}
         self._bos_trackers: dict = {}   # trade_id \u2192 BOSTracker (sweep only)
         self._post_target_trail: dict = {}   # trade_id \u2192 bool (ORB only)
+        self._brk_trail_armed: dict = {}     # r54 (BRK.16): trade_id -> True once a Breakout's trail has armed
         # VEL.1 - consecutive velocity breaches per trade. WITHOUT THIS the
         # check AttributeErrors on first call and the except swallows it,
         # leaving a permanent silent no-op.
@@ -2589,6 +2632,12 @@ class ExitEngine:
             decision.exit_reason = f"stop_hit pnl={pnl_pct:.1%}"
             return decision
 
+        # 2b. r54 (BRK.16) — A BREAKOUT'S TRAIL ARMS AT 0.5W. Until then the trail (5), its FVG lock and the
+        #     post-target runner trail (3) are inert; every other strategy is armed as before.
+        _armed = True
+        if str(record.get("strategy") or "") in BRK_TRAIL_ARM_STRATEGIES:
+            _armed = self._breakout_trail_gate(record, current_premium, df_1m)
+
         # 3. TARGET — v3.8 RUNNER MODE (SWEEP_POST_TARGET_TRAIL, default on):
         #    sweeps get the same post-target treatment as ORB — no hard TP,
         #    the trade switches to the tightened FVG-aware trail and runs
@@ -2607,7 +2656,7 @@ class ExitEngine:
             trail_stop = self._update_post_target_trail(
                 trade_id, current_premium, record,
                 self._fvg_frame(df_1m, df_5m), direction
-            )
+            ) if _armed else None                                # r54 (BRK.16)
             if trail_stop is not None:
                 if current_premium <= trail_stop:
                     decision.should_exit = True
@@ -2631,6 +2680,9 @@ class ExitEngine:
 
         # 5. TRAIL \u2014 FVG-anchored once armed (+20%), plus the 50% % trail; the
         #    higher of the two governs (both write to _trail_stops).
+        #    r54 (BRK.16): an unarmed Breakout trail is skipped whole - no trail, no lock, nothing to hit.
+        if not _armed:
+            return decision
         if pnl_pct >= FVG_TRAIL_ARM_PCT:
             self._update_fvg_trail(trade_id, current_premium, record,
                                    self._fvg_frame(df_1m, df_5m), direction)
@@ -3314,6 +3366,91 @@ class ExitEngine:
             self._bos_trackers[trade_id] = BOSTracker(direction, entry_price,
                                                       min_dist=min_dist)
         return self._bos_trackers[trade_id]
+
+    def trail_armed(self, record) -> bool:
+        """r54 (BRK.16) - may this trade's TRAIL govern? True for every strategy but Breakout (unchanged). A Breakout's
+        trail governs once armed (the underlying reached the edge +/- 0.5W, latched per trade), when the record holds a
+        persisted trail_stop > 0 (a restart: only an armed trail writes one), or when the record has no readable arm
+        level (it then arms from entry, as before r54). No side effects. Never raises."""
+        try:
+            if str(record.get("strategy") or "") not in BRK_TRAIL_ARM_STRATEGIES:
+                return True
+            if (getattr(self, "_brk_trail_armed", None) or {}).get(str(record.get("trade_id") or "")):
+                return True
+            if float(record.get("trail_stop") or 0.0) > 0:      # only an armed trail writes one (restart)
+                return True
+            return isinstance(breakout_trail_arm(record), str)
+        except Exception:                                       # noqa: BLE001
+            return True
+
+    def _breakout_trail_gate(self, record, current_premium: float, df_1m) -> bool:
+        """r54 (BRK.16) - True when a Breakout's trail is ARMED this tick; False keeps the trail, its FVG lock and the
+        post-target runner trail inert. Arms (latched) the first tick the underlying reaches the edge +/- 0.5W, and
+        SEEDS the trail there at max(stop_premium, peak mark since entry x (1 - TRAIL_LOCK_PCT)).
+
+        🔑 The operator, 2026-10-29: "I want the trailing stop activation to occur at 1/2 W." Before that the
+        structure stop (and the hard stop, delta par, delta floor, no-progress, exhaustion, EOD) protect the trade.
+        ⚠️ A RECORD WITH NO READABLE RANGE OR DIRECTION ARMS FROM ENTRY, AS BEFORE r54, warned once per trade: the
+        trail can only close a trade sooner than the structure stop would, never later, so an arm level the record
+        cannot supply must not take that protection away.
+        ⚠️ A RESTART: a persisted trail_stop > 0 on a Breakout was written only by an armed trail (no TRAIL intent
+        exists before the arm; the column defaults to 0.0), so it re-arms - and keeps the recovered level."""
+        tid = str(record.get("trade_id") or "")
+        armed = self.__dict__.setdefault("_brk_trail_armed", {})
+        if armed.get(tid):
+            return True
+        arm = breakout_trail_arm(record)
+        if isinstance(arm, str):
+            if tid not in _BRK_ARM_UNREADABLE_SAID:
+                _BRK_ARM_UNREADABLE_SAID.add(tid)
+                logger.warning(f"[exit] Breakout {tid[:8]}: the 0.5W trail arm level is unreadable ({arm}) - "
+                               f"the trail arms from entry as before r54 (BRK.16)")
+            armed[tid] = True
+            return True
+        try:
+            persisted = float(record.get("trail_stop") or 0.0)
+        except (TypeError, ValueError):
+            persisted = 0.0
+        if persisted > 0:
+            armed[tid] = True
+            self._trail_active[tid] = True
+            self._trail_stops.setdefault(tid, persisted)
+            logger.info(f"[exit] Breakout {tid[:8]}: trail re-armed from trades.db (trail_stop {persisted:.2f}; "
+                        f"BRK.16)")
+            return True
+        level, d = arm
+        px = None
+        try:
+            px = float(record.get("current_price") or 0.0) or None
+        except (TypeError, ValueError):
+            px = None
+        if px is None:
+            try:
+                if df_1m is not None and len(df_1m):
+                    px = float(df_1m["close"].iloc[-1])           # the forming bar's last price, as decide() reads it
+            except Exception:                                   # noqa: BLE001
+                px = None
+        if px is None or px != px:
+            return False                                        # unmeasured this tick: stays unarmed
+        if not (px >= level if d == "long" else px <= level):
+            return False
+
+        def _p(v):
+            try:
+                v = float(v)
+                return v if v == v and v > 0 else 0.0
+            except (TypeError, ValueError):
+                return 0.0
+        peak = max(_p(record.get("entry_premium")), _p(record.get("mfe_premium")),
+                   _p(record.get("max_premium_seen")), _p(current_premium))
+        seed = max(_p(record.get("stop_premium")), peak * (1.0 - TRAIL_LOCK_PCT))
+        armed[tid] = True
+        self._trail_active[tid] = True
+        self._trail_stops[tid] = seed
+        logger.info(f"TRAIL ARMED (BRK.16): {tid[:8]} underlying {px:.2f} reached the 0.5W arm {level:.2f} ({d}); "
+                    f"seed ${seed:.2f} = max(stop {_p(record.get('stop_premium')):.2f}, peak {peak:.2f} x "
+                    f"{1.0 - TRAIL_LOCK_PCT:.2f})")
+        return True
 
     def _update_trail(self, trade_id: str,
                        current: float, entry: float,

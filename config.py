@@ -1,5 +1,12 @@
 """
-config.py  v5.3
+config.py  v5.4
+v5.4  2026-10-29  OTV5 r54 (BRK.16) — BREAKOUT'S TARGET AND TRAIL ARM ARE MULTIPLES OF THE OPENING RANGE WIDTH W. The operator,
+      2026-10-29: "the target will be from the boundary of the opening range a distance of 1W"; "I want the trailing stop
+      activation to occur at 1/2 W." BRK_TARGET_W = 1.0 (target = orb_high + 1W long / orb_low - 1W short; planning only:
+      R, the strike, underlying_target) and BRK_TRAIL_ARM_W = 0.5 (the trail arms once the underlying reaches the edge
+      +/- 0.5W). BRK_ENTRY_MAX_W = 0.5: "It should honestly refuse if it's already crossed 1/2W" - no Breakout plan on a
+      break close at or beyond edge +/- 0.5W, and no fire on a live price there ("that is runaway's domain"). No env
+      toggle. BRK_RESEARCH_UNTIL and the FITTED dials are unchanged.
 v5.3  2026-10-28  OTV5 r50 (PARC.3) — PARC IS PAUSED: OT_PARC UNSET = log, NOT trade. The operator, after the 10-28 backtest
       (PARC +$47.57 gross per trade vs PARK +$155.26; 68 percent of PARC trades ended on the 5m structure stop, a median
       0.227 percent from the 11:00 close): "Don't go live on the PARC tomorrow until we find a better stop placement." An unset (or empty, or unknown) OT_PARC now
@@ -1104,6 +1111,17 @@ RESTING_STOP_WAIT_S = 120.0
 RESTING_STOP_EMERGENCY_FRAC = 0.05
 BRK_NOPROG_STALL_BARS = 2      # consecutive closed 1m bars without a new favourable extreme
 BRK_NOPROG_MIN_R = 0.5         # best progress since entry, in R = |underlying_entry - underlying_stop|
+# ── r54 (BRK.16) — BREAKOUT'S TARGET AND TRAIL ARM, IN MULTIPLES OF THE OPENING RANGE WIDTH W ──────────────────
+# The operator, 2026-10-29: "For any opening range width, let's call it W — the target will be from the boundary of the
+# opening range a distance of 1W. For a long it's from the top of the opening range and for a short, it's from the
+# bottom"; "I want the trailing stop activation to occur at 1/2 W." The target is PLANNING ONLY (R, the strike,
+# underlying_target) - Breakout has no target exit ("how far it gets is determined by the trailing stop").
+BRK_TARGET_W = 1.0             # strategy/breakout_plan.py: target = edge +/- BRK_TARGET_W x W
+BRK_TRAIL_ARM_W = 0.5          # execution/exit_engine.py: the trail arms once the underlying reaches edge +/- this x W
+# The operator, 2026-10-29, on a break already well under way: "if we haven't entered before it reaches 1W, absolutely
+# refuse it — that is runaway's domain. It should honestly refuse if it's already crossed 1/2W." The plan refuses a break
+# CLOSE at or beyond edge +/- BRK_ENTRY_MAX_W x W, and the strategy will not fire on a live price at or beyond it.
+BRK_ENTRY_MAX_W = 0.5          # strategy/breakout_plan.py + strategy/breakout.py: no entry at/beyond edge +/- this x W
 
 ENTRY_WINDOWS = {
     # r149: directional debits run ALL DAY to the entries stop (operator: "A").

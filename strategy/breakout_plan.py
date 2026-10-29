@@ -1,5 +1,24 @@
 """
-strategy/breakout_plan.py  v5.1
+strategy/breakout_plan.py  v5.2
+v5.2  2026-10-29  OTV5 r54 (BRK.16) — THE TARGET IS THE EDGE +/- 1W, THE STRIKE IS THE NEAREST TO IT, AND BREAKOUT READS NO
+      LEVELS. The operator's spec, 2026-10-29: "For any opening range width, let's call it W — the target will be from the
+      boundary of the opening range a distance of 1W. For a long it's from the top of the opening range and for a short,
+      it's from the bottom"; "for STRIKE selection, it should be the strike nearest that 1W distance we identify as the
+      target"; "I want to take out any levels references that may interfere with the trade ... The breakout trade should
+      be purely directional without regard for levels in its path"; and to the build: "I concur on both. Yes build it."
+      (1) target = orb_high + BRK_TARGET_W x W (long) / orb_low - BRK_TARGET_W x W (short), source "edge+1W"/"edge-1W";
+      planning only (R, the strike, underlying_target) - no exit reads it as a take-profit. (2) select_contract(chain,
+      direction, target) for every symbol, SPX included: r259's (STRK.2) at-or-inside pick for a cash index is retired
+      here; the live two-sided quote above QUOTE_FLOOR is still required. (3) The level board (_board), range_clean,
+      room_to_run, the pool (_pool, pool_price/name/dist_r, _reach's nearer-of rule) and _route's DEFER->LiquidityHunt /
+      DEFER->SweepCreditSpread hand-off are gone; the names stay on the plan row as "n/a - Breakout has no level reads"
+      (None), and an unmet bar now only WAITs. (4) R is SIGNED: (target - break close) for a long, (break close -
+      target) for a short, over the risk (abs() gave a target behind the break a positive R - the 10-27/10-28 reviews,
+      BRK.5). (5) A break close at or beyond edge +/- BRK_ENTRY_MAX_W (0.5) x W refuses at `r`, "the break close is
+      already past 1/2 W (runaway's domain)" - the operator: "if we haven't entered before it reaches 1W, absolutely
+      refuse it — that is runaway's domain. It should honestly refuse if it's already crossed 1/2W." prep.entry_limit
+      carries the level to Breakout.generate_signal, which will not fire on a live price at or beyond it.
+      The LiquidityHunt's level reads are untouched. GATE tests/check_brk_spec_1029.py.
 v5.1  2026-10-27  OTV5 r44 (BAR.1) — THE BREAK BAR IS THE LAST BAR CLOSED BY TIME, NOT df_1m.iloc[-2]. "THE BREAK: a CLOSED
       bar's CLOSE beyond the edge (r5)" read iloc[-2], which on a tick in the first instant of a minute (before that
       minute's first row exists) is one bar stale. META 2026-10-27 3f2b1372: Breakout short fired 10:10:00 ET on the
@@ -156,6 +175,9 @@ So the OUTPUT of this file is a TRIGGER and nothing else: every declared bar
 already TRUE, a strike selected, a stop and an R that clear the floor — and one
 thing left pending, which the strategy confirms on the next tick.
 
+🔴 r54 (BRK.16): THE ROUTING BELOW IS RETIRED - Breakout reads no levels, so it has no pool to route on and an
+unmet bar only WAITs (the operator, 2026-10-29: "The breakout trade should be purely directional without regard
+for levels in its path"). The paragraph is kept as the history of what the plan did until r54.
 🔑 AND IT ROUTES RATHER THAN MERELY REFUSING. Operator: *"if we identify that
 it's a fakeout before it happens, maybe we can tip off the appropriate trade to
 take that."* When the bars fail in the shape that says HARVEST — a pool sitting
@@ -556,6 +578,8 @@ def _record_rearm(row: dict) -> None:
 # v1.10 (BRK.6) - what an index records in place of a tape or a book it cannot have.
 NA_NO_TAPE = "n/a - cash index, no tape"
 NA_NO_BOOK = "n/a - cash index, no book"
+# r54 (BRK.16) - what the level bars record now that Breakout reads no levels map and no liquidity map.
+NA_NO_LEVELS = "n/a - Breakout has no level reads"
 
 
 def _cash_index(symbol: str) -> bool:
@@ -592,8 +616,7 @@ class BreakoutPreparation:
     __slots__ = ("tick", "spec", "conditions", "unmet", "ready", "direction", "side",
                  "edge", "break_close", "stop", "stop_1m", "stop_5m", "risk", "target", "target_src",
                  "contract", "premium", "r", "trigger", "invalidation",
-                 "pool_price", "pool_name", "pool_dist_r", "verdict", "defer_to",
-                 "defer_side", "defer_level", "defer_why", "price_now", "orb",
+                 "verdict", "price_now", "orb", "entry_limit",
                  "persist", "cash_index")
 
     def __init__(self, tick, spec):
@@ -606,10 +629,9 @@ class BreakoutPreparation:
         self.target = self.target_src = None
         self.contract = self.premium = self.r = None
         self.trigger = self.invalidation = None
-        self.pool_price = self.pool_name = self.pool_dist_r = None
-        self.verdict, self.defer_to = "WAIT", ""
-        self.defer_side = self.defer_level = self.defer_why = None
+        self.verdict = "WAIT"                   # r54 (BRK.16): no DEFER - an unmet bar only waits
         self.price_now = self.orb = None
+        self.entry_limit = None                 # r54 (BRK.16): edge +/- BRK_ENTRY_MAX_W x W
         self.persist = ()
         self.cash_index = False
 
@@ -626,7 +648,7 @@ class BreakoutPreparation:
         when the window closes.
         ⚠️ AND THE FIT DOES NOT NEED A BYPASS TO BE POSSIBLE: each informer's
         CONTINUOUS value is recorded every tick (`flow_imbalance`, `regime`,
-        `depth_ratio`, `pool_dist_r`, `range_width_pct`), so any threshold can be
+        `depth_ratio`, `range_width_pct`), so any threshold can be
         fitted afterwards from the values themselves — which is strictly more
         than a stored would-have boolean could ever have told us.
         """
@@ -755,13 +777,9 @@ class BreakoutPlan:
         t.check("range_width_pct", wpct, None)
         prep.cond("orb_range", wpct, B.accepts("orb_range", wpct))
 
-        # ── nothing live inside it (r39 retires them TRAVERSED) ────────────
-        board = self._board(px, hi, lo)
-        board_ok = str(board.get("state") or "") == "ok"          # r299 (BRK.14)
-        inside = [l for l in (board.get("above", []) + board.get("below", []))
-                  if hi and lo and lo <= float(l.get("price") or 0) <= hi]
-        _rc = float(len(inside)) if board_ok else None            # an unreadable board is not a clean range
-        prep.cond("range_clean", _rc, B.accepts("range_clean", _rc))
+        # ══ r54 (BRK.16) — NO LEVEL READS. The operator, 2026-10-29: "The breakout trade should be purely
+        # directional without regard for levels in its path." No board is read; range_clean is not a bar. ══
+        t.check("range_clean", None, None, note=NA_NO_LEVELS)
 
         # ── THE BREAK: a CLOSED bar's CLOSE beyond the edge (r5) ───────────
         # r44 (BAR.1) - the last bar CLOSED BY TIME; iloc[-2] was a minute stale on a
@@ -839,29 +857,32 @@ class BreakoutPlan:
         t.check("stop_1m", prep.stop_1m, None)
         prep.risk = abs(bc - prep.stop) if (bc and prep.stop) else None
 
-        pool = self._pool(board, px, direction)
-        prep.pool_price = pool[0] if pool else None
-        prep.pool_name = pool[1] if pool else None
-        prep.pool_dist_r = ((abs(prep.pool_price - bc) / prep.risk)
-                            if (pool and prep.risk and prep.risk > 0 and bc) else None)
-        t.check("pool_price", prep.pool_price, None)
-        t.check("pool_name", None, None, note=str(prep.pool_name or "open air"))
-        t.check("pool_dist_r", prep.pool_dist_r, None)
-        # r299 (BRK.14): "no pool" is open air only when the board was READ; an unreadable board is None
-        prep.cond("room_to_run", prep.pool_dist_r if board_ok else None,
-                  bool((board_ok and pool is None)
-                       or B.accepts("room_to_run", (prep.pool_dist_r or 0) if board_ok else None)))
+        # r54 (BRK.16) - no pool and no room_to_run: the names stay on the row, read as n/a
+        t.check("room_to_run", None, None, note=NA_NO_LEVELS)
+        t.check("pool_price", None, None)
+        t.check("pool_name", None, None)
+        t.check("pool_dist_r", None, None)
+        t.check("reach_pool", None, None)
 
-        # the reach: the NEARER of the measured move and the pool's near edge
-        measured = (bc + width) if (direction == "long" and bc and width) else \
-                   (bc - width) if (direction == "short" and bc and width) else None
-        t.check("reach_measured", measured, None)
-        t.check("reach_pool", prep.pool_price, None)
-        prep.target, prep.target_src = self._reach(direction, measured, prep.pool_price)
+        # ══ r54 (BRK.16) — THE TARGET IS THE EDGE +/- 1W ══════════════════════
+        # The operator, 2026-10-29: "the target will be from the boundary of the opening range a distance of
+        # 1W. For a long it's from the top of the opening range and for a short, it's from the bottom." It is
+        # PLANNING ONLY - R, the strike, underlying_target; "how far it gets is determined by the trailing stop".
+        _kw = float(config.BRK_TARGET_W)
+        prep.target = ((hi + _kw * width) if (direction == "long" and hi and width) else
+                       (lo - _kw * width) if (direction == "short" and lo and width) else None)
+        prep.target_src = (f"edge{'+' if direction == 'long' else '-'}{_kw:g}W"
+                           if prep.target is not None else "")
+        # the 1/2 W entry limit: no plan on a break close beyond it, no fire on a price beyond it (BRK.16)
+        _ew = float(config.BRK_ENTRY_MAX_W)
+        prep.entry_limit = ((hi + _ew * width) if (direction == "long" and hi and width) else
+                            (lo - _ew * width) if (direction == "short" and lo and width) else None)
+        t.check("entry_limit", prep.entry_limit, None)
+        t.check("reach_measured", prep.target, None)
 
         # ── EVERY BAR MUST CLEAR, OR NO PLAN GOES FORWARD ──────────────────
         if prep.unmet:
-            return self._route(prep, t, B)
+            return self._route(prep, t, B)                   # r54 (BRK.16): it only WAITs now
 
         # ══ r316 (BRK.15) — A SIDE FIRES ON A FRESH BREAK; EVERY RETURN TO THE RANGE RE-ARMS IT ═══
         # The operator, 2026-10-24: *"The new session high/low rule needs to be dropped"*; *"For now, rearm
@@ -880,24 +901,44 @@ class BreakoutPlan:
         # later one must CLOSE beyond every prior RTH bar's extreme.
 
         # ── the structural bars: a contract, an R that clears the floor ────
+        # r54 (BRK.16) - "for STRIKE selection, it should be the strike nearest that 1W distance we identify as the
+        # target": the nearest listed strike with a live quote, on EVERY symbol. r259's (STRK.2) at-or-inside pick
+        # for a cash index is retired for Breakout (the operator, 2026-10-29).
         from strategy.orb_plan import select_contract
-        prep.contract = (select_contract(chain, direction, prep.target, inside=bool(prep.cash_index))
-                         if chain else None)                            # r259 (STRK.2)
+        prep.contract = (select_contract(chain, direction, prep.target)
+                         if (chain and prep.target is not None) else None)
         t.check("contract", None, prep.contract is not None)
         if prep.contract is None:
-            t.refuse("contract", "no listed strike with a live quote at or inside the reach"
-                     if prep.cash_index else "no listed strike with a live quote at the reach")
+            t.refuse("contract", "no listed strike with a live quote at the reach"
+                     if prep.target is not None else "no 1W target - the opening range has no width")
             return prep
         prep.premium = _f(getattr(prep.contract, "mark", None))
         t.check("premium", prep.premium, bool(prep.premium and prep.premium > QUOTE_FLOOR))
         if not prep.premium or prep.premium <= QUOTE_FLOOR:
             t.refuse("premium", "the contract has no live quote")
             return prep
-        reach = abs((prep.target or bc) - bc)
+        # r54 (BRK.16) - R IS SIGNED: target - break close for a long, break close - target for a short. abs() gave a
+        # target already BEHIND the break a positive R (AMD 10-27 R 0.11, NFLX/UNH 10-28 - the reviews' BRK.5 note).
+        reach = ((prep.target - bc) if direction == "long" else (bc - prep.target))
         prep.r = (reach / prep.risk) if (prep.risk and prep.risk > 0) else None
-        t.check("r", prep.r, B.accepts("r", prep.r))
+        t.check("r", prep.r, B.accepts("r", prep.r) and reach > 0)
         t.check("stop_survivable", prep.risk, bool(prep.risk and prep.risk > 0))
         t.check("target", prep.target, prep.target is not None)
+        # ══ r54 (BRK.16) — A BREAK ALREADY PAST 1/2 W IS THE RUNAWAY'S ═══════════════════════════════════
+        # The operator, 2026-10-29: "if we haven't entered before it reaches 1W, absolutely refuse it — that is
+        # runaway's domain. It should honestly refuse if it's already crossed 1/2W." A break close at or beyond
+        # edge +/- BRK_ENTRY_MAX_W x W refuses at `r` (it also guarantees the signed reach above is positive).
+        if prep.entry_limit is not None and (bc >= prep.entry_limit if direction == "long"
+                                             else bc <= prep.entry_limit):
+            t.refuse("r", f"the break close is already past 1/2 W (runaway's domain): break close {bc:.2f} "
+                          f"{'>=' if direction == 'long' else '<='} {prep.entry_limit:.2f} "
+                          f"(edge {prep.edge:.2f} {'+' if direction == 'long' else '-'} "
+                          f"{float(config.BRK_ENTRY_MAX_W):g}W)")
+            return prep
+        if reach <= 0:                                  # unreachable once the 1/2 W gate holds; kept as a floor
+            t.refuse("r", f"the break close is already beyond the 1W target (break close {bc:.2f}, "
+                          f"target {prep.target:.2f} via {prep.target_src})")
+            return prep
         if not B.accepts("r", prep.r):
             t.refuse("r", f"R {prep.r:.2f} outside acceptance "
                           f"{B.acceptance('r')}" if prep.r else "R unmeasurable")
@@ -1124,81 +1165,22 @@ class BreakoutPlan:
             return False
         return True
 
-    # ── the router: a refusal that names the trade that SHOULD take it ─────
+    # ── an unmet bar: WAIT, and say on what ─────────────────────────────────
     def _route(self, prep, t, B):
-        """Not every failure is the same failure.
+        """An unmet bar holds the plan and names what it is waiting on.
 
-        🔑 THE HARVEST SHAPE IS SPECIFIC: a pool sitting where the stops are,
-        and the tape or the book saying the level is being defended rather than
-        given up. That is not "no trade" — it is the SWEEP's trade, or the
-        HUNT's, and the plan says so with `permit()` rather than going quiet.
-        ⚠️ WAIT IS THE DEFAULT. Only the named shape defers; anything else is
-        an ordinary DECLINE, because a permission issued on a shrug is worse
-        than silence.
+        🔴 r54 (BRK.16) — THE HARVEST ROUTE IS GONE. Until r54 a pool in the path with a fading regime or book
+        deferred the break to the LiquidityHunt or the SweepCreditSpread (DEFER, `permit()`), reading
+        `pool_dist_r` off the level board. The operator, 2026-10-29: "The Hunt trade should be working from levels.
+        The breakout trade should be purely directional without regard for levels in its path." Breakout reads no
+        pool, so it has nothing to route on; the Hunt and the sweep find their own levels as they always have.
+        (0 '[breakout] DEFER' lines in the 10-26..10-28 window logs.)
         """
-        # ⚠️ THE FADE ROUTE READS THE FITTED DIAL, NOT THE LIVE ACCEPTANCE.
-        # While acceptance is "any" every pool distance clears room_to_run, so
-        # asking "did room_to_run fail?" would never route a harvest to the
-        # sweep. The ROUTING question is "is a pool sitting in the path?", which
-        # is a fact about the tape and not an acceptance band.
-        pooled = (prep.pool_dist_r is not None
-                  and prep.pool_dist_r < B.FITTED_ROOM_MIN_R)
-        # 🔴 THIS READ `prep.unmet` UNTIL r59, WHICH MADE THE FADE ROUTE DEAD
-        # FOR THE WHOLE RESEARCH WINDOW. With acceptance at "any" NOTHING is
-        # ever unmet, so `fading` was permanently False and DEFER->HUNT /
-        # DEFER->SWEEP could not fire — the twin of the `pooled` bug fixed
-        # beside it, caught only because the operator said he wanted the
-        # breakout and the hunt tailored for BOTH a real break and a fakeout
-        # grab. Routing reads the FITTED dials, like `pooled` does.
-        _reg = (prep.conditions.get("gamma_regime") or (None,))[0]
-        _dep = (prep.conditions.get("depth_thin") or (None,))[0]
-        # v1.10: an index's absent book is n/a, not a book being defended
-        fading = (not B.accepts_fitted("gamma_regime", _reg)
-                  or (not prep.cash_index and not B.accepts_fitted("depth_thin", _dep)))
-        if pooled and fading and prep.direction and prep.pool_price:
-            # price will REACH the pool and stop there -> the hunt has a target
-            # it never gives way at all -> the sweep fades the level
-            reached = "flow_commit" not in prep.unmet
-            prep.defer_to = "LiquidityHunt" if reached else "SweepCreditSpread"
-            prep.defer_side = ("put" if prep.direction == "long" else "call") \
-                if not reached else prep.side
-            prep.defer_level = prep.pool_price
-            prep.verdict = "DEFER"
-            prep.defer_why = (f"breakout bars failed as a HARVEST: pool "
-                              f"{prep.pool_name} at {prep.pool_price:.2f} "
-                              f"({prep.pool_dist_r:.2f}R), unmet={','.join(prep.unmet)}")
-            t.check("verdict", None, None, note=f"DEFER->{prep.defer_to}")
-            t.check("defer_to", None, None, note=prep.defer_to)
-            logger.info("[breakout] DEFER -> %s  %s", prep.defer_to, prep.defer_why)
-            t.permit(prep.defer_side, prep.defer_level, source=self.name,
-                     why=prep.defer_why)
-            return prep
         t.check("verdict", None, None, note="WAIT")
         t.hold(f"waiting on: {', '.join(prep.unmet)}")
         return prep
 
     # ── readers, each failing to None rather than raising ─────────────────
-    _BOARD_SAID: set = set()      # r299: the board's failure state is said ONCE per state per process
-
-    def _board(self, px, hi, lo) -> dict:
-        """The level board, with its STATE. r299 (BRK.14): a failed read is no longer an empty dict
-        that range_clean counted as "nothing inside" and room_to_run as "open air" - after the
-        research window that was two informers silently disabled by a store hiccup (audit
-        2026-10-18 D3). The callers read `state`; anything but "ok" makes their readings None."""
-        try:
-            from derived.levels import board_for
-            b = board_for(self._store_(), self._symbol(), px, hi, lo) or {}
-        except Exception as exc:                                # noqa: BLE001
-            b = {"state": f"unavailable ({type(exc).__name__}: {exc})", "above": [], "below": []}
-        st = str(b.get("state") or "unavailable (no state)")
-        if st != "ok" and st not in BreakoutPlan._BOARD_SAID:
-            BreakoutPlan._BOARD_SAID.add(st)
-            from strategy import breakout as _B               # this module imports the spec per method
-            logger.warning("[breakout] level board %s — range_clean and room_to_run read as UNREADABLE "
-                           "(admitted while ACCEPTANCE=any, refused once the dials get numbers on %s)",
-                           st, _B.RESEARCH_UNTIL)
-        return b
-
     @staticmethod
     def _symbol() -> str:
         try:
@@ -1250,29 +1232,3 @@ class BreakoutPlan:
         except Exception as exc:                                # noqa: BLE001
             logger.debug("[breakout] depth unavailable: %s", exc)
             return None
-
-    @staticmethod
-    def _pool(board, px, direction):
-        """The nearest NAMED level ahead of the break, or None for open air."""
-        side = board.get("above" if direction == "long" else "below", []) or []
-        for l in side:
-            p = _f(l.get("near_edge") if "near_edge" in l else l.get("price"))
-            if p is None:
-                continue
-            return p, str(l.get("provenance") or "level")
-        return None
-
-    @staticmethod
-    def _reach(direction, measured, pool):
-        """The NEARER of the measured move and the pool — the operator's ruling.
-
-        *"even a fakeout eventually has to go where the orders are resting"* — a
-        measured move projecting THROUGH a resting shelf projects through the
-        orders that will stop it.
-        """
-        if measured is None:
-            return (pool, "pool") if pool is not None else (None, "")
-        if pool is None:
-            return measured, "measured_move"
-        nearer = min(measured, pool) if direction == "long" else max(measured, pool)
-        return nearer, ("pool" if nearer == pool else "measured_move")

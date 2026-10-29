@@ -1,5 +1,15 @@
 """
-strategy/breakout.py  v5.0
+strategy/breakout.py  v5.1
+v5.1  2026-10-29  OTV5 r54 (BRK.16) — BREAKOUT IS PURELY DIRECTIONAL: range_clean AND room_to_run ARE NO LONGER CONDITIONS.
+      The operator, 2026-10-29: "I want to take out any levels references that may interfere with the trade the levels
+      that I'm talking about are the levels map and the liquidity map. The Hunt trade should be working from levels. The
+      breakout trade should be purely directional without regard for levels in its path." Both bars leave CONDITIONS (so
+      neither can be unmet and nothing routes on them); their names stay in PLAN_CHECKS, recorded each tick as
+      "n/a - Breakout has no level reads", beside pool_price / pool_name / pool_dist_r / reach_pool (None). The dials
+      (_DIALS, GATES, FITTED_ROOM_MIN_R, FITTED_RANGE_CLEAN_MAX) are untouched - fitting them is a separate open
+      question (BRK.5) - and the LiquidityHunt keeps every level read it has. generate_signal: the fire tick also
+      refuses a live price at or beyond the plan's entry_limit (edge +/- BRK_ENTRY_MAX_W x W) - the operator: "It should
+      honestly refuse if it's already crossed 1/2W" ("that is runaway's domain"). "entry_limit" joins PLAN_CHECKS.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 THE SPECIFICATION. The plan searches; this declares what it must find.
 
@@ -329,8 +339,7 @@ class Breakout:
         "orb_range":     (f"a 5-minute opening range is established and its width is "
                           f"{_dial('orb_range')} of spot — neither a "
                           f"three-cent range nor a gap-day monster"),
-        "range_clean":   ("no live level sits inside the range — r39 retires them TRAVERSED, "
-                          "so a level still inside means the board has not caught up"),
+        # r54 (BRK.16): "range_clean" is no longer a condition - Breakout reads no levels map
         "break_close":   ("a CLOSED 1m bar's CLOSE beyond the range edge — r5's rule, bodies "
                           "decide and wicks test. This is the anti-fakeout gate that costs "
                           "nothing in TIME, which is the whole point of skipping the retest"),
@@ -346,11 +355,8 @@ class Breakout:
                           f"({_dial('depth_thin')}) — the book's answer to the same "
                           f"question flow_commit asks of the tape, and independent of it. "
                           f"(PRIOR, unmeasured)"),
-        "room_to_run":   (f"OPEN AIR ahead, or the nearest named pool at least "
-                          f"{_dial('room_to_run')} away. MEASURED: open air reached 1R 63.0% vs "
-                          f"49.5% with a pool ahead (n=327, base 51.4%) — but n=46 on the "
-                          f"open-air arm, so it is a BINARY and no distance threshold is "
-                          f"claimed"),
+        # r54 (BRK.16): "room_to_run" is no longer a condition - "purely directional without regard for
+        # levels in its path" (the operator, 2026-10-29)
     }
 
     # 🔑 WHICH BARS MUST STILL BE TRUE WHEN PRICE ARRIVES (PLAN_SPEC §10:
@@ -380,6 +386,8 @@ class Breakout:
         "range_width_pct", "break_dir", "break_close_px", "vol_multiple",
         "flow_imbalance", "flow_tagged", "regime", "depth_ratio",
         "pool_price", "pool_name", "pool_dist_r", "reach_measured", "reach_pool",
+        "range_clean", "room_to_run",            # r54 (BRK.16): recorded "n/a - Breakout has no level reads"
+        "entry_limit",                           # r54 (BRK.16): edge +/- BRK_ENTRY_MAX_W x W
         "verdict", "defer_to", "persist_ok",
         NEW_EXTREME, "side_fired_today", "session_extreme",     # r131
         FRESH_BREAK, "break_run_from",                           # r316 (BRK.15)
@@ -468,5 +476,13 @@ class Breakout:
         if not held:
             return prep.tick.hold(
                 f"trigger not in place — price {px:.2f} back inside {edge:.2f}")
+        # r54 (BRK.16) — AND NOT ALREADY PAST 1/2 W ON THIS TICK. The operator, 2026-10-29: "if we haven't entered
+        # before it reaches 1W, absolutely refuse it — that is runaway's domain. It should honestly refuse if it's
+        # already crossed 1/2W." The plan refused a break CLOSE past it; this refuses the live price at the fire.
+        lim = getattr(prep, "entry_limit", None)
+        if lim is not None and (px >= lim if prep.direction == "long" else px <= lim):
+            prep.tick.check("persist_ok", None, False, note=f"price {px:.2f} past the 1/2 W limit {lim:.2f}")
+            return prep.tick.hold(
+                f"refused at the fire — price {px:.2f} already past 1/2 W ({lim:.2f}): runaway's domain")
 
         return prep.emit(self.name)

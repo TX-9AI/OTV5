@@ -1,5 +1,12 @@
 """
-main.py  v5.7
+main.py  v5.8
+v5.8  2026-10-29  OTV5 r54 (BRK.16) — BREAKOUT'S PIN GATE ALLOWS A PIN AHEAD OF THE TRADE. The operator, 2026-10-29: "if the
+      Pin is in the direction of the break, allow it. But if the pin is on the opposite direction from our trade, forbid
+      it" (the NARROW reading, concurred: same scope as today). Inside today's band (PINNING and |pin - price| / EM <
+      PIN_PROXIMITY_MIN_FRAC) a Breakout whose pin is AHEAD (above price for a long, below for a short) is ALLOWED and
+      logged "[pin] ALLOWED Breakout <dir> ... pin ahead"; a pin behind is refused as today; a pin exactly at price is
+      refused (today's gate). pin_ahead_allows() is the decision, driven by tests/check_brk_spec_1029.py. Every other
+      strategy keeps today's gate; outside the band nothing changes; the observe line says "would ALLOW (pin ahead)".
 v5.7  2026-10-29  OTV5 r53 (FLY.3) — A BUTTERFLY'S ENTRY QUOTE AND GREEKS ARE THE FLY'S, NOT ITS BODY LEG'S. RECORD ONLY.
       _capture_entry_contract matched record["option_symbol"], which on a fly is the CENTER leg, so entry_bid/ask and
       entry_delta/gamma/theta were the body's (NVDA 2026-10-28: entry_premium 0.58 beside entry_bid/ask 0.21/0.22,
@@ -5451,6 +5458,39 @@ def pin_proximity_verdict(ctx) -> tuple:
         return False, None, "", 0.0, f"{type(exc).__name__}: {exc}"
 
 
+def pin_ahead_allows(signal, ctx, verdict) -> bool:
+    """r54 (BRK.16) - True when the pin-proximity gate's REFUSAL is lifted for this signal: a Breakout whose pin is
+    AHEAD of the trade - above the price for a long, below it for a short.
+
+    🔑 The operator, 2026-10-29: "if the Pin is in the direction of the break, allow it. But if the pin is on the
+    opposite direction from our trade, forbid it." The NARROW reading (concurred): the scope is today's - only a
+    verdict that already refuses (PINNING, inside PIN_PROXIMITY_MIN_FRAC of EM) is asked; outside it nothing changes.
+    ⚠️ A pin exactly AT the price is neither side and stays refused (today's gate); an unreadable direction, price or
+    pin stays refused. Every other strategy: False (today's gate). Never raises; an error reads False (refuse).
+    `verdict` is pin_proximity_verdict(ctx)'s tuple."""
+    try:
+        if str(getattr(signal, "strategy_name", "") or "") != "Breakout":
+            return False
+        _r, _fr, _env, _pin, _why = verdict
+        if not _r or _fr is None:
+            return False
+        px = float(ctx.get("price") or 0)
+        pin = float(_pin or 0)
+        if not (px > 0 and pin > 0):
+            return False
+        d = str(getattr(signal, "direction", "") or "").lower()
+        if d not in ("long", "short"):
+            sd = str(getattr(signal, "option_side", "") or "").lower()
+            d = "long" if sd.startswith("c") else "short" if sd.startswith("p") else ""
+        if d == "long":
+            return pin > px
+        if d == "short":
+            return pin < px
+        return False
+    except Exception:                                           # noqa: BLE001
+        return False
+
+
 def _noise_floor_of(df_1m) -> float:
     """r93's stop-distance floor: NOISE_FLOOR_BAR_MULT x the median 1m bar RANGE
     over the last NOISE_FLOOR_LOOKBACK_BARS bars. 0.0 means UNMEASURABLE and the
@@ -5724,8 +5764,10 @@ def _log_only(signal, ctx) -> bool:
         pin = "pin gate OFF"
         if PIN_PROXIMITY_ACTIVE:
             _r, _frac, _env, _pin, _why = pin_proximity_verdict(ctx)
+            _ahead = pin_ahead_allows(signal, ctx, (_r, _frac, _env, _pin, _why))     # r54 (BRK.16)
             pin = ("pin unmeasurable" if _frac is None else
-                   (f"pin would REFUSE ({_frac:.3f} EM from {_pin:g})" if _r
+                   (f"pin would ALLOW ({_frac:.3f} EM from {_pin:g}, pin ahead)" if _ahead else
+                    f"pin would REFUSE ({_frac:.3f} EM from {_pin:g})" if _r
                     else f"pin would pass ({_frac:.3f} EM from {_pin:g})"))
         strike = getattr(signal, "strike", None)
         key = (name, str(getattr(signal, "direction", "")), strike,
@@ -5905,6 +5947,12 @@ def _execute_entry_signal(signal, ctx, ms, state, _sigj=None, *, additive: bool 
         if _pin_frac is None:
             logger.warning("[pin] proximity gate STOOD DOWN (%s) — this entry "
                            "is unfiltered", _pin_why or "unmeasurable")
+        elif _refuse and pin_ahead_allows(signal, ctx, (_refuse, _pin_frac, _pin_env, _pin, _pin_why)):
+            # r54 (BRK.16) — the operator, 2026-10-29: "if the Pin is in the direction of the break, allow it."
+            logger.info("[pin] ALLOWED %s %s: price %.2f is %.3f EM from pin %g (floor %.2f) in a PINNING "
+                        "regime - pin ahead, in the direction of the break (BRK.16)", signal.strategy_name,
+                        getattr(signal, "direction", ""), float(ctx.get("price") or 0), _pin_frac, _pin,
+                        PIN_PROXIMITY_MIN_FRAC)
         elif _refuse:
             logger.info("[pin] REFUSED %s: price %.2f is %.3f EM from pin %g "
                         "(floor %.2f) in a PINNING regime — dealers dampen the "

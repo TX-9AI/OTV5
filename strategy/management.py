@@ -1,5 +1,10 @@
 """
-strategy/management.py  v5.0
+strategy/management.py  v5.1
+v5.1  2026-10-29  OTV5 r54 (BRK.16) — THE NEARER-STOP DEFERRAL CANNOT DEFER TO AN UNARMED BREAKOUT TRAIL. A Breakout's trail
+      now arms only once the underlying reaches the range edge +/- 0.5W (the operator, 2026-10-29: "I want the trailing
+      stop activation to occur at 1/2 W"; exit_engine v5.8). r98's structure-stop deferral asks the exit engine's
+      trail_armed(record) first: an unarmed trail never governs, so the 5m structure stop exits. Every other strategy
+      and every other rule here is unchanged.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v2.11 2026-10-18  OTV4TEST r288 (BRK.13) — BREAKOUT'S DELTA FLOOR. After the spec stops, par delta and the target/nickel
       rules, before no-progress and exhaustion: once BRK_DFLOOR_AFTER_S (600 s) have passed since entry, a readable
@@ -609,7 +614,12 @@ class ManagementPlan:
                 # ⚠️ IT ONLY EVER DEFERS TO A NEARER STOP. `max()` is at or
                 # above the structure alone, so this cannot hold a position
                 # past both — it exits the moment price reaches the closer one.
-                if breached and not credit and nearer_stop_defers(
+                # r54 (BRK.16): an UNARMED Breakout trail (below edge +/- 0.5W) is no stop at all, so it
+                # cannot be the nearer one - the structure governs until the trail arms.
+                _trail_live = True
+                if strategy == "Breakout" and exit_engine is not None and hasattr(exit_engine, "trail_armed"):
+                    _trail_live = bool(exit_engine.trail_armed(record))
+                if breached and not credit and _trail_live and nearer_stop_defers(
                         record, prem, stop_p, entry):
                     breached = False          # the trail is nearer; it governs
                 if breached:

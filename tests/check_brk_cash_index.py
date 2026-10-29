@@ -1,6 +1,11 @@
 #!/usr/bin/env python3
 """
-tests/check_brk_cash_index.py  v5.0
+tests/check_brk_cash_index.py  v5.1
+v5.1  2026-10-29  OTV5 r54 (BRK.16) — C10 RE-POINTED: BREAKOUT NO LONGER DEFERS ON ANY SYMBOL. The operator, 2026-10-29:
+      "The breakout trade should be purely directional without regard for levels in its path." breakout_plan v5.2 has
+      no pool (pool_price / pool_name / pool_dist_r are gone from the preparation) and _route only WAITs, so the
+      "QQQ's absent book still defers" half no longer holds by ruling; C10 now asserts SPX AND QQQ both WAIT on the
+      same fading-book fixture. C1-C9 unchanged.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 ON A CASH INDEX, BREAKOUT'S TAPE AND BOOK BARS ARE NOT APPLICABLE - NEVER A REFUSAL (BRK.6).
 
@@ -20,8 +25,8 @@ v1.0  2026-10-05  OTV4TEST r251 - found and authored on SPX-TEST. SPX has no tim
   C8  the REAL Breakout.generate_signal does not hold an SPX trigger as "trigger incomplete"
       (its PERSISTENT re-check reads the plan's conditions); it reaches the price-vs-trigger test
   C9  CONTROL for C8: the same fire path on QQQ still holds "trigger incomplete - flow_commit"
-  C10 _route: an index's absent book is not a FADING book - no HARVEST deferral on SPX on that alone;
-      QQQ with the same absent book still defers (unchanged)
+  C10 _route: no HARVEST deferral on SPX or QQQ - both WAIT (r54: Breakout reads no pool; before r54, QQQ with
+      the same absent book deferred)
 
 Drives the REAL BreakoutPlan.prepare (flow read through a scratch store built by the REAL FeedStore, which
 holds no prints, exactly like SPX), the REAL Breakout.generate_signal and the REAL BreakoutPlan._route.
@@ -142,14 +147,13 @@ def main():
     def route(symbol):
         plan, p = prep(symbol, research_open)
         p.unmet = list(p.unmet)
-        p.pool_dist_r, p.pool_price, p.pool_name = 0.30, 101.80, "rth"
         p.conditions["gamma_regime"] = (-0.5, "", True)        # a regime the fitted dial accepts
         p.verdict = "WAIT"
         plan._route(p, plan.planner.tick(101.35), B)
         return p.verdict
     v_spx, v_qqq = route("SPX"), route("QQQ")
-    check("C10 _route: SPX's absent book does not defer as a HARVEST; QQQ's still does (unchanged)",
-          v_spx != "DEFER" and v_qqq == "DEFER", f"SPX={v_spx} QQQ={v_qqq}")
+    check("C10 _route: neither SPX nor QQQ defers as a HARVEST - both WAIT (r54, BRK.16: no pool to route on)",
+          v_spx == "WAIT" and v_qqq == "WAIT", f"SPX={v_spx} QQQ={v_qqq}")
 
     fs.conn.close()
     print(("RED - " + f"{len(FAILED)} of {len(RAN)} failed: " + " ".join(FAILED)) if FAILED

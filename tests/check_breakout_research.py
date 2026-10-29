@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
-"""tests/check_breakout_research.py — v5.0
+"""tests/check_breakout_research.py — v5.1
+v5.1  2026-10-29  OTV5 r54 (BRK.16) — R12b RE-POINTED: THE FADE ROUTE IS REMOVED BY RULING, NOT DEAD BY ACCIDENT. The
+      operator, 2026-10-29: "The Hunt trade should be working from levels. The breakout trade should be purely
+      directional without regard for levels in its path." breakout_plan v5.2 reads no pool, so _route no longer defers
+      (DEFER->LiquidityHunt / DEFER->SweepCreditSpread, permit()); R12b now pins that it is GONE. R12 (the fitted dials
+      still discriminate; accepts_fitted is unchanged) and every other check are as before.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 THE OBSERVER POSTURE IS REAL, IT EXPIRES, AND BREAKOUT IS THE ORB WITHOUT THE RETEST.
 
@@ -44,7 +49,8 @@ this repo has paid for that four times (r32, r37, r39, r41).
   R9  the declared structure_stop is the impulsive-candle extreme, and HOLDs on
       a return into the range
   R10 Breakout will not stack on itself while one is open
-  R12 the fade route (DEFER->HUNT / DEFER->SWEEP) still discriminates while
+  R12 the fitted dials still discriminate while acceptance is "any"; R12b (r54) Breakout's fade route
+      (DEFER->HUNT / DEFER->SWEEP) is removed by ruling. Before r54 R12b read: the route still discriminates while
       acceptance is "any" — it reads the FITTED dials, because `prep.unmet` is
       EMPTY all window and a route keyed on it would be silently dead
   R11 Breakout sizes EXACTLY as the ORB — r44's risk scalar reaches it, which
@@ -184,11 +190,12 @@ def _run():
               "admission takes every break; routing still sees a harvest")
         src_p = open(os.path.join(root, "strategy", "breakout_plan.py"),
                      encoding="utf-8").read()
-        guard("R12b and it reads the FITTED dials, not prep.unmet "
-              "(which is empty all window)",
-              'fading = ("gamma_regime" in prep.unmet)' not in src_p
-              and "B.accepts_fitted(\"gamma_regime\"" in src_p,
-              "a fade route keyed on unmet is DEAD for the whole window")
+        # r54 (BRK.16): the fade route is removed by the operator's ruling - Breakout reads no pool to route on
+        _route_src = src_p[src_p.index("    def _route(self"):src_p.index("    # ── readers")]
+        guard("R12b Breakout's fade route is REMOVED (r54): _route only waits - no permit(), no DEFER verdict",
+              "t.permit(" not in _route_src and 'verdict = "DEFER"' not in _route_src
+              and "prep.pool_" not in _route_src and 'note="WAIT"' in _route_src,
+              "a DEFER->HUNT / DEFER->SWEEP hand-off is still in breakout_plan._route")
     except Exception as exc:                                     # noqa: BLE001
         guard("R12 the FADE route still discriminates", False,
               f"{type(exc).__name__}: {exc}")
