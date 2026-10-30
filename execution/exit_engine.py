@@ -1,5 +1,15 @@
 """
-execution/exit_engine.py  v5.8
+execution/exit_engine.py  v5.9
+v5.9  2026-10-30  OTV5 r55 (BRK.17) — THE EXHAUSTION EXIT'S EVIDENCE IS KEPT, NOT ONLY ITS VERDICT. RECORD ONLY. UNH 2026-10-29
+      took three exhaustion exits (10534a1a, 4f01b80a, 449040f2 - the last 60 s after entry) and no review could judge
+      them: _momentum_divergence returned a bool and its readings lived only in self._exhaust_state. The operator,
+      2026-10-29: "The momentum values behind that exit aren't logged. -damn it, why?" ... "Yes, build it." On every
+      NEW favourable extreme the call now also stores self._exhaust_last[trade_id] = {direction, new_ext, new_roc,
+      prior_ext, prior_roc, diverged, bar_ts, bar_state, base_ts} (prior_* None on the first extreme; bar_ts the 5m row
+      the ROC's close was read from, bar_state "forming" / "closed" by this module's now_et(), None when untimed; base_ts
+      the row 5 back); a call that sees no new extreme leaves None. exhaust_reading(trade_id) returns it. The bool, the
+      ROC, the extreme state and every input are exactly as before - a failure to build the reading is swallowed and
+      only loses the reading. management v5.2 writes it. Gate tests/check_exhaust_evidence.py.
 v5.8  2026-10-29  OTV5 r54 (BRK.16) — BREAKOUT'S TRAIL ARMS AT 0.5W, NOT AT ENTRY. The operator, 2026-10-29: "I want the
       trailing stop activation to occur at 1/2 W." W = orb_range_high - orb_range_low on the record. Until the UNDERLYING
       (record current_price, else the forming 1m bar's last price - management.decide's own price) reaches orb_high +
@@ -1272,6 +1282,7 @@ class ExitEngine:
         self._trail_stops:  dict = {}
         # v4.5: `self._condor_ratchet` deleted with the ratchet itself.
         self._exhaust_state: dict = {}   # per-trade {ext, mom} for continuation divergence
+        self._exhaust_last: dict = {}    # r55 (BRK.17): trade_id -> the last call's new-extreme reading (record only)
         self._trail_active: dict = {}
         self._bos_trackers: dict = {}   # trade_id \u2192 BOSTracker (sweep only)
         self._post_target_trail: dict = {}   # trade_id \u2192 bool (ORB only)
@@ -3579,6 +3590,10 @@ class ExitEngine:
         else 5m rate-of-change. State (last extreme + its momentum) is carried in
         self._exhaust_state per trade_id.
         """
+        try:                                                       # r55 (BRK.17): record only
+            self.__dict__.setdefault("_exhaust_last", {}).pop(trade_id, None)
+        except Exception:                                           # noqa: BLE001
+            pass
         if underlying is None:
             return False
         # momentum reading: prefer a numeric from df_5m ROC (comparable across
@@ -3601,6 +3616,7 @@ class ExitEngine:
         )
         diverged = False
         if favorable_new_extreme:
+            prior_ext, prior_mom = st["ext"], st["mom"]          # r55 (BRK.17): read before the update
             # new extreme: does momentum confirm or diverge vs the prior extreme?
             if st["mom"] is not None:
                 if direction == "long":
@@ -3609,7 +3625,39 @@ class ExitEngine:
                     diverged = mom > st["mom"] and mom >= 0
             st["ext"] = underlying
             st["mom"] = mom
+            self._exhaust_note(trade_id, direction, underlying, mom, prior_ext, prior_mom, diverged, df_5m)
         return diverged
+
+    def _exhaust_note(self, trade_id, direction, new_ext, new_roc, prior_ext, prior_roc,
+                      diverged, df_5m) -> None:
+        """r55 (BRK.17) — RECORD ONLY: keep the readings behind one new-extreme comparison.
+        Never raises and returns nothing, so _momentum_divergence's verdict cannot move."""
+        try:
+            last = self.__dict__.setdefault("_exhaust_last", {})
+            bar_ts = base_ts = bar_state = None
+            try:
+                start = df_5m.index[-1]
+                bar_ts = start.isoformat() if hasattr(start, "isoformat") else str(start)
+                b0 = df_5m.index[-6]
+                base_ts = b0.isoformat() if hasattr(b0, "isoformat") else str(b0)
+                s0, t = _bar_epoch(start), _bar_epoch(now_et())
+                if s0 is not None and t is not None and t >= s0:
+                    bar_state = "closed" if s0 + 300.0 <= t else "forming"
+            except Exception:                                       # noqa: BLE001
+                pass
+            last[trade_id] = {
+                "direction": direction, "new_ext": float(new_ext), "new_roc": float(new_roc),
+                "prior_ext": None if prior_ext is None else float(prior_ext),
+                "prior_roc": None if prior_roc is None else float(prior_roc),
+                "diverged": bool(diverged), "bar_ts": bar_ts, "bar_state": bar_state,
+                "base_ts": base_ts}
+        except Exception:                                           # noqa: BLE001
+            pass
+
+    def exhaust_reading(self, trade_id) -> Optional[dict]:
+        """r55 (BRK.17) — the reading the LAST _momentum_divergence call for this trade
+        stored: a dict when that call saw a new favourable extreme, else None."""
+        return (self.__dict__.get("_exhaust_last") or {}).get(trade_id)
 
     def place_exit_order(self, record: TradeRecord, reason: str,
                          mark_price: Optional[float] = None) -> FillResult:

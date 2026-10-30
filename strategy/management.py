@@ -1,5 +1,15 @@
 """
-strategy/management.py  v5.1
+strategy/management.py  v5.2
+v5.2  2026-10-30  OTV5 r55 (BRK.17) — THE EXHAUSTION EXIT WRITES ITS NUMBERS. RECORD ONLY: NO DECISION CHANGES. The operator,
+      2026-10-29, on UNH's three exhaustion exits: "The momentum values behind that exit aren't logged. -damn it, why?" ...
+      "Yes, build it." After the unchanged exit_engine._momentum_divergence call, decide() reads
+      exit_engine.exhaust_reading(trade_id) (exit_engine v5.9) and, on every NEW favourable extreme, writes plan check
+      rows exhaust_ext / exhaust_roc / exhaust_prior_ext / exhaust_prior_roc / exhaust_diverged / exhaust_bar (the 5m row
+      the ROC5 close was read from, "forming" or "closed"); exhaust_roc's note carries the whole comparison. The CLOSE
+      reason keeps its "exhaustion: new <dir> extreme" prefix and its "on weaker momentum — continuing on fumes pnl=" tail
+      and now carries the numbers between them: "exhaustion: new short extreme 407.50 (ROC5 +0.31, 5m 09:40 forming) vs
+      prior 407.60 (ROC5 +0.17) on weaker momentum — continuing on fumes pnl=16.1%". An engine without exhaust_reading,
+      or a reading that cannot be read, gives today's rows and today's reason. Gate tests/check_exhaust_evidence.py.
 v5.1  2026-10-29  OTV5 r54 (BRK.16) — THE NEARER-STOP DEFERRAL CANNOT DEFER TO AN UNARMED BREAKOUT TRAIL. A Breakout's trail
       now arms only once the underlying reaches the range edge +/- 0.5W (the operator, 2026-10-29: "I want the trailing
       stop activation to occur at 1/2 W"; exit_engine v5.8). r98's structure-stop deferral asks the exit engine's
@@ -375,7 +385,56 @@ EXIT_CONDITIONS["ATPButterfly"] = dict(EXIT_CONDITIONS["GEXPinButterfly"])
 
 MGMT_CHECKS = ("premium", "entry_premium", "pnl_pct", "stop_premium", "trail_stop",
                "target_premium", "underlying_stop", "dist_to_stop", "mfe_pct",
-               "mae_pct", "ticks_held", "fired", "extension_atr")
+               "mae_pct", "ticks_held", "fired", "extension_atr",
+               # r55 (BRK.17): the exhaustion comparison, written on every new favourable extreme
+               "exhaust_ext", "exhaust_roc", "exhaust_prior_ext", "exhaust_prior_roc",
+               "exhaust_diverged", "exhaust_bar")
+
+
+def _exhaust_bar_txt(ev) -> str:
+    """r55 (BRK.17) — "5m 09:40 forming" from a reading's bar_ts / bar_state; "" if unreadable."""
+    try:
+        ts = str(ev.get("bar_ts") or "")
+        hm = ts[11:16] if len(ts) >= 16 and ts[13] == ":" else ts
+        return ("5m " + hm + (" " + ev["bar_state"] if ev.get("bar_state") else "")) if hm else ""
+    except Exception:                                          # noqa: BLE001
+        return ""
+
+
+def exhaust_evidence_text(ev) -> str:
+    """r55 (BRK.17) — the numbers for the exhaustion reason, between "new <dir> extreme" and
+    "on weaker momentum": " 407.50 (ROC5 +0.31, 5m 09:40 forming) vs prior 407.60 (ROC5 +0.17)".
+    "" for no reading, so the reason is exactly today's."""
+    try:
+        if not isinstance(ev, dict) or ev.get("new_ext") is None or ev.get("new_roc") is None:
+            return ""
+        bar = _exhaust_bar_txt(ev)
+        out = f" {float(ev['new_ext']):.2f} (ROC5 {float(ev['new_roc']):+.2f}{', ' + bar if bar else ''})"
+        if ev.get("prior_ext") is not None and ev.get("prior_roc") is not None:
+            out += f" vs prior {float(ev['prior_ext']):.2f} (ROC5 {float(ev['prior_roc']):+.2f})"
+        else:
+            out += " vs no prior extreme"
+        return out
+    except Exception:                                          # noqa: BLE001
+        return ""
+
+
+def _record_exhaust_checks(t, ev) -> None:
+    """r55 (BRK.17) — RECORD ONLY: the plan check rows of one new-extreme comparison. Never raises."""
+    try:
+        bar = _exhaust_bar_txt(ev)
+        note = (f"new {ev.get('direction', '')} extreme{exhaust_evidence_text(ev)}: "
+                f"{'DIVERGED (weaker momentum)' if ev.get('diverged') else 'confirmed (no divergence)'}"
+                + (f"; ROC5 = 5m close {ev.get('bar_ts')} minus 5m close {ev.get('base_ts')}" if ev.get("bar_ts") else ""))
+        t.check("exhaust_ext", ev.get("new_ext"), None)
+        t.check("exhaust_roc", ev.get("new_roc"), None, note=note)
+        t.check("exhaust_prior_ext", ev.get("prior_ext"), None)
+        t.check("exhaust_prior_roc", ev.get("prior_roc"), None)
+        t.check("exhaust_diverged", 1.0 if ev.get("diverged") else 0.0, None)
+        t.check("exhaust_bar", (f"{ev.get('bar_ts')} {ev.get('bar_state') or 'unknown'}"
+                                if ev.get("bar_ts") else (bar or None)), None)
+    except Exception as exc:                                   # noqa: BLE001
+        logger.debug("[manage] exhaustion check rows not written: %s", exc)
 
 COVERED = ("RunawayContinuation", "GEXPinButterfly", "SweepCreditSpread",
            "TrendCreditSpread", "ATPButterfly", "Breakout")
@@ -715,10 +774,22 @@ class ManagementPlan:
                     _c = ctx or {}
                     _tid = str(record.get("trade_id", "") or "")
                     _dir = "long" if str(record.get("option_side", "")) == "call" else "short"
-                    if exit_engine._momentum_divergence(_tid, record, price, _dir,
-                                                        _c.get("trend"), _c.get("df_5m")):
+                    _diverged = exit_engine._momentum_divergence(_tid, record, price, _dir,
+                                                                 _c.get("trend"), _c.get("df_5m"))
+                    # r55 (BRK.17) — RECORD ONLY: the comparison behind that verdict, on every new extreme.
+                    _ev = None
+                    try:
+                        _rd = getattr(exit_engine, "exhaust_reading", None)
+                        _ev = _rd(_tid) if callable(_rd) else None
+                        if isinstance(_ev, dict):
+                            _record_exhaust_checks(t, _ev)
+                        else:
+                            _ev = None
+                    except Exception:                           # noqa: BLE001
+                        _ev = None
+                    if _diverged:
                         intent = Intent("CLOSE",
-                                        f"exhaustion: new {_dir} extreme on weaker momentum "
+                                        f"exhaustion: new {_dir} extreme{exhaust_evidence_text(_ev)} on weaker momentum "
                                         f"— continuing on fumes pnl={pnl:.1%}",
                                         "exhaustion", pnl_pct=pnl)
                     else:
