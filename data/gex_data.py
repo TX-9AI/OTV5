@@ -1,5 +1,29 @@
 """
-data/gex_data.py  v5.0
+data/gex_data.py  v5.1
+v5.1  2026-10-30  OTV5 r56 (GEX.4) — THE FLIP AND THE WALLS SAY SOMETHING ABOUT TODAY'S PRICE. TELEMETRY ONLY: NO DECISION READS
+      flip_strike, call_wall or put_wall (main, strategy/, derived/, status.py, dtp: none; sweep_gex_confluence has zero
+      callers), and pin / pin_strike_raw / pin_dist_pct / pin_concentration / net_gex_ratio / gex_environment / orb_bias /
+      net_gex / strikes are untouched. The flip walked the front expiry from its LOWEST strike with no distance bound and took
+      the first per-strike net sign change (a strike netting exactly 0 counted; zero-gamma strikes are dropped so the strike
+      set moved every tick), so it landed on junk: TSLA 2026-10-29 logged flips of $50-$390 on a ~$404 stock (09:30:19 ET:
+      215, a strike whose put gamma the feed gave as 0.00000 on 633 OI), SPX 10-26 5000-7555 on ~7670; with no crossing it
+      COPIED THE PIN. The walls were unbounded argmaxes of call / put GEX on one 1-DTE expiry, so both fell on the big-OI
+      strike nearest spot (call_wall == put_wall on 96% of TSLA 10-29 readings). The operator, 2026-10-29: "I'm curious
+      about the gex flip you described. Have an agent look into it." then "I agree on the gex fix for flip & walls, yes now."
+      FLIP: the zero of the CUMULATIVE net-GEX profile (summed upward from the band's low edge), built from contracts within
+      GEX_FLIP_BAND_PCT (0.15) of spot that carry real open interest (>= MIN_OI_THRESHOLD, no oi_proxy) and gamma >=
+      GEX_FLIP_GAMMA_FLOOR (0.01) x the band's peak contract gamma; linearly interpolated between strikes; the crossing
+      nearest spot when there are several (flip_crossings counts them); none in band -> flip_strike 0.0 and "flip=none",
+      NEVER the pin. Chosen over re-pricing total GEX at hypothetical spots because that needs a time-to-expiry clock inside
+      this function and the per-contract IV, which is junk exactly where the tails are (deep-ITM IV 2.66): the cumulative
+      profile is deterministic, uses only what the strike map already reads, and is the report's primary method (TSLA
+      10-26..10-29 report: 363-393 on every 10-29 snapshot). WALLS: call_wall = the max call-GEX strike AT OR ABOVE spot,
+      put_wall = the max |put GEX| strike AT OR BELOW spot (no distance band: r215's "a wall may be far away" stands); each
+      records its runner-up strike and runner/wall ratio (call_wall_runner / _ratio, put_wall_runner / _ratio; 1.0 = a tie)
+      so a near-tie that will flip-flop is visible (TSLA 10-29 09:30: 420 16.2M vs 400 15.1M). No spot or no candidate on a
+      side -> 0.0 / "none". The GEX computed line keeps its fields and order (status.py parses pin=$ and env=) and appends
+      cw2= / pw2=. No DB column: nothing persists flip or walls (derived/snapshot writes net_gex only). Gate
+      tests/check_gex_flip_walls.py.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v4.1  2026-09-01  r215 — 🔴 THE PIN STRIKE WAS A BARE ARGMAX OVER THE WHOLE
       CHAIN, UNBOUNDED. `max(strikes_sorted, key=net_gex)` with nothing
@@ -60,10 +84,10 @@ GEX Formula (per strike):
     net_gex  = call_gex + put_gex
 Derived outputs:
     net_gex_total   — sum across all strikes. Positive = pinning, negative = trending
-    call_wall       — strike with highest cumulative call GEX (resistance)
-    put_wall        — strike with highest cumulative put GEX (support)
+    call_wall       — strike with highest call GEX at or above spot (r56)
+    put_wall        — strike with highest |put GEX| at or below spot (r56)
     pin_strike      — strike where net GEX is maximized (strongest magnet)
-    flip_strike     — strike where net GEX crosses zero (trending/pinning boundary)
+    flip_strike     — zero of the cumulative net-GEX profile near spot (r56; 0 = none)
     gex_environment — "PINNING", "TRENDING", or "NEUTRAL"
     orb_bias        — "DAMPENING" or "AMPLIFYING" (for ORB strategy)
 Strategy inputs:
@@ -108,6 +132,14 @@ GEX_PIN_CONCENTRATION = float(_os.environ.get("OT_GEX_PIN_CONC", "0.15"))
 # fitted against outcomes, and `pin_dist_pct` is recorded so it can be.
 PIN_MAX_DIST_PCT = float(_os.environ.get("OT_GEX_PIN_MAX_DIST_PCT", "0.03"))
 #   PINNING additionally requires the pin strike to hold >= this share of gross |GEX|
+# 🔴 r56 (GEX.4) — THE FLIP IS SEARCHED ONLY NEAR SPOT, ON CONTRACTS WITH REAL GAMMA AND REAL OI.
+# ⚠️ BOTH ARE PRIORS AND SAY SO. 15%: the TSLA 2026-10-29 junk sat 8-50% from spot (372.5 on ~404 from a
+# deep-ITM call's 0.0025 gamma, 215 from a put gamma fed as 0.00000), and every cumulative crossing the report
+# found sat 3-10% away; 15% keeps those and drops the tails that set the old reading. The floor is RELATIVE (a
+# fraction of the band's peak contract gamma) so one figure fits SPX at 7,700 and SOFI at 17 — r215's lesson.
+# Recorded, not traded: no decision reads flip_strike.
+GEX_FLIP_BAND_PCT = float(_os.environ.get("OT_GEX_FLIP_BAND_PCT", "0.15"))
+GEX_FLIP_GAMMA_FLOOR = float(_os.environ.get("OT_GEX_FLIP_GAMMA_FLOOR", "0.01"))
 GEX_SIGN_RATIO        = float(_os.environ.get("OT_GEX_SIGN_RATIO", "0.20"))
 #   |net|/gross below this = NEUTRAL (no meaningful dealer-positioning signal)
 
@@ -135,14 +167,21 @@ class GEXSnapshot:
     net_gex:            float = 0.0       # total_call + total_put
 
     # Key levels
-    call_wall:          float = 0.0       # Strike with highest call GEX
-    put_wall:           float = 0.0       # Strike with highest put GEX magnitude
+    call_wall:          float = 0.0       # r56: highest call GEX AT OR ABOVE spot; 0.0 = none
+    put_wall:           float = 0.0       # r56: highest |put GEX| AT OR BELOW spot; 0.0 = none
+    call_wall_runner:   float = 0.0       # r56: the runner-up call-wall strike (0.0 = none)
+    call_wall_runner_ratio: float = 0.0   # r56: runner call GEX / wall call GEX (1.0 = a tie)
+    put_wall_runner:    float = 0.0       # r56: the runner-up put-wall strike (0.0 = none)
+    put_wall_runner_ratio:  float = 0.0   # r56: runner |put GEX| / wall |put GEX|
     pin_strike:         float = 0.0       # Strike with highest net GEX WITHIN
                                            # PIN_MAX_DIST_PCT of spot; 0.0 = none
     pin_strike_raw:     float = 0.0       # r215: the UNBOUNDED argmax, recorded
                                            # so the bound can be fitted later
     pin_dist_pct:       float = 0.0       # r215: |raw pin - spot| / spot
-    flip_strike:        float = 0.0       # Strike where net GEX crosses zero
+    flip_strike:        float = 0.0       # r56: zero of the cumulative net-GEX profile
+                                           # within GEX_FLIP_BAND_PCT of spot, nearest
+                                           # spot, interpolated; 0.0 = none (never the pin)
+    flip_crossings:     int   = 0         # r56: how many crossings the band held
 
     # Per-strike breakdown (sorted by strike)
     strikes:            List[StrikeGEX] = field(default_factory=list)
@@ -172,15 +211,89 @@ class GEXSnapshot:
     valid:              bool  = False      # False if chain data was insufficient
 
     def summary(self) -> str:
+        # ⚠️ r56: fields and order kept (status.py parses "pin=$" and "env="); a level
+        # that does not exist prints "none", never "$0"; the runner-ups are appended.
+        def _lvl(v, fmt=".0f"):
+            return f"${v:{fmt}}" if v and v > 0 else "none"
+
+        def _run(k, r):
+            return f"${k:.0f}@{r:.2f}" if k and k > 0 else "none"
         return (
             f"GEX={self.net_gex/1e6:.1f}M "
             f"env={self.gex_environment} "
             f"pin=${self.pin_strike:.0f} "
-            f"call_wall=${self.call_wall:.0f} "
-            f"put_wall=${self.put_wall:.0f} "
-            f"flip=${self.flip_strike:.0f} "
-            f"orb={self.orb_bias}"
+            f"call_wall={_lvl(self.call_wall)} "
+            f"put_wall={_lvl(self.put_wall)} "
+            f"flip={_lvl(self.flip_strike, '.1f')} "
+            f"orb={self.orb_bias} "
+            f"cw2={_run(self.call_wall_runner, self.call_wall_runner_ratio)} "
+            f"pw2={_run(self.put_wall_runner, self.put_wall_runner_ratio)}"
         )
+
+
+def _wall(strikes_sorted, spot_price, side):
+    """r56 (GEX.4): (wall, runner-up, runner/wall ratio) on the spot side of a
+    call (at or above) or put (at or below) wall; zeros when there is none."""
+    if not spot_price or spot_price <= 0:
+        return 0.0, 0.0, 0.0
+    if side == "call":
+        cand = [s for s in strikes_sorted
+                if s.strike >= spot_price and s.call_gex > 0]
+        cand.sort(key=lambda s: (-s.call_gex, s.strike))
+        mag = [s.call_gex for s in cand]
+    else:
+        cand = [s for s in strikes_sorted
+                if s.strike <= spot_price and s.put_gex < 0]
+        cand.sort(key=lambda s: (s.put_gex, -s.strike))
+        mag = [-s.put_gex for s in cand]
+    if not cand:
+        return 0.0, 0.0, 0.0
+    if len(cand) == 1:
+        return cand[0].strike, 0.0, 0.0
+    return cand[0].strike, cand[1].strike, round(mag[1] / mag[0], 4)
+
+
+def _flip_level(chain, spot_price):
+    """r56 (GEX.4): (flip or None, crossings) — the zero of the cumulative
+    net-GEX profile within GEX_FLIP_BAND_PCT of spot, from contracts with real
+    OI (>= MIN_OI_THRESHOLD; the oi_proxy is not used here) and gamma >=
+    GEX_FLIP_GAMMA_FLOOR x the band's peak contract gamma; linear between
+    strikes; the crossing nearest spot. Reads its own contracts: the strike map
+    the pin and environment use is not touched."""
+    if not spot_price or spot_price <= 0:
+        return None, 0
+    lo = spot_price * (1.0 - GEX_FLIP_BAND_PCT)
+    hi = spot_price * (1.0 + GEX_FLIP_BAND_PCT)
+    rows = []
+    for sign, side in ((1.0, getattr(chain, "calls", None) or []),
+                       (-1.0, getattr(chain, "puts", None) or [])):
+        for c in side:
+            try:
+                k, g = float(c.strike), float(c.gamma)
+                oi = float(c.open_interest or 0)
+            except (TypeError, ValueError):
+                continue
+            if lo <= k <= hi and g > 0 and oi >= MIN_OI_THRESHOLD:
+                rows.append((k, g, oi, sign))
+    if not rows:
+        return None, 0
+    floor = GEX_FLIP_GAMMA_FLOOR * max(r[1] for r in rows)
+    per: dict = {}
+    for k, g, oi, sign in rows:
+        if g >= floor:
+            per[k] = per.get(k, 0.0) + sign * g * oi * 100 * spot_price
+    pts, cum = [], 0.0
+    for k in sorted(per):
+        cum += per[k]
+        pts.append((k, cum))
+    best, n = None, 0
+    for (k0, c0), (k1, c1) in zip(pts, pts[1:]):
+        if (c0 < 0) != (c1 < 0):
+            n += 1
+            x = k0 + (k1 - k0) * (-c0) / (c1 - c0) if c1 != c0 else k1
+            if best is None or abs(x - spot_price) < abs(best - spot_price):
+                best = x
+    return (round(best, 2) if best is not None else None), n
 
 
 def compute_gex(chain: OptionsChain, spot_price: float) -> GEXSnapshot:
@@ -247,15 +360,19 @@ def compute_gex(chain: OptionsChain, spot_price: float) -> GEXSnapshot:
     snapshot.total_put_gex  = sum(s.put_gex  for s in strikes_sorted)
     snapshot.net_gex        = snapshot.total_call_gex + snapshot.total_put_gex
 
-    # ── Call wall — strike with highest positive call GEX ─────────────────────
-    call_wall_strike = max(strikes_sorted, key=lambda s: s.call_gex, default=None)
-    if call_wall_strike:
-        snapshot.call_wall = call_wall_strike.strike
-
-    # ── Put wall — strike with highest put GEX magnitude ─────────────────────
-    put_wall_strike = min(strikes_sorted, key=lambda s: s.put_gex, default=None)
-    if put_wall_strike:
-        snapshot.put_wall = put_wall_strike.strike
+    # ── Walls — r56 (GEX.4): a call wall ABOVE spot, a put wall BELOW it ─────
+    # 🔴 THESE WERE UNBOUNDED ARGMAXES with no side-of-spot rule. On one 1-DTE
+    # expiry gamma peaks at the money, so both landed on the big-OI strike
+    # nearest spot (call_wall == put_wall on 96% of TSLA 2026-10-29 readings).
+    # A wall is resistance above / support below or it is not a wall. Still no
+    # distance band (r215: a wall may be far away). The runner-up and its ratio
+    # make a near-tie visible (TSLA 09:30: 420 16.2M vs 400 15.1M).
+    _cw, _cwr, _cwq = _wall(strikes_sorted, spot_price, "call")
+    _pw, _pwr, _pwq = _wall(strikes_sorted, spot_price, "put")
+    snapshot.call_wall, snapshot.call_wall_runner = _cw, _cwr
+    snapshot.call_wall_runner_ratio = _cwq
+    snapshot.put_wall, snapshot.put_wall_runner = _pw, _pwr
+    snapshot.put_wall_runner_ratio = _pwq
 
     # ── Pin strike — highest net GEX WITHIN REACH OF SPOT ────────────────────
     # 🔴 r215 — THIS WAS A BARE ARGMAX OVER THE WHOLE CHAIN, UNBOUNDED. Nothing
@@ -292,24 +409,15 @@ def compute_gex(chain: OptionsChain, spot_price: float) -> GEXSnapshot:
             # distance is not a passed check. Refuse rather than pass through.
             snapshot.pin_strike = 0.0
 
-    # ── Flip strike — where net GEX crosses zero ──────────────────────────────
-    # Walk from low to high strikes, find where net GEX goes from negative to positive
-    flip = None
-    for i in range(1, len(strikes_sorted)):
-        prev = strikes_sorted[i - 1]
-        curr = strikes_sorted[i]
-        if prev.net_gex < 0 and curr.net_gex >= 0:
-            # Flip point — take the strike closer to zero
-            if abs(prev.net_gex) < abs(curr.net_gex):
-                flip = prev.strike
-            else:
-                flip = curr.strike
-            break
-    if flip:
-        snapshot.flip_strike = flip
-    elif strikes_sorted:
-        # No clean flip found — use pin strike as proxy
-        snapshot.flip_strike = snapshot.pin_strike
+    # ── Flip — r56 (GEX.4): the cumulative profile's zero NEAR SPOT, or none ──
+    # 🔴 THIS WALKED FROM THE LOWEST STRIKE, UNBOUNDED, and took the first
+    # per-strike sign change (a strike netting exactly 0 counted), so a far tail
+    # strike with a zero or junk greek set it: TSLA 2026-10-29 flips of $50-$390
+    # on ~$404, SPX 10-26 5000-7555 on ~7670. With no crossing it COPIED THE PIN,
+    # a clean-looking wrong answer. Now: _flip_level (header v5.1); none -> 0.0.
+    _flip, _ncross = _flip_level(chain, spot_price)
+    snapshot.flip_strike = _flip if _flip is not None else 0.0
+    snapshot.flip_crossings = _ncross
 
     # ── Environment classification (v3.1: scale-free ratios) ──────────────────
     gross = sum(abs(sg.net_gex) for sg in snapshot.strikes) or 1.0

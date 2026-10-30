@@ -4,9 +4,9 @@
 Do not edit by hand: the generator runs inside the land command and
 the canary fails on drift (WORKING_AGREEMENT 33).
 
-530 Python modules across 12 local packages.
+531 Python modules across 12 local packages.
 
-**Reached by:** 138 imported · 25 declared entry points · 252 referenced from a script, unit or doc but never imported · **115 by nothing here**.
+**Reached by:** 138 imported · 25 declared entry points · 253 referenced from a script, unit or doc but never imported · **115 by nothing here**.
 
 ⚠️ The last group is a REVIEW LIST, not a delete list. A
 `land.spec CHECK` line ships inside a tarball and is never
@@ -42,7 +42,7 @@ execution.exit_engine); every such edge is listed below like any other.
 - `analysis/market_state.py` - the structural state assembly.
   **Carries the vocabulary, classifies nothing.**
 
-**Where the evidence lives:** `tests/` holds 328 standing
+**Where the evidence lives:** `tests/` holds 329 standing
 checks (`check_*.py`, all run by `tools/boot_sweep.py` at boot)
 plus the studies that produced every threshold in
 `docs/TRADES.md`. **A number in a strategy file should be
@@ -183,7 +183,7 @@ Change these with the most care; a break here reaches everything downstream.
 
 ### `data/__init__.py`
 - **calls:** (none)
-- **called by:** `data/open_interest.py`, `main.py`, `tests/check_audit_20260823.py`, `tests/check_db_handles.py`, `tests/check_feed_always_on.py`, `tests/check_half_day_rth.py`, `tests/check_oi_shared_loop.py`, `tests/check_pin_bounded.py`, `tests/check_spxw_only.py`
+- **called by:** `data/open_interest.py`, `main.py`, `tests/check_audit_20260823.py`, `tests/check_db_handles.py`, `tests/check_feed_always_on.py`, `tests/check_gex_flip_walls.py`, `tests/check_half_day_rth.py`, `tests/check_oi_shared_loop.py`, `tests/check_pin_bounded.py`, `tests/check_spxw_only.py`
 
 ### `data/candle_feed.py`
 - **calls:** `config.py`, `data/tasty_client.py`, `utils/__init__.py`, `utils/market_calendar.py`
@@ -207,7 +207,7 @@ Change these with the most care; a break here reaches everything downstream.
 
 ### `data/gex_data.py`
 - **calls:** `data/options_chain.py`
-- **called by:** `main.py`, `tests/check_pin_bounded.py`, `tests/gex_from_chains.py`
+- **called by:** `main.py`, `tests/check_gex_flip_walls.py`, `tests/check_pin_bounded.py`, `tests/gex_from_chains.py`
 
 ### `data/macro_data.py`
 - **calls:** `config.py`, `data/market_data.py`, `utils/time_utils.py`
@@ -223,7 +223,7 @@ Change these with the most care; a break here reaches everything downstream.
 
 ### `data/options_chain.py`
 - **calls:** `analysis/tenor_publish.py`, `config.py`, `data/open_interest.py`, `data/tasty_client.py`, `execution/tick_size.py`, `utils/math_utils.py`, `utils/paths.py`, `utils/time_utils.py`
-- **called by:** `analysis/trade_readiness.py`, `data/gex_data.py`, `main.py`, `strategy/base_strategy.py`, `strategy/gex_pin_butterfly.py`, `strategy/iron_condor_strategy.py`, `strategy/orb_plan.py`, `strategy/orb_strategy.py`, `strategy/volt_plan.py`, `tests/check_entry_gate.py`, `tests/check_eod_schedule.py`, `tests/check_exit_quote.py`, `tests/check_orb_plan.py`, `tests/check_orb_reentry.py`, `tests/check_orcs.py`, `tests/check_rehearsal_toggle.py`, `tests/check_spxw_only.py`, `tests/check_store_paths.py`, `tests/check_strike_ladder.py`, `tests/check_sweep_spread.py`, `tests/check_tick_join.py`, `tests/check_trade_switches.py`, `tests/check_zero_bid_refused.py`, `tests/gex_from_chains.py`, `tools/emergency_watchdog.py`
+- **called by:** `analysis/trade_readiness.py`, `data/gex_data.py`, `main.py`, `strategy/base_strategy.py`, `strategy/gex_pin_butterfly.py`, `strategy/iron_condor_strategy.py`, `strategy/orb_plan.py`, `strategy/orb_strategy.py`, `strategy/volt_plan.py`, `tests/check_entry_gate.py`, `tests/check_eod_schedule.py`, `tests/check_exit_quote.py`, `tests/check_gex_flip_walls.py`, `tests/check_orb_plan.py`, `tests/check_orb_reentry.py`, `tests/check_orcs.py`, `tests/check_rehearsal_toggle.py`, `tests/check_spxw_only.py`, `tests/check_store_paths.py`, `tests/check_strike_ladder.py`, `tests/check_sweep_spread.py`, `tests/check_tick_join.py`, `tests/check_trade_switches.py`, `tests/check_zero_bid_refused.py`, `tests/gex_from_chains.py`, `tools/emergency_watchdog.py`
 
 ### `data/tasty_client.py`
 - **calls:** `config.py`
@@ -1084,6 +1084,10 @@ Change these with the most care; a break here reaches everything downstream.
 ### `tests/check_gates.py`
 - **calls:** (none)
 - **called by:** (not imported) — referenced in `devtools.sh`, `docs/BACKLOG.md`, `docs/TRADES.md`, `docs/WORKING_AGREEMENT.md`
+
+### `tests/check_gex_flip_walls.py`
+- **calls:** `data/__init__.py`, `data/gex_data.py`, `data/options_chain.py`
+- **called by:** (not imported) — referenced in `docs/BACKLOG.md`
 
 ### `tests/check_gex_from_chains.py`
 - **calls:** (none)
