@@ -1,5 +1,11 @@
 """
-warehouse/s3_push.py  v5.2
+warehouse/s3_push.py  v5.3
+v5.3  2026-10-30  OTV5 r57 (TCS.LOG1) — THE SHADOW TRADES ARE THEIR OWN STREAM. A LOG-only TrendCreditSpread books a shadow
+      trade in shadow_trades.db (execution/shadow_book.py), never in trades.db. A "shadow_trades" stage right after
+      "trades" pushes it with the SAME push_trades (content-hash CDC per trade_id) under raw/shadow_trades/dt=/sym=/
+      (datatype "shadow_trade", src_file shadow_trades.db) and its own ledger (shadow_trades_ledger.json), so no reader
+      of raw/trades ever sees a shadow. push_trades' keywords default to exactly today's trades push. Gate
+      tests/check_tcs_shadow.py.
 v5.2  2026-10-25  (WH.20) — push_series FILES EACH OBJECT UNDER ITS ROWS' OWN ET DAY, NOT THE PUSH DAY (otv4 r417's
       pusher half, ported). `day = datetime.now(ET)` filed every batch by PUSH time, and SERIES_BATCH_ROWS caps each run,
       so a backlog that drained after midnight landed in the NEXT day's dt= (mainline 2026-09-23: 566 of 224,336 raw
@@ -663,25 +669,31 @@ def discover(root: str = SRC_ROOT, suffix: str = ".jsonl.gz"):
 TRADES_DB = os.environ.get(
     "OT_TRADES_DB", os.path.join(_HOME, "options-trader", "trades.db"))
 TRADES_LEDGER = os.path.join(STATE_DIR, "trades_ledger.json")
+# r57 (TCS.LOG1) — the shadow store, beside trades.db unless named (execution/shadow_book.shadow_db_path reads the same).
+SHADOW_TRADES_DB = os.environ.get("OT_SHADOW_TRADES_DB") or os.path.join(
+    os.path.dirname(os.path.abspath(TRADES_DB)), "shadow_trades.db")
+SHADOW_TRADES_LEDGER = os.path.join(STATE_DIR, "shadow_trades_ledger.json")
 
 
-def trade_envelope(rec: dict, sym: str, day: str) -> bytes:
+def trade_envelope(rec: dict, sym: str, day: str, datatype: str = "trade",
+                   src_file: str = "trades.db") -> bytes:
     env = {
         "schema_version": SCHEMA_VERSION,
-        "datatype": "trade",
+        "datatype": datatype,
         "symbol": sym,
         "dt": day,
         "trade_id": rec.get("trade_id"),
         "status": rec.get("status"),
         "src_host": HOST,
-        "src_file": "trades.db",
+        "src_file": src_file,
         "pushed_at_utc": _now_utc(),
         "record": rec,
     }
     return json.dumps(env, separators=(",", ":"), default=str).encode("utf-8")
 
 
-def push_trades(s3, bucket: str, db_path: str, ledger: dict, counters=None):
+def push_trades(s3, bucket: str, db_path: str, ledger: dict, counters=None,
+                ns: str = "trades", datatype: str = "trade", src_file: str = "trades.db"):
     """Push every trade row whose CONTENT has changed since last push.
 
     Trade rows MUTATE — written at entry, rewritten at exit. So this is not
@@ -718,8 +730,8 @@ def push_trades(s3, bucket: str, db_path: str, ledger: dict, counters=None):
             ems = int(datetime.fromisoformat(str(ts)).timestamp() * 1000)
         except Exception:
             ems = 0
-        key = "%s/trades/dt=%s/sym=%s/%d-%s.json" % (PREFIX, day, sym, ems, sha[:16])
-        if not put_and_verify(s3, bucket, key, trade_envelope(rec, sym, day), counters):
+        key = "%s/%s/dt=%s/sym=%s/%d-%s.json" % (PREFIX, ns, day, sym, ems, sha[:16])
+        if not put_and_verify(s3, bucket, key, trade_envelope(rec, sym, day, datatype, src_file), counters):
             failed += 1
             break
         ledger[tid] = sha
@@ -1479,6 +1491,7 @@ def main(argv=None) -> int:
         counters = load_ledger(COUNTERS_PATH)
         ledger = load_ledger()
         t_ledger = load_ledger(TRADES_LEDGER)
+        st_ledger = load_ledger(SHADOW_TRADES_LEDGER)      # r57 (TCS.LOG1)
         misc = load_ledger(MISC_LEDGER)
         c_ledger = load_ledger(CANDLE_LEDGER)
         ds_ledger = load_ledger(DSERIES_LEDGER)
@@ -1508,6 +1521,10 @@ def main(argv=None) -> int:
         #   journal — largest by far, and the most tolerant of lag
         stages = [
             ("trades", lambda: push_trades(s3, BUCKET, TRADES_DB, t_ledger, counters)),
+            # r57 (TCS.LOG1) — the shadow trades, their own prefix and ledger (absent store: nothing, silently).
+            ("shadow_trades", lambda: push_trades(s3, BUCKET, SHADOW_TRADES_DB, st_ledger, counters,
+                                                  ns="shadow_trades", datatype="shadow_trade",
+                                                  src_file="shadow_trades.db")),
             ("circuit_breaker", lambda: push_table(
                 s3, BUCKET, TRADES_DB, "circuit_breaker_events", "event_time",
                 "circuit_breaker", t_ledger, me, counters)),

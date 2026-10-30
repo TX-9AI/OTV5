@@ -1,5 +1,11 @@
 """
-config.py  v5.4
+config.py  v5.5
+v5.5  2026-10-30  OTV5 r57 (TCS.LOG1) — TCS IS REACTIVATED AS LOG ONLY: OT_TCS_ACTIVE unset = log. The operator, 2026-10-30: "Can
+      you reactivate TCS Monday as 'log only'? But do not trade it." then "Make sure TCS logs everything an executable
+      trade logs." TREND_CREDIT_ACTIVE (the TRADE switch) is unchanged and stays False unless OT_TCS_ACTIVE=1. TCS_MODE
+      (trade / log / off) and TCS_ENV_REFUSED are what configure.sh's TCS item reads, as PARC_MODE is for PARC (r50);
+      strategy/plan_state.py decides the state. In log a fire is booked as a SHADOW trade (execution/shadow_book.py):
+      the real entry pipeline at the paper fill, its own store, never an order. Gate tests/check_tcs_shadow.py.
 v5.4  2026-10-29  OTV5 r54 (BRK.16) — BREAKOUT'S TARGET AND TRAIL ARM ARE MULTIPLES OF THE OPENING RANGE WIDTH W. The operator,
       2026-10-29: "the target will be from the boundary of the opening range a distance of 1W"; "I want the trailing stop
       activation to occur at 1/2 W." BRK_TARGET_W = 1.0 (target = orb_high + 1W long / orb_low - 1W short; planning only:
@@ -788,7 +794,20 @@ TCS_WING_WIDTH_QQQ          = float(os.environ.get("OT_TCS_WING_QQQ", "5"))
 # ⚠️ SPEC.1 CLASS. An operator decision must not live in an env-var default
 # that no surface reports. If TC.6 is ever to be disabled again it is an
 # explicit OT_TCS_ACTIVE=0, not an absence.
-TREND_CREDIT_ACTIVE         = os.environ.get("OT_TCS_ACTIVE", "0") == "1"   # r204: RETIRED by ruling 2026-10-03 ("Retire the sweep & TCS"); =1 restores it
+TREND_CREDIT_ACTIVE         = os.environ.get("OT_TCS_ACTIVE", "") == "1"    # r204: RETIRED by ruling 2026-10-03 ("Retire the sweep & TCS"); =1 restores it
+# OTV5 r57 (TCS.LOG1) — unset = LOG: the plan runs and a fire books a SHADOW trade (execution/shadow_book.py), never
+# an order. "0"/"off"/"dormant" = off (not asked); "1" = trade (TREND_CREDIT_ACTIVE). An unknown value keeps the
+# default (log) and is named. The label configure.sh shows; strategy/plan_state.py makes the same reading.
+TCS_ENV_REFUSED = ""
+_tcs_raw = os.environ.get("OT_TCS_ACTIVE", "").strip().lower()
+if _tcs_raw in ("1", "trade", "active", "on") and TREND_CREDIT_ACTIVE:
+    TCS_MODE = "trade"
+elif _tcs_raw in ("0", "off", "dormant"):
+    TCS_MODE = "off"
+else:
+    TCS_MODE = "log"
+    if _tcs_raw not in ("", "log", "1"):
+        TCS_ENV_REFUSED = _tcs_raw
 SWEEP_CS_ENABLED            = os.environ.get("OT_SWEEP_CS", "0") == "1"     # r204: RETIRED by the same ruling; =1 restores it
 # ── TC.6 ENTRY GATES (2026-08-14 HOTFIX — it rapid-fired the whole fleet) ─────
 # Observed 10:02 ET on 08-14: NVDA sold a $5-wide for $0.06, PLTR a $6-wide for

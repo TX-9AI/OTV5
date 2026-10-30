@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
-"""tests/check_sweep_stop.py  v5.0
+"""tests/check_sweep_stop.py  v5.1
+v5.1  2026-10-30  OTV5 r57 (TCS.LOG1) — S3's control is a TRADED TCS, and a TCS is LOG (a shadow trade) by default since r57, so
+      this run switches it ACTIVE (OT_TCS_ACTIVE=1); what it pins is unchanged.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 THE SWEEP'S PREMIUM STOP IS THE CREDIT PLUS 15% OF THE RISK (PLAN_SPEC §31).
 
@@ -31,6 +33,7 @@ _root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, _root)
 os.environ.setdefault("OT_PAPER_TRADING", "1")
 os.environ.setdefault("OT_INSTRUMENT", "SYN")
+os.environ["OT_TCS_ACTIVE"] = "1"     # r57 (TCS.LOG1): S3 drives a TRADED TCS (check_tcs_shadow pins the log default)
 _fails = []
 
 

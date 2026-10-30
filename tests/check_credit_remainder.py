@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""tests/check_credit_remainder.py  v5.0
+"""tests/check_credit_remainder.py  v5.1
+v5.1  2026-10-30  OTV5 r57 (TCS.LOG1) — C7's subject is a TRADED TCS (a live partial), and a TCS is LOG (a shadow trade, never
+      ordered) by default since r57, so this run switches it ACTIVE (OT_TCS_ACTIVE=1), as r303 did for the plan checkers;
+      what it pins is unchanged.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.2  2026-09-26  OTV4TEST r146 — the fixture symbol SYN is FORCED, not setdefault: with OT_INSTRUMENT present (QQQ from the sweep harness, or any shell that exports it) the ladder read QQQ's penny ticks (9 rungs, not 3) and keyed on cv:QQQ - C2b/C2c/C7b went red on ENVIRONMENT, not code.
 v1.1  2026-09-22  OTV4TEST r92 — C7d reads TCS_ENTRY_END_ET from config instead of the
@@ -34,6 +37,7 @@ import tempfile
 _root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, _root)
 os.environ.setdefault("OT_PAPER_TRADING", "1")
+os.environ["OT_TCS_ACTIVE"] = "1"     # r57 (TCS.LOG1): C7 drives a TRADED TCS (check_tcs_shadow pins the log default)
 os.environ["OT_INSTRUMENT"] = "SYN"   # r146: FORCED - an ambient OT_INSTRUMENT must not replace the fixture symbol
 
 _fails = []

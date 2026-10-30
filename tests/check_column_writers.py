@@ -1,6 +1,11 @@
 #!/usr/bin/env python3
 """
-tests/check_column_writers.py  v5.1
+tests/check_column_writers.py  v5.2
+v5.2  2026-10-30  OTV5 r57 (TCS.LOG1) — W3 / W4: THE SHADOW STORE (shadow_trades.db, execution/shadow_book.py) has every trades
+      column (the same TradeLogger code builds it, so WRITERS covers them - a shadow row is written by the same writers
+      through ShadowTradeLogger) plus shadow / shadow_box_paper / shadow_plan_state, each written by
+      ShadowBook.open_entry. W3: a fresh shadow store's columns are exactly WRITERS + SHADOW_WRITERS; W4: each shadow
+      writer exists and names its column.
 v5.1  2026-10-26  OTV5 r34 (SCHEMA.2) — is_liquidity_hunt joins WRITERS (EntryEngine.enter): it is now a column.
 v5.0  2026-10-25  OTV5 r15 (SCHEMA.1) — new. EVERY trades COLUMN HAS A NAMED, DEDICATED WRITER. The operator, 2026-10-25,
       approving r15 (no column is ever dropped at boot): "make sure every column has a dedicated writer". A read-only
@@ -13,6 +18,8 @@ v5.0  2026-10-25  OTV5 r15 (SCHEMA.1) — new. EVERY trades COLUMN HAS A NAMED, 
   W1  the store's columns (a fresh TradeLogger: the CREATE + every migration add) and WRITERS name EXACTLY the same set:
       a new column with no writer, or a writer for a column that does not exist, is red.
   W2  every named writer exists (file, then function or Class.method, by AST) and its own source names the column.
+  W3  the shadow store's columns = WRITERS + SHADOW_WRITERS (r57)
+  W4  every shadow writer exists and names its column (r57)
 """
 import ast
 import os
@@ -124,6 +131,30 @@ for col, (path, qual) in sorted(WRITERS.items()):
     elif not re.search(r"\b%s\b" % re.escape(col), src):
         bad.append("%s: not named in %s:%s" % (col, path, qual))
 check("W2 every named writer exists and its own source names its column", not bad, "; ".join(bad[:8]))
+
+# ── r57 (TCS.LOG1) — the shadow store ──
+_SB = ("execution/shadow_book.py", "ShadowBook.open_entry")
+SHADOW_WRITERS = {"shadow": _SB, "shadow_box_paper": _SB, "shadow_plan_state": _SB}
+try:
+    from execution import shadow_book as _sbm
+    _sdb = os.path.join(_tmp, "shadow.db")
+    _sbm.ShadowTradeLogger(_sdb)
+    c = sqlite3.connect(_sdb)
+    scols = {r[1] for r in c.execute("PRAGMA table_info(trades)")}
+    c.close()
+    want = set(WRITERS) | set(SHADOW_WRITERS)
+    check("W3 the shadow store's columns are exactly WRITERS + SHADOW_WRITERS", scols == want,
+          "no writer: %s; no column: %s" % (sorted(scols - want), sorted(want - scols)))
+except Exception as exc:                                         # noqa: BLE001
+    check("W3 the shadow store's columns are exactly WRITERS + SHADOW_WRITERS", False, f"{type(exc).__name__}: {exc}")
+bad = []
+for col, (path, qual) in sorted(SHADOW_WRITERS.items()):
+    src = _func_src(path, qual) if os.path.exists(os.path.join(ROOT, path)) else None
+    if src is None:
+        bad.append("%s: %s:%s not found" % (col, path, qual))
+    elif not re.search(r"\b%s\b" % re.escape(col), src):
+        bad.append("%s: not named in %s:%s" % (col, path, qual))
+check("W4 every shadow writer exists and its own source names its column", not bad, "; ".join(bad[:8]))
 
 print("\n%s — %d checks, %d failed" % ("GREEN" if not FAILED else "RED", len(RAN), len(FAILED)))
 if FAILED:

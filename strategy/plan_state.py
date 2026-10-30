@@ -1,5 +1,10 @@
 """
-strategy/plan_state.py  v5.1
+strategy/plan_state.py  v5.2
+v5.2  2026-10-30  OTV5 r57 (TCS.LOG1) — TrendCreditSpread's DEFAULT IS LOG: OT_TCS_ACTIVE unset (or empty, or "log", or
+      a value nobody recognises, which is named) -> log; "0" / "off" / "dormant" -> dormant; "1" (config.TREND_CREDIT_ACTIVE)
+      -> active, unchanged. In LOG the TCS signal runs the real entry and books a SHADOW trade (execution/shadow_book.py),
+      never an order. The operator, 2026-10-30: "Can you reactivate TCS Monday as 'log only'? But do not trade it." then
+      "Make sure TCS logs everything an executable trade logs." Gate tests/check_tcs_shadow.py.
 v5.1  2026-10-27  OTV5 r46 (PARC.1) — PARC joins the table: ("OT_PARC", ACTIVE, HOUR), its state read from
       config.PARC_MODE as PARK's is from PARK_MODE (trade -> active, log -> log, off -> dormant). The operator,
       2026-10-27: "Call it PARC"; "No shadow mode. We're paper. It trades tomorrow." Gate tests/check_parc.py.
@@ -70,7 +75,7 @@ TABLE: Dict[str, Tuple[str, str, str]] = {
     "ORBStrategy":              ("OT_ORB_TRADE",      DORMANT, HOUR),
     "OpeningRangeCreditSpread": ("OT_ORCS",           DORMANT, HOUR),
     "SweepCreditSpread":        ("OT_SWEEP_CS",       DORMANT, HOUR),
-    "TrendCreditSpread":        ("OT_TCS_ACTIVE",     DORMANT, HOUR),
+    "TrendCreditSpread":        ("OT_TCS_ACTIVE",     LOG,     HOUR),     # OTV5 r57 (TCS.LOG1): unset = log (shadow)
     "IronCondorStrategy":       ("",                  DORMANT, CONDITION),   # no entry of its own (r249)
     "CondorManagement":         ("",                  ACTIVE,  CONDITION),
     "CreditRoll":               ("",                  ACTIVE,  CONDITION),
@@ -105,7 +110,7 @@ def _raw(key: str) -> str:
     elif key == "OT_SWEEP_CS":
         v = os.environ.get("OT_SWEEP_CS", "0")
     elif key == "OT_TCS_ACTIVE":
-        v = os.environ.get("OT_TCS_ACTIVE", "0")
+        v = os.environ.get("OT_TCS_ACTIVE", "")       # r57 (TCS.LOG1): unset = log, "0" = dormant
     elif key == "OT_GEX_BUTTERFLY":
         v = os.environ.get("OT_GEX_BUTTERFLY", "1")
     else:
@@ -167,6 +172,12 @@ def state(name: str) -> str:
             if bool(getattr(_c, _FLAG[n], dflt == ACTIVE)):
                 return ACTIVE
             if raw == "log":
+                return LOG
+            if dflt == LOG:                                     # r57 (TCS.LOG1): a default-LOG trade
+                if raw in _OFF:
+                    return DORMANT
+                if raw not in ("", "1"):                        # "1" with the flag off: a checker's flip
+                    _note(n, key, raw)
                 return LOG
             if dflt == ACTIVE and raw not in _OFF and raw not in _ON:
                 _note(n, key, raw)

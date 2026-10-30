@@ -1,5 +1,19 @@
 """
-main.py  v5.8
+main.py  v5.9
+v5.9  2026-10-30  OTV5 r57 (TCS.LOG1) — A LOG-ONLY TCS IS A FULL SHADOW TRADE. The operator, 2026-10-30: "Can you reactivate
+      TCS Monday as 'log only'? But do not trade it." then "Make sure TCS logs everything an executable trade logs."
+      TrendCreditSpread is LOG by default (strategy/plan_state v5.2). _execute_condor_leg: a TCS whose plan is LOG
+      (execution/shadow_book.is_shadow_signal) is not refused at the credit door; it runs the rest of the door - the
+      entry gate, its contracts, the vertical sizing, the paper fill (paper_fill_credit of the mark, the live order
+      block skipped on any box), the same make_record - and at the write it is booked by shadow_book.open_entry
+      (shadow_trades.db, trade_id shadow-<uuid>, order_id SHADOW) with the entry snapshot, fire snapshot and entry
+      contract written to the shadow row (_capture_entry_snapshot / _capture_entry_contract take tl=; the fire snapshot
+      does not link a plan_ledger row). Not written: trades.db, note_entry_risk, the real position manager, the
+      remainder, the Telegram alert ("[shadow]" log line instead). A shadow TCS of the same side already open refuses
+      it. main_loop: _shadow_manage(ctx) every RTH tick beside the offer / remainder supervisors (both branches);
+      _shadow_eod in the hard-close branch (the same flatten_all, then the held pass until 15:50). Boot:
+      _recover_open_position resumes the shadow store (expired settled, live resumed). OT_TCS_ACTIVE=0: not asked,
+      nothing written; =1: the real trade path, unchanged. Gate tests/check_tcs_shadow.py.
 v5.8  2026-10-29  OTV5 r54 (BRK.16) — BREAKOUT'S PIN GATE ALLOWS A PIN AHEAD OF THE TRADE. The operator, 2026-10-29: "if the
       Pin is in the direction of the break, allow it. But if the pin is on the opposite direction from our trade, forbid
       it" (the NARROW reading, concurred: same scope as today). Inside today's band (PINNING and |pin - price| / EM <
@@ -1728,7 +1742,7 @@ def _retired_reason(name: str) -> str:
     if name in ("SweepCreditSpread", "SweepForLeg2") and not _c.SWEEP_CS_ENABLED and not _ps.is_log("SweepCreditSpread"):
         return "retired by the operator's ruling 2026-10-03 (OT_SWEEP_CS=1 restores it)"
     if name == "TrendCreditSpread" and not _c.TREND_CREDIT_ACTIVE and not _ps.is_log("TrendCreditSpread"):
-        return "retired by the operator's ruling 2026-10-03 (OT_TCS_ACTIVE=1 restores it)"
+        return "retired by the operator's ruling 2026-10-03 (OT_TCS_ACTIVE=1 restores it; unset = log, r57)"
     return ""
 
 
@@ -2569,7 +2583,7 @@ _contract_warned: set = set()
 _snapshot_warned: set = set()
 
 
-def _capture_entry_contract(ctx: dict, record: dict) -> bool:
+def _capture_entry_contract(ctx: dict, record: dict, tl=None) -> bool:
     """v5.5 (N.9) — persist the CONTRACT's own state at entry.
 
     Every value here was ALREADY IN MEMORY: `OptionContract` carries
@@ -2621,7 +2635,7 @@ def _capture_entry_contract(ctx: dict, record: dict) -> bool:
                     "chain_iv_rank": getattr(chain, "iv_rank", None),
                 }
         if payload is not None:
-            if get_trade_logger().set_entry_contract(trade_id, payload):
+            if (tl or get_trade_logger()).set_entry_contract(trade_id, payload):   # r57: tl = the shadow store
                 return True
             reason = "write-returned-false"
     except Exception as exc:                                 # noqa: BLE001
@@ -2694,7 +2708,7 @@ def _fly_entry_contract(chain, record: dict):
     }, ""
 
 
-def _capture_fire_snapshot(ctx: dict, record: dict) -> None:
+def _capture_fire_snapshot(ctx: dict, record: dict, link_plan: bool = True) -> None:
     """r63 — freeze EVERY derived value at the instant this trade fired.
 
     🔴 THE EDGE STUDY IS A JOIN: fire_snapshot JOIN trades ON trade_id.
@@ -2737,6 +2751,8 @@ def _capture_fire_snapshot(ctx: dict, record: dict) -> None:
     # ⚠️ HOOKED HERE because this function already runs on EVERY fill and
     # already holds the trade record. A link that depends on each strategy
     # remembering to pass a plan id is a link the next strategy will not have.
+    if not link_plan:                                           # r57 (TCS.LOG1): a shadow links no plan row
+        return
     try:
         from derived.registry import plan_ledger as _pl
         _led = _pl(INSTRUMENT)
@@ -2748,7 +2764,7 @@ def _capture_fire_snapshot(ctx: dict, record: dict) -> None:
         logger.debug("plan link skipped: %s", exc)
 
 
-def _capture_entry_snapshot(ctx: dict, record: dict, direction: str) -> bool:
+def _capture_entry_snapshot(ctx: dict, record: dict, direction: str, tl=None) -> bool:
     """Persist the entry-time FVG/structure picture onto the trade row.
 
     Called only after a fill is confirmed and the row exists. Returns True on a
@@ -2759,7 +2775,7 @@ def _capture_entry_snapshot(ctx: dict, record: dict, direction: str) -> bool:
     trade_id = (record or {}).get("trade_id", "")
     try:
         payload = _entry_snapshot_json(ctx, direction)
-        wrote = get_trade_logger().set_entry_snapshot(trade_id, payload)
+        wrote = (tl or get_trade_logger()).set_entry_snapshot(trade_id, payload)   # r57: tl = the shadow store
         if not wrote:
             reason = "write-returned-false"
         elif '"err"' in payload:
@@ -3068,14 +3084,19 @@ def _execute_condor_leg(signal: "OptionsSignal", state: BotState,
     # r303 (PSTATE.1) — THE CREDIT DOOR. A LOG plan's vertical is recorded and never executed; r254's three
     # doors were all on the debit side, so nothing stopped a credit signal before this line. (After the VIX
     # stamp, which only annotates the signal: check_vix_stamp V4 pins it as the first statement.)
-    if _log_only(signal, ctx):
+    # OTV5 r57 (TCS.LOG1) — A LOG TCS IS NOT REFUSED HERE: it runs the rest of this door as a SHADOW trade
+    # (execution/shadow_book.py) - the real gates, contracts, sizing and paper fill - and is booked to its own store
+    # where a real trade is written. It never reaches the live order block below, on any box.
+    from execution import shadow_book as _sbm
+    _shadow = _sbm.is_shadow_signal(signal)
+    if not _shadow and _log_only(signal, ctx):
         return
     from config import (CONTRACT_MULTIPLIER, CONDOR_NICKEL_CLOSE,
                         CONDOR_STOP_LOSS_PCT, INSTRUMENT)
     from database.trade_logger import make_record, get_trade_logger
     import uuid
 
-    mode = "PAPER" if state.paper_trading else "LIVE"
+    mode = "SHADOW" if _shadow else "PAPER" if state.paper_trading else "LIVE"
 
     # ── 🔴 r101 — NOTHING OPENS BEFORE ENTRY_OPEN_ET (09:35 ET) ─────────────
     # The credit half of the pair of choke points; the debit half is
@@ -3099,6 +3120,13 @@ def _execute_condor_leg(signal: "OptionsSignal", state: BotState,
 
     if short_contract is None or long_contract is None:
         logger.error("Condor leg: missing contracts — cannot execute")
+        return
+
+    # r57 (TCS.LOG1) — admission's TCS rule (max_open_of_type=1) on the shadow's own book: the real admission and
+    # pairing gate count the real book only, so one open shadow TCS refuses the next, as one real TCS would.
+    if _shadow and _sbm.get_shadow_book().tcs_open():
+        logger.info("[shadow] TCS %s spread NOT booked - a shadow TCS is already open (admission: one TCS open at a "
+                    "time)", signal.option_side)
         return
 
     net_credit   = signal.net_credit
@@ -3136,7 +3164,7 @@ def _execute_condor_leg(signal: "OptionsSignal", state: BotState,
     _lkey = None
     _req_contracts = contracts
 
-    if not state.paper_trading:
+    if not state.paper_trading and not _shadow:                  # r57: a shadow NEVER enters the live block
         # ── LIVE 2-leg vertical credit entry — FILL-CONFIRMED (v3.7, defect O) ─
         # Submission is not a fill. The record is written ONLY for contracts
         # the broker confirms filled, at the broker's per-leg net credit —
@@ -3194,7 +3222,7 @@ def _execute_condor_leg(signal: "OptionsSignal", state: BotState,
         # non-comparable.
         from execution.limit_ladder import paper_fill_credit
         fill_credit = paper_fill_credit(net_credit)
-        order_id    = "PAPER"
+        order_id    = "SHADOW" if _shadow else "PAPER"          # r57: a shadow books the paper fill on any box
 
     is_leg1  = "Leg 1" in signal.setup_type      # r106: display only, not identity
     max_loss = (spread_width - fill_credit) * contracts * CONTRACT_MULTIPLIER
@@ -3356,6 +3384,22 @@ def _execute_condor_leg(signal: "OptionsSignal", state: BotState,
                       is_fed_day=bool(getattr(signal, "is_fed_day", False)),
                       notes=str(getattr(signal, "notes", "") or ""),
                       trail_activation=0.0, is_liquidity_hunt=0)
+    if _shadow:
+        # ── r57 (TCS.LOG1) — THE SHADOW WRITE: everything an executed trade writes, to the SHADOW store. Not
+        # trades.db, not note_entry_risk, not the real position manager, no remainder, no Telegram alert.
+        _sbk = _sbm.get_shadow_book()
+        if not _sbk.open_entry(record, box_paper=state.paper_trading):
+            return
+        if ctx is not None:
+            _capture_entry_snapshot(ctx, record, "neutral", tl=_sbk.logger)
+            _capture_fire_snapshot(ctx, record, link_plan=False)
+            _capture_entry_contract(ctx, record, tl=_sbk.logger)
+        logger.info(
+            f"[shadow] TCS SHADOW TRADE BOOKED (never ordered): {record['trade_id'][:15]} {signal.setup_type} "
+            f"short={short_contract.strike:g} long={long_contract.strike:g} x{contracts} credit=${fill_credit:.2f} "
+            f"exit=breach@{getattr(signal, 'underlying_stop', 0.0):.2f} or nickel or EOD | maxloss=${max_loss:.0f} "
+            f"(OT_TCS_ACTIVE unset/log; =1 trades it)")
+        return
     get_trade_logger().log_entry(record)
     try:                                                        # r208 (CAP.4): log-only
         get_risk_manager().note_entry_risk(record)
@@ -5787,6 +5831,56 @@ def _log_only(signal, ctx) -> bool:
     return True
 
 
+def _shadow_manage(ctx) -> None:
+    """r57 (TCS.LOG1) — one management pass over the open SHADOW trades (execution/shadow_book.py): the same
+    position_manager / management / exit-engine code as a real TCS, at the mark, paper fills, its own store and rows.
+    Nothing when no shadow store exists. Never raises."""
+    try:
+        from execution.shadow_book import peek_shadow_book
+        _b = peek_shadow_book()
+        if _b is not None:
+            _b.manage(ctx)
+    except Exception as exc:                                    # noqa: BLE001
+        logger.warning("[shadow] manage pass skipped: %s", exc)
+
+
+def _shadow_eod(state, hc_ctx=None) -> None:
+    """r57 (TCS.LOG1) — the shadow book's end of day: position_manager.flatten_all over the shadows (EOD.1's clock,
+    paper booked at the 15:55 cross), then, before 15:50, the held pass the real branch runs. Never raises."""
+    try:
+        from execution.shadow_book import peek_shadow_book
+        _b = peek_shadow_book()
+        if _b is None or not _b.has_open():
+            return
+        chain = _spot = None
+        try:
+            chain = get_chain_fetcher().fetch_chain()
+        except Exception as e:                                  # noqa: BLE001
+            logger.warning("[shadow] EOD: chain fetch failed (%s) - last marks this pass", e)
+        try:
+            _spot = get_cache().get_price()
+        except Exception:                                       # noqa: BLE001
+            _spot = None
+        _b.flatten(chain=chain, spot=_spot)
+        from utils.time_utils import eod_close_due as _ecd
+        if _b.has_open() and not _ecd(False):
+            _b.manage(hc_ctx if hc_ctx is not None else run_analysis(state))
+    except Exception as exc:                                    # noqa: BLE001
+        logger.warning("[shadow] EOD pass skipped: %s", exc)
+
+
+def _shadow_resume() -> None:
+    """r57 (TCS.LOG1) — boot: the shadow store's expired rows settled, its live rows resumed (what the real paper
+    boot does, minus the broker). Nothing when no shadow store exists. Never raises."""
+    try:
+        from execution.shadow_book import peek_shadow_book
+        _b = peek_shadow_book()
+        if _b is not None:
+            _b.resume_at_boot(settle=_settle_expired_row)
+    except Exception as exc:                                    # noqa: BLE001
+        logger.warning("[shadow] boot resume skipped: %s", exc)
+
+
 def _execute_entry_signal(signal, ctx, ms, state, _sigj=None, *, additive: bool = False):
     """r161 — the execution tail of attempt_new_entry, factored so the
     butterfly can fire from main_loop while another position is open.
@@ -6542,6 +6636,7 @@ def main_loop(state: BotState):
             # ── Hard close check ──────────────────────────────────────────
             if is_hard_close_time():
                 handle_hard_close(state)
+                _hc_ctx = None
                 # 🔴 r99 — CREDIT VERTICALS HOLD TO 15:45 (config
                 # VERTICAL_HOLD_TO_ET, operator ruling 2026-08-13) BUT NOTHING
                 # ENFORCED IT ON THIS PATH. flatten_all closed every record
@@ -6564,6 +6659,7 @@ def main_loop(state: BotState):
                     except Exception as _hc_err:                # noqa: BLE001
                         logger.warning("15:40-15:45 vertical manage pass "
                                        "failed: %s", _hc_err)
+                _shadow_eod(state, _hc_ctx)          # r57 (TCS.LOG1): the shadow book's end of day
                 time.sleep(POLL_INTERVAL_SECONDS)
                 continue
 
@@ -6680,6 +6776,7 @@ def main_loop(state: BotState):
             # ── Manage open position ──────────────────────────────────────
             _supervise_offers(ctx, state)   # r195 — BOTH branches
             _supervise_credit_remainders(ctx, state)   # r315 — BOTH branches
+            _shadow_manage(ctx)             # r57 (TCS.LOG1) — BOTH branches; the shadow book only
             if pos_mgr.has_open_position():
                 # ── Broken-wing roll: FIRST REFUSAL ───────────────────────
                 # The roll must run BEFORE manage_open_position. The per-leg
@@ -7317,6 +7414,7 @@ def _recover_open_position(state: BotState, restart_type: str = ""):
 
     # ── Step 2: resume every still-live (unexpired) position ─────────────────
     live = trade_logger.get_open_trades_live()
+    _shadow_resume()                                    # r57 (TCS.LOG1): the shadow store, Steps 1-2, no broker
 
     # LIVE ONLY, and only when explicitly enabled: the broker is the source of
     # truth for what's actually open. (Paper has no broker to query; and even on

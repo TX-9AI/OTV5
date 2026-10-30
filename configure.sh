@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 # ==========================================================================
-# configure.sh  v5.4
+# configure.sh  v5.5
+# v5.5  2026-10-30  OTV5 r57 (TCS.LOG1) — ITEM 16 IS TCS (OT_TCS_ACTIVE 1|log|0, UNSET = log); Done moves to 17. The
+#       operator, 2026-10-30: "Can you reactivate TCS Monday as 'log only'? But do not trade it." then "Make sure TCS
+#       logs everything an executable trade logs." The label reads config.TCS_MODE (the consumer), as item 15 reads
+#       PARC_MODE; log books a SHADOW trade (execution/shadow_book.py: shadow_trades.db, never ordered).
 # v5.4  2026-10-28  OTV5 r50 (PARC.3) — PARC's code default is now log (paused until a better stop): item 15's help
 #       says so. The operator: "Don't go live on the PARC tomorrow until we find a better stop placement."
 # v5.3  2026-10-27  OTV5 r46 (PARC.1) — ITEM 15 IS PARC (OT_PARC 1|log|0, UNSET = 1, trade); Done moves to 16. The
@@ -427,6 +431,7 @@ show_config() {
     echo -e "  BRK no-progress:${BOLD}$(brk_noprog_label)${RESET}"
     echo -e "  Resting stop:   ${BOLD}$(resting_stop_label)${RESET}"
     echo -e "  PARC:           ${BOLD}$(parc_label)${RESET}"
+    echo -e "  TCS:            ${BOLD}$(tcs_label)${RESET}"
     echo -e "  Data capture:   ${BOLD}$(data_capture_label)${RESET}"
     echo -e "  Trading mode:   $(echo -e $mode_label)"
     local rec_pin rec_label
@@ -819,6 +824,49 @@ change_parc() {
     set_env "OT_PARC" "$val"
     reload_daemon
     echo "  PARC set to $val - $(parc_label)."
+}
+
+# ── OTV5 r57 (TCS.LOG1) — TCS: 1 (trade) | log (a shadow trade) | 0 (off), UNSET = log ─────────────
+tcs_label() {
+    local v got
+    v=$(get_env "OT_TCS_ACTIVE")
+    got=$(cd "$BOT_DIR" && OT_TCS_ACTIVE="$v" python3 -c \
+        "import config; print(config.TCS_MODE + (' (set to ' + config.TCS_ENV_REFUSED + ' - REFUSED)' if config.TCS_ENV_REFUSED else ''))")
+    if [[ -z "$v" ]]; then
+        printf 'not set (code default: %s)' "${got:-UNREADABLE - config.py did not import}"
+    else
+        printf '%s' "${got:-UNREADABLE - config.py did not import}"
+    fi
+}
+
+change_tcs() {
+    local val
+    echo ""
+    echo "  TCS: $(tcs_label)"
+    echo ""
+    echo "  The trend credit spread (11:31-15:40): a credit spread on the side"
+    echo "  the trend leaves behind; exits: breach of its bound, the nickel, else"
+    echo "  the end-of-day close."
+    echo "  1   - trade it (retired by ruling 2026-10-03; 1 restores it)."
+    echo "  log - a SHADOW trade: the real entry and exits at the paper fill,"
+    echo "        booked to shadow_trades.db, NEVER ordered (the default since r57)."
+    echo "  0   - off: not asked, nothing written."
+    echo ""
+    read -p "    Mode (1 / log / 0, blank to clear): " val
+    val="${val// /}"; val="${val,,}"
+    if [[ -z "$val" ]]; then
+        drop_env "OT_TCS_ACTIVE"
+        reload_daemon
+        echo "  TCS cleared - $(tcs_label)."
+        return
+    fi
+    if [[ "$val" != "1" && "$val" != "log" && "$val" != "0" ]]; then
+        print_warn "REFUSED - '$val' is not 1, log or 0. Nothing written."
+        return
+    fi
+    set_env "OT_TCS_ACTIVE" "$val"
+    reload_daemon
+    echo "  TCS set to $val - $(tcs_label)."
 }
 
 # ── r136 — DATA CAPTURE: managed (the conductor owns this box's data) or
@@ -1229,9 +1277,10 @@ while true; do
     echo -e "  ${BOLD}13.${RESET} Resting stop        (currently: $(resting_stop_label))"
     echo -e "  ${BOLD}14.${RESET} Data capture        (currently: $(data_capture_label))"
     echo -e "  ${BOLD}15.${RESET} PARC                (currently: $(parc_label))"
-    echo -e "  ${BOLD}16.${RESET} Done"
+    echo -e "  ${BOLD}16.${RESET} TCS                 (currently: $(tcs_label))"
+    echo -e "  ${BOLD}17.${RESET} Done"
     echo ""
-    read -p "    Select [1-16]: " menu_choice
+    read -p "    Select [1-17]: " menu_choice
 
     case "$menu_choice" in
         1) change_instrument; CHANGED=true ;;
@@ -1249,8 +1298,9 @@ while true; do
         13) change_resting_stop;  CHANGED=true ;;
         14) change_data_capture ;;
         15) change_parc;          CHANGED=true ;;
-        16) break ;;
-        *) print_warn "Please enter a number between 1 and 16." ;;
+        16) change_tcs;           CHANGED=true ;;
+        17) break ;;
+        *) print_warn "Please enter a number between 1 and 17." ;;
     esac
     echo ""
 done

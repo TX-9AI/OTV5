@@ -1,5 +1,7 @@
 # TRADES — the specs
 
+**`TRADES.md` v5.3 · 2026-10-30 · OTV5 r57 (TCS.LOG1) — TCS is reactivated as LOG ONLY: OT_TCS_ACTIVE unset = a SHADOW trade (the real entry and exits at the paper fill, booked to shadow_trades.db, never ordered). The operator: "Can you reactivate TCS Monday as 'log only'? But do not trade it." then "Make sure TCS logs everything an executable trade logs."**
+
 **`TRADES.md` v5.2 · 2026-10-28 · OTV5 r50 (PARC.3) — PARC is PAUSED: OT_PARC unset = log (records, never orders) until a better stop placement. The operator: "Don't go live on the PARC tomorrow until we find a better stop placement."**
 
 **`TRADES.md` v5.1 · 2026-10-27 · OTV5 r46 (PARC.1) — PARC: its roster row and section 10. The operator: "Call it PARC"; "No shadow mode. We're paper. It trades tomorrow."**
@@ -31,7 +33,7 @@ is its `docs/PLAN_SPEC.md` section.
 | VOLT | `VOLT` | OFF | `OT_VOLT` | 09:35-10:30 | section 8 below |
 | ORB break + retest | `ORBStrategy` | OFF | `OT_ORB_TRADE` | 09:35-15:40 | PLAN_SPEC §29 |
 | Sweep credit spread | `SweepCreditSpread` | OFF | `OT_SWEEP_CS` | 09:35-15:40 | PLAN_SPEC §31 |
-| Trend credit spread | `TrendCreditSpread` | OFF | `OT_TCS_ACTIVE` | 11:31-15:40 | PLAN_SPEC §34 |
+| Trend credit spread | `TrendCreditSpread` | OFF | `OT_TCS_ACTIVE` | 11:31-15:40 | PLAN_SPEC §34; LOG since r57: unset = `log`, a SHADOW trade (execution/shadow_book.py, never ordered); `1` trades it, `0` stops it; configure.sh item 16 |
 | PARK | `PARK` | ON | none (`OT_PARK=log` records it, `off` stops it) | 11:01-11:03 | section 9 below |
 | PARC | `PARC` | LOG (paused, r50) | `OT_PARC` (`1` trades it, `log` records it - the default since r50, `0` stops it; configure.sh item 15) | 11:01-11:03 | section 10 below |
 

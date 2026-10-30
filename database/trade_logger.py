@@ -1,5 +1,9 @@
 """
-database/trade_logger.py  v5.3
+database/trade_logger.py  v5.4
+v5.4  2026-10-30  OTV5 r57 (TCS.LOG1) — EXTRA_ADDS: a subclass's own column adds, run with the migration adds and counted as
+      this tree's shape (so they are never named "outside this tree's shape"). Empty here: the trades store is
+      unchanged, column for column. execution/shadow_book.ShadowTradeLogger (a SEPARATE store, shadow_trades.db) adds
+      shadow / shadow_box_paper / shadow_plan_state through it. Gate tests/check_tcs_shadow.py.
 v5.3  2026-10-26  OTV5 r34 (SCHEMA.2) — is_liquidity_hunt IS A COLUMN. EntryEngine.enter has always put it in the record
       (r12), but the trades table had no column, so log_entry dropped it from every insert with a "[schema] ... DROPPED"
       WARNING: all 54 trades of 2026-10-26 lost it (the readers fall back to strategy == "LiquidityHunt"). Now it is in
@@ -361,6 +365,8 @@ def make_record(**kwargs) -> TradeRecord:
 class TradeLogger:
     """SQLite-backed trade log for options_trader."""
 
+    EXTRA_ADDS = ()      # r57 (TCS.LOG1): a subclass's own (column, definition) adds; none on the trades store
+
     SCHEMA = """
     CREATE TABLE IF NOT EXISTS trades (
         trade_id          TEXT PRIMARY KEY,
@@ -634,6 +640,7 @@ class TradeLogger:
             # OTV5 r34 (SCHEMA.2) — EntryEngine.enter's hunt flag; backfilled at the add, below.
             ("is_liquidity_hunt",      "INTEGER DEFAULT 0"),
         ]
+        _MIGRATION_ADDS = _MIGRATION_ADDS + list(self.EXTRA_ADDS)    # r57: empty on the trades store
         for col, definition in _MIGRATION_ADDS:
             try:
                 conn.execute(f"ALTER TABLE trades ADD COLUMN {col} {definition}")

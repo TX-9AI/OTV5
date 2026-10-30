@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """
-tests/check_parc.py  v5.1
+tests/check_parc.py  v5.2
+v5.2  2026-10-30  OTV5 r57 (TCS.LOG1) — P13 RE-POINTED, NOT DROPPED (section 38.4): TCS joined configure.sh's menu as item 16, so
+      Done is 17 and the prompt names 1-17. PARC stays item 15; properties unchanged.
 v5.1  2026-10-28  OTV5 r50 (PARC.3) — PARC'S DEFAULT IS log (paused). P13 now expects unset -> log/log and an unknown value
       -> log, named; the trading checks set OT_PARC=1 explicitly, as a box that opts in would. The operator: "Don't go live on the PARC tomorrow until we find a better stop placement."
 v5.0  2026-10-27  OTV5 r46 (PARC.1) — new. PARC: PARK'S ENTRY, A CREDIT SPREAD ON THE SAFER SIDE, THE BREAKOUT RAMP, THE
@@ -536,10 +538,10 @@ def main():
     m = [probe({}), probe({"OT_PARC": "log"}), probe({"OT_PARC": "0"}), probe({"OT_PARC": "yes"})]
     cfg = open(os.path.join(ROOT, "configure.sh")).read()
     check("P13 OT_PARC unset -> log (r50, paused); log -> log; 0 -> off/dormant; 'yes' keeps log, named; configure.sh "
-          "item 15 is PARC, Done 16",
+          "item 15 is PARC, Done 17 (r57: TCS is 16)",
           m == [["log", "", "log"], ["log", "", "log"], ["off", "", "dormant"], ["log", "yes", "log"]]
-          and re.search(r"^\s*15\)\s*change_parc", cfg, re.M) and re.search(r"^\s*16\)\s*break", cfg, re.M)
-          and "Select [1-16]" in cfg, f"{m}")
+          and re.search(r"^\s*15\)\s*change_parc", cfg, re.M) and re.search(r"^\s*17\)\s*break", cfg, re.M)
+          and "Select [1-17]" in cfg, f"{m}")
 
     import shutil
     shutil.rmtree(_TD, ignore_errors=True)

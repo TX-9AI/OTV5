@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """
-tests/check_plan_states.py  v5.3
+tests/check_plan_states.py  v5.4
+v5.4  2026-10-30  OTV5 r57 (TCS.LOG1) — S1 RE-POINTED (WA section 38.4): TrendCreditSpread's default is now LOG (the operator:
+      "Can you reactivate TCS Monday as 'log only'? But do not trade it."), so the ruled roster names PARC and TCS as the
+      LOG plans; S3 adds OT_TCS_ACTIVE=0 -> dormant and =log -> log. Every other state is unchanged.
 v5.3  2026-10-28  OTV5 r50 (PARC.3) — S1 RE-POINTED: PARC's default is now LOG (paused until a better stop; the operator:
       "Don't go live on the PARC tomorrow until we find a better stop placement."), so the ruled roster names PARC as the one LOG plan; every other state is unchanged.
 v5.2  2026-10-27  OTV5 r46 (PARC.1) — S1 RE-POINTED (WA section 38.4): PARC is a new plan, ACTIVE by default (OT_PARC unset =
@@ -137,15 +140,15 @@ def main():
     # ── S1-S3: the states, read in fresh interpreters (config reads several switches at import) ──
     ruled_active = ["Breakout", "CondorManagement", "CreditRoll", "GEXPinButterfly", "LiquidityHunt",
                     "PARK", "RunawayContinuation"]
-    ruled_log = ["PARC"]                                   # r50 (PARC.3): paused, records only
+    ruled_log = ["PARC", "TrendCreditSpread"]              # r50 (PARC.3): paused; r57 (TCS.LOG1): a shadow trade
     ruled_dormant = ["ATPButterfly", "IronCondorStrategy", "ORBStrategy", "OpeningRangeCreditSpread",
-                     "SweepCreditSpread", "TrendCreditSpread", "VOLT"]
+                     "SweepCreditSpread", "VOLT"]
     st = fresh("import json\nfrom strategy import plan_state as S\n"
                "print(json.dumps({n: S.state(n) for n in S.TABLE}))")
     act = sorted(k for k, v in st.items() if v == "active")
     dor = sorted(k for k, v in st.items() if v == "dormant")
     lg = sorted(k for k, v in st.items() if v == "log")
-    check("S1 defaults = today's roster (active / dormant as ruled; PARC the one LOG plan, r50)",
+    check("S1 defaults = today's roster (active / dormant as ruled; PARC and TCS the LOG plans, r50 / r57)",
           act == ruled_active and dor == ruled_dormant and lg == ruled_log, f"{st}")
 
     try:
@@ -169,7 +172,9 @@ def main():
              ("RunawayContinuation", {"OT_RUNAWAY": "log"}, "log"),
              ("OpeningRangeCreditSpread", {"OT_ORCS": "1"}, "active"),
              ("OpeningRangeCreditSpread", {"OT_ORCS": "log"}, "log"),
-             ("SweepCreditSpread", {"OT_SWEEP_CS": "log"}, "log")]
+             ("SweepCreditSpread", {"OT_SWEEP_CS": "log"}, "log"),
+             ("TrendCreditSpread", {"OT_TCS_ACTIVE": "0"}, "dormant"),       # r57 (TCS.LOG1)
+             ("TrendCreditSpread", {"OT_TCS_ACTIVE": "log"}, "log")]
     got = [(n, e, fresh(probe % n, e)) for n, e, _w in cases]
     miss = [(n, e, g) for (n, e, g), (_n, _e, w) in zip(got, cases) if not (isinstance(g, list) and g[0] == w)]
     true_named = next((g for n, e, g in got if e == {"OT_VOLT": "true"}), None)

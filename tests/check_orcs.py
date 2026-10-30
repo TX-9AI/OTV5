@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """
-tests/check_orcs.py  v5.0
+tests/check_orcs.py  v5.1
+v5.1  2026-10-30  OTV5 r57 (TCS.LOG1) — T6 RE-POINTED (WA section 38.4): TrendCreditSpread is LOG by default (a shadow trade, never
+      ordered - the operator: "Can you reactivate TCS Monday as 'log only'? But do not trade it."), so by default it IS asked;
+      OT_TCS_ACTIVE=0 is what stops it now. The sweep and its leg two stay retired; the runaway is untouched.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.8  2026-10-11  OTV4TEST r269 (OPS.22, mirror of otv4 r479) - the zone NAME is "America/New_York", the zone the legacy link
       US/Eastern pointed to: identical rules, no behaviour change. tzdata 2026c moved the US/* links into tzdata-legacy;
@@ -49,7 +52,7 @@ v1.1  2026-10-03  OTV4TEST r204 (PREM.2) — ORCS IS A TRADE: THE FILLED OFFER B
   T4  the REAL exit engine HOLDS an ORCS leg marked at ten times its credit (the same leg under the
       condor's name is stopped - the control), and closes it when the end-of-day close is due
   T5  the roll does not see two open ORCS legs as a condor
-  T6  RETIRED: _safe_strategy does not call the sweep, the sweep's leg two or the TCS; each switch restores it
+  T6  RETIRED: _safe_strategy does not call the sweep or the sweep's leg two; the TCS is asked (log, r57) unless OT_TCS_ACTIVE=0; each switch restores it
   T7  ORCS is in the admission table: 09:45-10:30, two of the type, not cap-exempt
 v1.0  2026-10-03  OTV4TEST r203 (PREM.1) — THE OPENING PREMIUM SPREAD PLAN FINDS ITS STRIKES AND PLACES NOTHING.
 
@@ -464,6 +467,15 @@ def main():
         for nm in ("SweepCreditSpread", "SweepForLeg2", "TrendCreditSpread"):
             main._safe_strategy(nm, lambda nm=nm: called.append(nm), None)
         off = list(called)
+        _tv = os.environ.get("OT_TCS_ACTIVE")                  # r57: "0" stops the TCS (unset = log, asked)
+        os.environ["OT_TCS_ACTIVE"] = "0"
+        try:
+            main._safe_strategy("TrendCreditSpread", lambda: called.append("TCS-at-0"), None)
+        finally:
+            if _tv is None:
+                os.environ.pop("OT_TCS_ACTIVE", None)
+            else:
+                os.environ["OT_TCS_ACTIVE"] = _tv
         sv = (C.SWEEP_CS_ENABLED, C.TREND_CREDIT_ACTIVE)
         C.SWEEP_CS_ENABLED = C.TREND_CREDIT_ACTIVE = True
         try:
@@ -472,9 +484,10 @@ def main():
         finally:
             C.SWEEP_CS_ENABLED, C.TREND_CREDIT_ACTIVE = sv
         main._safe_strategy("RunawayContinuation", lambda: called.append("RunawayContinuation"), None)
-        check("T6 the sweep, its leg two and the TCS are not called; each switch restores them; the runaway is untouched",
-              off == [] and sv == (False, False)
-              and called == ["SweepCreditSpread", "SweepForLeg2", "TrendCreditSpread", "RunawayContinuation"],
+        check("T6 the sweep and its leg two are not called, the TCS is (log, r57) and OT_TCS_ACTIVE=0 stops it; each "
+              "switch restores them; the runaway is untouched",
+              off == ["TrendCreditSpread"] and sv == (False, False)
+              and called == ["TrendCreditSpread", "SweepCreditSpread", "SweepForLeg2", "TrendCreditSpread", "RunawayContinuation"],
               f"off {off}, defaults {sv}, after {called}")
     except Exception as exc:                                  # noqa: BLE001
         check("T6 (did not run)", False, f"{type(exc).__name__}: {exc}")

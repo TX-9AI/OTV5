@@ -1,5 +1,13 @@
 """
-execution/position_manager.py  v5.27
+execution/position_manager.py  v5.28
+v5.28 2026-10-30  OTV5 r57 (TCS.LOG1) — THE SHADOW SEAM. Two hooks, _exit_engine() (get_exit_engine, as before) and
+      _management() (get_management_plan, as before), so execution/shadow_book.ShadowPositionManager manages a SHADOW
+      trade through THIS _manage_one / flatten_all / _execute_exit with its own exit engine, store and management rows.
+      SHADOW (False here; read as getattr(self, "SHADOW", False) is True, so a stand-in self is never a shadow)
+      gates the five real-book side effects of a close: the resting stop, risk_manager
+      record_win / record_loss (the daily loss cap), the Telegram exit alert, the ORB re-arm / standing-offer cancel
+      and the resting-stop abandon. The P&L arithmetic, log_exit, the exit quote and trail cleanup are shared. On this
+      class every path is byte-for-byte today's behaviour. Gate tests/check_tcs_shadow.py.
 v5.27 2026-10-28  OTV5 r48 (LIVE.7, PARC.1 nickel) — TWO LIVE EXIT-PATH EDGES FROM THE 2026-10-27 ORDER-PATH AUDIT.
       (b) flatten_all with no live mark passed the ENTRY premium on as the mark, so live a 15:50 close could post a
       sell limit AT ENTRY (marketable when the option is above entry). LIVE now invents no mark: it passes None and
@@ -672,10 +680,21 @@ class PositionManager:
     Fetches live option premium, evaluates exits, and closes when triggered.
     """
 
+    SHADOW = False      # r57 (TCS.LOG1): True only on execution/shadow_book.ShadowPositionManager
+
     def __init__(self, paper_trading: bool = PAPER_TRADING):
         self.paper_trading = paper_trading
         self._open_records: List[TradeRecord] = []
         self._trade_logger = get_trade_logger()
+
+    def _exit_engine(self):
+        """r57 (TCS.LOG1) — the exit engine this manager decides and closes with (the shadow book has its own)."""
+        return get_exit_engine(self.paper_trading)
+
+    def _management(self):
+        """r57 (TCS.LOG1) — the management plan this manager asks first (the shadow book's writes its own rows)."""
+        from strategy.management import get_management_plan
+        return get_management_plan()
 
     def open_condor_leg_count(self) -> int:
         """Open condor legs among the records this manager holds (A2.2).
@@ -1075,6 +1094,8 @@ class PositionManager:
         _fo.observe_map(record, current_premium, getattr(chain, "spot_price", None))
 
         exit_eng = get_exit_engine(self.paper_trading)
+        if getattr(self, "SHADOW", False) is True:                                      # r57 (TCS.LOG1): the shadow book's own engine
+            exit_eng = self._exit_engine()
         # ── r266 (STOP.1) — A RESTING STOP IS RESOLVED BEFORE ANYTHING ELSE ──
         # The stop already fired; this tick only decides WHICH price paper books.
         try:
@@ -1110,6 +1131,8 @@ class PositionManager:
         decision = None
         try:
             from strategy.management import get_management_plan
+            if getattr(self, "SHADOW", False) is True:                                  # r57 (TCS.LOG1): the shadow rows' plan
+                get_management_plan = self._management               # noqa: F811
             _intent = get_management_plan().decide(
                 record, current_premium, df_1m=df_1m, open_records=self._open_records,
                 current_price=record.get("current_price"),
@@ -1460,8 +1483,10 @@ class PositionManager:
         trade_id = record["trade_id"]
 
         exit_eng = get_exit_engine(self.paper_trading)
+        if getattr(self, "SHADOW", False) is True:                                      # r57 (TCS.LOG1): the shadow book's own engine
+            exit_eng = self._exit_engine()
         # r266 (STOP.1) — a premium stop with the mark already under its level RESTS instead.
-        if not _rested:
+        if not _rested and getattr(self, "SHADOW", False) is not True:                  # r57: a shadow never rests
             try:
                 if (_rs.active_mode(self.paper_trading) == "trade"
                         and _rs.eligible(record, decision.exit_reason)):
@@ -1539,6 +1564,15 @@ class PositionManager:
                 _WARNED_ONCE.add("exit_quote_raised")
                 logger.warning("exit quote capture raised (%s: %s) - warned once",
                                type(_xe).__name__, _xe)
+
+        if getattr(self, "SHADOW", False) is True:
+            # r57 (TCS.LOG1) — A SHADOW CLOSE TOUCHES NOTHING OF THE REAL BOOK: no risk_manager win/loss (the daily
+            # loss cap), no Telegram exit alert, no resting stop, no ORB re-arm. One distinct line, and done.
+            exit_eng.clear_trail(trade_id)
+            _mk = f" mark=${float(current_premium):.2f}" if current_premium is not None else ""
+            logger.info(f"[shadow] Position closed: {trade_id[:15]} exit=${fill_price:.2f}{_mk} "
+                        f"pnl=${pnl_usd:+.2f} reason={decision.exit_reason} (shadow - never ordered)")
+            return True
 
         risk_mgr = get_risk_manager()
         if pnl_usd >= 0:
