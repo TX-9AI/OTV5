@@ -1,5 +1,18 @@
 """
-main.py  v5.9
+main.py  v5.10
+v5.10 2026-10-30  OTV5 r61 (ORB.10) — THE RETIRED ORB NO LONGER HOLDS THE ENGINE OPEN, SO RUNAWAY CAN SEE THE REVERSAL.
+      ORBStrategy is DORMANT (retired, OTV4TEST r187) and the ORB engine runs only for RunawayContinuation, which reads
+      its direction off the engine state. The engine's only release from OPEN_* is notify_position_closed (an ORB close,
+      an ORB offer release, a same-side Runaway fire), so after the first break+retest it held OPEN_LONG / OPEN_SHORT to
+      15:40 (52 of 60 OPEN_* segments 2026-10-26..10-30) and Runaway could only look the first break's way (QQQ 10-30
+      short ~10:25, AMD 10-26 ~10:03, SPX 10-27 ~09:51, NFLX 10-27 ~10:22 never set up). run_analysis:
+      _orb_release_due(state) - ORBStrategy not active (plan_state), no ORB standing offer working, no open ORB
+      position - and right after get_orb_engine().update() an OPEN_* engine is released by
+      orb_engine.release_unowned() (the release an ORB close gives); the tick's `orb` is re-read from the engine. The
+      tape reach-back gets the same word (rebuild_from_tape(release_open=...)), so a restart re-derives what the live
+      loop holds. Not after the ORB dispatch: attempt_new_entry returns before it on a blocked session, at the loss cap
+      and on a no-chain tick, and every bar read while OPEN_* is lost. OT_ORB_TRADE=1 (ORB active): unchanged. The
+      operator, 2026-10-30: "investigate and fix this". Gate tests/check_orb_release.py.
 v5.9  2026-10-30  OTV5 r57 (TCS.LOG1) — A LOG-ONLY TCS IS A FULL SHADOW TRADE. The operator, 2026-10-30: "Can you reactivate
       TCS Monday as 'log only'? But do not trade it." then "Make sure TCS logs everything an executable trade logs."
       TrendCreditSpread is LOG by default (strategy/plan_state v5.2). _execute_condor_leg: a TCS whose plan is LOG
@@ -2025,7 +2038,8 @@ def run_analysis(state: BotState, chain=None) -> dict:
             from data.market_data import fetch_candles as _fetch_deep_1m
             _deep_1m = _fetch_deep_1m(INSTRUMENT, "1m", ORB_REBUILD_1M_BARS)
             if _deep_1m is not None and not _deep_1m.empty:
-                _orb_eng.rebuild_from_tape(_deep_1m)
+                # r61 (ORB.10): with no ORB owner the replay releases each OPEN_* on its bar, as below
+                _orb_eng.rebuild_from_tape(_deep_1m, release_open=_orb_release_due(state))
                 # ── r95 — A MISSED SETUP IS A ROW, NOT A LOG LINE ───────────
                 # Operator's ruling, 2026-08-24: an interrupted firing sequence
                 # is never re-entered — it is LOGGED AS MISSED. The log is not
@@ -2096,6 +2110,17 @@ def run_analysis(state: BotState, chain=None) -> dict:
             logger.warning("ORB tape reach-back skipped: %s", _exc)
 
     orb = _orb_eng.update(df_5m, df_1m, price, None)
+    # ── r61 (ORB.10) — A CONFIRMATION NOBODY CAN TRADE IS RELEASED ON ITS TICK ──
+    # ORBStrategy is retired; only an ORB close / offer release / same-side Runaway fire ever
+    # released OPEN_*, so the engine held the first break's side to 15:40 and Runaway (which reads
+    # its direction off the state) never saw the reversal. HERE, not after the ORB dispatch:
+    # attempt_new_entry returns before the dispatch on blocked / capped / no-chain ticks, and every
+    # bar the engine reads while OPEN_* is lost. Before the state file and the plan-ledger block, so
+    # a dormant ORB writes no CONFIRMED row (r303: dormant plans do not write to the ledger).
+    if (orb.state in (ORBState.OPEN_LONG, ORBState.OPEN_SHORT)
+            and _orb_release_due(state)):
+        _orb_eng.release_unowned()
+        orb = _orb_eng.data                 # r96: the release may have replaced ORBData
 
     # Write ORB state to JSON file so status.py can read it directly
     # without parsing bot.log — eliminates all log-parsing timing issues.
@@ -4320,6 +4345,25 @@ def _orb_offer_working() -> bool:
         logger.warning("offer check failed (%s) — treating as WORKING and "
                        "skipping ORB this tick", exc)
         return True
+
+
+def _orb_release_due(state) -> bool:
+    """r61 (ORB.10) — True when no ORB trade can own an ORB confirmation: ORBStrategy is not active
+    (plan_state; retired since OTV4TEST r187), no ORB standing offer is working and no ORB position is
+    open. Then the engine is released from OPEN_* (orb_engine.release_unowned) instead of holding it to
+    15:40, which blinded RunawayContinuation to the opposite break. Fails CLOSED (False): an unreadable
+    offer store or book keeps today's behaviour."""
+    try:
+        from strategy import plan_state as _ps
+        if _ps.state("ORBStrategy") == _ps.ACTIVE:
+            return False
+        if _orb_offer_working():
+            return False
+        _recs = get_position_manager(getattr(state, "paper_trading", True)).get_open_records()
+        return not any("ORB" in str(r.get("strategy") or "") for r in (_recs or []))
+    except Exception as exc:                                    # noqa: BLE001
+        logger.warning("[orb] release check unreadable (%s) - the engine is not released this tick", exc)
+        return False
 
 
 def _supervise_offers(ctx: dict, state: BotState) -> None:

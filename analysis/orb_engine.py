@@ -1,5 +1,19 @@
 """
-analysis/orb_engine.py  v5.1
+analysis/orb_engine.py  v5.2
+v5.2  2026-10-30  OTV5 r61 (ORB.10) — A CONFIRMATION NOBODY CAN TRADE IS RELEASED, SO THE ENGINE KEEPS WATCHING. ORBStrategy
+      is retired (DORMANT since OTV4TEST r187) but this engine still runs for RunawayContinuation, which takes its
+      direction from the state name. After the first break+retest the engine sat in OPEN_LONG / OPEN_SHORT
+      (_advance_state returns early there) until the 15:40 cutoff: notify_position_closed, the only release, is reached
+      from an ORB close, an ORB offer release or a same-side Runaway fire, and ORB never trades now (52 of 60 OPEN_*
+      segments 2026-10-26..10-30 held to 15:40), so Runaway could never see the reversal (QQQ 2026-10-30: OPEN_LONG
+      10:00-15:40 while the 10:14 close broke the low and the 10:24 close took the short 50%). release_unowned(): the
+      same notify_position_closed an ORB close gives (50% accepted -> INVALIDATED runaway; past the cutoff -> EXPIRED;
+      last close inside -> re-armed WAITING_FOR_BREAK; else ARMED on the original impulse, attempt + 1), and the
+      confirming bar is remembered (ORBData.released_bar_ts) so _check_for_retest does not re-confirm the SAME bar on
+      the next 15 s tick; the next bar is judged as before. rebuild_from_tape(release_open=True) releases every OPEN_*
+      the replay reaches on that bar, so a restart re-derives the same states the live loop holds. The caller
+      (main.run_analysis) decides when: ORBStrategy not active, no ORB offer working, no open ORB position. The
+      operator, 2026-10-30: "investigate and fix this". GATE tests/check_orb_release.py.
 v5.1  2026-10-27  OTV5 r44 (BAR.1) — THE ENGINE ADVANCES ON THE LAST BAR CLOSED BY TIME. Every latch, the break, the
       retest, the 50% acceptance, AWAITING_RANGE_REENTRY and _closed_inside read df_1m.iloc[-2] (iloc[-3] for the
       previous close), one bar stale on a tick before the new minute's first row exists (META 2026-10-27 3f2b1372: a
@@ -636,6 +650,9 @@ class ORBData:
     # builds a fresh ORBData, so the next attempt starts clean without anyone
     # clearing it.
     order_placed:       bool  = False
+    # r61 (ORB.10) — the 1m bar whose confirmation release_unowned() released. That bar is
+    # not judged again as a retest (the 15 s loop re-reads one closed bar ~4 times).
+    released_bar_ts:    str   = ""
     retest_depth_px:    float = 0.0  # v3.7 (defect G): confirming retest wick's
                                      # penetration into the range, in PX
                                      # (long: orb_high - low; short: high - orb_low).
@@ -1088,8 +1105,13 @@ class ORBEngine:
 
     # ── r95 — THE RESTART REACH-BACK ─────────────────────────────────────────
     def rebuild_from_tape(self, df_1m: pd.DataFrame,
-                          ms: Optional[str] = None) -> bool:
+                          ms: Optional[str] = None, release_open: bool = False) -> bool:
         """Reconstruct this session's ORB state by replaying the closed 1m tape.
+
+        r61 (ORB.10) — `release_open`: the caller's word that no ORB trade can own a confirmation
+        (main.py: ORBStrategy not active, no ORB offer, no ORB position). Every OPEN_* the replay
+        reaches is then released on its bar by release_unowned(), exactly as the live loop releases
+        it on the tick, so the replay keeps reading the tape past it.
 
         🔴 WHY THIS EXISTS. `_load_range_from_file()` restores the RANGE across a
         restart. Nothing restored the STATE, so a restarted engine came back to
@@ -1225,6 +1247,9 @@ class ORBEngine:
                         # rather than the age of the SETUP, which is the number that
                         # matters and the one that would quietly read ~0 forever.
                         confirm_ts = sub.index[self._cp(sub)]
+                    if release_open and self._data.state in (ORBState.OPEN_LONG,
+                                                             ORBState.OPEN_SHORT):
+                        self.release_unowned("ORBStrategy is not active (tape reach-back)")
                     replayed += 1
             finally:
                 self._asof = None
@@ -1815,6 +1840,10 @@ class ORBEngine:
                 and high == d.break_candle_high and low == d.break_candle_low
                 and close == d.break_candle_close):
             return
+        # r61 (ORB.10) — the bar whose confirmation was released is spent: re-reading it on the
+        # next tick would confirm it again (and release it again) every 15 s until it rolls.
+        if d.released_bar_ts and candle_ts == d.released_bar_ts:
+            return
 
         if d.break_direction == "long":
             # (a) Runaway breakout — ran to the 50% TP with no retest → invalidate.
@@ -1882,6 +1911,26 @@ class ORBEngine:
 
     def mark_triggered(self):
         self.notify_position_closed()
+
+    def release_unowned(self, why: str = "ORBStrategy is not active") -> bool:
+        """r61 (ORB.10) — release an OPEN_* confirmation that no ORB trade can own. -> released?
+
+        The same notify_position_closed() an ORB close gives, nothing else: 50% accepted ->
+        INVALIDATED runaway; past the cutoff -> EXPIRED; last close inside -> WAITING_FOR_BREAK;
+        else ARMED on the original impulse. The confirming bar is remembered so the next tick's
+        re-read of that same bar is not a second confirmation. The caller decides WHEN (main.py:
+        ORBStrategy not active, no ORB offer working, no ORB position open)."""
+        d = self._data
+        if d.state not in (ORBState.OPEN_LONG, ORBState.OPEN_SHORT):
+            return False
+        was, bar, seq = d.state, d.last_retest_bar_ts, d.confirmation_seq
+        self.notify_position_closed()
+        d = self._data                      # r96 — _rearm() may have replaced it
+        if d.state in (ORBState.ARMED_LONG, ORBState.ARMED_SHORT):
+            d.released_bar_ts = bar
+        logger.info("ORB RELEASED %s (confirmation #%d, bar %s): %s - nothing can trade it, so the "
+                    "engine continues as after an ORB close -> %s", was, seq, bar or "-", why, d.state)
+        return True
 
     def mark_order_placed(self) -> None:
         """r207 — an order has been CONSTRUCTED for this confirmation.
