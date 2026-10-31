@@ -1,6 +1,22 @@
 #!/usr/bin/env python3
 """
-warehouse/retention_purge.py  v5.0
+warehouse/retention_purge.py  v5.1
+v5.1  2026-10-31  OTV5 r66 (RET.1) — THE FOUR TICK TABLES ARE KEPT ONE DAY, STILL NEVER PAST THE PUSH MARK.
+      quote_series, greeks_series, prints and last_trade: ARTIFACT_DAYS 3 -> 1. session_summary, theo_series and
+      underlying_series stay 3. The operator, 2026-10-31, on GOOGL's disk (92%, 721M free of 8.6G; feed_store.db
+      1.78G, quote_series 745M / 6.22M rows over 10-27..10-31): "On googl can we delete everything already stored
+      in the warehouse & then cleanup & do a 1x reseed", then yes to the long-term change. WHY 1 IS SAFE: (a) the
+      3-day reason was "a Friday push that fails silently is not noticed until Monday", and since r136 the cutoff is
+      clamped to the push mark (_safe_cutoff), which advances only after a PUT read back byte-identical - an
+      unshipped row is never deleted at any window; (b) no trading or indicator code reads these tables older than
+      today - seven read sites, windows 60-900 s, proven by tests/check_series_lookback.py L3-L6 (AST inventory,
+      every call site's window, and a fixture on which deleting every row older than a day changes no reading).
+      A box that never pushes (_box_never_pushes) stays age-only, now at 1 day. WHAT IT BUYS: GOOGL holds ~1.2M
+      quote rows a day (~250M with indexes), so the plateau falls from ~3 days of rows plus their freed pages to ~1,
+      and reclaim()'s 2.2x VACUUM gate fits on an 8.6G box again; VACUUM INTO and a file swap (OPS.42/OPS.41) are not
+      needed. config.py's inert RETENTION_DAYS_ARTIFACTS block (3 days) now differs: this file is the code, per the
+      rule below; config.py is left untouched under the benchmark freeze. Gate: tests/check_series_lookback.py L1-L6
+      (L1, L2 red on 11b55b1, green on the fix).
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.12 2026-10-13  OTV4TEST r279 (SHARED; MIRROR OF otv4 r416 064070b + r419 b9bb9dc) - THE
       DELETES COMMIT AS THEY GO, AND A VACUUM MUST FIT 2.2x ITS LIVE SIZE. Ruled by the
@@ -328,7 +344,8 @@ RETENTION_DAYS = {"1m": 60, "5m": 30, "15m": 30, "1h": 60, "1d": None}   # r175:
 # Non-candle raw artifacts. A RE-PUSH window, not a warm-up requirement:
 # verified in source that the surface engine reads a 15-minute window and
 # nothing reaches across sessions. Three days rather than two because a Friday
-# push that fails silently is not noticed until Monday.
+# push that fails silently is not noticed until Monday. (r66: the four tick tables are
+# now 1 day - the push-mark clamp, not the window, is what keeps an unshipped row.)
 # 🔴 r191 — THE DERIVED SERIES PURGE IS NOW A CONSTANT, AND IT WAS THE REASON
 # NOTHING CAUGHT THIS. These three were deleted at 20 days by a HARDCODED TUPLE
 # inside `purge()`, while `tests/check_purge_pushed.py` proves its invariant by
@@ -405,11 +422,15 @@ TREE_DAYS = {
     "shadow":          None,
 }
 
+# 🔑 r66 (RET.1) — THE FOUR TICK TABLES 3 -> 1. The clamp below (`_safe_cutoff`) is what makes a short window
+# safe: the cutoff never passes the push mark, and the mark moves only on a verified PUT, so the "Friday push that
+# fails silently" the 3 days were for keeps its rows anyway. Every runtime reader looks back <= 900 s
+# (tests/check_series_lookback.py). The other three stay 3: small, and not part of the operator's ruling.
 ARTIFACT_DAYS = {
-    "greeks_series":     3,
-    "quote_series":      3,
-    "prints":            3,
-    "last_trade":        3,
+    "greeks_series":     1,
+    "quote_series":      1,
+    "prints":            1,
+    "last_trade":        1,
     "theo_series":       3,
     "underlying_series": 3,
     "session_summary":   3,
