@@ -1,5 +1,18 @@
 """
-execution/exit_engine.py  v5.10
+execution/exit_engine.py  v5.11
+v5.11 2026-10-31  OTV5 r62 (BRK.18) — THE EXHAUSTION EXIT'S MOMENTUM IS READ FROM TODAY'S BARS ONLY. A TRADING FIX (BROKEN, NOT
+      TO SPEC), the operator on hearing of it: "this is a fucking problem". _momentum_divergence's ROC5 is the 5m close
+      minus the close 5 rows back, and until the session's sixth 5m bar (09:55 ET) the row 5 back is YESTERDAY's: the
+      2026-10-30 review's exhaust_* rows read "ROC5 = 5m close 2026-10-30T09:35 minus 5m close 2026-10-29T15:40" on
+      every open Breakout (AMZN 067dbb54, gapped down after earnings and rallying, read ROC5 -9.95 / -8.00 on each new
+      high; AVGO -14 to -17; SPX -85.82), and NFLX 3d320e88 was CLOSED 09:44:48 ET on "exhaustion: ... (ROC5 +0.23, 5m
+      09:40 forming) vs prior 62.16 (ROC5 +0.21)" - both measured from 10-29 15:45. The overnight gap was the
+      "momentum". The rule now counts the frame's trailing rows on the LAST row's ET date (_bars_in_session) and takes a
+      reading only when at least 6 of them are today's - the SAME "no reading" path a frame shorter than 6 rows has
+      always taken (False, no state update, no exhaust_reading), so the ROC5 never spans the session boundary and no
+      exhaustion exit is possible before the 09:55 bar. A frame without a DatetimeIndex counts every row (the
+      rule exactly as before). The verdict, the comparison, the extreme state and the reading are otherwise unchanged;
+      the reading gains bars_in_session. Gate tests/check_exhaust_session.py.
 v5.10 2026-10-30  OTV5 r58 (DECAY.1) — THE PEAK-DECAY PROFIT STOP. A TRADING CHANGE, ORDERED LIVE FOR MONDAY 2026-11-02 UNDER
       THE OPERATOR'S EXPLICIT OVERRIDE OF THE BENCHMARK FREEZE: "I'm thinking like some kind of stop that says we've decayed
       20% from the peak so cut it" ... "I want the decay stop running by Monday". evaluate() is now the front door: it
@@ -925,6 +938,7 @@ from utils.time_utils import (is_hard_close_time, minutes_since, now_utc,
                               fmt_et_short, now_et, ts_for_db)
 from utils.time_utils import closed_pos as _closed_pos, closed_part as _closed_part   # r44 (BAR.1)
 from utils.time_utils import _epoch_s as _bar_epoch                                 # r52 (HUNT.15)
+from utils.time_utils import ET as _ET                                              # r62 (BRK.18)
 from execution.limit_ladder import limit_at_mark, hard_close_order_mode
 # v4.21 (AUDIT F1): the binding v4.20 forgot. `is_trend_participation` was
 # called in _evaluate_condor_leg and never imported — NameError on every condor
@@ -1287,6 +1301,31 @@ def _gain_floor(entry: float, peak: float, lock: float) -> float:
 
 
 _HANDOFF_NO_ENTRY_SAID: set = set()          # r317 (STALE.1): trade_ids already warned about
+
+
+def _bars_in_session(df) -> Optional[int]:
+    """r62 (BRK.18) — how many of the frame's trailing rows share the LAST row's ET date (today's session's bars).
+    A naive DatetimeIndex is read as ET wall time (as utils.time_utils._epoch_s reads a naive time). An index that
+    is not a DatetimeIndex has no session to read and every row counts (len(df) - the reading as before r60).
+    Never raises: an error also counts every row."""
+    try:
+        idx = df.index
+        n = len(idx)
+        if not isinstance(idx, pd.DatetimeIndex) or n == 0:
+            return n
+        days = list((idx.tz_convert(_ET) if idx.tz is not None else idx).date)
+        k = 0
+        for d in reversed(days):
+            if d != days[-1]:
+                break
+            k += 1
+        return k
+    except Exception:                                           # noqa: BLE001
+        try:
+            return len(df)
+        except Exception:                                       # noqa: BLE001
+            return None
+
 
 class ExitEngine:
     """Evaluates every open options trade on each tick."""
@@ -3742,7 +3781,11 @@ class ExitEngine:
         # momentum reading: prefer a numeric from df_5m ROC (comparable across
         # extremes); the live `trend` object gives a categorical we can't diff.
         mom = None
+        n_sess = None
         if df_5m is not None and len(df_5m) >= 6:
+            # r62 (BRK.18): the ROC5's base row must be TODAY's - never the prior session's (2026-10-30 AMZN / NFLX)
+            n_sess = _bars_in_session(df_5m)
+        if n_sess is not None and n_sess >= 6:
             try:
                 c = df_5m["close"]
                 mom = float(c.iloc[-1] - c.iloc[-6])  # 5-bar ROC
@@ -3768,11 +3811,12 @@ class ExitEngine:
                     diverged = mom > st["mom"] and mom >= 0
             st["ext"] = underlying
             st["mom"] = mom
-            self._exhaust_note(trade_id, direction, underlying, mom, prior_ext, prior_mom, diverged, df_5m)
+            self._exhaust_note(trade_id, direction, underlying, mom, prior_ext, prior_mom, diverged, df_5m,
+                               bars_in_session=n_sess)
         return diverged
 
     def _exhaust_note(self, trade_id, direction, new_ext, new_roc, prior_ext, prior_roc,
-                      diverged, df_5m) -> None:
+                      diverged, df_5m, bars_in_session=None) -> None:
         """r55 (BRK.17) — RECORD ONLY: keep the readings behind one new-extreme comparison.
         Never raises and returns nothing, so _momentum_divergence's verdict cannot move."""
         try:
@@ -3793,7 +3837,7 @@ class ExitEngine:
                 "prior_ext": None if prior_ext is None else float(prior_ext),
                 "prior_roc": None if prior_roc is None else float(prior_roc),
                 "diverged": bool(diverged), "bar_ts": bar_ts, "bar_state": bar_state,
-                "base_ts": base_ts}
+                "base_ts": base_ts, "bars_in_session": bars_in_session}
         except Exception:                                           # noqa: BLE001
             pass
 
