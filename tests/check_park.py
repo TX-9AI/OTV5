@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """
-tests/check_park.py  v5.0
+tests/check_park.py  v5.1
+v5.1  2026-10-30  OTV5 r58 (DECAY.1) — OT_DECAY_STOP=0 HERE: this checker pins a pre-decay exit in isolation. K10a2 (mark 1.70 / bid 1.50, then bid 1.20) now closes on the peak-decay stop (p 0.70 -> 0.22), which is the r57 rule working, not the PARK lock;
+      the decay stop itself is gated by tests/check_decay_stop.py. No assertion changed.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 PARK - THE 11:00 FIRST-HOUR CONTINUATION (PARK.1): THE PLAN, THE STRATEGY, ITS SIZE, ITS EXITS, ITS OWN BUDGET.
 v1.4  2026-10-19  OTV4TEST r302 (GATE.2). K13a ran attempt_new_entry() on the WALL CLOCK, so before 09:35 ET
@@ -72,6 +74,8 @@ os.environ["OT_SIGNAL_JOURNAL_DIR"] = os.path.join(_TD, "sj")
 os.environ["OT_RESTING_DB"] = os.path.join(_TD, "r.db")
 CF = os.path.join(_TD, "cf")
 os.environ["OT_COUNTERFACTUAL_DIR"] = CF
+# r58 (DECAY.1): this checker pins a pre-decay exit in isolation; the peak-decay stop is gated in tests/check_decay_stop.py
+os.environ["OT_DECAY_STOP"] = "0"
 os.environ.pop("OT_PARK", None)
 ET = ZoneInfo("America/New_York")
 FAILED, RAN = [], []

@@ -1,5 +1,14 @@
 """
-strategy/management.py  v5.2
+strategy/management.py  v5.3
+v5.3  2026-10-30  OTV5 r58 (DECAY.1) — THE PEAK-DECAY STOP'S CHECK ROWS. The decision is exit_engine v5.10's (evaluate() ends
+      with it, after every existing exit; this plan's spec exits still run before the calculator step that reaches it, so
+      they win too). The operator, 2026-10-30: "I'm thinking like some kind of stop that says we've decayed 20% from the
+      peak so cut it" ... "I want the decay stop running by Monday". decide() takes the engine's reading right after
+      the calculator step (a stale one is dropped first) and writes plan check rows decay_peak_p / decay_p / decay_armed
+      / decay_frac (its note: armed or not, the out level, FIRED, or "an existing exit fired first") / decay_fired; _one()
+      writes the same rows for the records this plan does not cover, from the running engine's reading of
+      position_manager's evaluate() that tick. A CLOSE on it carries condition "decay". No trades column (plan check
+      rows, as r55's exhaust_*). Gate tests/check_decay_stop.py.
 v5.2  2026-10-30  OTV5 r55 (BRK.17) — THE EXHAUSTION EXIT WRITES ITS NUMBERS. RECORD ONLY: NO DECISION CHANGES. The operator,
       2026-10-29, on UNH's three exhaustion exits: "The momentum values behind that exit aren't logged. -damn it, why?" ...
       "Yes, build it." After the unchanged exit_engine._momentum_divergence call, decide() reads
@@ -388,7 +397,23 @@ MGMT_CHECKS = ("premium", "entry_premium", "pnl_pct", "stop_premium", "trail_sto
                "mae_pct", "ticks_held", "fired", "extension_atr",
                # r55 (BRK.17): the exhaustion comparison, written on every new favourable extreme
                "exhaust_ext", "exhaust_roc", "exhaust_prior_ext", "exhaust_prior_roc",
-               "exhaust_diverged", "exhaust_bar")
+               "exhaust_diverged", "exhaust_bar",
+               # r58 (DECAY.1): the peak-decay stop's reading, on every tick the exit engine evaluates it
+               "decay_peak_p", "decay_p", "decay_armed", "decay_frac", "decay_fired")
+
+
+def _record_decay_checks(t, rd) -> None:
+    """r58 (DECAY.1) — the plan check rows of one decay reading (exit_engine.decay_take). Never raises."""
+    try:
+        if not isinstance(rd, dict):
+            return
+        t.check("decay_peak_p", round(float(rd["peak_p"]), 4), None)
+        t.check("decay_p", round(float(rd["p"]), 4), None)
+        t.check("decay_armed", 1.0 if rd.get("armed") else 0.0, None)
+        t.check("decay_frac", round(float(rd["frac"]), 4), None, note=str(rd.get("note") or ""))
+        t.check("decay_fired", 1.0 if rd.get("fired") else 0.0, None)
+    except Exception as exc:                                   # noqa: BLE001
+        logger.debug("[manage] decay check rows not written: %s", exc)
 
 
 def _exhaust_bar_txt(ev) -> str:
@@ -803,6 +828,15 @@ class ManagementPlan:
 
             # ── 2. THE CALCULATORS — the engine's trail / tightening / theta /
             # velocity, adopted as the plan's own decision ────────────────────
+            # r58 (DECAY.1): the engine's evaluate() ends with the decay stop; its reading is taken right after so the
+            # rows are this tick's (a stale one from a tick that never reached the calculators is dropped first).
+            _dtake = getattr(exit_engine, "decay_take", None) if exit_engine is not None else None
+            _tid_d = str(record.get("trade_id", "") or "")
+            if callable(_dtake):
+                try:
+                    _dtake(_tid_d)
+                except Exception:                               # noqa: BLE001
+                    _dtake = None
             if intent is None and exit_engine is not None and prem is not None:
                 try:
                     d = exit_engine.evaluate(record, prem, df_1m=df_1m,
@@ -818,6 +852,11 @@ class ManagementPlan:
                 except Exception as exc:                        # noqa: BLE001
                     logger.warning("[manage] calculator raised for %s: %s — holding this tick",
                                    str(record.get("trade_id", ""))[:8], exc)
+            if callable(_dtake):
+                try:
+                    _record_decay_checks(t, _dtake(_tid_d))
+                except Exception:                               # noqa: BLE001
+                    pass
             if intent is None:
                 intent = Intent("HOLD", "", "", pnl_pct=pnl)
 
@@ -937,6 +976,14 @@ class ManagementPlan:
             t.check("mfe_pct", (mfe - entry) / entry if not credit else (entry - mfe) / entry, None)
         if mae is not None and entry > 0:
             t.check("mae_pct", (mae - entry) / entry if not credit else (entry - mae) / entry, None)
+        # r58 (DECAY.1): position_manager's evaluate() of this record ran just before this row (main's tick order)
+        try:
+            import execution.exit_engine as _xe
+            _eng = getattr(_xe, "_exit_engine", None)        # the running singleton; never builds one here
+            if _eng is not None and hasattr(_eng, "decay_take"):
+                _record_decay_checks(t, _eng.decay_take(str(rec.get("trade_id", "") or "")))
+        except Exception:                                      # noqa: BLE001
+            pass
 
         if conds is None:
             t.hold(f"{strategy}: no declared exit conditions — the exit engine's "

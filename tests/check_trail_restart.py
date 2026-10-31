@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """
-tests/check_trail_restart.py  v5.0
+tests/check_trail_restart.py  v5.1
+v5.1  2026-10-30  OTV5 r58 (DECAY.1) — OT_DECAY_STOP=0 HERE: this checker pins a pre-decay exit in isolation. T2b (a Breakout restart at peak 2.40, mark 1.95) now closes on the peak-decay stop before the recovered trail is reached, which is the r57 rule working;
+      the decay stop itself is gated by tests/check_decay_stop.py. No assertion changed.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.0  2026-10-18  OTV4TEST r294 (EXIT.6; MIRROR OF otv4 r493 1c60b69) — A RESTART KEEPS THE LOCKED TRAIL.
 
@@ -43,6 +45,8 @@ for _sp in _glob.glob(os.path.join(_root, "venv", "lib", "python*", "site-packag
     if _sp not in sys.path:                                  # r106 venv bootstrap
         sys.path.insert(1, _sp)
 os.environ.setdefault("OT_INSTRUMENT", "QQQ")
+# r58 (DECAY.1): this checker pins a pre-decay exit in isolation; the peak-decay stop is gated in tests/check_decay_stop.py
+os.environ["OT_DECAY_STOP"] = "0"
 _SCR = tempfile.mkdtemp(prefix="chk_trail_restart_")
 for _k, _v in (("OT_TRADES_DB", "t.db"), ("OT_DERIVED_DB", "d.db"), ("OT_FEED_DB", "f.db"), ("OT_LOG_FILE", "bot.log"),
                ("OT_COUNTERFACTUAL_DIR", "cf"), ("OT_RESTING_DB", "r.db"), ("OT_SIGNAL_JOURNAL_DIR", "sj")):

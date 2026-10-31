@@ -1,5 +1,12 @@
 """
-config.py  v5.5
+config.py  v5.6
+v5.6  2026-10-30  OTV5 r58 (DECAY.1) — THE PEAK-DECAY PROFIT STOP'S KNOBS. The operator, 2026-10-30: "I'm thinking like some
+      kind of stop that says we've decayed 20% from the peak so cut it" ... "I want the decay stop running by Monday".
+      DECAY_STOP (OT_DECAY_STOP, default 1 = on, 0 = off), DECAY_STOP_X = 0.30 (OT_DECAY_STOP_X: armed, close when
+      p <= peak_p x (1 - X)), DECAY_STOP_ARM = 0.05 (OT_DECAY_STOP_ARM: armed once peak_p >= ARM x entry premium),
+      DECAY_STOP_EXEMPT = ("RunawayContinuation", "PARK") by default, OT_DECAY_STOP_EXEMPT a comma list (unset = that
+      default; PARK exempt after the 10-30 scoring: the decay stop cut PARK's all-afternoon winners, -$19.3k on 6 PARK
+      trades). Read by execution/exit_engine.py v5.10 at call time.
 v5.5  2026-10-30  OTV5 r57 (TCS.LOG1) — TCS IS REACTIVATED AS LOG ONLY: OT_TCS_ACTIVE unset = log. The operator, 2026-10-30: "Can
       you reactivate TCS Monday as 'log only'? But do not trade it." then "Make sure TCS logs everything an executable
       trade logs." TREND_CREDIT_ACTIVE (the TRADE switch) is unchanged and stays False unless OT_TCS_ACTIVE=1. TCS_MODE
@@ -1141,6 +1148,25 @@ BRK_TRAIL_ARM_W = 0.5          # execution/exit_engine.py: the trail arms once t
 # refuse it — that is runaway's domain. It should honestly refuse if it's already crossed 1/2W." The plan refuses a break
 # CLOSE at or beyond edge +/- BRK_ENTRY_MAX_W x W, and the strategy will not fire on a live price at or beyond it.
 BRK_ENTRY_MAX_W = 0.5          # strategy/breakout_plan.py + strategy/breakout.py: no entry at/beyond edge +/- this x W
+# ── r58 (DECAY.1) — THE PEAK-DECAY PROFIT STOP ─────────────────────────────────────────────────────────────────────
+# The operator, 2026-10-30: "I'm thinking like some kind of stop that says we've decayed 20% from the peak so cut it" ...
+# "I want the decay stop running by Monday". p = open profit per unit premium, favourable-positive (debit: mark - entry;
+# credit vertical / condor leg / tent: entry - cost to close); peak_p = its best since entry (the persisted best / worst
+# mark). Armed once peak_p >= DECAY_STOP_ARM x entry premium; armed, the trade closes when p <= peak_p x (1 -
+# DECAY_STOP_X). Every existing exit is evaluated first; decay only adds an exit. The study it mirrors:
+# ~/reviews/decay (coupled.py / hist.py "V0 B X30 arm+5, Runaway exempt"). execution/exit_engine.py reads these at
+# call time.
+DECAY_STOP = os.environ.get("OT_DECAY_STOP", "1").strip() != "0"            # 1 = on (default), 0 = off
+DECAY_STOP_X = float(os.environ.get("OT_DECAY_STOP_X", "0.30"))             # the fade from the peak that closes
+DECAY_STOP_ARM = float(os.environ.get("OT_DECAY_STOP_ARM", "0.05"))         # the peak (x entry premium) that arms
+# Exempt strategies keep their own exits untouched. OT_DECAY_STOP_EXEMPT = a comma list of strategy names; UNSET = the
+# default below (set but empty = nothing exempt). PARK is exempt by default: the 10-30 scoring had the decay stop cutting
+# PARK's all-afternoon winners (-$19.3k on 6 PARK trades); the 48-day replay of V0 X30 with Runaway + PARK exempt is
+# +$18.8k / +$20.0k (trigger / next-tick fill) vs Runaway-only +$4.7k / +$6.2k.
+_DECAY_EXEMPT_DEFAULT = ("RunawayContinuation", "PARK")
+_dx_raw = os.environ.get("OT_DECAY_STOP_EXEMPT")
+DECAY_STOP_EXEMPT = (_DECAY_EXEMPT_DEFAULT if _dx_raw is None
+                     else tuple(x.strip() for x in _dx_raw.split(",") if x.strip()))
 
 ENTRY_WINDOWS = {
     # r149: directional debits run ALL DAY to the entries stop (operator: "A").

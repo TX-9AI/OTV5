@@ -1,5 +1,19 @@
 """
-execution/exit_engine.py  v5.9
+execution/exit_engine.py  v5.10
+v5.10 2026-10-30  OTV5 r58 (DECAY.1) — THE PEAK-DECAY PROFIT STOP. A TRADING CHANGE, ORDERED LIVE FOR MONDAY 2026-11-02 UNDER
+      THE OPERATOR'S EXPLICIT OVERRIDE OF THE BENCHMARK FREEZE: "I'm thinking like some kind of stop that says we've decayed
+      20% from the peak so cut it" ... "I want the decay stop running by Monday". evaluate() is now the front door: it
+      runs _evaluate_route (the r57 evaluate(), renamed, byte-for-byte the same routing and exits) and, ONLY when that
+      does not exit, _decay_read: p = open profit per unit premium, favourable-positive (debit incl. butterfly net:
+      mark - entry; credit vertical / condor leg / tent: entry - cost to close), peak_p = the best p since entry from
+      the best mark seen (this mark, mfe_premium / mae_premium, the persisted max_premium_seen / min_premium_seen - so
+      the peak survives a restart). Armed once peak_p >= DECAY_STOP_ARM (0.05) x entry; armed, it closes when
+      p <= peak_p x (1 - DECAY_STOP_X (0.30)), reason "decay: open profit +$X (p 0.120) fell 31% from peak +$Y
+      (p 0.180), armed at 09:41:15 pnl=6.0%", through the normal close path (paper fills at the mark; live, no
+      _FLOOR_REASONS substring, so _exit_policy walks the ladder as for a target). RunawayContinuation and PARK
+      are exempt by default (DECAY_STOP_EXEMPT, OT_DECAY_STOP_EXEMPT); OT_DECAY_STOP=0 turns it off. Every tick's
+      reading is kept (decay_reading / decay_take) for management v5.3's decay_* plan check rows. The study it
+      mirrors: ~/reviews/decay coupled.py / hist.py "V0 B X30 arm+5", Runaway + PARK exempt. Gate tests/check_decay_stop.py.
 v5.9  2026-10-30  OTV5 r55 (BRK.17) — THE EXHAUSTION EXIT'S EVIDENCE IS KEPT, NOT ONLY ITS VERDICT. RECORD ONLY. UNH 2026-10-29
       took three exhaustion exits (10534a1a, 4f01b80a, 449040f2 - the last 60 s after entry) and no review could judge
       them: _momentum_divergence returned a bool and its readings lived only in self._exhaust_state. The operator,
@@ -1283,6 +1297,8 @@ class ExitEngine:
         # v4.5: `self._condor_ratchet` deleted with the ratchet itself.
         self._exhaust_state: dict = {}   # per-trade {ext, mom} for continuation divergence
         self._exhaust_last: dict = {}    # r55 (BRK.17): trade_id -> the last call's new-extreme reading (record only)
+        self._decay_state: dict = {}     # r58 (DECAY.1): trade_id -> {"armed_at": "HH:MM:SS" | None, "seen": True}
+        self._decay_last: dict = {}      # r58 (DECAY.1): trade_id -> this tick's decay reading (the check rows)
         self._trail_active: dict = {}
         self._bos_trackers: dict = {}   # trade_id \u2192 BOSTracker (sweep only)
         self._post_target_trail: dict = {}   # trade_id \u2192 bool (ORB only)
@@ -1344,8 +1360,135 @@ class ExitEngine:
                  df_5m: Optional[pd.DataFrame] = None,
                  vol_state=None,
                  trend=None) -> ExitDecision:
+        """r58 (DECAY.1) — THE FRONT DOOR: every existing exit first, then the peak-decay stop.
+
+        _evaluate_route is the r57 evaluate() unchanged (every strategy's exits, the trail, the excursion tracker).
+        Only when it does NOT exit does the decay stop get a say: armed once the trade's best open profit reached
+        DECAY_STOP_ARM x entry premium, it closes when the open profit has faded DECAY_STOP_X of that peak. Both
+        callers reach it here - position_manager for the records the plan does not cover, management.decide's
+        calculator step for the ones it does (after its own spec exits). RunawayContinuation and PARK are
+        exempt by default (DECAY_STOP_EXEMPT); OT_DECAY_STOP=0 turns it off. A failure inside the decay read is logged and returns the
+        existing decision - the decay stop can add an exit, never cost one."""
+        d = self._evaluate_route(record, current_premium, df_1m=df_1m, df_5m=df_5m,
+                                 vol_state=vol_state, trend=trend)
+        try:
+            rd = self._decay_read(record, current_premium, existing_exit=bool(getattr(d, "should_exit", False)))
+        except Exception as exc:                                  # noqa: BLE001
+            logger.warning("[exit] decay read failed for %s: %s - the existing exits decide",
+                           str(record.get("trade_id", ""))[:8], exc)
+            return d
+        if rd is not None and rd.get("fired"):
+            logger.info(f"[exit] DECAY {str(record.get('trade_id', ''))[:8]}: {rd['reason']}")
+            return ExitDecision(should_exit=True, exit_reason=rd["reason"],
+                                current_pnl_pct=rd["pnl_pct"], current_pnl_usd=rd["pnl_usd"])
+        return d
+
+    def _decay_read(self, record: TradeRecord, current_premium, existing_exit: bool = False) -> Optional[dict]:
+        """r58 (DECAY.1) — this tick's peak-decay reading, stored for the plan check rows; None when the rule does
+        not apply (off, exempt, no entry premium, no usable mark).
+
+        p = open profit per unit premium, favourable-positive, exactly the study's (~/reviews/decay hist.py / coupled.py):
+          debit (single leg; butterfly, whose mark is the net lower - 2 x center + upper): p = mark - entry
+          credit vertical / condor leg / tent (mark = cost to close):                       p = entry - mark
+        peak_p = the best p since entry, from the best mark this position has seen: this tick's mark, the in-memory
+        excursion (mfe_premium / mae_premium, _track_excursion) and the PERSISTED best / worst (max_premium_seen /
+        min_premium_seen, trade_logger.update_current_premium every tick - what a rehydrated record carries after a
+        restart). Floored at 0 (the study's peak starts at 0).
+        ARMED once peak_p >= DECAY_STOP_ARM x entry; armed, FIRES when p <= peak_p x (1 - DECAY_STOP_X) - unless an
+        existing exit already fired this tick (it wins; the reading says so). A 1e-9 tolerance on both comparisons so
+        a fade of exactly X (or a peak of exactly ARM) is not lost to binary floating point."""
+        tid = str(record.get("trade_id", "") or "")
+        last = self.__dict__.setdefault("_decay_last", {})
+        last.pop(tid, None)
+        if not getattr(_cfg, "DECAY_STOP", False):
+            return None
+        strategy = str(record.get("strategy", "") or "")
+        if strategy in tuple(getattr(_cfg, "DECAY_STOP_EXEMPT", ()) or ()):
+            return None
+
+        def _pos(v):
+            try:
+                x = float(v)
+            except (TypeError, ValueError):
+                return None
+            return x if 0 < x <= 1e6 and x == x else None
+
+        entry = _pos(record.get("entry_premium"))
+        px = _pos(current_premium)
+        if entry is None or px is None:
+            return None
+        X = float(getattr(_cfg, "DECAY_STOP_X", 0.30))
+        ARM = float(getattr(_cfg, "DECAY_STOP_ARM", 0.05))
+        credit = bool(is_credit_vertical(record) or is_tent(record))
+        if credit:
+            marks = [m for m in (px, _pos(record.get("mae_premium")), _pos(record.get("min_premium_seen")))
+                     if m is not None]
+            best = min(marks)
+            p, peak = entry - px, entry - best
+        else:
+            marks = [m for m in (px, _pos(record.get("mfe_premium")), _pos(record.get("max_premium_seen")))
+                     if m is not None]
+            best = max(marks)
+            p, peak = px - entry, best - entry
+        peak = max(peak, 0.0)
+        EPS = 1e-9
+        armed = peak > 0 and peak >= ARM * entry - EPS
+        st = self.__dict__.setdefault("_decay_state", {}).setdefault(tid, {})
+        first = not st.get("seen")
+        st["seen"] = True
+        if armed and "armed_at" not in st:
+            # armed on this engine's FIRST look at the trade, from a persisted peak above this mark: the arm happened
+            # before this process (a restart) and its time is not known
+            st["armed_at"] = None if (first and best != px) else now_et().strftime("%H:%M:%S")
+        frac = (1.0 - p / peak) if peak > 0 else 0.0
+        level = peak * (1.0 - X)
+        would = bool(armed and p <= level + EPS)
+        fired = would and not existing_exit
+        try:
+            n = float(record.get("contracts") or 0) * 100.0
+        except (TypeError, ValueError):
+            n = 0.0
+
+        def _usd(v):
+            return f"{'+' if v >= 0 else '-'}${abs(v):,.2f}"
+
+        pnl_pct = p / entry
+        at = st.get("armed_at")
+        reason = (f"decay: open profit {_usd(p * n)} (p {p:.3f}) fell {frac:.0%} from peak {_usd(peak * n)} "
+                  f"(p {peak:.3f}), armed at {at if at else 'n/a (before a restart)'} pnl={pnl_pct:.1%}")
+        if not armed:
+            note = (f"not armed: peak p {peak:.3f} < arm {ARM:g} x entry {entry:.2f} = {ARM * entry:.3f}; "
+                    f"p {p:.3f}")
+        elif fired:
+            note = f"FIRED: p {p:.3f} <= peak {peak:.3f} x (1 - {X:g}) = {level:.3f} ({frac:.0%} faded)"
+        elif would:
+            note = (f"would fire (p {p:.3f} <= {level:.3f}, {frac:.0%} faded) but an existing exit fired first")
+        else:
+            note = f"armed at {at if at else 'n/a'}: p {p:.3f}, {frac:.0%} faded of peak {peak:.3f}; out at p <= {level:.3f}"
+        rd = {"trade_id": tid, "credit": credit, "entry": entry, "mark": px, "best_mark": best,
+              "p": p, "peak_p": peak, "armed": armed, "armed_at": at, "frac": frac, "level": level,
+              "x": X, "arm": ARM, "would_fire": would, "fired": fired, "existing_exit": bool(existing_exit),
+              "pnl_pct": pnl_pct, "pnl_usd": p * n, "reason": reason, "note": note}
+        last[tid] = rd
+        return rd
+
+    def decay_reading(self, trade_id) -> Optional[dict]:
+        """r58 (DECAY.1) — the last evaluate()'s decay reading for this trade, or None (not evaluated / exempt / off)."""
+        return (self.__dict__.get("_decay_last") or {}).get(str(trade_id or ""))
+
+    def decay_take(self, trade_id) -> Optional[dict]:
+        """r58 (DECAY.1) — the reading, removed: a check row is written once per evaluate(), never from a stale tick."""
+        return (self.__dict__.get("_decay_last") or {}).pop(str(trade_id or ""), None)
+
+    def _evaluate_route(self,
+                        record: TradeRecord,
+                        current_premium: float,
+                        df_1m: Optional[pd.DataFrame] = None,
+                        df_5m: Optional[pd.DataFrame] = None,
+                        vol_state=None,
+                        trend=None) -> ExitDecision:
         """
-        Strategy-aware exit evaluation.
+        Strategy-aware exit evaluation (r58: the r57 evaluate(), renamed; evaluate() wraps it).
         Routes to the appropriate exit logic based on strategy_name.
                 neutral strategies (butterfly, condor) that depend on RANGING.
         """

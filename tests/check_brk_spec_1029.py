@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """
-tests/check_brk_spec_1029.py  v5.0
+tests/check_brk_spec_1029.py  v5.1
+v5.1  2026-10-30  OTV5 r58 (DECAY.1) — OT_DECAY_STOP=0 HERE: this checker pins a pre-decay exit in isolation. T1 / T3 (a +30% Breakout given back to 1.90 below 0.5W, and the 2.60 -> 2.00 tick before the 0.5W arm) now close on the peak-decay stop, which is the r57 rule working, not the trail;
+      the decay stop itself is gated by tests/check_decay_stop.py. No assertion changed.
 v5.0  2026-10-29  OTV5 r54 (BRK.16) — THE OPERATOR'S 2026-10-29 BREAKOUT SPEC, DRIVEN THROUGH THE REAL CODE.
       "the target will be from the boundary of the opening range a distance of 1W"; "I want the trailing stop
       activation to occur at 1/2 W"; "for STRIKE selection, it should be the strike nearest that 1W distance we identify
@@ -62,6 +64,8 @@ for _k, _v in (("OT_TRADES_DB", "trades.db"), ("OT_DERIVED_DB", "derived.db"), (
                ("OT_WAREHOUSE_STATE", "ws"), ("OT_PLAN_STATES_FILE", "ps.json")):
     os.environ[_k] = os.path.join(_s, _v)
 os.environ.setdefault("OT_INSTRUMENT", "QQQ")
+# r58 (DECAY.1): this checker pins a pre-decay exit in isolation; the peak-decay stop is gated in tests/check_decay_stop.py
+os.environ["OT_DECAY_STOP"] = "0"
 FAILED, RAN = [], []
 
 
