@@ -1,5 +1,8 @@
 """
-strategy/structure.py  v5.1
+strategy/structure.py  v5.2
+v5.2  2026-10-31  OTV5 r67 (PARC.4): of() no longer names strategy "PARC" / setup parc_*: PARC is
+      removed (no PARC row was ever booked). The operator, 2026-10-31: "On PARC, no. It was an idea. It failed. It's done." and "Yes" to removing its code.
+      Every other strategy's structure is unchanged. Gate tests/check_no_parc.py.
 v5.1  2026-10-27  OTV5 r46 (PARC.1): of() reads strategy "PARC" (setup parc_long / parc_short) as CONDOR_LEG - a lone credit
       vertical - so its value is priced short - long (position_manager), its P&L is credit-signed, has_assignment_risk is
       True (EOD.1's 15:45 resting close) and the fee model prices two legs. Its EXITS are its own: exit_engine routes
@@ -135,8 +138,6 @@ def of(record: Optional[Mapping[str, Any]]) -> Structure:
         return Structure.CONDOR_LEG
 
     if "ironcondor" in strat.replace("_", ""):
-        return Structure.CONDOR_LEG
-    if strat == "parc" or setup.startswith("parc_"):          # OTV5 r46 (PARC.1): a lone credit vertical
         return Structure.CONDOR_LEG
 
     if "butterfly" in strat.replace("_", "") or setup.startswith("butterfly"):

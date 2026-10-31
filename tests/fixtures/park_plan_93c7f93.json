@@ -1,0 +1,524 @@
+{
+ "admission": {
+  "cap_exempt": true,
+  "max_open_of_type": 1,
+  "max_tries_per_session": 1,
+  "window": [
+   [
+    11,
+    1
+   ],
+   [
+    11,
+    3
+   ]
+  ]
+ },
+ "cap_excludes_park": true,
+ "dormant": {
+  "prep": {
+   "ask": null,
+   "bid": null,
+   "checks": {
+    "entry_window": [
+     null,
+     false
+    ]
+   },
+   "conditions": {},
+   "contract": null,
+   "direction": "",
+   "gap": null,
+   "move_pct": null,
+   "premium": null,
+   "price_now": 702.4,
+   "ready": false,
+   "side": "",
+   "spot": null,
+   "unmet": []
+  },
+  "signal": null
+ },
+ "gate_g": {
+  "prep": {
+   "ask": null,
+   "bid": null,
+   "checks": {
+    "close_1030": [
+     702.1,
+     null
+    ],
+    "entry_window": [
+     null,
+     true
+    ],
+    "first_hour_move": [
+     0.3,
+     true
+    ],
+    "gap": [
+     -1.0,
+     null
+    ],
+    "gate_g": [
+     -1.0,
+     false
+    ],
+    "move_pct": [
+     0.3,
+     null
+    ],
+    "open_0930": [
+     700.0,
+     null
+    ],
+    "prior_close": [
+     701.0,
+     null
+    ],
+    "spot_1100": [
+     702.4,
+     null
+    ]
+   },
+   "conditions": {
+    "entry_window": [
+     null,
+     "11:01-11:03 ET, once the 11:00 1m bar has closed",
+     true
+    ],
+    "first_hour_move": [
+     0.3,
+     "|10:30 1m close / 09:30 1m open - 1| >= 0.20% - the first hour moved, and its sign is the direction",
+     true
+    ],
+    "gate_g": [
+     -1.0,
+     "the direction is never against the opening gap (09:30 open vs the prior close): a call needs gap >= 0, a put gap <= 0. MEASURED: halves QQQ's losers, neutral on SPX",
+     false
+    ]
+   },
+   "contract": null,
+   "direction": "long",
+   "gap": -1.0,
+   "move_pct": 0.3,
+   "premium": null,
+   "price_now": 702.4,
+   "ready": false,
+   "side": "call",
+   "spot": 702.4,
+   "unmet": [
+    "gate_g"
+   ]
+  },
+  "signal": null
+ },
+ "long": {
+  "prep": {
+   "ask": 1.53,
+   "bid": 1.47,
+   "checks": {
+    "ask": [
+     1.53,
+     null
+    ],
+    "bid": [
+     1.47,
+     null
+    ],
+    "close_1030": [
+     702.1,
+     null
+    ],
+    "contract": [
+     1.53,
+     true
+    ],
+    "delta": [
+     0.5,
+     null
+    ],
+    "entry_window": [
+     null,
+     true
+    ],
+    "first_hour_move": [
+     0.3,
+     true
+    ],
+    "gap": [
+     1.0,
+     null
+    ],
+    "gate_g": [
+     1.0,
+     true
+    ],
+    "move_pct": [
+     0.3,
+     null
+    ],
+    "open_0930": [
+     700.0,
+     null
+    ],
+    "prior_close": [
+     699.0,
+     null
+    ],
+    "spot_1100": [
+     702.4,
+     null
+    ],
+    "strike": [
+     702.0,
+     null
+    ]
+   },
+   "conditions": {
+    "contract": [
+     1.53,
+     "the strike nearest the 11:00 1m close, today's expiry, two-sided, ask >= 0.50; bought at the mark, never worse (PARK.4)",
+     true
+    ],
+    "entry_window": [
+     null,
+     "11:01-11:03 ET, once the 11:00 1m bar has closed",
+     true
+    ],
+    "first_hour_move": [
+     0.3,
+     "|10:30 1m close / 09:30 1m open - 1| >= 0.20% - the first hour moved, and its sign is the direction",
+     true
+    ],
+    "gate_g": [
+     1.0,
+     "the direction is never against the opening gap (09:30 open vs the prior close): a call needs gap >= 0, a put gap <= 0. MEASURED: halves QQQ's losers, neutral on SPX",
+     true
+    ]
+   },
+   "contract": {
+    "ask": 1.53,
+    "bid": 1.47,
+    "side": "C",
+    "strike": 702.0
+   },
+   "direction": "long",
+   "gap": 1.0,
+   "move_pct": 0.3,
+   "premium": 1.5,
+   "price_now": 702.4,
+   "ready": true,
+   "side": "call",
+   "spot": 702.4,
+   "unmet": []
+  },
+  "signal": {
+   "adx_at_signal": 0.0,
+   "atr_at_signal": 0.0,
+   "butterfly_direction": "",
+   "center_contract": null,
+   "condor_trigger_source": "",
+   "confluence_factors": [],
+   "contract": {
+    "ask": 1.53,
+    "bid": 1.47,
+    "side": "C",
+    "strike": 702.0
+   },
+   "contracts": 0,
+   "conviction": 0.0,
+   "direction": "long",
+   "entry_delta": 0.5,
+   "entry_premium": 1.5,
+   "expected_move": 0.0,
+   "expected_move_mult": 0.0,
+   "expiry": "2026-10-28",
+   "flat_angle_deg": 0.0,
+   "is_butterfly": false,
+   "is_credit_vertical": false,
+   "is_fed_day": false,
+   "level_strength": 0.0,
+   "long_call_contract": null,
+   "long_put_contract": null,
+   "lower_contract": null,
+   "max_loss": 0.0,
+   "max_loss_condor": 0.0,
+   "max_profit": 0.0,
+   "net_credit": 0.0,
+   "net_debit": 0.0,
+   "notes": "",
+   "option_side": "call",
+   "orb_break_ts": 0.0,
+   "orb_range_high": 0.0,
+   "orb_range_low": 0.0,
+   "orb_stop_distance_px": 0.0,
+   "setup_grade": "UNGRADED",
+   "setup_type": "park_long",
+   "short_call_contract": null,
+   "short_put_contract": null,
+   "stop_loss_pct": 1.0,
+   "strategy_name": "PARK",
+   "strike": 702.0,
+   "swept_level_name": "",
+   "total_cost": 0.0,
+   "tp_pct": 1.0,
+   "underlying_entry": 702.4,
+   "underlying_stop": 0.0,
+   "underlying_stop_is_thesis": false,
+   "underlying_target": 0.0,
+   "underlying_tp50": 0.0,
+   "upper_contract": null,
+   "vix_at_signal": 0.0
+  }
+ },
+ "quiet": {
+  "prep": {
+   "ask": null,
+   "bid": null,
+   "checks": {
+    "close_1030": [
+     700.9,
+     null
+    ],
+    "entry_window": [
+     null,
+     true
+    ],
+    "first_hour_move": [
+     0.128571429,
+     false
+    ],
+    "gap": [
+     1.0,
+     null
+    ],
+    "gate_g": [
+     1.0,
+     true
+    ],
+    "move_pct": [
+     0.128571429,
+     null
+    ],
+    "open_0930": [
+     700.0,
+     null
+    ],
+    "prior_close": [
+     699.0,
+     null
+    ],
+    "spot_1100": [
+     701.0,
+     null
+    ]
+   },
+   "conditions": {
+    "entry_window": [
+     null,
+     "11:01-11:03 ET, once the 11:00 1m bar has closed",
+     true
+    ],
+    "first_hour_move": [
+     0.128571429,
+     "|10:30 1m close / 09:30 1m open - 1| >= 0.20% - the first hour moved, and its sign is the direction",
+     false
+    ],
+    "gate_g": [
+     1.0,
+     "the direction is never against the opening gap (09:30 open vs the prior close): a call needs gap >= 0, a put gap <= 0. MEASURED: halves QQQ's losers, neutral on SPX",
+     true
+    ]
+   },
+   "contract": null,
+   "direction": "long",
+   "gap": 1.0,
+   "move_pct": 0.128571429,
+   "premium": null,
+   "price_now": 701.0,
+   "ready": false,
+   "side": "call",
+   "spot": 701.0,
+   "unmet": [
+    "first_hour_move"
+   ]
+  },
+  "signal": null
+ },
+ "short": {
+  "prep": {
+   "ask": 1.53,
+   "bid": 1.47,
+   "checks": {
+    "ask": [
+     1.53,
+     null
+    ],
+    "bid": [
+     1.47,
+     null
+    ],
+    "close_1030": [
+     697.9,
+     null
+    ],
+    "contract": [
+     1.53,
+     true
+    ],
+    "delta": [
+     -0.5,
+     null
+    ],
+    "entry_window": [
+     null,
+     true
+    ],
+    "first_hour_move": [
+     0.3,
+     true
+    ],
+    "gap": [
+     -1.0,
+     null
+    ],
+    "gate_g": [
+     -1.0,
+     true
+    ],
+    "move_pct": [
+     -0.3,
+     null
+    ],
+    "open_0930": [
+     700.0,
+     null
+    ],
+    "prior_close": [
+     701.0,
+     null
+    ],
+    "spot_1100": [
+     697.6,
+     null
+    ],
+    "strike": [
+     698.0,
+     null
+    ]
+   },
+   "conditions": {
+    "contract": [
+     1.53,
+     "the strike nearest the 11:00 1m close, today's expiry, two-sided, ask >= 0.50; bought at the mark, never worse (PARK.4)",
+     true
+    ],
+    "entry_window": [
+     null,
+     "11:01-11:03 ET, once the 11:00 1m bar has closed",
+     true
+    ],
+    "first_hour_move": [
+     0.3,
+     "|10:30 1m close / 09:30 1m open - 1| >= 0.20% - the first hour moved, and its sign is the direction",
+     true
+    ],
+    "gate_g": [
+     -1.0,
+     "the direction is never against the opening gap (09:30 open vs the prior close): a call needs gap >= 0, a put gap <= 0. MEASURED: halves QQQ's losers, neutral on SPX",
+     true
+    ]
+   },
+   "contract": {
+    "ask": 1.53,
+    "bid": 1.47,
+    "side": "P",
+    "strike": 698.0
+   },
+   "direction": "short",
+   "gap": -1.0,
+   "move_pct": -0.3,
+   "premium": 1.5,
+   "price_now": 697.6,
+   "ready": true,
+   "side": "put",
+   "spot": 697.6,
+   "unmet": []
+  },
+  "signal": {
+   "adx_at_signal": 0.0,
+   "atr_at_signal": 0.0,
+   "butterfly_direction": "",
+   "center_contract": null,
+   "condor_trigger_source": "",
+   "confluence_factors": [],
+   "contract": {
+    "ask": 1.53,
+    "bid": 1.47,
+    "side": "P",
+    "strike": 698.0
+   },
+   "contracts": 0,
+   "conviction": 0.0,
+   "direction": "short",
+   "entry_delta": -0.5,
+   "entry_premium": 1.5,
+   "expected_move": 0.0,
+   "expected_move_mult": 0.0,
+   "expiry": "2026-10-28",
+   "flat_angle_deg": 0.0,
+   "is_butterfly": false,
+   "is_credit_vertical": false,
+   "is_fed_day": false,
+   "level_strength": 0.0,
+   "long_call_contract": null,
+   "long_put_contract": null,
+   "lower_contract": null,
+   "max_loss": 0.0,
+   "max_loss_condor": 0.0,
+   "max_profit": 0.0,
+   "net_credit": 0.0,
+   "net_debit": 0.0,
+   "notes": "",
+   "option_side": "put",
+   "orb_break_ts": 0.0,
+   "orb_range_high": 0.0,
+   "orb_range_low": 0.0,
+   "orb_stop_distance_px": 0.0,
+   "setup_grade": "UNGRADED",
+   "setup_type": "park_short",
+   "short_call_contract": null,
+   "short_put_contract": null,
+   "stop_loss_pct": 1.0,
+   "strategy_name": "PARK",
+   "strike": 698.0,
+   "swept_level_name": "",
+   "total_cost": 0.0,
+   "tp_pct": 1.0,
+   "underlying_entry": 697.6,
+   "underlying_stop": 0.0,
+   "underlying_stop_is_thesis": false,
+   "underlying_target": 0.0,
+   "underlying_tp50": 0.0,
+   "upper_contract": null,
+   "vix_at_signal": 0.0
+  }
+ },
+ "size": {
+  "allowed": true,
+  "contracts": 6,
+  "rule": "budget"
+ },
+ "state": "active",
+ "window": [
+  [
+   11,
+   1
+  ],
+  [
+   11,
+   3
+  ]
+ ]
+}

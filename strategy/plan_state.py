@@ -1,5 +1,8 @@
 """
-strategy/plan_state.py  v5.2
+strategy/plan_state.py  v5.3
+v5.3  2026-10-31  OTV5 r67 (PARC.4) — PARC LEAVES THE TABLE (its row and its config.PARC_MODE
+      branch): PARC is removed. The operator, 2026-10-31: "On PARC, no. It was an idea. It failed. It's done." and "Yes" to removing its code. Every other plan's
+      state is unchanged. Gate tests/check_no_parc.py.
 v5.2  2026-10-30  OTV5 r57 (TCS.LOG1) — TrendCreditSpread's DEFAULT IS LOG: OT_TCS_ACTIVE unset (or empty, or "log", or
       a value nobody recognises, which is named) -> log; "0" / "off" / "dormant" -> dormant; "1" (config.TREND_CREDIT_ACTIVE)
       -> active, unchanged. In LOG the TCS signal runs the real entry and books a SHADOW trade (execution/shadow_book.py),
@@ -32,7 +35,7 @@ THE SWITCH. Each plan keeps the env key it already had; the values are active | 
 keep their meaning: "1" (and "trade") = active; for a default-OFF trade anything but active/log stays dormant,
 exactly as "only the literal 1" did; for a default-ON plan "0" / "off" = dormant. A value nobody recognises
 leaves the plan at its DEFAULT state and is named (refused()), never silently obeyed. PARK keeps
-config.PARK_MODE (trade -> active, log -> log, off -> dormant); PARC (OTV5 r46) reads config.PARC_MODE the same way. The config flags (ORCS_ENABLED,
+config.PARK_MODE (trade -> active, log -> log, off -> dormant). The config flags (ORCS_ENABLED,
 SWEEP_CS_ENABLED, TREND_CREDIT_ACTIVE, ATP_BUTTERFLY_ENABLED, GEX_BUTTERFLY_ENABLED) still decide ACTIVE, so a
 checker that flips one still flips the trade; "log" is read from the same key at call time.
 
@@ -68,7 +71,6 @@ TABLE: Dict[str, Tuple[str, str, str]] = {
     "Breakout":                 ("OT_BREAKOUT",       ACTIVE,  HOUR),
     "LiquidityHunt":            ("OT_HUNT",           ACTIVE,  HOUR),
     "PARK":                     ("OT_PARK",           ACTIVE,  HOUR),
-    "PARC":                     ("OT_PARC",           ACTIVE,  HOUR),     # OTV5 r46 (PARC.1)
     "GEXPinButterfly":          ("OT_GEX_BUTTERFLY",  ACTIVE,  HOUR),
     "ATPButterfly":             ("OT_ATP_BUTTERFLY",  DORMANT, HOUR),
     "VOLT":                     ("OT_VOLT",           DORMANT, HOUR),
@@ -163,9 +165,6 @@ def state(name: str) -> str:
         if n == "PARK":
             import config as _c
             return {"trade": ACTIVE, "log": LOG, "off": DORMANT}.get(str(getattr(_c, "PARK_MODE", "trade")), ACTIVE)
-        if n == "PARC":                                         # OTV5 r46 (PARC.1): config.PARC_MODE decides
-            import config as _c
-            return {"trade": ACTIVE, "log": LOG, "off": DORMANT}.get(str(getattr(_c, "PARC_MODE", "trade")), ACTIVE)
         raw = _raw(key)
         if n in _FLAG:
             import config as _c

@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """
-tests/check_fly_entry_quote.py  v5.0
+tests/check_fly_entry_quote.py  v5.1
+v5.1  2026-10-31  OTV5 r67 (PARC.4) — F7's credit vertical is a SweepCreditSpread lone vertical
+      (structure CONDOR_LEG, is_condor_leg 0), not a PARC row: PARC is removed. The operator, 2026-10-31: "On PARC, no. It was an idea. It failed. It's done." and "Yes" to removing its code.
+      The property (a credit vertical writes its short leg's values) is unchanged.
 v5.0  2026-10-29  OTV5 r53 (FLY.3) — A BUTTERFLY'S ENTRY QUOTE AND GREEKS ARE THE FLY'S, NOT ITS BODY LEG'S.
       main._capture_entry_contract matched record["option_symbol"], which on a fly is the CENTER leg, so every fly row
       carried the body's quote and greeks: NVDA 2026-10-28 b495e4a9 (GEXPinButterfly, calls 217.5/220/222.5) booked
@@ -170,7 +173,7 @@ check("F6 a single-leg trade writes its own contract (2.50/2.55, delta 0.80, iv 
       and near(got6.get("entry_delta"), 0.80) and near(got6.get("entry_iv"), 0.66), f"{ok6!r} {got6}")
 
 # ── F7 a credit vertical unchanged ────────────────────────────────────────────
-vert = {"trade_id": str(uuid.uuid4()), "symbol": "NVDA", "strategy": "PARC", "setup_type": "parc",
+vert = {"trade_id": str(uuid.uuid4()), "symbol": "NVDA", "strategy": "SweepCreditSpread", "setup_type": "sweep_credit_spread",
         "direction": "long", "option_side": "put", "is_butterfly": 0, "is_condor_leg": 0, "strike": 220.0,
         "short_symbol": PUT.symbol, "long_symbol": "NVDA  261028P00217500", "option_symbol": PUT.symbol,
         "entry_premium": 0.80, "contracts": 2, "paper_trade": 1}

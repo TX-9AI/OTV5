@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """
-tests/check_cap_fly_exempt.py  v5.2
+tests/check_cap_fly_exempt.py  v5.3
+v5.3  2026-10-31  OTV5 r67 (PARC.4) — F1 / F6 RE-POINTED (WA section 38.4), F12b DROPPED WITH ITS
+      SUBJECT: PARC is removed, so F1's exempt set is the two flies and PARK again and F6's funnel filter names PARK
+      only. The operator, 2026-10-31: "On PARC, no. It was an idea. It failed. It's done." and "Yes" to removing its code.
 v5.2  2026-10-27  OTV5 r46 (PARC.1) — F1 RE-POINTED (WA section 38.4): PARC is cap-exempt like PARK (its own budget; the
       operator, 2026-10-27: "Call it PARC"), so F1's exempt set names it; F12b: PARC is admitted at the cap at 11:01; F6 lets PARC reach the funnel beside
       PARK (asked in the capped branch every tick, refused by its window at 13:30, never admitted).
@@ -126,18 +129,15 @@ def _facts(name, now=IN_WINDOW, **kw):
 
 
 # ── F1 — the cap still refuses everything else ──────────────────────────────
-EXEMPT = FLIES + ("PARK", "PARC")  # r288: PARK, its own budget; r46: PARC, its own budget
+EXEMPT = FLIES + ("PARK",)  # r288: PARK, its own budget (r67: PARC removed)
 others = [n for n in TABLE if n not in EXEMPT]
 _f1 = {n: PMOD.decide(_facts(n)).gate for n in others}
-check("F1 cap broken: every strategy but the two butterflies, PARK and PARC is refused on catastrophic_cap",
+check("F1 cap broken: every strategy but the two butterflies and PARK is refused on catastrophic_cap",
       bool(others) and all(g == "catastrophic_cap" for g in _f1.values()), str(_f1))
 # ── F12 (r288) — PARK is admitted at the cap inside its own window ───────────
 _f12 = PMOD.decide(_facts("PARK", now=(11, 1)))
 check("F12 cap broken: PARK is admitted at 11:01 (cap-exempt, its own budget)",
       bool(_f12.admitted), f"{_f12.admitted} {_f12.gate}")
-_f12b = PMOD.decide(_facts("PARC", now=(11, 1)))
-check("F12b cap broken: PARC is admitted at 11:01 (cap-exempt, its own budget; OTV5 r46)",
-      bool(_f12b.admitted), f"{_f12b.admitted} {_f12b.gate}")
 
 # ── F2 — both butterflies admitted ──────────────────────────────────────────
 _f2 = {n: (PMOD.decide(_facts(n)).admitted, PMOD.decide(_facts(n)).gate) for n in FLIES}
@@ -327,8 +327,8 @@ _R = {}
 def _f6():
     _R["f6"] = _drive(IN_WINDOW)
     asked, funnel, executed, admitted = _R["f6"]
-    # r288: PARK is ASKED in the capped branch every tick (refused by its window at 13:30, never admitted); r46: PARC too
-    return (asked == ["GEX", "ATP"] and [f for f in funnel if f not in ("PARK", "PARC")] == ["GEXPinButterfly", "ATPButterfly"]
+    # r288: PARK is ASKED in the capped branch every tick (refused by its window at 13:30, never admitted)
+    return (asked == ["GEX", "ATP"] and [f for f in funnel if f != "PARK"] == ["GEXPinButterfly", "ATPButterfly"]
             and executed == [] and admitted == sorted(FLIES))
 
 

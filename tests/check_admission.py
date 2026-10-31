@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """
-tests/check_admission.py  v5.1
+tests/check_admission.py  v5.2
+v5.2  2026-10-31  OTV5 r67 (PARC.4) — PARC LEAVES SPEC AND `ALL` (WA section 38.4): PARC is removed.
+      The operator, 2026-10-31: "On PARC, no. It was an idea. It failed. It's done." and "Yes" to removing its code. Every other row unchanged.
 v5.1  2026-10-27  OTV5 r46 (PARC.1) — PARC JOINS SPEC AND `ALL`: 11:01-11:03, cap 1, ONE try per session, by ruling (the
       operator, 2026-10-27: "Call it PARC"; "No shadow mode. We're paper. It trades tomorrow."). Restated from the ruling.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
@@ -105,7 +107,7 @@ def main():
     #    stacked — 19 positions off one opening range — was the one this
     #    checker never asked about. Added; it is not a new belief, it is the
     #    belief SPEC already held going unexercised since r51.
-    ALL = [ORB, RUNAWAY, HUNT, BREAKOUT, SWEEP, TCS, GEXFLY, ATPFLY, VOLT, ORCS, "PARK", "PARC"]   # r292: PARK was in SPEC, not here (the r78 defect again)
+    ALL = [ORB, RUNAWAY, HUNT, BREAKOUT, SWEEP, TCS, GEXFLY, ATPFLY, VOLT, ORCS, "PARK"]   # r292: PARK was in SPEC, not here (the r78 defect again)
 
     def ok(strategy, hhmm, **kw):
         return decide(Facts(strategy=strategy, now_et=hhmm, orb_established=True, **kw))
@@ -142,7 +144,6 @@ def main():
         ATPFLY:  (((13, 0), (15, 0)), 1, 1),     # r273: was 12:00 (r179: was 11:30)
         ORCS:    (((9, 45), (10, 30)), 2, None),  # r204
         "PARK":  (((11, 1), (11, 3)), 1, 1),      # r288 (PARK.1): the ask 11:01-11:02, one per session
-        "PARC":  (((11, 1), (11, 3)), 1, 1),      # OTV5 r46 (PARC.1): PARK's window, one per session
     }
     # ⚠️ r76 — CAPS RESTATED FROM THE OPERATOR'S RULING, 2026-09-21: *"With
     # rare exception, there are no blocking TRADES and no maximum number of

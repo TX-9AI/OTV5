@@ -1,4 +1,7 @@
-"""tests/check_data_capture.py — v5.3
+"""tests/check_data_capture.py — v5.4
+v5.4  2026-10-31  OTV5 r67 (PARC.4) — D4 RE-POINTED, NOT DROPPED (section 38.4): PARC (item 15) left
+      configure.sh's menu, so TCS is 15, Done is 16 and the prompt names 1-16. Data capture stays item 14;
+      properties unchanged. The operator, 2026-10-31: "On PARC, no. It was an idea. It failed. It's done." and "Yes" to removing its code.
 v5.3  2026-10-30  OTV5 r57 (TCS.LOG1) — D4 RE-POINTED, NOT DROPPED (section 38.4): TCS joined configure.sh's menu as item 16,
       so Done is 17 and the prompt names 1-17. Data capture stays item 14; properties unchanged.
 v5.2  2026-10-27  OTV5 r46 (PARC.1) — D4 RE-POINTED, NOT DROPPED (section 38.4): PARC joined configure.sh's menu as item 15,
@@ -277,8 +280,8 @@ _cdc = (re.search(r"^change_data_capture\(\) \{\n.*?^\}", _cfg, re.M | re.S) or 
 guard("D4 change_data_capture calls the ONE script for both answers (scoped to its body - r139's item 1 also re-applies managed)",
       lambda: _cdc.count('bash "$BOT_DIR/deploy/data_capture.sh" managed') == 1
       and _cdc.count('bash "$BOT_DIR/deploy/data_capture.sh" standalone') == 1)
-guard("D4 Done is 17, the prompt names 1-17, and the summary shows the mode",
-      lambda: re.search(r"^\s*17\)\s*break", _cfg, re.M) and "Select [1-17]" in _cfg
+guard("D4 Done is 16, the prompt names 1-16, and the summary shows the mode",
+      lambda: re.search(r"^\s*16\)\s*break", _cfg, re.M) and "Select [1-16]" in _cfg
       and "Data capture:   ${BOLD}$(data_capture_label)" in _cfg)
 
 # ── D5 VIX family ────────────────────────────────────────────────────────────

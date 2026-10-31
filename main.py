@@ -1,5 +1,11 @@
 """
-main.py  v5.10
+main.py  v5.11
+v5.11 2026-10-31  OTV5 r67 (PARC.4) — PARC IS NO LONGER ASKED OR EXECUTED. The operator, 2026-10-31: "On PARC, no. It was an idea. It failed. It's done." and "Yes" to removing its code.
+      Removed: the Parc import, _attempt_parc and its two calls (the normal dispatch and the capped branch),
+      _credit_window_end's PARC window, _STRUCTURE_BY_NAME["PARC"], the Service line's " · parc=<mode>", and
+      _execute_condor_leg's _is_parc arms (each now its pre-r46 form: size_for("vertical"), direction "neutral",
+      the stop_premium / stop_pct of TCS-or-else, is_condor_leg 1, no extra PARK signal columns, the stop/nickel
+      alert). Every other strategy's path is unchanged. Gate tests/check_no_parc.py.
 v5.10 2026-10-30  OTV5 r61 (ORB.10) — THE RETIRED ORB NO LONGER HOLDS THE ENGINE OPEN, SO RUNAWAY CAN SEE THE REVERSAL.
       ORBStrategy is DORMANT (retired, OTV4TEST r187) and the ORB engine runs only for RunawayContinuation, which reads
       its direction off the engine state. The engine's only release from OPEN_* is notify_position_closed (an ORB close,
@@ -1725,8 +1731,6 @@ _atp_bfly_strategy = ATPButterflyStrategy()
 _liquidity_hunt = LiquidityHunt()                                      # OTV4TEST r12
 from strategy.park import Park as _Park                                 # r288 (PARK.1)
 _park_strategy = _Park()
-from strategy.parc import Parc as _Parc                                 # OTV5 r46 (PARC.1)
-_parc_strategy = _Parc()
 from strategy.breakout import Breakout as _BreakoutStrategy            # OTV4TEST r51
 _breakout = _BreakoutStrategy()                                        # BRK.1
 _iron_condor_strategy = IronCondorStrategy()
@@ -2835,9 +2839,6 @@ def _credit_window_end(signal) -> tuple:
         # OTV4TEST r9 (HYG.5): the PLAN owns the window; main.py reads it there
         from strategy import tcs_plan as _tp
         return _tp.window_end()
-    if name == "PARC":                                          # OTV5 r46 (PARC.1): its own window
-        from config import ENTRY_WINDOWS as _EW
-        return tuple(_EW["PARC"][1])
     if name == "SweepCreditSpread":
         try:
             from strategy import sweep_plan as _sp          # r9: the plan's window (a tuple)
@@ -3158,7 +3159,6 @@ def _execute_condor_leg(signal: "OptionsSignal", state: BotState,
     spread_width = abs(short_contract.strike - long_contract.strike)
     # r204 — ORCS: its own name, PAPER ONLY until a live ruling. r230: the condor leg's stop and exits.
     _is_orcs = (getattr(signal, "strategy_name", "") == "OpeningRangeCreditSpread")
-    _is_parc = (getattr(signal, "strategy_name", "") == "PARC")   # OTV5 r46 (PARC.1)
     if _is_orcs and not state.paper_trading:
         logger.warning("[orcs] LIVE entry REFUSED - ORCS is paper-only until the operator rules it live")
         return
@@ -3171,16 +3171,8 @@ def _execute_condor_leg(signal: "OptionsSignal", state: BotState,
     # to the old positional call), and writing `grade="B"` here trips
     # check_conviction_removed S4 — "no code assigns an A or B grade". The
     # grading system is retired; this call must not look like it revives it.
-    if _is_parc:
-        # OTV5 r46 (PARC.1) — the Breakout ramp on the credit the ladder books (paper: paper_fill_credit of the mark).
-        from execution.limit_ladder import paper_fill_credit as _pfc
-        sizing = get_risk_manager().size_for(
-            "parc", spread_width=spread_width,
-            credit=(_pfc(net_credit) if state.paper_trading else net_credit),
-            value_at_stop=getattr(signal, "parc_value_at_stop", None))
-    else:
-        sizing = get_risk_manager().size_for("vertical", spread_width=spread_width,
-                                             credit=net_credit)
+    sizing = get_risk_manager().size_for("vertical", spread_width=spread_width,
+                                         credit=net_credit)
     if not sizing.allowed:
         logger.info(f"Condor leg not sized: {sizing.reject_reason}")
         return
@@ -3287,7 +3279,6 @@ def _execute_condor_leg(signal: "OptionsSignal", state: BotState,
         trade_id         = str(uuid.uuid4()),
         symbol           = INSTRUMENT,
         strategy         = ("TrendCreditSpread" if _is_tcs
-                            else "PARC" if _is_parc                       # OTV5 r46 (PARC.1)
                             else "OpeningRangeCreditSpread" if _is_orcs
                             else "SweepCreditSpread" if _is_sweep
                             else "IronCondorStrategy"),
@@ -3301,7 +3292,7 @@ def _execute_condor_leg(signal: "OptionsSignal", state: BotState,
         # and it was never persisted.
         pool_price       = float(getattr(signal, "pool_price", 0.0) or 0.0),
         setup_score      = delta_score,          # street-sign: |short-strike delta|
-        direction        = (signal.direction if _is_parc else "neutral"),   # r46: PARC has a side of the tape
+        direction        = "neutral",
         option_side      = signal.option_side,
         is_butterfly     = 0,
         strike           = short_contract.strike,
@@ -3318,7 +3309,7 @@ def _execute_condor_leg(signal: "OptionsSignal", state: BotState,
         # TO EXPIRY, UNMANAGED, and its only exits are a breach of the bound or
         # the 15:45 close. Writing a stop here is what made a $0.06 credit
         # closeable on one cent of widening.
-        stop_premium     = (0.0 if (_is_tcs or _is_parc)   # r230: an ORCS leg takes the condor leg's stop; r46: PARC none
+        stop_premium     = (0.0 if _is_tcs                 # r230: an ORCS leg takes the condor leg's stop
                             else _sweep_stop_premium(fill_credit, spread_width, _stop_pct)
                             if _is_sweep
                             else fill_credit * (1 + _stop_pct)),
@@ -3383,7 +3374,7 @@ def _execute_condor_leg(signal: "OptionsSignal", state: BotState,
         # v6.9 (AUDIT F6): a TC.6 record must not claim condor-leg identity —
         # is_condor_leg is what _condor_sibling_open and condor_roll key on,
         # and condor_leg_num=2 on every TC.6 row was data pollution.
-        is_condor_leg    = (0 if _is_parc else 1),   # v4.3: all credit verticals are condor-eligible; r46: PARC pairs with nothing
+        is_condor_leg    = 1,   # v4.3: all credit verticals are condor-eligible
         # 🔴 r106 — ALWAYS 0. Operator, 2026-08-24: "There is no condor implied,
         # it is merely PERMITTED." Leg 1 / leg 2 is plan vocabulary from the
         # state machine r90 removed — it numbered verticals by FILL ORDER as if
@@ -3402,13 +3393,6 @@ def _execute_condor_leg(signal: "OptionsSignal", state: BotState,
         relaxed_entry    = int(getattr(signal, 'relaxed_entry', 0) or 0),   # AUDIT F4 — same drop as entry_engine
         status           = "open",
     )
-    if _is_parc:
-        # OTV5 r46 (PARC.1) — the signal columns PARK writes (entry_engine._record_kwargs and its record) that this
-        # door does not, so a PARC row drops nothing a PARK row carries.
-        record.update(underlying_target=float(getattr(signal, "underlying_target", 0.0) or 0.0),
-                      is_fed_day=bool(getattr(signal, "is_fed_day", False)),
-                      notes=str(getattr(signal, "notes", "") or ""),
-                      trail_activation=0.0, is_liquidity_hunt=0)
     if _shadow:
         # ── r57 (TCS.LOG1) — THE SHADOW WRITE: everything an executed trade writes, to the SHADOW store. Not
         # trades.db, not note_entry_risk, not the real position manager, no remainder, no Telegram alert.
@@ -3435,7 +3419,7 @@ def _execute_condor_leg(signal: "OptionsSignal", state: BotState,
     # room to run toward either short strike. ctx is optional so a caller that
     # cannot supply one degrades to no capture rather than to a raise.
     if ctx is not None:
-        _capture_entry_snapshot(ctx, record, (signal.direction if _is_parc else "neutral"))
+        _capture_entry_snapshot(ctx, record, "neutral")
         _capture_fire_snapshot(ctx, record)
         _capture_entry_contract(ctx, record)          # v5.5 (N.9)
     get_position_manager(state.paper_trading).add_condor_leg(record)
@@ -3452,7 +3436,7 @@ def _execute_condor_leg(signal: "OptionsSignal", state: BotState,
                 long_strike=float(long_contract.strike),
                 side=signal.option_side, strategy=record["strategy"],
                 requested=_req_contracts, remaining=_partial_remaining,
-                stop_pct=(0.0 if (_is_tcs or _is_parc) else _stop_pct),
+                stop_pct=(0.0 if _is_tcs else _stop_pct),
                 window_end_et=_credit_window_end(signal)))
         except Exception as _rexc:                              # noqa: BLE001
             logger.error("[remainder] could not register the unfilled %d: %s",
@@ -3467,9 +3451,6 @@ def _execute_condor_leg(signal: "OptionsSignal", state: BotState,
     # caught the last identity bug.
     _exit_desc = (f"exit=breach@{getattr(signal, 'underlying_stop', 0.0):.2f} or 15:45"
                   if _is_tcs else
-                  f"exit=structure@{getattr(signal, 'underlying_stop', 0.0):.2f} | "
-                  f"nickel=${CONDOR_NICKEL_CLOSE:.2f} | EOD.1 (size {sizing.rule})"
-                  if _is_parc else
                   f"stop=${fill_credit * (1 + _stop_pct):.2f} ({_stop_pct:.0%}) | "
                   f"nickel=${CONDOR_NICKEL_CLOSE:.2f}")
     get_alert_manager()._send(
@@ -4269,8 +4250,6 @@ _STRUCTURE_BY_NAME = {
     "VOLT":                 "long_debit",
     # r288 (PARK.1) — a long single option bought at 11:01; declared, not defaulted.
     "PARK":                 "long_debit",
-    # OTV5 r46 (PARC.1) — a credit vertical sold at 11:01; declared, not defaulted.
-    "PARC":                 "vertical",
 }
 
 
@@ -4603,7 +4582,6 @@ def attempt_new_entry(ctx: dict, ms: MarketState, state: BotState):
                            "unavailable — nothing is asked", gate="catastrophic_cap")
             return
         _attempt_park(ctx, ms, state)                    # r288 (PARK.1): cap-exempt, its own budget
-        _attempt_parc(ctx, ms, state)                    # OTV5 r46 (PARC.1): cap-exempt, its own budget
         _attempt_butterfly(ctx, ms, state, additive=True)
         return
 
@@ -5063,7 +5041,6 @@ def attempt_new_entry(ctx: dict, ms: MarketState, state: BotState):
     # ⚠️ ALWAYS ADDITIVE NOW: the butterfly never took a slot (r161) and after
     # r43 there is no slot left to take.
     _attempt_park(ctx, ms, state, chain=chain)          # r288 (PARK.1)
-    _attempt_parc(ctx, ms, state, chain=chain)          # OTV5 r46 (PARC.1): beside PARK, never instead of it
     _attempt_butterfly(ctx, ms, state, additive=True)
 
 
@@ -5343,38 +5320,6 @@ def _attempt_park(ctx, ms, state, chain=None) -> None:
                          ), ctx)
     if sig is not None:
         _execute_entry_signal(sig, ctx, ms, state, None, additive=True)
-
-
-def _attempt_parc(ctx, ms, state, chain=None) -> None:
-    """OTV5 r46 (PARC.1) — ask PARC (its plan is dormant outside 11:01-11:03) and, on a fire, execute it through the
-    credit-vertical door (_execute_condor_leg: paper_fill_credit on paper, the entry ladder live). Called right after
-    _attempt_park from the normal dispatch AND the capped branch: PARC is cap-exempt (admission) and its P&L is outside
-    the cap (config.CAP_EXCLUDED_STRATEGIES). One per session on this box, DB-backed (fails closed).
-    OT_PARC=0: never asked (plan_state DORMANT). OT_PARC=log: asked; its TAKE is LOG-ONLY and the door refuses it."""
-    from config import PARC_MODE
-    if PARC_MODE == "off":
-        return
-    if _one_per_session_used("PARC"):
-        _plan_skip("PARC", "one per session on this box — already traded today", gate="tries_per_session")
-        return
-    _ch, _hhmm = chain, ""
-    try:
-        _t = now_et()
-        _hhmm = _t.strftime("%H:%M")
-        if _ch is None and (11, 0) <= (_t.hour, _t.minute) < (11, 5):   # the capped branch has no chain
-            _ch = ctx.get("chain") or get_chain_fetcher().fetch_chain()
-    except Exception:                                   # noqa: BLE001
-        _ch = chain
-    sig = _safe_strategy("PARC",
-                         lambda: _parc_strategy.generate_signal(
-                             price_now   = ctx.get("price"),
-                             now_et      = _hhmm,
-                             chain       = _ch,
-                             prior_close = (ctx.get("gap") or {}).get("prior_close"),
-                             paper       = bool(getattr(state, "paper_trading", True)),
-                         ), ctx)
-    if sig is not None:
-        _execute_condor_leg(sig, state, ctx)
 
 
 def _attempt_butterfly(ctx, ms, state, *, additive: bool) -> None:
@@ -5776,10 +5721,6 @@ def _banner_dials() -> str:
     brk += f" · park={PARK_MODE}"                                          # r288 (PARK.1)
     if PARK_ENV_REFUSED:
         brk += f" (OT_PARK={PARK_ENV_REFUSED!r} REFUSED)"
-    from config import PARC_MODE, PARC_ENV_REFUSED                         # OTV5 r46 (PARC.1)
-    brk += f" · parc={PARC_MODE}"
-    if PARC_ENV_REFUSED:
-        brk += f" (OT_PARC={PARC_ENV_REFUSED!r} REFUSED)"
     # r293 (DIAL.2) — the three dials whose refusal was recorded by config and read by NOTHING: a typo on
     # OT_HUNT_STOP5M moved every Hunt back to the 1m boundary with no line anywhere (audit 10-18 G2).
     from config import (HUNT_STOP5M_MODE, HUNT_STOP5M_ENV_REFUSED, BRK_REARM_MODE, BRK_REARM_ENV_REFUSED,

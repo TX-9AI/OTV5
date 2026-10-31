@@ -1,5 +1,9 @@
 """
-execution/position_manager.py  v5.28
+execution/position_manager.py  v5.29
+v5.29 2026-10-31  OTV5 r67 (PARC.4) — PARC LEAVES THE ADMISSION TABLE (its constant and its rule).
+      The operator, 2026-10-31: "On PARC, no. It was an idea. It failed. It's done." and "Yes" to removing its code. _execute_exit's credit_signed keeps
+      structure.is_credit_vertical(record) (r46): it is structural, and every row it signs is a credit vertical.
+      Gate tests/check_no_parc.py.
 v5.28 2026-10-30  OTV5 r57 (TCS.LOG1) — THE SHADOW SEAM. Two hooks, _exit_engine() (get_exit_engine, as before) and
       _management() (get_management_plan, as before), so execution/shadow_book.ShadowPositionManager manages a SHADOW
       trade through THIS _manage_one / flatten_all / _execute_exit with its own exit engine, store and management rows.
@@ -402,7 +406,6 @@ GEXFLY = "GEXPinButterfly"
 ATPFLY = "ATPButterfly"
 ORCS = "OpeningRangeCreditSpread"     # r204
 PARK = "PARK"                         # r288 (PARK.1): the 11:00 first-hour continuation
-PARC = "PARC"                         # OTV5 r46 (PARC.1): PARK's entry, a credit spread on the safer side
 # r72 — VOLT (VOLume Trade), THE CONTROL ARM. Two gates and nothing else, in
 # the same window as the morning four, blocking nothing and blocked by nothing.
 # Its purpose is to make the OTHER strategies' gates measurable: if VOLT keeps
@@ -536,8 +539,6 @@ _DEFAULT_RULES = {
     # r288 (PARK.1) — one per session, and its own budget: the cap neither refuses it nor counts its P&L
     # (config.CAP_EXCLUDED_STRATEGIES).
     PARK:    AdmissionRule(config.ENTRY_WINDOWS[PARK], max_open_of_type=1, max_tries_per_session=1, cap_exempt=True),
-    # OTV5 r46 (PARC.1) — PARK's rule: one per session, its own budget (CAP_EXCLUDED_STRATEGIES), cap-exempt.
-    PARC:    AdmissionRule(config.ENTRY_WINDOWS[PARC], max_open_of_type=1, max_tries_per_session=1, cap_exempt=True),
 }
 
 
@@ -1527,7 +1528,7 @@ class PositionManager:
         credit_signed = (bool(record.get("is_condor_leg"))
                          or record.get("strategy") == "IronCondorStrategy"
                          or bool(record.get("is_short_position"))
-                         or _is_credit_vertical(record))          # r46 (PARC.1): a credit vertical by structure
+                         or _is_credit_vertical(record))          # r46: a credit vertical by structure
         if credit_signed:
             pnl_per_share = entry_prem - fill_price
         else:

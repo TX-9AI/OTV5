@@ -1,5 +1,8 @@
 """
-strategy/park_plan.py  v5.2
+strategy/park_plan.py  v5.3
+v5.3  2026-10-31  OTV5 r67 (PARC.4) — WORDS ONLY: read_first_hour's docstring and one comment no
+      longer say PARC shares the read (PARC is removed; it was the only other caller). No code changed: PARK's
+      decisions and rows are identical (tests/check_no_parc.py N5). The operator, 2026-10-31: "On PARC, no. It was an idea. It failed. It's done." and "Yes" to removing its code.
 v5.2  2026-10-30  OTV5 r60 (PARK.4) — PARK BUYS AT THE MARK, NOT THE ASK. The operator, 2026-10-30, on CVX's PARK
       (235C bought at the ask 1.56 on a 0.97/1.56 quote, mark 1.265, -$657 booked, -$480 at the mark): "That's not my
       spec… you know park is a borrowed trade. To match my spec, we ladder in from aggressive to mark & never worse
@@ -108,7 +111,7 @@ def first_hour_bars(symbol: str, day):
 
 
 def read_first_hour(t, cond, *, symbol: str, day, prior_close=None):
-    """THE FIRST-HOUR READ (PARK.1), shared by PARK and PARC (OTV5 r46). Reads the store, writes the plan checks
+    """THE FIRST-HOUR READ (PARK.1), factored out of ParkPlan.prepare at OTV5 r46. Reads the store, writes the plan checks
     in PARK's order on tick `t`, asks `cond` for first_hour_move and gate_g, and returns {"move_pct", "spot",
     "direction", "gap"} - or None when the tick STARVED (it has already said so on `t`). Moved verbatim from
     ParkPlan.prepare: the starved inputs, the prior-close source note, the move and the direction rule
@@ -247,7 +250,7 @@ class ParkPlan:
             return prep
         prep.cond("entry_window", None, True)
 
-        # ── the first hour, from the store (r46: one read, shared with PARC) ──
+        # ── the first hour, from the store (r46: one read) ──
         if day is None:
             from utils.time_utils import now_et as _now
             day = _now().date()

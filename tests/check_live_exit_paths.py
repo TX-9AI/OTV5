@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """
-tests/check_live_exit_paths.py  v5.0
+tests/check_live_exit_paths.py  v5.1
+v5.1  2026-10-31  OTV5 r67 (PARC.4) — L1c's credit vertical is a SweepCreditSpread lone vertical
+      (structure CONDOR_LEG, is_condor_leg 0), not a PARC row, and the L4 INFO line is gone: PARC is removed.
+      The operator, 2026-10-31: "On PARC, no. It was an idea. It failed. It's done." and "Yes" to removing its code. Every property unchanged.
 v5.0  2026-10-28  OTV5 r48 (LIVE.7, PARC.1 nickel) — THE LIVE EXIT PATH'S THREE EDGES FROM THE 2026-10-27 ORDER-PATH
       AUDIT, DRIVEN THROUGH THE REAL ExitEngine AND PositionManager WITH A STUB BROKER.
       (b) position_manager.flatten_all with no live mark handed the ENTRY premium on as the mark: live, a 15:50 close
@@ -25,7 +28,6 @@ v5.0  2026-10-28  OTV5 r48 (LIVE.7, PARC.1 nickel) — THE LIVE EXIT PATH'S THRE
   L3d LIVE: the fly's 15:45 resting best case and 15:55 one-tick cross are unchanged
   L5a PAPER: the fly stop books the mark; L5b PAPER: a stale stash changes nothing, the single books the mark;
       L5c PAPER: the no-mark flatten's ledger P&L is $0 at entry (as on base)
-  L4  NOT BUILT: PARC's live nickel resting from entry (no standing exit-order machinery exists; BACKLOG PARC.1)
 
 Born red on b78fc8f at L1a, L1c, L2a, L2b, L3b. Run both ways (base vs fix).
 Run:  python3 tests/check_live_exit_paths.py   (needs the venv's tastytrade)
@@ -176,7 +178,7 @@ def main():
 
     clock["t"] = at(15, 47)
     acct["a"] = _Acct(); LR.reset_all()
-    r1c = TL.make_record(trade_id="L1c-vert", symbol="QQQ", strategy="PARC", setup_type="parc",
+    r1c = TL.make_record(trade_id="L1c-vert", symbol="QQQ", strategy="SweepCreditSpread", setup_type="sweep_credit_spread",
                          direction="long", option_side="put", contracts=3, entry_premium=0.60,
                          total_cost=120.0, max_loss=120.0, short_strike=699.0, long_strike=698.0,
                          short_symbol="QQQ   261028P00699000", long_symbol="QQQ   261028P00698000",
@@ -332,7 +334,6 @@ def main():
     check("L5b PAPER stale stash: the single books the mark it is handed (2.00)",
           f5b.confirmed and abs(f5b.fill_price - 2.00) < 1e-9, f"fill={f5b.fill_price}")
 
-    print("  INFO  L4 NOT BUILT: PARC's live nickel resting from entry - no standing exit-order machinery to reuse")
     shutil.rmtree(_s, ignore_errors=True)
     print(f"\n{'ALL PASS' if not FAILED else 'FAILED: ' + ', '.join(FAILED)}")
     return 1 if FAILED else 0

@@ -1,6 +1,11 @@
 #!/usr/bin/env python3
 """
-tests/check_park_late_shadow.py  v5.0
+tests/check_park_late_shadow.py  v5.1
+v5.1  2026-10-31  OTV5 r67 (PARC.4) — B1's _evaluate_route pin RE-POINTED (WA section 38.4): 83462494db328bc4 ->
+      ad64d87edd0b44fa. The function's only change is the removed `elif strategy == "PARC"` arm (4 lines: the test,
+      two comment lines, the _evaluate_parc call), which no PARK record can reach; _evaluate_park, _park_cf and
+      _decay_read keep their 0e4d240 hashes and D1 (decisions ON vs OFF) is unchanged. PARC is removed. The operator,
+      2026-10-31: "On PARC, no. It was an idea. It failed. It's done." and "Yes" to removing its code.
 v5.0  2026-10-31  OTV5 r63 (PARK.LATE1) — THE PARK LATE-DAY PEAK SHADOW. RECORD ONLY: IT NEVER CLOSES OR CHANGES A PARK TRADE.
       The operator, 2026-10-30: "Giveback: $18,764 of $43,258 peak open profit; PARK accounts for $13,780 of it - this is
       disgusting ... We have to figure this out."; 2026-10-31, on the study's log-only shadow: "yes to all of the
@@ -163,7 +168,7 @@ check("C1 config: on / (14, 30) / 0.50 / 0.20 by default; OT_PARK_LATE_SHADOW=0 
 
 # ── B byte-for-byte ──────────────────────────────────────────────────────────────────────────────────
 PINNED = {"_evaluate_park": "11f87bb5bfe16b82", "_park_cf": "af8d04371db47fb8",
-          "_decay_read": "e2379a457c018f91", "_evaluate_route": "83462494db328bc4"}       # 0e4d240
+          "_decay_read": "e2379a457c018f91", "_evaluate_route": "ad64d87edd0b44fa"}       # 0e4d240; route: r67 (PARC arm removed)
 got = {n: h16(getattr(XE.ExitEngine, n)) for n in PINNED}
 check("B1 PARK's exits, the decay read and the route are byte-for-byte 0e4d240's; PARK stays decay-exempt; PARK knobs",
       got == PINNED and tuple(config.DECAY_STOP_EXEMPT) == ("RunawayContinuation", "PARK")

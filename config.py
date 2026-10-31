@@ -1,5 +1,10 @@
 """
-config.py  v5.8
+config.py  v5.9
+v5.9  2026-10-31  OTV5 r67 (PARC.4) — PARC IS REMOVED. The operator, 2026-10-31: "On PARC, no. It was an idea. It failed. It's done." and "Yes" to removing its code.
+      PARC was a log-only plan (paused at r50, never an active strategy): OT_PARC, PARC_MODE, PARC_ENV_REFUSED,
+      PARC_MIN_CREDIT and ENTRY_WINDOWS["PARC"] are gone; CAP_EXCLUDED_STRATEGIES is ("PARK",) again (no PARC row
+      was ever booked, so the cap's P&L is unchanged). Dead-code removal under the freeze, by the operator's yes.
+      Gate tests/check_no_parc.py.
 v5.8  2026-10-31  OTV5 r63 (PARK.LATE1) — THE PARK LATE-DAY PEAK SHADOW'S KNOBS. RECORD ONLY: NO PARK EXIT CHANGES. The operator,
       2026-10-30, on PARK's giveback ($13,780 of $43,258 peak open profit): "this is disgusting ... We have to figure this
       out."; 2026-10-31, on the study's log-only shadow: "yes to all of the prepared solutions". PARK_LATE_SHADOW
@@ -1082,27 +1087,7 @@ PARK_LATE_X = float(os.environ.get("OT_PARK_LATE_X", "0.20"))                   
 # a PARK close never counts toward the cap's realized P&L, and the cap never refuses
 # PARK (position_manager: cap_exempt). Sizing is the box's own RISK_PER_TRADE_USD,
 # flat: floor(risk / (mark x 100)) (r60 PARK.4: the mark, was the ask).
-CAP_EXCLUDED_STRATEGIES = ("PARK", "PARC")     # r46 (PARC.1): PARC has its own budget too
-# ── OTV5 r46 (PARC.1) — PARC: PARK'S ENTRY, A CREDIT SPREAD ON THE SAFER SIDE ──────
-# The operator, 2026-10-27: "under identical entry conditions the PARK trade sells a
-# credit spread ATM nearest the strike on the safer side ... Call it PARC"; "No shadow
-# mode. We're paper. It trades tomorrow." The read is PARK's (PARK_MOVE_PCT, the bars,
-# GATE-G); the spread, its 5m structure stop, the Breakout ramp and the exits are
-# strategy/parc.py's. OT_PARC 1 | log | 0 (also trade/active/on, off/dormant), UNSET =
-# 1 (trade). log: the plan runs and a would-be fire is recorded, never ordered; 0: not
-# asked. An unknown value keeps the default (trade) and is named (PSTATE.1's rule).
-PARC_ENV_REFUSED = ""
-_pc_raw = os.environ.get("OT_PARC", "log").strip().lower()   # r50 (PARC.3): unset = log - paused until a better stop
-if _pc_raw in ("1", "trade", "active", "on"):
-    PARC_MODE = "trade"
-elif _pc_raw in ("log", ""):
-    PARC_MODE = "log"
-elif _pc_raw in ("0", "off", "dormant"):
-    PARC_MODE = "off"
-else:
-    PARC_MODE = "log"                  # r50: an unknown value keeps the default, now log
-    PARC_ENV_REFUSED = _pc_raw
-PARC_MIN_CREDIT = 0.20               # = 4 x CONDOR_NICKEL_CLOSE (0.05): a thinner credit is no trade
+CAP_EXCLUDED_STRATEGIES = ("PARK",)           # r67 (PARC.4): PARC removed (r46 had added it)
 # ── r288 (BRK.13) — BREAKOUT'S DELTA FLOOR ──────────────────────────────────────
 # trade | log | off, UNSET = trade (the operator, 2026-10-17 19:12 ET: "A is fine", to
 # "trade it on QQQ-TEST with a counterfactual"). Breakout exits when |delta| <=
@@ -1204,7 +1189,6 @@ ENTRY_WINDOWS = {
     "ATPButterfly":         ((13, 0),  (15, 0)),   # r273 (BFLY.10): was 12:00. r179: was 11:30 here while the plan itself stayed dormant until 12:00; the operator, 2026-09-30: "12:00 is fine"
     "OpeningRangeCreditSpread": ((9, 45), (10, 30)),  # r204 (ORCS): 09:45 beat 09:36; positive to 10:30, gone from 11:00 (X6/X7)
     "PARK":                 ((11, 1),  (11, 3)),   # r288 (PARK.1): 11:01-11:02 after the 11:00 bar closes; r60 (PARK.4): at the mark, laddered live
-    "PARC":                 ((11, 1),  (11, 3)),   # OTV5 r46 (PARC.1): PARK's window, the credit side
 }
 
 

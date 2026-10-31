@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """
-tests/check_plan_states.py  v5.4
+tests/check_plan_states.py  v5.5
+v5.5  2026-10-31  OTV5 r67 (PARC.4) — S1 / S3 RE-POINTED (WA section 38.4): PARC is removed, so the
+      ruled roster's one LOG plan is TrendCreditSpread and S3 drops PARC's two cases; OT_PARC leaves SWITCHES. The operator, 2026-10-31: "On PARC, no. It was an idea. It failed. It's done." and "Yes" to removing its code.
+      Every other state is unchanged.
 v5.4  2026-10-30  OTV5 r57 (TCS.LOG1) — S1 RE-POINTED (WA section 38.4): TrendCreditSpread's default is now LOG (the operator:
       "Can you reactivate TCS Monday as 'log only'? But do not trade it."), so the ruled roster names PARC and TCS as the
       LOG plans; S3 adds OT_TCS_ACTIVE=0 -> dormant and =log -> log. Every other state is unchanged.
@@ -74,7 +77,7 @@ for _k, _v in (("OT_TRADES_DB", "t.db"), ("OT_DERIVED_DB", "d.db"), ("OT_FEED_DB
     os.environ[_k] = os.path.join(_TD, _v)
 os.environ.setdefault("OT_INSTRUMENT", "QQQ")
 SWITCHES = ("OT_VOLT", "OT_ORB_TRADE", "OT_ATP_BUTTERFLY", "OT_ORCS", "OT_SWEEP_CS", "OT_TCS_ACTIVE",
-            "OT_GEX_BUTTERFLY", "OT_PARK", "OT_PARC", "OT_RUNAWAY", "OT_BREAKOUT", "OT_HUNT")
+            "OT_GEX_BUTTERFLY", "OT_PARK", "OT_RUNAWAY", "OT_BREAKOUT", "OT_HUNT")
 for _k in SWITCHES:
     os.environ.pop(_k, None)
 ET = ZoneInfo("America/New_York")
@@ -140,7 +143,7 @@ def main():
     # ── S1-S3: the states, read in fresh interpreters (config reads several switches at import) ──
     ruled_active = ["Breakout", "CondorManagement", "CreditRoll", "GEXPinButterfly", "LiquidityHunt",
                     "PARK", "RunawayContinuation"]
-    ruled_log = ["PARC", "TrendCreditSpread"]              # r50 (PARC.3): paused; r57 (TCS.LOG1): a shadow trade
+    ruled_log = ["TrendCreditSpread"]                      # r57 (TCS.LOG1): a shadow trade (r67: PARC removed)
     ruled_dormant = ["ATPButterfly", "IronCondorStrategy", "ORBStrategy", "OpeningRangeCreditSpread",
                      "SweepCreditSpread", "VOLT"]
     st = fresh("import json\nfrom strategy import plan_state as S\n"
@@ -148,7 +151,7 @@ def main():
     act = sorted(k for k, v in st.items() if v == "active")
     dor = sorted(k for k, v in st.items() if v == "dormant")
     lg = sorted(k for k, v in st.items() if v == "log")
-    check("S1 defaults = today's roster (active / dormant as ruled; PARC and TCS the LOG plans, r50 / r57)",
+    check("S1 defaults = today's roster (active / dormant as ruled; TCS the LOG plan, r57)",
           act == ruled_active and dor == ruled_dormant and lg == ruled_log, f"{st}")
 
     try:
@@ -167,7 +170,6 @@ def main():
              ("GEXPinButterfly", {"OT_GEX_BUTTERFLY": "0"}, "dormant"),
              ("GEXPinButterfly", {"OT_GEX_BUTTERFLY": "log"}, "log"),
              ("PARK", {"OT_PARK": "off"}, "dormant"), ("PARK", {"OT_PARK": "log"}, "log"),
-             ("PARC", {"OT_PARC": "0"}, "dormant"), ("PARC", {"OT_PARC": "log"}, "log"),
              ("RunawayContinuation", {"OT_RUNAWAY": "off"}, "dormant"),
              ("RunawayContinuation", {"OT_RUNAWAY": "log"}, "log"),
              ("OpeningRangeCreditSpread", {"OT_ORCS": "1"}, "active"),

@@ -1,5 +1,7 @@
 # TRADES — the specs
 
+**`TRADES.md` v5.5 · 2026-10-31 · OTV5 r67 (PARC.4) — PARC is REMOVED: its roster row and section 10 are gone with its code. The operator: "On PARC, no. It was an idea. It failed. It's done." and "Yes" to removing its code.**
+
 **`TRADES.md` v5.4 · 2026-10-30 · OTV5 r60 (PARK.4) — PARK is bought AT THE MARK, not the ask: paper books the mark, live ladders in from the bid to the mark and never posts above it, sized on the mark. The operator: "That's not my spec… you know park is a borrowed trade. To match my spec, we ladder in from aggressive to mark & never worse than mark".**
 
 **`TRADES.md` v5.3 · 2026-10-30 · OTV5 r57 (TCS.LOG1) — TCS is reactivated as LOG ONLY: OT_TCS_ACTIVE unset = a SHADOW trade (the real entry and exits at the paper fill, booked to shadow_trades.db, never ordered). The operator: "Can you reactivate TCS Monday as 'log only'? But do not trade it." then "Make sure TCS logs everything an executable trade logs."**
@@ -37,7 +39,6 @@ is its `docs/PLAN_SPEC.md` section.
 | Sweep credit spread | `SweepCreditSpread` | OFF | `OT_SWEEP_CS` | 09:35-15:40 | PLAN_SPEC §31 |
 | Trend credit spread | `TrendCreditSpread` | OFF | `OT_TCS_ACTIVE` | 11:31-15:40 | PLAN_SPEC §34; LOG since r57: unset = `log`, a SHADOW trade (execution/shadow_book.py, never ordered); `1` trades it, `0` stops it; configure.sh item 16 |
 | PARK | `PARK` | ON | none (`OT_PARK=log` records it, `off` stops it) | 11:01-11:03 | section 9 below |
-| PARC | `PARC` | LOG (paused, r50) | `OT_PARC` (`1` trades it, `log` records it - the default since r50, `0` stops it; configure.sh item 15) | 11:01-11:03 | section 10 below |
 
 A window's end is exclusive: 10:30 means the last entry is 10:29. A switch is ACTIVE at
 `1` or `active` (r303 below). ORCS is RETIRED (r249, the operator 2026-10-04: "Retire it on this repo"; PLAN_SPEC §41.13) - OT_ORCS=1 restores it, PAPER ONLY (a live box refuses it); since r303 its plan is DORMANT with it and records nothing (the operator, 2026-10-19: "1. Yes"). The ORB trade is retired but
@@ -817,40 +818,6 @@ holds); the close at 15:45. No premium stop, no trail. Every exit writes
 +10,550 at $1,050 (+1,590 without the fit week); SPX 39 days n14 +13,320 at $2,500. PARK.X (picks
 sha 85dca420): the delta floor +11,786 on QQQ, +16,370 on SPX, every winner kept; take-profit and
 time exits cut the big days. Small n: the book rests on two or three days a month.
-
-## 10. PARC — `parc.py` (the spec) + `parc_plan.py` (the plan)
-
-**OTV5 r46 (PARC.1), 2026-10-27.** PARK's entry, sold as a credit spread on the safer side. The operator:
-*"under identical entry conditions the PARK trade sells a credit spread ATM nearest the strike on the safer side
-(1st mark below the current price for a long: put spread, or 1st mark above current price for a short: call spread)
-... adopt the same scaling model we use for breakout, meaning the stop distance will determine our position size. Get
-rid of the delta stop. This will be a hold to 1550 or stop on structure ... also add a nickel close"*; *"Call it
-PARC"*; *"I want 1050 to be the floor & use the same ramp in configure.sh (most are set to $2500)"*; *"No shadow mode.
-We're paper. It trades tomorrow."*; *"I also want to make sure it uses the ladder entry & exit."*
-
-**Entry = PARK's, read by PARK's code** (`park_plan.read_first_hour`): the first hour moved >= 0.20%, its sign the
-direction, GATE-G, 11:01-11:03, once per session, its own budget (cap-exempt, `CAP_EXCLUDED_STRATEGIES`). It runs
-BESIDE PARK: both may fire the same minute.
-
-**The spread**, today's chain: a LONG sells the first listed put strictly below the 11:00 1m close and buys the next
-put below (bull put); a SHORT sells the first call strictly above and buys the next call above (bear call). Both legs
-two-sided. **The credit** is the credit-vertical ladder's (`main._execute_condor_leg`): paper books
-`limit_ladder.paper_fill_credit` of the mark credit (short mid - long mid), live walks the entry ladder toward it.
-Minimum credit 0.20 (4 x the nickel) on the credit the ladder books; less is no trade.
-
-**The structure stop** is Breakout's 5m swing (`breakout_plan.swing_5m_stop`, BRK.11): the last 3 closed 5m bars that
-ended by 11:01 - a long's lowest low below the 11:00 close, a short's highest high above it. No swing behind the
-price, no trade.
-
-**Size** is Breakout's ramp (`risk_manager._size_parc`, rule `parc_ramp`): per spread max loss = (width - credit) x
-100 and the loss at the stop (the spread priced at the stop, at the legs' IV and the real time to expiry, capped at
-the max loss; no IV -> the max loss); contracts = max(1, min(floor(OT_RISK_USD / loss at stop), floor(OT_ORB_BUDGET_USD
-/ max loss))); one spread over the top refuses.
-
-**Exits, first match wins (`exit_engine._evaluate_parc`):** the structure stop (a touch through the swing, Breakout's
-rule); the nickel close (bought back at 0.05 when it can be); else EOD.1 like every short-leg structure - the 15:45
-resting best case, the 15:55 cross. No delta exit, no lock, no premium stop, no trail. Paper books the structure stop
-at the mark, the nickel at 0.05, the end of day at the cross (EOD.1's paper rule).
 
 ## Not specced, deliberately
 

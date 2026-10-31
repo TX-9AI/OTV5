@@ -1,5 +1,9 @@
 """
-execution/exit_engine.py  v5.12
+execution/exit_engine.py  v5.13
+v5.13 2026-10-31  OTV5 r67 (PARC.4) — PARC'S EXITS ARE REMOVED: evaluate()'s strategy "PARC" route,
+      _evaluate_parc, _parc_nickel and its two uses (paper place_exit_order's nickel booking, _exit_limit's resting
+      0.05). The operator, 2026-10-31: "On PARC, no. It was an idea. It failed. It's done." and "Yes" to removing its code. No other strategy reached
+      them (each keyed on strategy "PARC"). Gate tests/check_no_parc.py.
 v5.12 2026-10-31  OTV5 r63 (PARK.LATE1) — THE PARK LATE-DAY PEAK SHADOW. RECORD ONLY: IT NEVER CLOSES OR CHANGES A PARK TRADE.
       The operator, 2026-10-30: "Giveback: $18,764 of $43,258 peak open profit; PARK accounts for $13,780 of it - this is
       disgusting ... We have to figure this out."; 2026-10-31, on the study's log-only shadow: "yes to all of the prepared
@@ -1650,10 +1654,6 @@ class ExitEngine:
 
         if record.get("is_butterfly"):
             return self._evaluate_butterfly(record, current_premium)
-        elif strategy == "PARC":
-            # OTV5 r46 (PARC.1) — its own exits, BEFORE the credit arm: structure stop, nickel, EOD.1. None of the
-            # condor's (lone stop, sibling probe, breach) and none of PARK's (lock, delta floor) apply.
-            return self._evaluate_parc(record, current_premium, df_1m=df_1m)
         elif strategy == "IronCondorStrategy" or is_credit_vertical(record):
             # v4.21 (AUDIT F2): route on the STRUCTURE, not one strategy string.
             # main v6.8 writes strategy="TrendCreditSpread"; the old test sent
@@ -1780,73 +1780,6 @@ class ExitEngine:
             self._park_cf(record, why, bid, current_premium, d)
             logger.info("[park] %s EXIT %s", str(record.get("trade_id", ""))[:8], why)
         return decision
-
-    def _evaluate_parc(self, record: TradeRecord, current_premium: float, df_1m=None) -> ExitDecision:
-        """PARC exits (OTV5 r46). FIRST MATCH WINS:
-          1. STRUCTURE STOP - a touch through underlying_stop (the 5m swing behind the 11:00 price): Breakout's rule
-                              and reason text (strategy/management.py, r209) - `last` is the forming 1m bar's last
-                              price; a long (bull put spread) is out below the stop, a short (bear call) above it.
-          2. NICKEL CLOSE   - the spread can be bought back for <= CONDOR_NICKEL_CLOSE: its stashed ask (the
-                              structure's buy price, position_manager) or its mark. Live rests the buy at 0.05;
-                              paper books 0.05 (place_exit_order).
-          3. EOD.1          - assignment risk: the 15:45 resting best case, the 15:55 cross (_eod_due / _eod_label).
-        Nothing else: no premium stop (stop_premium 0), no delta exit, no lock, no trail, no theta / fizzle."""
-        from config import CONDOR_NICKEL_CLOSE
-        d = ExitDecision()
-        e = float(record.get("entry_premium") or 0.0)
-        try:
-            m = float(current_premium)
-        except (TypeError, ValueError):
-            m = None
-        n = int(record.get("contracts") or 0)
-        if m is not None and e > 0:
-            d.current_pnl_pct = (e - m) / e
-            d.current_pnl_usd = (e - m) * n * CONTRACT_MULTIPLIER
-        pnl = d.current_pnl_pct
-        why = ""
-        # 1. the structure stop: a TOUCH (r209), the rule management.py applies to Breakout
-        try:
-            ustop = float(record.get("underlying_stop") or 0.0)
-        except (TypeError, ValueError):
-            ustop = 0.0
-        last = None
-        try:
-            if df_1m is not None and len(df_1m):
-                last = float(df_1m["close"].iloc[-1])     # the FORMING 1m bar's last price - a touch, by design
-        except Exception:                                  # noqa: BLE001
-            last = None
-        if ustop > 0 and last is not None:
-            long_ = str(record.get("direction", "") or "") == "long" or (
-                not record.get("direction") and str(record.get("option_side", "")) == "put")
-            if (last < ustop) if long_ else (last > ustop):
-                why = f"structure_stop: touch {last:.2f} through {ustop:.2f} pnl={pnl:.1%}"
-        elif ustop > 0 and not record.get("_parc_no_frame_said"):
-            record["_parc_no_frame_said"] = 1
-            logger.warning("[parc] %s has no 1m frame this tick - the structure stop cannot be read; it holds",
-                           str(record.get("trade_id", ""))[:8])
-        # 2. the nickel: it can be bought for a nickel
-        if not why:
-            try:
-                ask = float(record.get("_exit_ask") or 0.0)
-            except (TypeError, ValueError):
-                ask = 0.0
-            if (0 < ask <= CONDOR_NICKEL_CLOSE + 1e-9) or (m is not None and m <= CONDOR_NICKEL_CLOSE + 1e-9):
-                why = (f"nickel_close pnl={pnl:.1%} (PARC: bought back at {CONDOR_NICKEL_CLOSE:.2f}; ask "
-                       f"{ask:.2f}, mark {m if m is not None else float('nan'):.2f})")
-        # 3. EOD.1: the short-leg schedule (15:45 resting best case, 15:55 cross)
-        if not why and _eod_due(record):
-            why = _eod_label(record)
-        if why:
-            d.should_exit = True
-            d.exit_reason = why
-            logger.info("[parc] %s EXIT %s", str(record.get("trade_id", ""))[:8], why)
-        return d
-
-    @staticmethod
-    def _parc_nickel(record, reason) -> bool:
-        """OTV5 r46 — a PARC nickel close: priced AT the nickel, live and paper."""
-        return (str(record.get("strategy", "") or "") == "PARC"
-                and str(reason or "").startswith("nickel_close"))
 
     def _park_cf(self, record, why, bid, mark, delta) -> None:
         """Once per trade per process: data/counterfactual/park_exit.jsonl. Never raises."""
@@ -4027,11 +3960,6 @@ class ExitEngine:
                     logger.info(f"[PAPER] EOD settled close {trade_id[:8]} @ {lim:.2f} at the cross ({_w})")
                     return self._stamp_exit_latency(record, FillResult(
                         confirmed=True, fill_price=float(lim), detail="paper eod settled best case"))
-            if self._parc_nickel(record, reason):              # OTV5 r46 (PARC.1): the nickel books the nickel
-                from config import CONDOR_NICKEL_CLOSE as _NK
-                logger.info(f"[PAPER] PARC nickel close {trade_id[:8]} @ {_NK:.2f} (mark {mark_price:.2f})")
-                return self._stamp_exit_latency(record, FillResult(
-                    confirmed=True, fill_price=float(_NK), detail="paper parc nickel close"))
             logger.info(f"[PAPER] Simulated fill {trade_id[:8]} @ {mark_price:.2f}")
             return self._stamp_exit_latency(
                 record,
@@ -4569,9 +4497,6 @@ class ExitEngine:
         or a long single is a 'buy' of it back / a 'sell' of it out.
         """
         policy = self._exit_policy(record, reason)
-        if self._parc_nickel(record, reason):                  # OTV5 r46 (PARC.1): a resting buy-to-close AT 0.05
-            from config import CONDOR_NICKEL_CLOSE as _NK
-            return float(_NK), "parc nickel — resting buy-to-close at the nickel"
         if policy == "eod_resting":
             best = self._eod_best_case(record)
             if best is not None:
