@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
-"""tests/check_tcs_shadow.py  v5.1
+"""tests/check_tcs_shadow.py  v5.2
+v5.2  2026-10-31  OTV5 r59 (ENT.1 land) — the fixture expiry is TODAY (ET), not the literal 2026-10-30: from 10-31 I4's restart
+      settled the open shadow as an expired orphan at boot and went red on every tree (83abcc6 included), refusing r59's land.
 v5.1  2026-10-30  OTV5 r57 (TCS.LOG1) — M1/M2 manage ticks run on a clock pinned to 13:00 ET (the lander ran M2 at 16:51 ET and the real 15:45 hard close pre-empted the breach on both books).
 v5.0  2026-10-30  OTV5 r57 (TCS.LOG1) — new. A LOG-ONLY TCS IS A FULL SHADOW TRADE THAT NEVER ORDERS.
       The operator, 2026-10-30: "Can you reactivate TCS Monday as 'log only'? But do not trade it." then "Make sure TCS
@@ -164,7 +166,8 @@ for _nm in ("note_entry_risk", "record_win", "record_loss"):
     setattr(_RM, _nm, _wrap)
 main.entries_open = lambda: True
 
-EXP = "2026-10-30"
+from utils.time_utils import now_et as _now_et
+EXP = _now_et().strftime("%Y-%m-%d")   # r59: today, so a restart never settles the fixture as expired
 
 
 class _Con:
@@ -185,7 +188,7 @@ class _Chain:
 
 def _df(close):
     import pandas as pd
-    idx = pd.date_range("2026-10-30 11:00", periods=30, freq="1min")
+    idx = pd.date_range(f"{EXP} 11:00", periods=30, freq="1min")
     return pd.DataFrame({"open": close, "high": close + 0.05, "low": close - 0.05, "close": close,
                          "volume": 1000}, index=idx)
 

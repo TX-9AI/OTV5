@@ -75,7 +75,7 @@ Unit `Environment=` lines set these; NEVER print a unit's Environment block to r
 | `OT_DECAY_STOP_X` | '0.30' | `config.py:1160` |
 | `OT_DELTA_PAR` | '0.98' | `config.py:2462` |
 | `OT_DEPLOY_CAP_MULT` | '2.0' | `config.py:1663` |
-| `OT_DERIVED_DB` | (none), (required), (set here), <expr> | `tests/check_breakout_new_extreme.py:105`, `tests/check_brk_cash_index.py:43`, `tests/check_brk_delta_floor.py:33`, `tests/check_brk_noprog.py:36`, `tests/check_brk_stop5m.py:52`, `tests/check_brk_strike_inside.py:41`, `tests/check_brk_zero_risk.py:37`, `tests/check_cap_page_once.py:62`, `tests/check_derived_layer.py:62`, `tests/check_derived_layer.py:119`, `tests/check_derived_layer.py:243`, `tests/check_engine_status.py:51`, `tests/check_expiry_settlement.py:57`, `tests/check_indicator_votes.py:75`, `tests/check_loss_cap_rearm.py:69`, `tests/check_no_zero_price.py:51`, `tests/check_parc.py:58`, `tests/check_park.py:69`, `tests/check_plan_observe.py:45`, `tests/check_surface_columns.py:111`, `tests/check_tcs_shadow.py:399`, `tests/stop_spread_report.py:74`, `tools/manifold_health.py:426`, `tools/open_scan.py:280`, `tools/plan_board.py:39`, `warehouse/retention_purge.py:782` |
+| `OT_DERIVED_DB` | (none), (required), (set here), <expr> | `tests/check_breakout_new_extreme.py:105`, `tests/check_brk_cash_index.py:43`, `tests/check_brk_delta_floor.py:33`, `tests/check_brk_noprog.py:36`, `tests/check_brk_stop5m.py:52`, `tests/check_brk_strike_inside.py:41`, `tests/check_brk_zero_risk.py:37`, `tests/check_cap_page_once.py:62`, `tests/check_derived_layer.py:62`, `tests/check_derived_layer.py:119`, `tests/check_derived_layer.py:243`, `tests/check_engine_status.py:51`, `tests/check_expiry_settlement.py:57`, `tests/check_indicator_votes.py:75`, `tests/check_loss_cap_rearm.py:69`, `tests/check_no_zero_price.py:51`, `tests/check_parc.py:58`, `tests/check_park.py:69`, `tests/check_plan_observe.py:45`, `tests/check_surface_columns.py:111`, `tests/check_tcs_shadow.py:402`, `tests/stop_spread_report.py:74`, `tools/manifold_health.py:426`, `tools/open_scan.py:280`, `tools/plan_board.py:39`, `warehouse/retention_purge.py:782` |
 | `OT_DISK_CHECK_S` | '300' | `data/disk_watch.py:109` |
 | `OT_DISK_DRILL_FLAG` | (set here), <expr> | `data/disk_watch.py:127`, `tests/check_alert_page.py:36` |
 | `OT_DISK_PCT` | '92' | `data/disk_watch.py:108` |
@@ -126,7 +126,7 @@ Unit `Environment=` lines set these; NEVER print a unit's Environment block to r
 | `OT_ORB_TRADE` | '0', (set here) | `strategy/plan_state.py:105`, `tests/check_admission_wired.py:43`, `tests/check_missed_inert.py:51`, `tests/check_trade_switches.py:182` |
 | `OT_ORCS` | '0', (set here) | `config.py:1674`, `strategy/plan_state.py:109`, `tests/check_plan_ledger_take.py:36`, `tests/check_spxw_settle_orcs_live.py:27`, `tests/check_time_parse.py:35` |
 | `OT_PAPER_SLIPPAGE_PCT` | '0.0' | `config.py:2819` |
-| `OT_PAPER_TRADING` | 'True', (none), (set here) | `config.py:1763`, `config.py:1772`, `tests/check_cap_counterfactual.py:46`, `tests/check_cap_page_once.py:65`, `tests/check_credit_remainder.py:112`, `tests/check_criteria.py:45`, `tests/check_emergency_watchdog.py:258`, `tests/check_emergency_watchdog.py:260`, `tests/check_emergency_watchdog.py:261`, `tests/check_entry_windows.py:277`, `tests/check_entry_windows.py:278`, `tests/check_entry_windows.py:306`, `tests/check_exit_pricing.py:54`, `tests/check_expiry_settlement.py:61`, `tests/check_loss_cap_rearm.py:72`, `tests/check_official_print.py:47`, `tests/check_orb_budget.py:109`, `tests/check_orcs.py:344`, `tests/check_plan_wiring.py:171`, `tests/check_recorder_keys.py:45`, `tests/check_tcs_shadow.py:61`, `tools/emergency_watchdog.py:164`, `tools/eod_summary.py:81` |
+| `OT_PAPER_TRADING` | 'True', (none), (set here) | `config.py:1763`, `config.py:1772`, `tests/check_cap_counterfactual.py:46`, `tests/check_cap_page_once.py:65`, `tests/check_credit_remainder.py:112`, `tests/check_criteria.py:45`, `tests/check_emergency_watchdog.py:258`, `tests/check_emergency_watchdog.py:260`, `tests/check_emergency_watchdog.py:261`, `tests/check_entry_windows.py:277`, `tests/check_entry_windows.py:278`, `tests/check_entry_windows.py:306`, `tests/check_exit_pricing.py:54`, `tests/check_expiry_settlement.py:61`, `tests/check_loss_cap_rearm.py:72`, `tests/check_official_print.py:47`, `tests/check_orb_budget.py:109`, `tests/check_orcs.py:344`, `tests/check_plan_wiring.py:171`, `tests/check_recorder_keys.py:45`, `tests/check_tcs_shadow.py:63`, `tools/emergency_watchdog.py:164`, `tools/eod_summary.py:81` |
 | `OT_PARC` | 'log', (set here) | `config.py:1073`, `tests/check_parc.py:72` |
 | `OT_PARK` | '' | `config.py:1034` |
 | `OT_PF_OBSERVE` | '1' | `analysis/pitchfork_observer.py:69` |
@@ -148,7 +148,7 @@ Unit `Environment=` lines set these; NEVER print a unit's Environment block to r
 | `OT_RESTING_STOP` | '' | `config.py:1103` |
 | `OT_RESTING_STOP_STATE` | (none), (set here) | `execution/resting_stop.py:49`, `tests/check_parc.py:64` |
 | `OT_RETENTION_APPLY` | (none) | `warehouse/retention_purge.py:958` |
-| `OT_RISK_USD` | '200', (set here) | `config.py:1349`, `tests/check_cap_counterfactual.py:47`, `tests/check_cap_page_once.py:66`, `tests/check_loss_cap_rearm.py:73`, `tests/check_parc.py:67`, `tests/check_scaling_toggle.py:84`, `tests/check_tcs_shadow.py:62`, `tests/check_volt_sizing.py:99` |
+| `OT_RISK_USD` | '200', (set here) | `config.py:1349`, `tests/check_cap_counterfactual.py:47`, `tests/check_cap_page_once.py:66`, `tests/check_loss_cap_rearm.py:73`, `tests/check_parc.py:67`, `tests/check_scaling_toggle.py:84`, `tests/check_tcs_shadow.py:64`, `tests/check_volt_sizing.py:99` |
 | `OT_RUNAWAY` | '' | `strategy/plan_state.py:97` |
 | `OT_RUNAWAY_END` | '' | `config.py:888` |
 | `OT_RUNAWAY_MAX_LOSS_PCT` | '0.20' | `config.py:1578` |
@@ -164,7 +164,7 @@ Unit `Environment=` lines set these; NEVER print a unit's Environment block to r
 | `OT_SCALE_BREAKOUT` | '1' | `config.py:1423` |
 | `OT_SCALE_ORB` | '1' | `config.py:1422` |
 | `OT_SCALE_VOLT` | '1' | `config.py:1424` |
-| `OT_SHADOW_TRADES_DB` | '', (none), (set here) | `execution/shadow_book.py:69`, `tests/check_tcs_shadow.py:213`, `tests/check_tcs_shadow.py:523`, `warehouse/s3_push.py:673` |
+| `OT_SHADOW_TRADES_DB` | '', (none), (set here) | `execution/shadow_book.py:69`, `tests/check_tcs_shadow.py:216`, `tests/check_tcs_shadow.py:526`, `warehouse/s3_push.py:673` |
 | `OT_SHUTDOWN_CAUSE` | (required), (set here), <expr> | `tests/check_shutdown_cause.py:78`, `tests/check_shutdown_cause.py:109`, `tests/check_shutdown_cause.py:110`, `utils/shutdown_cause.py:58` |
 | `OT_SIGNAL_JOURNAL_DIR` | (none), (set here) | `analysis/signal_journal.py:118`, `tests/check_brk_delta_floor.py:36`, `tests/check_brk_noprog.py:39`, `tests/check_expiry_settlement.py:59`, `tests/check_parc.py:62`, `tests/check_park.py:73` |
 | `OT_SIZE_ON_RISK` | '0' | `config.py:1653` |
@@ -179,7 +179,7 @@ Unit `Environment=` lines set these; NEVER print a unit's Environment block to r
 | `OT_SWEEP_SETUP_FLOOR` | '0.05' | `config.py:2099` |
 | `OT_SWEEP_SETUP_FLOOR_SHORT` | '0.20' | `config.py:2122` |
 | `OT_SWEEP_STALE_HARD_BARS` | '48' | `config.py:3125` |
-| `OT_TCS_ACTIVE` | '', (none), (set here) | `config.py:804`, `config.py:809`, `strategy/plan_state.py:113`, `tests/check_credit_remainder.py:40`, `tests/check_not_asked_reasons.py:54`, `tests/check_orcs.py:470`, `tests/check_orcs.py:471`, `tests/check_orcs.py:478`, `tests/check_plan_prepares.py:184`, `tests/check_plan_status.py:56`, `tests/check_sweep_stop.py:36`, `tests/check_tcs_narrates.py:28`, `tests/check_tcs_plan.py:55`, `tests/check_tcs_shadow.py:247`, `tests/check_time_parse.py:37` |
+| `OT_TCS_ACTIVE` | '', (none), (set here) | `config.py:804`, `config.py:809`, `strategy/plan_state.py:113`, `tests/check_credit_remainder.py:40`, `tests/check_not_asked_reasons.py:54`, `tests/check_orcs.py:470`, `tests/check_orcs.py:471`, `tests/check_orcs.py:478`, `tests/check_plan_prepares.py:184`, `tests/check_plan_status.py:56`, `tests/check_sweep_stop.py:36`, `tests/check_tcs_narrates.py:28`, `tests/check_tcs_plan.py:55`, `tests/check_tcs_shadow.py:250`, `tests/check_time_parse.py:37` |
 | `OT_TCS_COOLDOWN_MIN` | '0' | `config.py:1252` |
 | `OT_TCS_DRIFT_HORIZON_BARS` | '24' | `config.py:781` |
 | `OT_TCS_LGB` | '0.5' | `config.py:1221` |

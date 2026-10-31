@@ -1,5 +1,13 @@
 """
-utils/time_utils.py  v5.2
+utils/time_utils.py  v5.3
+v5.3  2026-10-30  OTV5 r59 (ENT.1) — ENTRY_OPEN_ET APPLIES ON THE PRODUCTION CLOCK, AND ONLY EVER LATER THAN THE RANGE.
+      entries_open() honoured config.ENTRY_OPEN_ET (OT_ENTRY_OPEN_ET) only when the caller passed `now`; both production
+      choke points call it bare (main._execute_condor_leg, entry_engine.enter), so the bare call fell through to
+      is_orb_complete (09:35) and the override was dead in production. 2026-10-30, the approved session floor
+      OT_ENTRY_OPEN_ET=10,0 on AMZN/CVX: AMZN's Breakout opened at 09:38 (Hunt and Runaway, which read the constant at
+      their own windows, were held). Now the floor is ENTRY_OPEN_ET on every call, clamped to never open before the
+      range closes (ORB_END): an override can only move the floor LATER. Default 09:35 = ORB_END, so no default box
+      changes. Malformed still fails closed. Operator: "obviously fix this". GATE tests/check_entry_floor_env.py.
 v5.2  2026-10-28  OTV5 r51 (BAR.2) — A BAR IS FINAL A FEW SECONDS AFTER ITS MINUTE ENDS: THE LOOP WAITS THEM OUT.
       r44's closed_pos calls the newest row closed the instant start + bar_s passes, but the feed is still folding the
       minute's last prints in: CRM 2026-10-28 (98806a54) read the 09:48 bar's close as 241.78 at 09:49:00.84 ET and
@@ -346,12 +354,18 @@ def entries_open(now: Optional[datetime] = None) -> bool:
             _cut = max(0, _c.hour * 60 + _c.minute - _lead)
             if (n.hour * 60 + n.minute) >= _cut:
                 return False
+        # 🔴 r59 (ENT.1) — THE OVERRIDE APPLIES ON THE PRODUCTION CLOCK TOO. It used to
+        # need an explicit `now`, and both choke points call this bare, so
+        # OT_ENTRY_OPEN_ET was dead in production (AMZN 2026-10-30: a 10:00 floor,
+        # a 09:38 Breakout). It can only move the floor LATER than the range.
         import config as _cfg
+        if not is_orb_complete(n):
+            return False
         _override = getattr(_cfg, "ENTRY_OPEN_ET", None)
-        if _override is not None and now is not None:
+        if _override is not None:
             h, m = tuple(_override)[:2]
             return (n.hour, n.minute) >= (int(h), int(m))
-        return is_orb_complete(n)
+        return True
     except Exception:                                          # noqa: BLE001
         return False
 
