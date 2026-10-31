@@ -1,5 +1,17 @@
 """
-execution/exit_engine.py  v5.11
+execution/exit_engine.py  v5.12
+v5.12 2026-10-31  OTV5 r63 (PARK.LATE1) — THE PARK LATE-DAY PEAK SHADOW. RECORD ONLY: IT NEVER CLOSES OR CHANGES A PARK TRADE.
+      The operator, 2026-10-30: "Giveback: $18,764 of $43,258 peak open profit; PARK accounts for $13,780 of it - this is
+      disgusting ... We have to figure this out."; 2026-10-31, on the study's log-only shadow: "yes to all of the prepared
+      solutions". evaluate() takes _park_late_read() after the decay read, inside its own try (a failure is logged at
+      DEBUG and loses only the reading), and returns the SAME decision it did before. For a PARK record, from
+      PARK_LATE_FROM_ET (14:30, close-anchored on a half day) on this module's now_et(): p = mark - entry, peak_p from
+      _decay_read's peak source (this mark, mfe_premium, the persisted max_premium_seen - it survives a restart); armed
+      once peak_p >= PARK_LATE_ARM (0.50) x entry; it WOULD exit when p <= peak_p x (1 - PARK_LATE_X (0.20)). The first
+      tick that trips stores tripped_at (HH:MM:SS) and the mark, logs "[park-late shadow] ... WOULD EXIT" once, and
+      would_exit is True on that tick only. park_late_reading / park_late_take serve management v5.4's park_late_* rows.
+      _evaluate_park, _decay_read, _evaluate_route and DECAY_STOP_EXEMPT are byte-for-byte unchanged; OT_PARK_LATE_SHADOW=0
+      turns it off. The study: scratchpad parkgb ("late X20 arm+50% from 14:30"). Gate tests/check_park_late_shadow.py.
 v5.11 2026-10-31  OTV5 r62 (BRK.18) — THE EXHAUSTION EXIT'S MOMENTUM IS READ FROM TODAY'S BARS ONLY. A TRADING FIX (BROKEN, NOT
       TO SPEC), the operator on hearing of it: "this is a fucking problem". _momentum_divergence's ROC5 is the 5m close
       minus the close 5 rows back, and until the session's sixth 5m bar (09:55 ET) the row 5 back is YESTERDAY's: the
@@ -1338,6 +1350,8 @@ class ExitEngine:
         self._exhaust_last: dict = {}    # r55 (BRK.17): trade_id -> the last call's new-extreme reading (record only)
         self._decay_state: dict = {}     # r58 (DECAY.1): trade_id -> {"armed_at": "HH:MM:SS" | None, "seen": True}
         self._decay_last: dict = {}      # r58 (DECAY.1): trade_id -> this tick's decay reading (the check rows)
+        self._park_late_state: dict = {}  # r63 (PARK.LATE1): trade_id -> {"tripped_at", "mark"} once the shadow trips
+        self._park_late_last: dict = {}   # r63 (PARK.LATE1): trade_id -> this tick's shadow reading (the check rows)
         self._trail_active: dict = {}
         self._bos_trackers: dict = {}   # trade_id \u2192 BOSTracker (sweep only)
         self._post_target_trail: dict = {}   # trade_id \u2192 bool (ORB only)
@@ -1410,6 +1424,11 @@ class ExitEngine:
         existing decision - the decay stop can add an exit, never cost one."""
         d = self._evaluate_route(record, current_premium, df_1m=df_1m, df_5m=df_5m,
                                  vol_state=vol_state, trend=trend)
+        try:
+            # r63 (PARK.LATE1): RECORD ONLY - the reading is stored for the check rows; `d` is never touched
+            self._park_late_read(record, current_premium, existing_exit=bool(getattr(d, "should_exit", False)))
+        except Exception as exc:                                  # noqa: BLE001
+            logger.debug("[park-late shadow] read failed for %s: %s", str(record.get("trade_id", ""))[:8], exc)
         try:
             rd = self._decay_read(record, current_premium, existing_exit=bool(getattr(d, "should_exit", False)))
         except Exception as exc:                                  # noqa: BLE001
@@ -1510,6 +1529,88 @@ class ExitEngine:
               "pnl_pct": pnl_pct, "pnl_usd": p * n, "reason": reason, "note": note}
         last[tid] = rd
         return rd
+
+    def _park_late_read(self, record: TradeRecord, current_premium, existing_exit: bool = False) -> Optional[dict]:
+        """r63 (PARK.LATE1) — RECORD ONLY: the PARK late-day peak shadow's reading for this tick, or None (off, not
+        PARK, before PARK_LATE_FROM_ET, no entry premium, no usable mark). It decides nothing and returns nothing the
+        caller acts on.
+
+        p = mark - entry (PARK is a single-leg debit); peak_p = the best p since entry from the best mark seen - this
+        mark, mfe_premium, the persisted max_premium_seen (as _decay_read; a rehydrated record keeps its peak), floored
+        at 0. ARMED once peak_p >= PARK_LATE_ARM x entry; it WOULD EXIT when p <= peak_p x (1 - PARK_LATE_X). The
+        window opens at PARK_LATE_FROM_ET moved to the day's bell (utils.time_utils.close_anchored: 14:30 -> 11:30 on
+        a 13:00 close). The first tripping tick is kept (tripped_at, mark): would_exit is True on that tick only, and
+        the "[park-late shadow]" line is logged once. A 1e-9 tolerance as _decay_read."""
+        tid = str(record.get("trade_id", "") or "")
+        last = self.__dict__.setdefault("_park_late_last", {})
+        last.pop(tid, None)
+        if not getattr(_cfg, "PARK_LATE_SHADOW", False):
+            return None
+        if str(record.get("strategy", "") or "") != "PARK":
+            return None
+        from utils.time_utils import close_anchored as _ca
+
+        def _pos(v):
+            try:
+                x = float(v)
+            except (TypeError, ValueError):
+                return None
+            return x if 0 < x <= 1e6 and x == x else None
+
+        entry = _pos(record.get("entry_premium"))
+        px = _pos(current_premium)
+        if entry is None or px is None:
+            return None
+        now = now_et()
+        frm = _ca(tuple(getattr(_cfg, "PARK_LATE_FROM_ET", (14, 30))), now)
+        if (now.hour, now.minute) < (frm.hour, frm.minute):
+            return None
+        X = float(getattr(_cfg, "PARK_LATE_X", 0.20))
+        ARM = float(getattr(_cfg, "PARK_LATE_ARM", 0.50))
+        marks = [m for m in (px, _pos(record.get("mfe_premium")), _pos(record.get("max_premium_seen"))) if m is not None]
+        best = max(marks)
+        p, peak = px - entry, max(best - entry, 0.0)
+        EPS = 1e-9
+        armed = peak > 0 and peak >= ARM * entry - EPS
+        level = peak * (1.0 - X)
+        trips = bool(armed and p <= level + EPS)
+        st = self.__dict__.setdefault("_park_late_state", {}).setdefault(tid, {})
+        first_trip = trips and "tripped_at" not in st
+        if first_trip:
+            st["tripped_at"] = now.strftime("%H:%M:%S")
+            st["mark"] = px
+            try:
+                n = float(record.get("contracts") or 0) * 100.0
+            except (TypeError, ValueError):
+                n = 0.0
+            logger.info("[park-late shadow] %s WOULD EXIT at %s ET (record only): mark %.2f, open profit p %.3f "
+                        "($%.2f) <= peak p %.3f x (1 - %g) = %.3f; best mark %.2f, entry %.2f%s",
+                        tid[:8], st["tripped_at"], px, p, p * n, peak, X, level, best, entry,
+                        "; a real PARK exit fired this tick" if existing_exit else "")
+        frac = (1.0 - p / peak) if peak > 0 else 0.0
+        if not armed:
+            note = f"not armed: peak p {peak:.3f} < {ARM:g} x entry {entry:.2f} = {ARM * entry:.3f}; p {p:.3f}"
+        elif first_trip:
+            note = (f"WOULD EXIT {st['tripped_at']} ET at mark {px:.2f}: p {p:.3f} <= peak {peak:.3f} x (1 - {X:g}) "
+                    f"= {level:.3f} ({frac:.0%} faded) - record only")
+        elif "tripped_at" in st:
+            note = f"tripped earlier at {st['tripped_at']} ET (mark {st['mark']:.2f}); p {p:.3f}, peak {peak:.3f}"
+        else:
+            note = f"armed: p {p:.3f}, {frac:.0%} faded of peak {peak:.3f}; would exit at p <= {level:.3f}"
+        rd = {"trade_id": tid, "entry": entry, "mark": px, "best_mark": best, "p": p, "peak_p": peak,
+              "armed": armed, "level": level, "frac": frac, "x": X, "arm": ARM, "from": frm.strftime("%H:%M"),
+              "trips": trips, "would_exit": first_trip, "tripped_at": st.get("tripped_at"),
+              "tripped_mark": st.get("mark"), "existing_exit": bool(existing_exit), "note": note}
+        last[tid] = rd
+        return rd
+
+    def park_late_reading(self, trade_id) -> Optional[dict]:
+        """r63 (PARK.LATE1) — the last evaluate()'s PARK late-shadow reading, or None."""
+        return (self.__dict__.get("_park_late_last") or {}).get(str(trade_id or ""))
+
+    def park_late_take(self, trade_id) -> Optional[dict]:
+        """r63 (PARK.LATE1) — the reading, removed: its check rows are written once per evaluate()."""
+        return (self.__dict__.get("_park_late_last") or {}).pop(str(trade_id or ""), None)
 
     def decay_reading(self, trade_id) -> Optional[dict]:
         """r58 (DECAY.1) — the last evaluate()'s decay reading for this trade, or None (not evaluated / exempt / off)."""

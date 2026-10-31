@@ -1,5 +1,12 @@
 """
-strategy/management.py  v5.3
+strategy/management.py  v5.4
+v5.4  2026-10-31  OTV5 r63 (PARK.LATE1) — THE PARK LATE-DAY PEAK SHADOW'S CHECK ROWS. RECORD ONLY: NO DECISION CHANGES. The
+      operator, 2026-10-31: "yes to all of the prepared solutions" (the PARK giveback study's log-only shadow). PARK is not
+      a COVERED strategy, so _one() writes its row; right after the decay_* rows it takes exit_engine v5.12's
+      park_late_take(trade_id) from the running engine and writes park_late_peak_p / park_late_p / park_late_armed on
+      every tick the shadow is read (PARK, from 14:30 ET close-anchored), and park_late_would_exit (1.0, its note the
+      ET time and the mark) ONCE, on the first tick it trips. No intent, no CLOSE, no trades column; the rows are plan
+      check rows (derived_plan_check in S3), outside EV. Gate tests/check_park_late_shadow.py.
 v5.3  2026-10-30  OTV5 r58 (DECAY.1) — THE PEAK-DECAY STOP'S CHECK ROWS. The decision is exit_engine v5.10's (evaluate() ends
       with it, after every existing exit; this plan's spec exits still run before the calculator step that reaches it, so
       they win too). The operator, 2026-10-30: "I'm thinking like some kind of stop that says we've decayed 20% from the
@@ -399,7 +406,9 @@ MGMT_CHECKS = ("premium", "entry_premium", "pnl_pct", "stop_premium", "trail_sto
                "exhaust_ext", "exhaust_roc", "exhaust_prior_ext", "exhaust_prior_roc",
                "exhaust_diverged", "exhaust_bar",
                # r58 (DECAY.1): the peak-decay stop's reading, on every tick the exit engine evaluates it
-               "decay_peak_p", "decay_p", "decay_armed", "decay_frac", "decay_fired")
+               "decay_peak_p", "decay_p", "decay_armed", "decay_frac", "decay_fired",
+               # r63 (PARK.LATE1): the PARK late-day peak shadow (record only), from 14:30 ET on PARK's rows
+               "park_late_peak_p", "park_late_p", "park_late_armed", "park_late_would_exit")
 
 
 def _record_decay_checks(t, rd) -> None:
@@ -414,6 +423,24 @@ def _record_decay_checks(t, rd) -> None:
         t.check("decay_fired", 1.0 if rd.get("fired") else 0.0, None)
     except Exception as exc:                                   # noqa: BLE001
         logger.debug("[manage] decay check rows not written: %s", exc)
+
+
+def _record_park_late_checks(t, rd) -> None:
+    """r63 (PARK.LATE1) — the plan check rows of one PARK late-shadow reading (exit_engine.park_late_take). RECORD
+    ONLY. park_late_would_exit is written once, on the first tripping tick, its note the time and the mark. Never
+    raises."""
+    if not rd:
+        return
+    try:
+        note = str(rd.get("note") or "")
+        t.check("park_late_peak_p", round(float(rd["peak_p"]), 4), None)
+        t.check("park_late_p", round(float(rd["p"]), 4), None, note=note)
+        t.check("park_late_armed", 1.0 if rd.get("armed") else 0.0, None)
+        if rd.get("would_exit"):
+            t.check("park_late_would_exit", 1.0, None,
+                    note=f"{rd.get('tripped_at')} ET mark {float(rd['mark']):.2f} - {note}")
+    except Exception as exc:                                   # noqa: BLE001
+        logger.debug("[manage] park-late check rows not written: %s", exc)
 
 
 def _exhaust_bar_txt(ev) -> str:
@@ -982,6 +1009,14 @@ class ManagementPlan:
             _eng = getattr(_xe, "_exit_engine", None)        # the running singleton; never builds one here
             if _eng is not None and hasattr(_eng, "decay_take"):
                 _record_decay_checks(t, _eng.decay_take(str(rec.get("trade_id", "") or "")))
+        except Exception:                                      # noqa: BLE001
+            pass
+        # r63 (PARK.LATE1): the PARK late-day shadow's reading from the same evaluate() (record only)
+        try:
+            import execution.exit_engine as _xe
+            _eng = getattr(_xe, "_exit_engine", None)
+            if _eng is not None and hasattr(_eng, "park_late_take"):
+                _record_park_late_checks(t, _eng.park_late_take(str(rec.get("trade_id", "") or "")))
         except Exception:                                      # noqa: BLE001
             pass
 

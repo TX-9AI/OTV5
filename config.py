@@ -1,5 +1,12 @@
 """
-config.py  v5.7
+config.py  v5.8
+v5.8  2026-10-31  OTV5 r63 (PARK.LATE1) — THE PARK LATE-DAY PEAK SHADOW'S KNOBS. RECORD ONLY: NO PARK EXIT CHANGES. The operator,
+      2026-10-30, on PARK's giveback ($13,780 of $43,258 peak open profit): "this is disgusting ... We have to figure this
+      out."; 2026-10-31, on the study's log-only shadow: "yes to all of the prepared solutions". PARK_LATE_SHADOW
+      (OT_PARK_LATE_SHADOW, default 1 = on, 0 = off), PARK_LATE_FROM_ET = (14, 30) (OT_PARK_LATE_FROM "H,M", a 16:00-bell
+      time: close-anchored on a half day), PARK_LATE_ARM = 0.50 (OT_PARK_LATE_ARM: armed once the best mark is >= +ARM
+      x entry), PARK_LATE_X = 0.20 (OT_PARK_LATE_X: would exit when open profit <= peak x (1 - X)). Read by
+      execution/exit_engine.py v5.12 at call time; written as plan check rows park_late_* by strategy/management.py v5.4.
 v5.7  2026-10-30  OTV5 r60 (PARK.4) — COMMENTS ONLY: PARK is bought at the MARK and sized on it. The operator, 2026-10-30:
       "To match my spec, we ladder in from aggressive to mark & never worse than mark". ENTRY_WINDOWS["PARK"] and the
       sizing note said "the ask"; no value changed (PARK_MIN_ASK 0.50 stays the feasibility floor).
@@ -1059,6 +1066,18 @@ PARK_LOCK_FLOOR = 0.20
 PARK_DELTA_FLOOR = 0.30
 PARK_DELTA_FROM_ET = (11, 30)
 PARK_CLOSE_ET = (15, 45)
+# ── r63 (PARK.LATE1) — THE LATE-DAY PEAK SHADOW. RECORD ONLY: IT NEVER CLOSES OR CHANGES A PARK TRADE ─────────────────
+# The operator, 2026-10-31: "yes to all of the prepared solutions" (the PARK giveback study, scratchpad parkgb: no
+# protection rule was robust over 228 rebuilt PARK trades / 47 days; the best, "late X20 arm+50% from 14:30", is +$5.5k
+# overall but -$954 without 10-30, so it is measured live, never traded). From PARK_LATE_FROM_ET (a 16:00-bell time,
+# close-anchored on a half day), once the trade's best mark is >= entry x (1 + PARK_LATE_ARM) (the r58 decay stop's
+# peak source: this mark, mfe_premium, the persisted max_premium_seen), it WOULD exit when open profit p = mark - entry
+# <= peak_p x (1 - PARK_LATE_X). PARK's own exits (lock, delta floor, PARK_CLOSE_ET) and its DECAY_STOP_EXEMPT entry
+# are untouched. OT_PARK_LATE_SHADOW=0 turns the rows off.
+PARK_LATE_SHADOW = os.environ.get("OT_PARK_LATE_SHADOW", "1").strip() != "0"     # 1 = on (default), 0 = off
+PARK_LATE_FROM_ET = tuple(int(x) for x in os.environ.get("OT_PARK_LATE_FROM", "14,30").split(","))
+PARK_LATE_ARM = float(os.environ.get("OT_PARK_LATE_ARM", "0.50"))                # best mark >= entry x (1 + ARM) arms
+PARK_LATE_X = float(os.environ.get("OT_PARK_LATE_X", "0.20"))                    # would exit at p <= peak_p x (1 - X)
 # Its own budget, outside the morning's catastrophic cap (the operator, 2026-10-17):
 # a PARK close never counts toward the cap's realized P&L, and the cap never refuses
 # PARK (position_manager: cap_exempt). Sizing is the box's own RISK_PER_TRADE_USD,
