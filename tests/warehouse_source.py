@@ -1,6 +1,12 @@
 #!/usr/bin/env python3
 """
-tests/warehouse_source.py  v5.0
+tests/warehouse_source.py  v5.1
+v5.1  2026-10-31  OTV5 r65 (RPT.29) — otv4test(rec, day) / mainline(rows, day_of): the OTV4TEST fleet's rows are named in one place.
+      raw/ holds both fleets: OTV4TEST's AAL (ip-172-31-1-45) and SOFI (ip-172-31-11-250) pushed beside mainline until
+      the 2026-10-25 repoint, and SOFI has pushed as an OTV5 box from the same host since. The discriminator is
+      day_trader_pro strategy_registry.resolve_lineage's order: the record's own `lineage` wins (TEST is OTV4TEST;
+      OTV4/MAIN/OTV5 are not); an untagged row (before the producers stamped it) is OTV4TEST when its box is AAL, or
+      SOFI before SOFI's OTV5 day. Re-implemented, not imported (rule 1). Gate check_edge_scan E7-E9.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.5  2026-10-11  OTV4TEST r269 (OPS.22, mirror of otv4 r479) - the zone NAME is "America/New_York", the zone the legacy link
       US/Eastern pointed to: identical rules, no behaviour change. tzdata 2026c moved the US/* links into tzdata-legacy;
@@ -218,6 +224,45 @@ def load_derived(table, dates, s3=None):
             if key not in best or stamp >= best[key][0]:
                 best[key] = (stamp, r)
     return [r for _s, r in best.values()], meta
+
+
+# ── the OTV4TEST fleet (v5.1, RPT.29) ──────────────────────────────────────
+# ⚠️ THE OPERATOR'S STANDING RULE: OTV4TEST's AAL and SOFI are filtered out of every warehouse measurement. Mirrors
+# day_trader_pro/strategy_registry.py TEST_BOXES and OTV5_SINCE (r508); a box repointed later is added in both.
+OTV4TEST_BOXES = ("AAL", "SOFI")
+OTV4TEST_LINEAGE = "TEST"
+OTV5_SINCE = {"SOFI": "2026-10-25"}          # the box's first OTV5 day; AAL never ran OTV5
+
+
+def otv4test(rec, day=None) -> bool:
+    """True when the row was written by the OTV4TEST fleet. `day` is the row's ET session day (YYYY-MM-DD).
+
+    🔑 THE RECORD'S TAG FIRST. SOFI is a live OTV5 box since 2026-10-25 on the same host, so the symbol alone would
+    drop OTV5 trades; the box-and-day rule only reads rows that carry no lineage. An untagged SOFI row with no day is
+    counted as OTV4TEST: a measurement must never be contaminated by a guess.
+    """
+    rec = rec or {}
+    lin = str(rec.get("lineage") or "").strip().upper()
+    if lin:
+        return lin == OTV4TEST_LINEAGE
+    box = str(rec.get("symbol") or rec.get("box") or "").strip().upper()
+    if box not in OTV4TEST_BOXES:
+        return False
+    since = OTV5_SINCE.get(box)
+    d = str(day or "").strip()[:10]
+    return not (since and d and d >= since)
+
+
+def mainline(rows, day_of=None):
+    """-> (kept, dropped): rows without the OTV4TEST fleet's, and a {symbol: n} count of what was dropped."""
+    kept, dropped = [], {}
+    for r in rows:
+        if otv4test(r, day_of(r) if day_of else None):
+            sym = str((r or {}).get("symbol") or "?").upper()
+            dropped[sym] = dropped.get(sym, 0) + 1
+        else:
+            kept.append(r)
+    return kept, dropped
 
 
 # 🔴 r297 — THE ENGINE EPOCH. r187 established it for report 41: anything

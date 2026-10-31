@@ -1,6 +1,14 @@
 #!/usr/bin/env python3
 """
-tests/edge_scan.py  v5.1
+tests/edge_scan.py  v5.2
+v5.2  2026-10-31  OTV5 r65 (RPT.29) — THE OTV4TEST FLEET IS OUT OF THE SCAN. raw/trades holds OTV4TEST's AAL and SOFI trades beside
+      mainline's, and the scan pooled them: 09-18..10-30 read 1,081 closed trades and 5 features MET the bar; filtered,
+      841 remain (240 OTV4TEST trade rows dropped: AAL 93, SOFI 147), no feature meets it (175 winners a side < 200),
+      and those 5 are candidates. The S3
+      path drops them through warehouse_source.mainline (the record's lineage first; an untagged AAL row, or an
+      untagged SOFI row before SOFI's OTV5 day 2026-10-25): trades by their entry day, unfired plans by their created
+      day. SOFI's OTV5 trades stay. A FLEET line prints what was dropped. Gate check_edge_scan E7-E9.
+      Operator: "Yes to dtp & the filter" (2026-10-31).
 v5.1  2026-10-25  (RPT.29) — THE STABILITY SPLIT READS A SPARSE FEATURE WITH .get() TOO. OTV4TEST r63 fixed the win/lose
       comprehensions but left d1/d2 indexing r[k], so a sparse feature that cleared the candidate floor still died with
       KeyError ('flow_imbalance', control's 10-25 run over 9,025 warehouse trades after 9m25s). Gate check_edge_scan E6.
@@ -282,6 +290,16 @@ def selftest() -> int:
     return 0 if ok else 1
 
 
+def _plan_day(r) -> str:
+    """A plan row's ET day, from created_ts (epoch seconds); "" when it has none."""
+    try:
+        from datetime import datetime
+        from zoneinfo import ZoneInfo
+        return datetime.fromtimestamp(float(r.get("created_ts")), ZoneInfo("America/New_York")).date().isoformat()
+    except Exception:                                           # noqa: BLE001
+        return ""
+
+
 def load_joined_s3(a):
     import warehouse_source as ws
     dates = ws.dates_of(a)
@@ -300,8 +318,14 @@ def load_joined_s3(a):
             pass
     rows = []
     joined = 0
-    closed = [t for t in trades if (t.get("status") or "").lower() == "closed"
-]
+    # v5.2 (RPT.29) — the OTV4TEST fleet's rows never enter the scan (the operator's standing rule).
+    trades, gone_t = ws.mainline(trades, day_of=lambda t: str(t.get("entry_time") or "")[:10])
+    plans_rows, gone_p = ws.mainline(plans_rows, day_of=_plan_day)
+    print(f"  FLEET: OTV4TEST excluded — {sum(gone_t.values())} trade row(s)"
+          f" {dict(sorted(gone_t.items()))}, {sum(gone_p.values())} plan row(s)"
+          f" {dict(sorted(gone_p.items()))} (lineage TEST; untagged AAL, or SOFI before"
+          f" {ws.OTV5_SINCE['SOFI']})")
+    closed = [t for t in trades if (t.get("status") or "").lower() == "closed"]
     for t in closed:
         pnl = _f(t.get("pnl_usd"))
         if pnl is None:

@@ -156,14 +156,14 @@ Unit `Environment=` lines set these; NEVER print a unit's Environment block to r
 | `OT_RUNAWAY` | '' | `strategy/plan_state.py:97` |
 | `OT_RUNAWAY_END` | '' | `config.py:898` |
 | `OT_RUNAWAY_MAX_LOSS_PCT` | '0.20' | `config.py:1600` |
-| `OT_S3_BUCKET` | 'vertigo-warehouse-tx9ai' | `tests/warehouse_source.py:66`, `warehouse/s3_push.py:378` |
+| `OT_S3_BUCKET` | 'vertigo-warehouse-tx9ai' | `tests/warehouse_source.py:72`, `warehouse/s3_push.py:378` |
 | `OT_S3_DERIVED_BATCH` | '10000' | `warehouse/s3_push.py:780` |
 | `OT_S3_DERIVED_SCAN` | '5000' | `warehouse/s3_push.py:779` |
 | `OT_S3_FLUSH_EVERY` | '200' | `warehouse/s3_push.py:768` |
 | `OT_S3_LOCK_WAIT` | '120' | `warehouse/s3_push.py:766` |
-| `OT_S3_PREFIX` | 'raw' | `tests/warehouse_source.py:68`, `warehouse/s3_push.py:380` |
+| `OT_S3_PREFIX` | 'raw' | `tests/warehouse_source.py:74`, `warehouse/s3_push.py:380` |
 | `OT_S3_PUSH` | '1', (set here) | `tests/check_series_catchup.py:47`, `warehouse/s3_push.py:382` |
-| `OT_S3_REGION` | 'us-east-2' | `tests/warehouse_source.py:67`, `warehouse/s3_push.py:379` |
+| `OT_S3_REGION` | 'us-east-2' | `tests/warehouse_source.py:73`, `warehouse/s3_push.py:379` |
 | `OT_S3_SERIES_BATCH` | '50000' | `warehouse/s3_push.py:1301` |
 | `OT_S3_SERIES_BUDGET_S` | '180' | `warehouse/s3_push.py:1313` |
 | `OT_S3_SERIES_DRAIN_BUDGET_S` | '420' | `warehouse/s3_push.py:1316` |

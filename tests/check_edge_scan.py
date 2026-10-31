@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
-"""tests/check_edge_scan.py — v5.1
+"""tests/check_edge_scan.py — v5.2
+v5.2  2026-10-31  OTV5 r65 (RPT.29) — E7-E9: THE OTV4TEST FLEET IS OUT OF THE S3 SCAN. load_joined_s3 runs against a fake bucket
+      holding both fleets: E7 trades (lineage TEST, an untagged AAL row, an untagged SOFI row before 2026-10-25) are
+      dropped; E8 an OTV4TEST plan row is dropped from the unfired-plan count; E9 SOFI's OTV5 trades (tagged, and
+      untagged on/after 10-25) and every mainline row stay, and the FLEET line names what went. Born red on b57c571
+      at E7, E8 and E9 (no FLEET line); E1-E6 unchanged.
 v5.1  2026-10-25  (RPT.29) — E6: A SPARSE FEATURE THAT CLEARS THE CANDIDATE FLOOR REACHES THE STABILITY SPLIT and must
       not raise there. E1's sparse feature never cleared CAND_N, so the d1/d2 lines (still r[k]) were never reached and
       control's real run died with KeyError. Born red on 26df107 at E6.
@@ -124,6 +129,98 @@ def _split_sparse():
 
 
 guard("E6 a sparse feature that clears the floor reaches the stability split without KeyError", _split_sparse)
+
+
+
+# ── E7-E9 (v5.2, RPT.29): the OTV4TEST fleet's rows are filtered out of the S3 path ──────────────────────────────
+import argparse                                                 # noqa: E402
+import contextlib                                               # noqa: E402
+import io                                                       # noqa: E402
+import json                                                     # noqa: E402
+import warehouse_source as ws                                   # noqa: E402
+
+_TRADES = [   # (trade_id, symbol, lineage, entry day, keep?)
+    ("m-amd", "AMD", "OTV4", "2026-10-01", True),        # mainline, tagged
+    ("m-spx", "SPX", None, "2026-09-22", True),          # mainline, untagged (before the producers stamped)
+    ("t-sofi-tag", "SOFI", "TEST", "2026-10-09", False),  # OTV4TEST, tagged
+    ("t-sofi-old", "SOFI", None, "2026-09-29", False),   # OTV4TEST, untagged, before SOFI's OTV5 day
+    ("t-aal", "AAL", None, "2026-10-01", False),         # OTV4TEST, untagged
+    ("t-aal-tag", "AAL", "TEST", "2026-10-09", False),   # OTV4TEST, tagged
+    ("v5-sofi", "SOFI", "OTV5", "2026-10-27", True),     # SOFI ON OTV5 — must stay
+    ("v5-sofi-u", "SOFI", None, "2026-10-26", True),     # untagged SOFI on/after 10-25 is OTV5
+]
+_PLANS = [    # (_rid, symbol, created ET day, keep?)
+    (1, "AMD", "2026-10-01", True), (2, "SOFI", "2026-10-09", False), (3, "AAL", "2026-10-01", False),
+    (4, "SOFI", "2026-10-27", True),
+]
+
+
+def _fake_bucket():
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+    P = ws.PREFIX
+    objs = {}
+    for i, (tid, sym, lin, day, _k) in enumerate(_TRADES):
+        rec = {"trade_id": tid, "symbol": sym, "status": "closed", "pnl_usd": 10.0 if i % 2 else -10.0,
+               "entry_time": f"{day}T10:00:00", "option_side": "call"}
+        if lin:
+            rec["lineage"] = lin
+        objs[f"{P}/trades/dt={day}/sym={sym}/{i}-t.json"] = json.dumps(
+            {"datatype": "trades", "symbol": sym, "dt": day, "pushed_at_utc": "T1", "record": rec}).encode()
+    for rid, sym, day, _k in _PLANS:
+        ts = datetime.fromisoformat(f"{day}T11:00:00").replace(tzinfo=ZoneInfo("America/New_York")).timestamp()
+        row = {"_rid": rid, "symbol": sym, "state": "EXPIRED", "created_ts": ts, "trigger_price": 10.0,
+               "max_price_seen": 11.0, "min_price_seen": 9.0, "direction": "call"}
+        objs[f"{P}/derived_plan_ledger/dt={day}/sym={sym}/{rid}-p.json"] = json.dumps(
+            {"datatype": "derived_plan_ledger", "symbol": sym, "dt": day, "pushed_at_utc": "T1",
+             "record": [row]}).encode()
+    return ws._FakeS3(objs)
+
+
+_RESULT = {}
+
+
+def _scan():
+    if not _RESULT:
+        fake = _fake_bucket()
+        real = ws.client
+        ws.client = lambda: fake
+        buf = io.StringIO()
+        try:
+            with contextlib.redirect_stdout(buf):
+                out = es.load_joined_s3(argparse.Namespace(date=None, frm="2026-09-22", to="2026-10-27",
+                                                           all_history=False))
+        finally:
+            ws.client = real
+        _RESULT.update(out=out, text=buf.getvalue())
+    return _RESULT
+
+
+def _e7():
+    rows, _plans, n_closed, _j = _scan()["out"]
+    want = sum(1 for t in _TRADES if t[4])
+    return n_closed == want and len(rows) == want, f"closed={n_closed} rows={len(rows)} want={want} (of {len(_TRADES)})"
+
+
+def _e8():
+    _rows, plans, _n, _j = _scan()["out"]
+    want = sum(1 for p in _PLANS if p[3])
+    return plans["total"] == want, f"plans={plans} want total={want} (of {len(_PLANS)})"
+
+
+def _e9():
+    r = _scan()
+    rows = r["out"][0]
+    sessions = sorted(x["_session"] for x in rows)
+    want = sorted(t[3] for t in _TRADES if t[4])
+    line = next((l.strip() for l in r["text"].splitlines() if "FLEET:" in l), "")
+    return (sessions == want and "4 trade row(s)" in line and "'AAL': 2" in line and "'SOFI': 2" in line
+            and "2 plan row(s)" in line), f"sessions={sessions} line={line!r}"
+
+
+guard("E7 the S3 scan drops the OTV4TEST fleet's trades (lineage TEST; untagged AAL; untagged SOFI before 10-25)", _e7)
+guard("E8 the unfired-plan count drops OTV4TEST's plan rows by box and created day", _e8)
+guard("E9 SOFI's OTV5 trades and every mainline trade stay, and the FLEET line names what went", _e9)
 
 print()
 if FAILED:
