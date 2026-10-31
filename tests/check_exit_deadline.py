@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
-"""tests/check_exit_deadline.py  v5.0
+"""tests/check_exit_deadline.py  v5.1
+v5.1  2026-10-31  OTV5 r68 (CFG.5) — OT_RESTING_STOP_STATE leaves the scratch env: the resting stop and its state file are deleted
+      (the operator, 2026-10-31: "Resting stop was a study. It failed. Get this the fuck out of here"). No check changed.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 F1 — A LIVE CLOSE BLOCKS THE TICK LOOP FOR ~14 s, NOT ~36 s, AND NEVER GOES SILENT TO THE WATCHDOG.
 
@@ -36,7 +38,7 @@ os.environ.setdefault("OT_INSTRUMENT", "QQQ")
 _SCR = tempfile.mkdtemp(prefix="chk_exit_deadline_")
 for _k, _v in (("OT_TRADES_DB", "t.db"), ("OT_DERIVED_DB", "d.db"), ("OT_FEED_DB", "f.db"), ("OT_LOG_FILE", "bot.log"),
                ("OT_COUNTERFACTUAL_DIR", "cf"), ("OT_RESTING_DB", "r.db"), ("OT_SIGNAL_JOURNAL_DIR", "sj"),
-               ("OT_RESTING_STOP_STATE", "rs.json"), ("OT_HEARTBEAT_FILE", "BOT_HEARTBEAT")):
+               ("OT_HEARTBEAT_FILE", "BOT_HEARTBEAT")):
     os.environ[_k] = os.path.join(_SCR, _v)
 PROBLEMS = []
 

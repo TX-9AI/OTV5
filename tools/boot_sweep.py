@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""tools/boot_sweep.py — v5.1
+"""tools/boot_sweep.py — v5.2
+v5.2  2026-10-31  OTV5 r68 (CFG.5) — OT_RESTING_STOP_STATE IS NO LONGER SET: the resting stop and its state file are deleted
+(the operator, 2026-10-31: "Resting stop was a study. It failed. Get this the fuck out of here"), so nothing reads the key.
+check_boot_sweep B3/B3b.
 v5.1  2026-10-25  (HYG.14) — EVERY CHECKER GETS ITS OWN TMPDIR, REMOVED WITH THE RUN. ~110 checkers call
 tempfile.mkdtemp() and never remove the dir; /tmp is tmpfs (RAM) and control held 2,225 such dirs, 814 MB. run_one sets
 TMPDIR to <its bootsweep- mkdtemp>/tmp, which the existing finally-rmtree removes, so whatever a checker leaks dies with its
@@ -161,7 +164,6 @@ def run_one(name: str) -> bool:
     env["OT_LOG_FILE"] = os.path.join(d, "bot.log")                   # r194 (BOX.16)
     env["OT_COUNTERFACTUAL_DIR"] = os.path.join(d, "counterfactual")  # r287 (CFDIR.1)
     env["OT_FEED_DB"] = os.path.join(d, "feed_store.db")              # r292 (GATE.1): the 2.5 GB live tape
-    env["OT_RESTING_STOP_STATE"] = os.path.join(d, "resting_stop_state.json")   # r292: a rest survives a restart
     env["OT_WAREHOUSE_STATE"] = os.path.join(d, "warehouse_state")    # r292: the push/purge ledgers
     env["OT_PLAN_STATES_FILE"] = os.path.join(d, "plan_states.json")  # r307 (GATE.4): the live bot's plan states
     env["OT_HEARTBEAT_FILE"] = os.path.join(d, "BOT_HEARTBEAT")        # OTV5 r4 (GATE.6): the watchdog's liveness signal

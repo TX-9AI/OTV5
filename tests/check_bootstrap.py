@@ -1,4 +1,8 @@
-"""tests/check_bootstrap.py — v5.4
+"""tests/check_bootstrap.py — v5.5
+v5.5  2026-10-31  OTV5 r68 (CFG.5) — G3c/G5/G17 RE-POINTED, NOT DROPPED (section 38.4): setup_ec2.sh v5.3 no longer primes
+      OT_SCALE_BREAKOUT or OT_PIN_PROXIMITY_ACTIVE (config fixes both ON; the operator, 2026-10-31: "7. Pin gate, default
+      "on" —remove from the menu", "9. Scaling, default on—take it out"), so G3 and G3c assert neither --plan line exists, G5
+      asserts the unit writes neither key, and G17 names the ramp TOP as configure.sh item 7 (the menu is 1-9).
 v5.4  2026-10-25  OTV5 r17 (BOOT.14) — G23: TWO INSTALL MODES, ONE INSTALLER. DRIVEN: setup_ec2 --plan names the mode
       (unattended by default, controller when asked) and refuses any other (rc 2); the template's own tmux step, run
       with a recording tmux stub, re-runs an UNATTENDED install inside tmux (the operator: "A user ran unattended install
@@ -304,8 +308,8 @@ _R["base"] = _setup(["--plan"], {"OT_CLAUDE_AT_BOOT": "1", "CLAUDE_LOGIN_B64": "
 r, plan, suite, home_after, sudo_calls = _R["base"]
 _WANT = {"unattended": "true", "tty": "0", "paper": "True", "instrument": "QQQ",
          "risk_usd": "200", "orb_budget_usd": "200",
-         "scale_orb": "1", "scale_breakout": "1", "scale_volt": "1",
-         "daily_loss_limit": "200", "pin_gate": "0", "swap_gb": "2",
+         "scale_orb": "1", "scale_volt": "1",          # r68 (CFG.5): no scale_breakout / pin_gate line
+         "daily_loss_limit": "200", "swap_gb": "2",
          "requirements": "requirements.lock", "git_repo": _origin,       # v1.12: origin.conf, as G2
          "git_ref": "main", "git_push": "0", "claude_at_boot": "1",
          "claude_login": "provided", "data_capture": "standalone", "data_capture_requested": "standalone"}
@@ -334,15 +338,15 @@ guard("G3b OT_CLAUDE_AT_BOOT=0 leaves the claude-boot installer out, keeps insta
       and any(s.startswith("deploy/install_claude.sh") for s in suite0)
       and plan0.get("claude_login") == "absent")
 
-r1, plan1, _s1, _h1, _x1 = _setup(["--plan"], {"OT_RISK_USD": "500", "OT_PIN_PROXIMITY_ACTIVE": "1",
+r1, plan1, _s1, _h1, _x1 = _setup(["--plan"], {"OT_RISK_USD": "500",
                                                "OT_SWAP_GB": "0", "OT_GIT_PUSH": "1",
                                                "OT_GIT_REF": "abc1234", "OT_DATA_CAPTURE": "managed",
                                                "OT_SCALE_ORB": "0"})
-guard("G3c the bootstrap's values win (risk 500 flows to TOP/loss; ORB scaling off; gate, swap, push, ref)",
+guard("G3c the bootstrap's values win (risk 500 flows to TOP/loss; ORB scaling off; swap, push, ref); r68: no pin gate / Breakout scaling",
       lambda: r1.returncode == 0 and "orb_risk_usd" not in plan1
-      and plan1.get("scale_orb") == "0" and plan1.get("scale_breakout") == "1"
+      and plan1.get("scale_orb") == "0" and "scale_breakout" not in plan1
       and plan1.get("orb_budget_usd") == "500" and plan1.get("daily_loss_limit") == "500"
-      and plan1.get("pin_gate") == "1" and plan1.get("swap_gb") == "0"
+      and "pin_gate" not in plan1 and plan1.get("swap_gb") == "0"
       and plan1.get("git_push") == "1" and plan1.get("git_ref") == "abc1234"
       and plan1.get("data_capture") == "standalone" and plan1.get("data_capture_requested") == "managed"
       and "start_bot" not in plan1 and "first_start" in plan1,
@@ -368,10 +372,11 @@ guard("G5 the bot unit no longer writes the merged OT_ORB_RISK_USD (r161)",
       lambda: "Environment=OT_ORB_RISK_USD" not in _unit)
 guard("G5 the bot unit carries the keys configure.sh grew",
       lambda: all("Environment=%s=${%s}" % (k, v) in _unit for k, v in (
-          ("OT_SCALE_ORB", "SCALE_ORB"), ("OT_SCALE_BREAKOUT", "SCALE_BREAKOUT"),
+          ("OT_SCALE_ORB", "SCALE_ORB"),
           ("OT_SCALE_VOLT", "SCALE_VOLT"), ("OT_ORB_BUDGET_USD", "ORB_BUDGET_USD"),
-          ("OT_DAILY_LOSS_LIMIT", "DAILY_LOSS_LIMIT"),
-          ("OT_PIN_PROXIMITY_ACTIVE", "PIN_GATE"))))
+          ("OT_DAILY_LOSS_LIMIT", "DAILY_LOSS_LIMIT"))))
+guard("G5 r68 (CFG.5): the bot unit writes neither OT_SCALE_BREAKOUT nor OT_PIN_PROXIMITY_ACTIVE (config fixes both ON)",
+      lambda: "OT_SCALE_BREAKOUT" not in _unit and "OT_PIN_PROXIMITY_ACTIVE" not in _unit)
 guard("G5 secrets are unset before the final login shell",
       lambda: (lambda u, e: 0 <= u < e)(
           _setup_txt.find("unset TT_CLIENT_SECRET TT_REFRESH_TOKEN TELEGRAM_TOKEN GITHUB_TOKEN CLAUDE_LOGIN_B64"),
@@ -843,8 +848,7 @@ _b17 = _read("bootstrap.example.sh")
 guard("G17 each sizing line names its configure.sh item",
       lambda: all(re.search(r"%s=.*configure\.sh item %s\s+%s" % (v, n, lbl), _b17)
                   for v, n, lbl in (("OT_RISK_USD", "2", "Risk per trade / ramp MIN"),
-                                    ("OT_ORB_BUDGET_USD", "8", r"Ramp TOP \(MAX\)"),
-                                    ("OT_SCALE_BREAKOUT", "9", "Breakout scaling"),
+                                    ("OT_ORB_BUDGET_USD", "7", r"Ramp TOP \(MAX\)"),
                                     ("OT_DAILY_LOSS_LIMIT", "6", "Daily catastrophic loss cap")))
       and all(re.search(r"%s=.*no configure\.sh item since r228" % v, _b17)
               for v in ("OT_SCALE_ORB", "OT_SCALE_VOLT")))

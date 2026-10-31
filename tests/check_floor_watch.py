@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """
-tests/check_floor_watch.py  v5.0
+tests/check_floor_watch.py  v5.1
+v5.1  2026-10-31  OTV5 r68 (CFG.5) — OT_RESTING_STOP and OT_RESTING_STOP_STATE leave the scratch env: the resting stop is deleted
+      (the operator, 2026-10-31: "Resting stop was a study. It failed. Get this the fuck out of here"). No check changed.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 THE 2 s FLOOR WATCH WAKES THE TICK (EXIT.5 on TEST, execution/fill_observers.sleep_observing).
 v1.0  2026-10-13  OTV4TEST r280. The operator, 2026-10-13 13:19 ET: "Yes to all" (the relayed "Exit5, yes");
@@ -30,10 +32,9 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 _TD = tempfile.mkdtemp(prefix="check_floor_watch_")
 for k, v in {"OT_TRADES_DB": "t.db", "OT_DERIVED_DB": "d.db", "OT_FEED_DB": "f.db", "OT_LOG_FILE": "bot.log",
-             "OT_RESTING_DB": "r.db", "OT_SIGNAL_JOURNAL_DIR": "sj", "OT_COUNTERFACTUAL_DIR": "cf",
-             "OT_RESTING_STOP_STATE": "rest_state.json"}.items():
+             "OT_RESTING_DB": "r.db", "OT_SIGNAL_JOURNAL_DIR": "sj", "OT_COUNTERFACTUAL_DIR": "cf"}.items():
     os.environ[k] = os.path.join(_TD, v)
-for k in ("OT_FILL_OBSERVE", "OT_FLOOR_WATCH", "OT_RESTING_STOP"):
+for k in ("OT_FILL_OBSERVE", "OT_FLOOR_WATCH"):
     os.environ.pop(k, None)
 FAILED, RAN = [], []
 

@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """
-tests/check_boot_sweep.py  v5.1
+tests/check_boot_sweep.py  v5.2
+v5.2  2026-10-31  OTV5 r68 (CFG.5) — B3/B3b RE-POINTED (section 38.4): OT_RESTING_STOP_STATE is no longer a scratch store - the
+      resting stop is deleted (the operator, 2026-10-31: "Resting stop was a study. It failed."); B3 no longer requires it
+      and B3b no longer expects it in run_one's env. Every other store unchanged.
 v5.1  2026-10-25  (HYG.14) — B9 DRIVES THE REAL run_one ON A CHECKER THAT LEAKS A tempfile.mkdtemp() DIR and records its
       path: the dir must sit under that run's bootsweep- scratch (not at /tmp's top level) and be GONE when run_one
       returns. ~110 checkers leak such dirs into /tmp (tmpfs; 2,225 dirs / 814 MB on control). Born red on ffe10bf at B9.
@@ -140,7 +143,7 @@ check("B3 every checker runs against SCRATCH stores",
       ("OT_TRADES_DB" in _src) and ("OT_DERIVED_DB" in _src)
       and ("OT_RESTING_DB" in _src) and ("OT_SIGNAL_JOURNAL_DIR" in _src)
       and ("OT_LOG_FILE" in _src) and ("OT_COUNTERFACTUAL_DIR" in _src)
-      and ("OT_FEED_DB" in _src) and ("OT_RESTING_STOP_STATE" in _src)        # r292 (GATE.1)
+      and ("OT_FEED_DB" in _src)                                              # r292 (GATE.1)
       and ("OT_WAREHOUSE_STATE" in _src) and ("OT_PLAN_STATES_FILE" in _src)     # r307 (GATE.4)
       and ("OT_HEARTBEAT_FILE" in _src)                                          # OTV5 r4 (GATE.6)
       and ("mkdtemp" in _src or "TemporaryDirectory" in _src),
@@ -176,7 +179,7 @@ def _b3b():
         _m.subprocess.run = _orig
     env = seen.get("env") or {}
     want = ("OT_TRADES_DB", "OT_DERIVED_DB", "OT_RESTING_DB", "OT_SIGNAL_JOURNAL_DIR", "OT_LOG_FILE",
-            "OT_COUNTERFACTUAL_DIR", "OT_FEED_DB", "OT_RESTING_STOP_STATE", "OT_WAREHOUSE_STATE",   # r292
+            "OT_COUNTERFACTUAL_DIR", "OT_FEED_DB", "OT_WAREHOUSE_STATE",   # r292 (r68: OT_RESTING_STOP_STATE gone)
             "OT_PLAN_STATES_FILE",                                                   # r307 (GATE.4)
             "OT_HEARTBEAT_FILE")                                                     # OTV5 r4 (GATE.6)
     paths = {k: env.get(k) for k in want}

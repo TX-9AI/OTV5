@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """
-tests/check_exhaust_evidence.py  v5.0
+tests/check_exhaust_evidence.py  v5.1
+v5.1  2026-10-31  OTV5 r68 (CFG.5) — OT_RESTING_STOP_STATE leaves the scratch env: the resting stop and its state file are deleted
+      (the operator, 2026-10-31: "Resting stop was a study. It failed. Get this the fuck out of here"). No check changed.
 v5.0  2026-10-30  OTV5 r55 (BRK.17) — THE EXHAUSTION EXIT'S EVIDENCE IS WRITTEN; NO DECISION CHANGES.
       UNH 2026-10-29 took three Breakout exhaustion exits (10534a1a 09:42 ET +$200, 4f01b80a 10:01 +$144,
       449040f2 10:05 -$4.50, the last 60 s after entry) whose reason read only "exhaustion: new short extreme on
@@ -41,7 +43,7 @@ sys.path.insert(0, ROOT)
 _s = tempfile.mkdtemp(prefix="check_exhaust_evidence.")
 for _k, _v in (("OT_TRADES_DB", "trades.db"), ("OT_DERIVED_DB", "derived.db"), ("OT_RESTING_DB", "resting.db"),
                ("OT_FEED_DB", "feed.db"), ("OT_COUNTERFACTUAL_DIR", "cf"), ("OT_LOG_FILE", "bot.log"),
-               ("OT_SIGNAL_JOURNAL_DIR", "sj"), ("OT_RESTING_STOP_STATE", "rs.json"),
+               ("OT_SIGNAL_JOURNAL_DIR", "sj"),
                ("OT_WAREHOUSE_STATE", "ws"), ("OT_PLAN_STATES_FILE", "ps.json")):
     os.environ[_k] = os.path.join(_s, _v)
 os.environ.setdefault("OT_INSTRUMENT", "UNH")

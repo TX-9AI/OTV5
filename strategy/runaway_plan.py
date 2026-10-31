@@ -1,5 +1,8 @@
 """
-strategy/runaway_plan.py  v5.1
+strategy/runaway_plan.py  v5.2
+v5.2  2026-10-31  OTV5 r68 (CFG.5) — THE OT_RUNAWAY_END IMPORT-TIME NOTICE IS GONE: config v5.10 fixes Runaway's end at 10:30
+      and reads no key (the operator, 2026-10-31: "10&11–defaults are fine, take them out"), so there is no set or refused
+      value to name. The end itself (config.RUNAWAY_CUTOFF_ET) is unchanged.
 v5.1  2026-10-27  OTV5 r44 (BAR.1) — THE LAST CLOSED BAR IS FOUND BY TIME. fifty_held_now's "last closed 1m close", the
       frozen strength window and the re-validation walk read df_1m.iloc[-2] / iloc[:-1], one bar stale on a tick before
       the new minute's first row exists (META 2026-10-27 10:10:00 ET: a Breakout fired on 10:08 while 10:09 had closed
@@ -90,13 +93,6 @@ from strategy.runaway_continuation import (
 from utils.math_utils import safe_float
 
 logger = logging.getLogger(__name__)
-
-# r189 (RUNW.1): say which end is in force when a box set one (WA 0.5).
-if getattr(config, "RUNAWAY_END_ENV_REFUSED", ""):
-    logger.warning("[runaway] OT_RUNAWAY_END=%r REFUSED (needs HH:MM between 09:36 and the entries stop); "
-                   "Runaway's last entry stays before %s", config.RUNAWAY_END_ENV_REFUSED, config.RUNAWAY_CUTOFF_ET)
-elif __import__("os").environ.get("OT_RUNAWAY_END", "").strip():
-    logger.info("[runaway] OT_RUNAWAY_END in force: entries stop at %s", config.RUNAWAY_CUTOFF_ET)
 
 # ── GATE CATEGORIES AS DATA (WA §36) — the plan's own values ────────────────
 GATES = {

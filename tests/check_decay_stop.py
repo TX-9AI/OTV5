@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """
-tests/check_decay_stop.py  v5.0
+tests/check_decay_stop.py  v5.1
+v5.1  2026-10-31  OTV5 r68 (CFG.5) — OT_RESTING_STOP_STATE leaves the scratch env: the resting stop and its state file are deleted
+      (the operator, 2026-10-31: "Resting stop was a study. It failed. Get this the fuck out of here"). No check changed.
 v5.0  2026-10-30  OTV5 r58 (DECAY.1) — THE PEAK-DECAY PROFIT STOP. A TRADING CHANGE, ordered live for Monday 2026-11-02 under
       the operator's explicit override of the benchmark freeze: "I'm thinking like some kind of stop that says we've decayed
       20% from the peak so cut it" ... "I want the decay stop running by Monday". The rule (the study's "V0 B X30 arm+5,
@@ -61,7 +63,7 @@ sys.path.insert(0, ROOT)
 _s = tempfile.mkdtemp(prefix="check_decay_stop.")
 for _k, _v in (("OT_TRADES_DB", "trades.db"), ("OT_DERIVED_DB", "derived.db"), ("OT_RESTING_DB", "resting.db"),
                ("OT_FEED_DB", "feed.db"), ("OT_COUNTERFACTUAL_DIR", "cf"), ("OT_LOG_FILE", "bot.log"),
-               ("OT_SIGNAL_JOURNAL_DIR", "sj"), ("OT_RESTING_STOP_STATE", "rs.json"),
+               ("OT_SIGNAL_JOURNAL_DIR", "sj"),
                ("OT_WAREHOUSE_STATE", "ws"), ("OT_PLAN_STATES_FILE", "ps.json")):
     os.environ[_k] = os.path.join(_s, _v)
 os.environ.setdefault("OT_INSTRUMENT", "QQQ")

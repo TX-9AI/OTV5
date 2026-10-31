@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """
-tests/check_no_parc.py  v5.0
+tests/check_no_parc.py  v5.1
+v5.1  2026-10-31  OTV5 r68 (CFG.5) — N4 RE-POINTED, NOT DROPPED (section 38.4): seven more items left configure.sh's menu, TCS's
+      among them (the operator, 2026-10-31: "15&16-same thing. These are DEAD thesis"; "Just the menu item for TCS, keep
+      briefing the shadow."), so Done is 9 and the prompt names 1-9. The PARC property (no item, no key) is unchanged.
 v5.0  2026-10-31  OTV5 r67 (PARC.4) — new. PARC IS REMOVED AND PARK IS UNCHANGED. The operator, 2026-10-31: "On PARC,
       no. It was an idea. It failed. It's done." and "Yes" to removing its code. PARC (PARK's entry sold as a credit
       spread, OTV5 r46; paused to log at r50) was never an active strategy. This gate pins that nothing can reach it
@@ -13,8 +16,8 @@ v5.0  2026-10-31  OTV5 r67 (PARC.4) — new. PARC IS REMOVED AND PARK IS UNCHANG
       no _parc_strategy and no _STRUCTURE_BY_NAME["PARC"]; the admission table has no PARC rule; risk_manager has no
       _size_parc; exit_engine has no _evaluate_parc / _parc_nickel; structure.of() names no PARC; and an AST sweep of
       every non-test .py finds no identifier and no (non-docstring) string naming PARC
-  N4  configure.sh: no parc_label / change_parc / OT_PARC outside comments; TCS is item 15, Done is 16, the prompt
-      names 1-16
+  N4  configure.sh: no parc_label / change_parc / OT_PARC outside comments; (r68) Done is 9, the prompt
+      names 1-9
   N5  PARK unchanged: on a fixture (a long, a short, a quiet first hour, GATE-G against the gap, the 11:03 dormant
       minute) PARK's prepared checks, conditions and signal, its admission rule, its size, its plan state, its window
       and its cap exclusion equal tests/fixtures/park_plan_93c7f93.json, captured on base 93c7f93 by this file's
@@ -276,9 +279,9 @@ def main():
     cfg = open(os.path.join(ROOT, "configure.sh"), encoding="utf-8").read()
     live = "\n".join(l for l in cfg.splitlines() if not l.lstrip().startswith("#"))
     bad = [w for w in ("parc_label", "change_parc", "OT_PARC", "PARC") if re.search(rf"\b{w}\b", live)]
-    check("N4 configure.sh: no PARC item outside comments; 15) change_tcs, 16) break, the prompt names 1-16",
-          not bad and re.search(r"^\s*15\)\s*change_tcs", cfg, re.M) and re.search(r"^\s*16\)\s*break", cfg, re.M)
-          and "Select [1-16]" in cfg and "Select [1-17]" not in cfg, f"live mentions {bad}")
+    check("N4 configure.sh: no PARC item outside comments; 9) break, the prompt names 1-9 (r68: TCS's item left too)",
+          not bad and re.search(r"^\s*9\)\s*break", cfg, re.M)
+          and "Select [1-9]" in cfg and "Select [1-17]" not in cfg and "Select [1-16]" not in cfg, f"live mentions {bad}")
 
     # ── N5 PARK unchanged ─────────────────────────────────────────────────────
     env = {k: v for k, v in os.environ.items() if not k.startswith("OT_")}

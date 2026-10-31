@@ -1,6 +1,10 @@
 #!/bin/bash
 # ==========================================================================
-# setup_ec2.sh  v5.2
+# setup_ec2.sh  v5.3
+# v5.3  2026-10-31  OTV5 r68 (CFG.5) — THE UNIT NO LONGER CARRIES OT_SCALE_BREAKOUT OR OT_PIN_PROXIMITY_ACTIVE (nor their
+#       --plan lines). config.py v5.10 fixes both ON and reads neither key; the operator, 2026-10-31: "7. Pin gate, default
+#       "on" —remove from the menu"; "9. Scaling, default on—take it out". This also ends a contradiction: this installer
+#       primed the gate 0 (the 2026-09-24 PIN.1 ruling) while every one of the 14 boxes ran 1 (measured 2026-10-31).
 # v5.2  2026-10-25  OTV5 r17 (BOOT.14) — TWO INSTALL MODES, ONE INSTALLER (OT_INSTALL_MODE). "unattended" (default) is
 #       unchanged: a terminal is reattached when one exists, the summary prints, the bootstrap is shredded here, and the
 #       install ends in a login shell. "controller" (control's fleet.py): no terminal is reattached, the summary prints
@@ -264,14 +268,12 @@ INSTRUMENT="${OT_INSTRUMENT:-QQQ}"
 RISK_USD="${OT_RISK_USD:-200}"
 PAPER_TRADING="True"
 # r132 — the keys configure.sh grew after v3, primed so a fresh box shows values
-# the operator chose. Defaults match config.py's, EXCEPT the pin gate: config.py
-# defaults it ON and the operator ruled it OFF on 2026-09-24 (PIN.1).
+# the operator chose. Defaults match config.py's. r68 (CFG.5): the pin gate and Breakout
+# scaling are fixed ON in config.py and are no longer written here.
 SCALE_ORB="${OT_SCALE_ORB:-1}"                  # r161 — configure.sh items 9-11
-SCALE_BREAKOUT="${OT_SCALE_BREAKOUT:-1}"
 SCALE_VOLT="${OT_SCALE_VOLT:-1}"
 ORB_BUDGET_USD="${OT_ORB_BUDGET_USD:-$RISK_USD}"
 DAILY_LOSS_LIMIT="${OT_DAILY_LOSS_LIMIT:-$RISK_USD}"
-PIN_GATE="${OT_PIN_PROXIMITY_ACTIVE:-0}"
 SWAP_GB="${OT_SWAP_GB:-2}"
 CLAUDE_AT_BOOT="${OT_CLAUDE_AT_BOOT:-0}"
 DATA_CAPTURE="${OT_DATA_CAPTURE:-standalone}"
@@ -411,11 +413,9 @@ if [ "$PLAN" = 1 ]; then
     echo "PLAN paper=$PAPER_TRADING"
     echo "PLAN risk_usd=$RISK_USD"
     echo "PLAN scale_orb=$SCALE_ORB"
-    echo "PLAN scale_breakout=$SCALE_BREAKOUT"
     echo "PLAN scale_volt=$SCALE_VOLT"
     echo "PLAN orb_budget_usd=$ORB_BUDGET_USD"
     echo "PLAN daily_loss_limit=$DAILY_LOSS_LIMIT"
-    echo "PLAN pin_gate=$PIN_GATE"
     echo "PLAN swap_gb=$SWAP_GB"
     echo "PLAN requirements=$REQ_FILE"
     echo "PLAN git_repo=$GITHUB_REPO"
@@ -547,11 +547,9 @@ Environment=TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID}
 Environment=GITHUB_TOKEN=${GITHUB_TOKEN}
 Environment=GITHUB_REPO=${GITHUB_REPO}
 Environment=OT_SCALE_ORB=${SCALE_ORB}
-Environment=OT_SCALE_BREAKOUT=${SCALE_BREAKOUT}
 Environment=OT_SCALE_VOLT=${SCALE_VOLT}
 Environment=OT_ORB_BUDGET_USD=${ORB_BUDGET_USD}
 Environment=OT_DAILY_LOSS_LIMIT=${DAILY_LOSS_LIMIT}
-Environment=OT_PIN_PROXIMITY_ACTIVE=${PIN_GATE}
 ExecStartPre=/bin/bash -c 'touch ${INSTALL_DIR}/bot.log ${INSTALL_DIR}/trades.db && chown ${USER}:${USER} ${INSTALL_DIR}/bot.log ${INSTALL_DIR}/trades.db'
 ExecStart=${VENV}/bin/python main.py --service
 Restart=always

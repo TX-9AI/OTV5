@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """
-tests/check_hunt_wick_since_entry.py  v5.0
+tests/check_hunt_wick_since_entry.py  v5.1
+v5.1  2026-10-31  OTV5 r68 (CFG.5) — OT_RESTING_STOP_STATE leaves the scratch env: the resting stop and its state file are deleted
+      (the operator, 2026-10-31: "Resting stop was a study. It failed. Get this the fuck out of here"). No check changed.
 v5.0  2026-10-28  OTV5 r52 (HUNT.15) — THE HUNT'S TARGET-WICK TAKE-OFF JUDGES ONLY A BAR THE TRADE LIVED THROUGH.
       TSLA 2026-10-28, trade c0e55b76: LiquidityHunt short, entry 13:38:00.93 UTC (09:38:00 ET), target 405.8409.
       At 09:38:15 exit_engine._hunt_at_target judged the 09:37 bar (low 405.78, close 406.44: a wick through the
@@ -30,7 +32,7 @@ sys.path.insert(0, ROOT)
 _s = tempfile.mkdtemp(prefix="check_hunt_wick_since_entry.")
 for _k, _v in (("OT_TRADES_DB", "trades.db"), ("OT_DERIVED_DB", "derived.db"), ("OT_RESTING_DB", "resting.db"),
                ("OT_FEED_DB", "feed.db"), ("OT_COUNTERFACTUAL_DIR", "cf"), ("OT_LOG_FILE", "bot.log"),
-               ("OT_SIGNAL_JOURNAL_DIR", "sj"), ("OT_RESTING_STOP_STATE", "rs.json"),
+               ("OT_SIGNAL_JOURNAL_DIR", "sj"),
                ("OT_WAREHOUSE_STATE", "ws"), ("OT_PLAN_STATES_FILE", "ps.json")):
     os.environ[_k] = os.path.join(_s, _v)
 os.environ.setdefault("OT_INSTRUMENT", "TSLA")

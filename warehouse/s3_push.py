@@ -1,5 +1,8 @@
 """
-warehouse/s3_push.py  v5.4
+warehouse/s3_push.py  v5.5
+v5.5  2026-10-31  OTV5 r68 (CFG.5) — THE PAUSED LINE NAMES configure.sh ITEM 8: data capture moved from 14 to 8 when the
+      operator's eight removals left the menu 1-9 (2026-10-31: "Do NOT add anything else to my config following a study or
+      test"). Text only; nothing pushes differently.
 v5.4  2026-10-31  OTV5 r64 (SER.1) — A RUN SHIPS SERIES BATCHES UNTIL CAUGHT UP, AND THE DRAIN OWES THE WHOLE DAY. One 50,000-row
       object per table per 5-minute run is ~167 rows/s; SPX writes ~310 quote rows/s, so quote_series fell behind every
       session (15:45 rows reached S3 the NEXT MORNING on 10-21, 10-22, 10-26, 10-28) and on 2026-10-30, taken down at
@@ -1576,7 +1579,7 @@ def main(argv=None) -> int:
                 _why = open(PAUSE_FLAG).read().strip()
             except Exception:
                 _why = "?"
-            print("s3_push: PAUSED ({}) - nothing pushed. configure.sh item 14 (or a typed OVERRIDE at item 1) "
+            print("s3_push: PAUSED ({}) - nothing pushed. configure.sh item 8 (or a typed OVERRIDE at item 1) "
                   "resumes it.".format(_why))
             if do_verify:
                 print("DRAIN host={} sym={} drained=no pushed=0 failed=0 prefixes=0 local=0 s3=0 short=0 "

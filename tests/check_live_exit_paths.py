@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """
-tests/check_live_exit_paths.py  v5.1
+tests/check_live_exit_paths.py  v5.2
+v5.2  2026-10-31  OTV5 r68 (CFG.5) — OT_RESTING_STOP_STATE leaves the scratch env: the resting stop and its state file are deleted
+      (the operator, 2026-10-31: "Resting stop was a study. It failed. Get this the fuck out of here"), and so does the
+      PM._rs.active_mode stub (it pinned the rest OFF, now the only path). No check changed.
 v5.1  2026-10-31  OTV5 r67 (PARC.4) — L1c's credit vertical is a SweepCreditSpread lone vertical
       (structure CONDOR_LEG, is_condor_leg 0), not a PARC row, and the L4 INFO line is gone: PARC is removed.
       The operator, 2026-10-31: "On PARC, no. It was an idea. It failed. It's done." and "Yes" to removing its code. Every property unchanged.
@@ -47,7 +50,7 @@ sys.path.insert(0, ROOT)
 os.environ.setdefault("OT_INSTRUMENT", "QQQ")
 _s = tempfile.mkdtemp(prefix="check_live_exit_paths.")
 for _k, _f in (("OT_TRADES_DB", "trades.db"), ("OT_DERIVED_DB", "derived_store.db"),
-               ("OT_RESTING_DB", "resting.db"), ("OT_RESTING_STOP_STATE", "rs.json"),
+               ("OT_RESTING_DB", "resting.db"),
                ("OT_COUNTERFACTUAL_DIR", "cf"), ("OT_LOG_FILE", "bot.log")):
     os.environ.setdefault(_k, os.path.join(_s, _f))
 ET = ZoneInfo("America/New_York")
@@ -120,7 +123,6 @@ def main():
     TU.now_et = lambda: clock["t"]
     acct = {"a": _Acct()}
     EE.get_session, EE.get_account = (lambda: "S"), (lambda: acct["a"])
-    PM._rs.active_mode = lambda paper: "off"
     cap = _Cap()
     for _ln in ("", "execution.position_manager", "execution.exit_engine"):
         logging.getLogger(_ln).addHandler(cap); logging.getLogger(_ln).setLevel(logging.INFO)

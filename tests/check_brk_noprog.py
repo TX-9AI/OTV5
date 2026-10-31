@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 """
-tests/check_brk_noprog.py  v5.0
+tests/check_brk_noprog.py  v5.1
+v5.1  2026-10-31  OTV5 r68 (CFG.5) — N11-N13 RE-POINTED, NOT DROPPED (section 38.4). The operator, 2026-10-31: "10&11–defaults are
+      fine, take them out"; "12, same thing. Trade it—I don't want this toggled". config v5.10 reads neither OT_BREAKOUT_END
+      nor OT_BRK_NOPROG: N11 pins Breakout's end at 10:30 with the key unset, 15:40 or junk; N12 pins trade with it unset,
+      log or off; N13 the banner shows both with the keys set otherwise. N1-N10, N14 (the rule itself) unchanged.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 BREAKOUT'S NO-PROGRESS EXIT (BRK.8) AND ITS PER-BOX ENTRY END (BRK.9).
 v1.0  2026-10-10  OTV4TEST r265. The operator, 2026-10-10 13:37 ET: "Yes, to all. Study, fit & apply";
@@ -17,9 +21,9 @@ v1.0  2026-10-10  OTV4TEST r265. The operator, 2026-10-10 13:37 ET: "Yes, to all
   N8  a SHORT (put) Breakout: the mirror on the lows
   N9  deterministic + recorded once: decide twice -> CLOSE twice, ONE row (acted true)
   N10 the exit is priced by the engine's own rule: the mark ladder ("walk")
-  N11 config: OT_BREAKOUT_END 15:40 moves ONLY Breakout's window; 16:00 / 0940x / unset keep 10:30 (refused named)
-  N12 config: OT_BRK_NOPROG unset -> log; trade/off honoured; junk -> log, refused named
-  N13 the Service mode line names breakout_end and brk_noprog (the REAL main._banner_dials)
+  N11 config: Breakout's end is 10:30 whatever OT_BREAKOUT_END says (r68: not read)
+  N12 config: no-progress is trade whatever OT_BRK_NOPROG says (r68: not read)
+  N13 the Service mode line names breakout_end=10:30 and brk_noprog=trade (the REAL main._banner_dials)
   N14 the ENTRY bar never counts: a stalled entry bar + one stalled bar after it is still undecided
 NOT RUN (exit 2), never FAIL, when the imports cannot load (e.g. a bare python3, no pandas).
 """
@@ -83,8 +87,8 @@ def _rows():
 def _cfg_probe(env):
     e = {k: v for k, v in os.environ.items() if k not in ("OT_BREAKOUT_END", "OT_BRK_NOPROG")}
     e.update(env)
-    code = ("import config,json;print(json.dumps([config.ENTRY_WINDOWS['Breakout'][1], config.BREAKOUT_END_ENV_REFUSED,"
-            " config.ENTRY_WINDOWS['RunawayContinuation'][1], config.BRK_NOPROG_MODE, config.BRK_NOPROG_ENV_REFUSED]))")
+    code = ("import config,json;print(json.dumps([config.ENTRY_WINDOWS['Breakout'][1], None,"
+            " config.ENTRY_WINDOWS['RunawayContinuation'][1], config.BRK_NOPROG_MODE, None]))")
     p = subprocess.run([sys.executable, "-c", code], cwd=ROOT, env=e, capture_output=True, text=True, timeout=120)
     return json.loads(p.stdout.strip().splitlines()[-1]) if p.returncode == 0 and p.stdout.strip() else p.stderr[-300:]
 
@@ -163,27 +167,27 @@ def main():
     pol = XE.ExitEngine._exit_policy({"strategy": "Breakout"}, i1.reason if i1 else "no_progress:")
     check("N10 the cut is priced by the engine's own rule: the mark ladder ('walk')", pol == "walk", pol)
 
-    c_set = _cfg_probe({"OT_BREAKOUT_END": "15:40"})
-    c_bad = _cfg_probe({"OT_BREAKOUT_END": "16:00"})
-    c_junk = _cfg_probe({"OT_BREAKOUT_END": "0940x"})
+    # r68 (CFG.5): the operator, 2026-10-31, "10&11–defaults are fine, take them out"; "12, same thing. Trade it—I
+    # don't want this toggled". Neither key is read: whatever the unit says, Breakout ends 10:30 and the cut trades.
     c_none = _cfg_probe({})
-    check("N11 OT_BREAKOUT_END 15:40 moves ONLY Breakout (Runaway unchanged); 16:00 / 0940x refused -> 10:30; unset 10:30",
-          isinstance(c_set, list) and c_set[0] == [15, 40] and c_set[1] == "" and c_set[2] == c_none[2]
-          and c_bad[0] == [10, 30] and c_bad[1] == "16:00" and c_junk[0] == [10, 30] and c_junk[1] == "0940x"
-          and c_none[0] == [10, 30] and c_none[1] == "", f"set={c_set} bad={c_bad} junk={c_junk} none={c_none}")
+    c_set = _cfg_probe({"OT_BREAKOUT_END": "15:40"})
+    c_junk = _cfg_probe({"OT_BREAKOUT_END": "0940x"})
+    check("N11 Breakout's end is 10:30 with OT_BREAKOUT_END unset, 15:40 or junk (the key is not read); Runaway 10:30",
+          isinstance(c_none, list) and c_none[0] == [10, 30] and c_none[2] == [10, 30]
+          and c_set == c_none and c_junk == c_none, f"none={c_none} set={c_set} junk={c_junk}")
 
-    m_none, m_tr, m_off, m_bad = (_cfg_probe({}), _cfg_probe({"OT_BRK_NOPROG": "trade"}),
-                                  _cfg_probe({"OT_BRK_NOPROG": "OFF"}), _cfg_probe({"OT_BRK_NOPROG": "yes"}))
-    check("N12 OT_BRK_NOPROG: unset -> log; trade / OFF honoured; 'yes' -> log, refused named",
-          m_none[3] == "log" and m_tr[3] == "trade" and m_off[3] == "off" and m_bad[3] == "log" and m_bad[4] == "yes",
-          f"{m_none} {m_tr} {m_off} {m_bad}")
+    m_none, m_log, m_off = (_cfg_probe({}), _cfg_probe({"OT_BRK_NOPROG": "log"}), _cfg_probe({"OT_BRK_NOPROG": "off"}))
+    check("N12 no-progress is 'trade' with OT_BRK_NOPROG unset, log or off (the key is not read)",
+          isinstance(m_none, list) and m_none[3] == "trade" and m_log[3] == "trade" and m_off[3] == "trade",
+          f"{m_none} {m_log} {m_off}")
 
-    e = dict(os.environ, OT_BREAKOUT_END="15:40", OT_BRK_NOPROG="trade", OT_INSTRUMENT=os.environ.get("OT_INSTRUMENT", "QQQ"))
+    e = dict(os.environ, OT_BREAKOUT_END="15:40", OT_BRK_NOPROG="log", OT_INSTRUMENT=os.environ.get("OT_INSTRUMENT", "QQQ"))
     p = subprocess.run([sys.executable, "-c", "import main;print(main._banner_dials())"], cwd=ROOT, env=e,
                        capture_output=True, text=True, timeout=240)
     out = (p.stdout.strip().splitlines() or [""])[-1]
-    check("N13 the Service mode line names 'breakout_end=15:40' and 'brk_noprog=trade' (the REAL main._banner_dials)",
-          p.returncode == 0 and "breakout_end=15:40" in out and "brk_noprog=trade" in out, out or p.stderr[-300:])
+    check("N13 the Service mode line names 'breakout_end=10:30' and 'brk_noprog=trade' with the keys set otherwise "
+          "(the REAL main._banner_dials)",
+          p.returncode == 0 and "breakout_end=10:30" in out and "brk_noprog=trade" in out, out or p.stderr[-300:])
 
     ENTRY_STALL = [(101.0, 100.6)] * 5 + [(101.25, 101.10), (101.28, 101.15), (101.2, 101.1)]
     t_0937_half = pd.Timestamp("2026-10-08 09:37:30", tz="America/New_York").timestamp()

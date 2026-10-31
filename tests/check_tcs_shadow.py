@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
-"""tests/check_tcs_shadow.py  v5.2
+"""tests/check_tcs_shadow.py  v5.3
+v5.3  2026-10-31  OTV5 r68 (CFG.5) — OT_RESTING_STOP_STATE leaves the scratch env: the resting stop and its state file are deleted
+      (the operator, 2026-10-31: "Resting stop was a study. It failed. Get this the fuck out of here"). No check changed.
 v5.2  2026-10-31  OTV5 r59 (ENT.1 land) — the fixture expiry is TODAY (ET), not the literal 2026-10-30: from 10-31 I4's restart
       settled the open shadow as an expired orphan at boot and went red on every tree (83abcc6 included), refusing r59's land.
 v5.1  2026-10-30  OTV5 r57 (TCS.LOG1) — M1/M2 manage ticks run on a clock pinned to 13:00 ET (the lander ran M2 at 16:51 ET and the real 15:45 hard close pre-empted the breach on both books).
@@ -58,7 +60,7 @@ for _k, _f in (("OT_TRADES_DB", "trades.db"), ("OT_DERIVED_DB", "derived_store.d
                ("OT_FEED_DB", "feed.db"), ("OT_PLAN_STATES_FILE", "plan_states.json"),
                ("OT_LOG_FILE", "bot.log"), ("OT_HEARTBEAT_FILE", "hb"),
                ("OT_COUNTERFACTUAL_DIR", "cf"), ("OT_SIGNAL_JOURNAL_DIR", "sj"),
-               ("OT_RESTING_STOP_STATE", "rs.json"), ("OT_WAREHOUSE_STATE", "wh")):
+               ("OT_WAREHOUSE_STATE", "wh")):
     os.environ[_k] = os.path.join(_TD, _f)
 os.environ["OT_PAPER_TRADING"] = "1"
 os.environ["OT_RISK_USD"] = "2500"

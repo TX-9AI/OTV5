@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """
-tests/check_brk_spec_1029.py  v5.1
+tests/check_brk_spec_1029.py  v5.2
+v5.2  2026-10-31  OTV5 r68 (CFG.5) — OT_RESTING_STOP_STATE leaves the scratch env: the resting stop and its state file are deleted
+      (the operator, 2026-10-31: "Resting stop was a study. It failed. Get this the fuck out of here"). No check changed.
 v5.1  2026-10-30  OTV5 r58 (DECAY.1) — OT_DECAY_STOP=0 HERE: this checker pins a pre-decay exit in isolation. T1 / T3 (a +30% Breakout given back to 1.90 below 0.5W, and the 2.60 -> 2.00 tick before the 0.5W arm) now close on the peak-decay stop, which is the r57 rule working, not the trail;
       the decay stop itself is gated by tests/check_decay_stop.py. No assertion changed.
 v5.0  2026-10-29  OTV5 r54 (BRK.16) — THE OPERATOR'S 2026-10-29 BREAKOUT SPEC, DRIVEN THROUGH THE REAL CODE.
@@ -60,7 +62,7 @@ sys.path.insert(0, ROOT)
 _s = tempfile.mkdtemp(prefix="check_brk_spec_1029.")
 for _k, _v in (("OT_TRADES_DB", "trades.db"), ("OT_DERIVED_DB", "derived.db"), ("OT_RESTING_DB", "resting.db"),
                ("OT_FEED_DB", "feed.db"), ("OT_COUNTERFACTUAL_DIR", "cf"), ("OT_LOG_FILE", "bot.log"),
-               ("OT_SIGNAL_JOURNAL_DIR", "sj"), ("OT_RESTING_STOP_STATE", "rs.json"),
+               ("OT_SIGNAL_JOURNAL_DIR", "sj"),
                ("OT_WAREHOUSE_STATE", "ws"), ("OT_PLAN_STATES_FILE", "ps.json")):
     os.environ[_k] = os.path.join(_s, _v)
 os.environ.setdefault("OT_INSTRUMENT", "QQQ")

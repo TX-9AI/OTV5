@@ -1,5 +1,12 @@
 """
-execution/position_manager.py  v5.29
+execution/position_manager.py  v5.30
+v5.30 2026-10-31  OTV5 r68 (CFG.5) — THE RESTING STOP IS DELETED. The operator, 2026-10-31: "13. Resting stop—I NEVER asked
+      for any of this to be added to config. Resting stop was a study. It failed. Get this the fuck out of here". The three
+      r266 (STOP.1) hooks go with execution/resting_stop.py: _manage_one's resolve-first block, _execute_exit's begin-a-rest
+      branch and its _rested parameter, and the abandon-on-close. NO BEHAVIOUR CHANGE: every hook was gated on
+      resting_stop.active_mode() == "trade", which needs OT_RESTING_STOP=trade on a paper box, and all 14 boxes carried
+      off (2026-10-31); with no rest ever begun, is_resting() was False and abandon() a no-op, so a stop closes at the mark
+      exactly as it did. The shadow book never rested (r57).
 v5.29 2026-10-31  OTV5 r67 (PARC.4) — PARC LEAVES THE ADMISSION TABLE (its constant and its rule).
       The operator, 2026-10-31: "On PARC, no. It was an idea. It failed. It's done." and "Yes" to removing its code. _execute_exit's credit_signed keeps
       structure.is_credit_vertical(record) (r46): it is structural, and every row it signs is a credit vertical.
@@ -302,7 +309,6 @@ from strategy.structure import (is_credit_vertical as _is_credit_vertical,
                                 is_tent as _is_tent,
                                 has_assignment_risk as _has_assignment_risk)   # r149
 from execution.exit_engine import get_exit_engine, ExitDecision
-from execution import resting_stop as _rs                          # r266 (STOP.1)
 from execution import fill_observers as _fo        # r270 (PMAP.1 + FILL.2): record-only observers
 from data.tasty_client import get_client, TastyClientError, sdk_result
 from risk.risk_manager import get_risk_manager
@@ -1097,31 +1103,6 @@ class PositionManager:
         exit_eng = get_exit_engine(self.paper_trading)
         if getattr(self, "SHADOW", False) is True:                                      # r57 (TCS.LOG1): the shadow book's own engine
             exit_eng = self._exit_engine()
-        # ── r266 (STOP.1) — A RESTING STOP IS RESOLVED BEFORE ANYTHING ELSE ──
-        # The stop already fired; this tick only decides WHICH price paper books.
-        try:
-            if _rs.is_resting(trade_id):
-                from execution.exit_engine import _eod_due
-                if _eod_due(record):
-                    _rs.abandon(trade_id, "the end-of-day close governs")
-                else:
-                    _act = _rs.step(trade_id, current_premium)
-                    if _act is None:
-                        return True                                  # still resting
-                    _px, _label, _st = _act
-                    _d = ExitDecision(should_exit=True,
-                                      exit_reason=f"{_st['reason']} | rested: {_label}")
-                    _closed = self._execute_exit(record, _d, _px, _rested=True)
-                    if _closed:
-                        _rs.finish(trade_id, _px, _label)
-                    return not _closed
-        except Exception as _rse:                                    # noqa: BLE001
-            logger.error(f"resting stop for {trade_id[:8]} raised ({_rse}) - abandoning it; "
-                         f"the normal exit path decides")
-            try:
-                _rs.abandon(trade_id, f"raised: {_rse}")
-            except Exception:                                        # noqa: BLE001
-                pass
         # ── r167 — THE MANAGEMENT PLAN DECIDES FIRST for the records it covers
         # (runaway, butterfly, a lone sweep/TCS vertical). It asserts the
         # declared spec conditions itself (15% floor / hard stop, the breach
@@ -1469,8 +1450,7 @@ class PositionManager:
 
     def _execute_exit(self, record: TradeRecord,
                        decision: ExitDecision,
-                       current_premium: float,
-                       _rested: bool = False) -> bool:
+                       current_premium: float) -> bool:
         """Place the exit and book P&L ONLY on a confirmed fill. Returns True if
         the position genuinely closed, False if not (caller retries).
 
@@ -1486,19 +1466,6 @@ class PositionManager:
         exit_eng = get_exit_engine(self.paper_trading)
         if getattr(self, "SHADOW", False) is True:                                      # r57 (TCS.LOG1): the shadow book's own engine
             exit_eng = self._exit_engine()
-        # r266 (STOP.1) — a premium stop with the mark already under its level RESTS instead.
-        if not _rested and getattr(self, "SHADOW", False) is not True:                  # r57: a shadow never rests
-            try:
-                if (_rs.active_mode(self.paper_trading) == "trade"
-                        and _rs.eligible(record, decision.exit_reason)):
-                    _lvl = _rs.level_for(record, decision.exit_reason,
-                                         getattr(exit_eng, "_trail_stops", {}).get(trade_id))
-                    if _lvl and current_premium is not None and float(current_premium) < _lvl:
-                        _rs.begin(record, decision.exit_reason, float(current_premium), _lvl)
-                        return False                                 # resting: the row stays open
-            except Exception as _rse:                                # noqa: BLE001
-                logger.error(f"resting stop could not start for {trade_id[:8]} ({_rse}) - "
-                             f"closing as before")
         fill     = exit_eng.place_exit_order(record, decision.exit_reason,
                                              mark_price=current_premium)
 
@@ -1592,11 +1559,6 @@ class PositionManager:
         )
 
         exit_eng.clear_trail(trade_id)
-        if not _rested:                                              # r266: any other close ends a rest
-            try:
-                _rs.abandon(trade_id, f"closed by {str(decision.exit_reason).split(' ')[0]}")
-            except Exception:                                        # noqa: BLE001
-                pass
 
         # ── Re-arm ORB engine if this was an ORB trade ─────────────────────────
         # Allows the engine to watch for another breakout attempt this session

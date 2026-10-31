@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """
-tests/check_eod_hold_log.py  v5.0
+tests/check_eod_hold_log.py  v5.1
+v5.1  2026-10-31  OTV5 r68 (CFG.5) — the PM._rs.active_mode stub is gone with the resting stop (deleted; the operator, 2026-10-31:
+      "Resting stop was a study. It failed. Get this the fuck out of here"): it pinned the rest OFF, which is now the only path. No check changed.
 v5.0  2026-10-26  OTV5 r36 (EOD.2) — AN INTENDED EOD HOLD IS ONE INFO LINE, NOT AN ERROR EVERY TICK.
       AMD 2026-10-26: the paper EOD close of f819b0bd was held from 15:45 to the 15:55 cross by design (EOD.1), and
       every manage tick logged "Exit NOT confirmed ... will retry" at ERROR - 60 lines. Driven through the REAL paper
@@ -78,9 +80,8 @@ def main():
     cap = _Cap(); lg = logging.getLogger("execution.position_manager"); lg.addHandler(cap); lg.setLevel(logging.DEBUG)
     self_ = type("PMStub", (), {"paper_trading": True})()
     dec = EE.ExitDecision(should_exit=True, exit_reason=WHY)
-    _gee, _am = PM.get_exit_engine, PM._rs.active_mode
+    _gee = PM.get_exit_engine
     try:
-        PM._rs.active_mode = lambda paper: "off"
         PM.get_exit_engine = lambda paper=True: eng
         EE.now_et = lambda: at(15, 46)
         rets = [PM.PositionManager._execute_exit(self_, dict(ORB), dec, 1.40) for _ in range(20)]
@@ -102,7 +103,7 @@ def main():
         check("H4 any other unconfirmed exit still logs ERROR every tick", rets == [False] * 3 and len(errs) == 3,
               f"errors={len(errs)}")
     finally:
-        PM.get_exit_engine, PM._rs.active_mode, EE.now_et = _gee, _am, _real
+        PM.get_exit_engine, EE.now_et = _gee, _real
 
     shutil.rmtree(_s, ignore_errors=True)
     print(f"\n{'ALL PASS' if not FAILED else 'FAILED: ' + ', '.join(FAILED)}")

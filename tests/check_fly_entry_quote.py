@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """
-tests/check_fly_entry_quote.py  v5.1
+tests/check_fly_entry_quote.py  v5.2
+v5.2  2026-10-31  OTV5 r68 (CFG.5) — OT_RESTING_STOP_STATE leaves the scratch env: the resting stop and its state file are deleted
+      (the operator, 2026-10-31: "Resting stop was a study. It failed. Get this the fuck out of here"). No check changed.
 v5.1  2026-10-31  OTV5 r67 (PARC.4) — F7's credit vertical is a SweepCreditSpread lone vertical
       (structure CONDOR_LEG, is_condor_leg 0), not a PARC row: PARC is removed. The operator, 2026-10-31: "On PARC, no. It was an idea. It failed. It's done." and "Yes" to removing its code.
       The property (a credit vertical writes its short leg's values) is unchanged.
@@ -45,7 +47,7 @@ for _sp in _glob.glob(os.path.join(ROOT, "venv", "lib", "python*", "site-package
 _s = tempfile.mkdtemp(prefix="check_fly_entry_quote.")
 for _k, _v in (("OT_TRADES_DB", "trades.db"), ("OT_DERIVED_DB", "derived.db"), ("OT_RESTING_DB", "resting.db"),
                ("OT_FEED_DB", "feed.db"), ("OT_COUNTERFACTUAL_DIR", "cf"), ("OT_LOG_FILE", "bot.log"),
-               ("OT_SIGNAL_JOURNAL_DIR", "sj"), ("OT_RESTING_STOP_STATE", "rs.json"),
+               ("OT_SIGNAL_JOURNAL_DIR", "sj"),
                ("OT_WAREHOUSE_STATE", "ws"), ("OT_PLAN_STATES_FILE", "ps.json")):
     os.environ[_k] = os.path.join(_s, _v)
 os.environ.setdefault("OT_INSTRUMENT", "NVDA")

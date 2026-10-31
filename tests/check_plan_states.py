@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """
-tests/check_plan_states.py  v5.5
+tests/check_plan_states.py  v5.6
+v5.6  2026-10-31  OTV5 r68 (CFG.5) — OT_RESTING_STOP_STATE leaves the scratch env: the resting stop and its state file are deleted
+      (the operator, 2026-10-31: "Resting stop was a study. It failed. Get this the fuck out of here"). No check changed.
 v5.5  2026-10-31  OTV5 r67 (PARC.4) — S1 / S3 RE-POINTED (WA section 38.4): PARC is removed, so the
       ruled roster's one LOG plan is TrendCreditSpread and S3 drops PARC's two cases; OT_PARC leaves SWITCHES. The operator, 2026-10-31: "On PARC, no. It was an idea. It failed. It's done." and "Yes" to removing its code.
       Every other state is unchanged.
@@ -72,7 +74,7 @@ sys.path.insert(0, ROOT)
 _TD = tempfile.mkdtemp(prefix="check_plan_states_")
 for _k, _v in (("OT_TRADES_DB", "t.db"), ("OT_DERIVED_DB", "d.db"), ("OT_FEED_DB", "f.db"),
                ("OT_LOG_FILE", "bot.log"), ("OT_SIGNAL_JOURNAL_DIR", "sj"), ("OT_RESTING_DB", "r.db"),
-               ("OT_COUNTERFACTUAL_DIR", "cf"), ("OT_RESTING_STOP_STATE", "rs.json"),
+               ("OT_COUNTERFACTUAL_DIR", "cf"),
                ("OT_WAREHOUSE_STATE", "ws"), ("OT_PLAN_STATES_FILE", "plan_states.json")):
     os.environ[_k] = os.path.join(_TD, _v)
 os.environ.setdefault("OT_INSTRUMENT", "QQQ")

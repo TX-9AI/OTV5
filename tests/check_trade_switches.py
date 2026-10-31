@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """
-tests/check_trade_switches.py  v5.0
+tests/check_trade_switches.py  v5.1
+v5.1  2026-10-31  OTV5 r68 (CFG.5) — S11 RE-POINTED, NOT DROPPED (section 38.4): config v5.10 fixes Runaway's end at 10:30 and reads
+      no OT_RUNAWAY_END (the operator, 2026-10-31: "10&11–defaults are fine, take them out"), so the same six cases now read
+      10:30 in all five Runaway readers and RUNAWAY_END_ENV_REFUSED is absent. Hunt / Breakout / VOLT unchanged.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.3  2026-10-12  OTV4TEST r273 (BFLY.10) — S9's fly rows RE-POINTED 12:00 -> 13:00. r273 (BFLY.10), by ruling - the operator, 2026-10-12: "reduce the fly window to 1300".
 v1.2  2026-10-03  OTV4TEST r189 (RUNW.1) — S11: OT_RUNAWAY_END MOVES RUNAWAY'S END AND NOTHING ELSE.
@@ -37,9 +40,9 @@ WHAT IT DRIVES (the REAL plans, on setups that FIRE when the switch is on):
       breakout constants).
   S9  UNCHANGED: the ORBStrategy row, both butterflies and both credit spreads
       keep their windows (the GEX pin fly is exempt by ruling).
-  S11 OT_RUNAWAY_END (r189), FRESH interpreter per case: unset -> every Runaway
-      window reader says 10:30; "11:30" -> all say 11:30; "1130", "16:30",
-      "09:30", "11:75" -> REFUSED (named) and all say 10:30; Hunt, Breakout and
+  S11 OT_RUNAWAY_END (r189; r68: no longer read), FRESH interpreter per case:
+      unset, "11:30", "1130", "16:30", "09:30", "11:75" -> every Runaway window
+      reader says 10:30, RUNAWAY_END_ENV_REFUSED is absent; Hunt, Breakout and
       VOLT stay at 10:30 in every case.
   S10 THE ATP FLY, in a FRESH interpreter (its plan reads the flag at import):
       switch UNSET -> config.ATP_BUTTERFLY_ENABLED and atp_butterfly_plan.ENABLED
@@ -258,11 +261,11 @@ def main():
             env["OT_RUNAWAY_END"] = val
         r = subprocess.run([sys.executable, "-c", code11], cwd=_root, env=env, capture_output=True, text=True)
         got11[val] = (r.stdout.strip().splitlines() or [r.stderr.strip()[-200:]])[-1]
-    want11 = {None: "10:30|10:30|10:30|10:30|10:30|10:30|10:30|10:30|''",
-              "11:30": "11:30|11:30|11:30|11:30|11:30|10:30|10:30|10:30|''"}
-    for bad in ("1130", "16:30", "09:30", "11:75"):
-        want11[bad] = "10:30|10:30|10:30|10:30|10:30|10:30|10:30|10:30|%r" % bad
-    check("S11 OT_RUNAWAY_END moves Runaway's end in every reader (and nothing else); a bad value is REFUSED and named",
+    # r68 (CFG.5): the operator, 2026-10-31, "10&11–defaults are fine, take them out" - the key is not read, so every
+    # case reads 10:30 in every reader, and RUNAWAY_END_ENV_REFUSED no longer exists.
+    want11 = {k: "10:30|10:30|10:30|10:30|10:30|10:30|10:30|10:30|'<absent>'"
+              for k in (None, "11:30", "1130", "16:30", "09:30", "11:75")}
+    check("S11 OT_RUNAWAY_END is not read (r68): every Runaway reader says 10:30 unset, '11:30' or junk; nothing else moves",
           all(got11[k] == want11[k] for k in want11),
           "; ".join(f"{k}: {got11[k]}" for k in want11 if got11[k] != want11[k]) or "all match")
 

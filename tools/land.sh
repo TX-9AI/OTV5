@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
-# tools/land.sh — v5.1
+# tools/land.sh — v5.2
+# v5.2  2026-10-31  OTV5 r68 (CFG.5) — OT_RESTING_STOP_STATE leaves every CHECK's scratch env: the resting stop is deleted (the
+#   operator, 2026-10-31: "Resting stop was a study. It failed."), so no checker can write its state file. check_land_tooling T6.
 # v5.1  2026-10-25  (DEP.2 mirror, HYG.14) — POS/NEG GREP `-qF --`, AND EVERY CHECK GETS ITS OWN TMPDIR, REMOVED AFTER.
 #   DEP.2: `grep -qF "$p"` read a POS/NEG text beginning with `-` as a grep OPTION (exit 2): a NEG could never fire
 #   (fails OPEN) and a POS refused a correct delivery (fails CLOSED). Mirrors day_trader_pro's lander v1.14 (dtp r374 /
@@ -628,7 +630,7 @@ land_one() {
     # ~110 checkers mkdtemp without removing; TMPDIR points them into $_scratch,
     # which is removed below on both branches.
     mkdir -p "$_scratch/tmp"
-    if ( cd "$repo" && env -u LAND_ARCHIVE -u LAND_STAGE TMPDIR="$_scratch/tmp" OT_TRADES_DB="$_scratch/trades.db" OT_DERIVED_DB="$_scratch/derived_store.db" OT_RESTING_DB="$_scratch/resting_orders.db" OT_SIGNAL_JOURNAL_DIR="$_scratch/signal_journal" OT_LOG_FILE="$_scratch/bot.log" OT_COUNTERFACTUAL_DIR="$_scratch/counterfactual" OT_FEED_DB="$_scratch/feed_store.db" OT_RESTING_STOP_STATE="$_scratch/resting_stop_state.json" OT_WAREHOUSE_STATE="$_scratch/warehouse_state" OT_PLAN_STATES_FILE="$_scratch/plan_states.json" OT_HEARTBEAT_FILE="$_scratch/BOT_HEARTBEAT" OT_INSTRUMENT="${OT_INSTRUMENT:-QQQ}" python3 "$chk" ) >/dev/null 2>&1; then
+    if ( cd "$repo" && env -u LAND_ARCHIVE -u LAND_STAGE TMPDIR="$_scratch/tmp" OT_TRADES_DB="$_scratch/trades.db" OT_DERIVED_DB="$_scratch/derived_store.db" OT_RESTING_DB="$_scratch/resting_orders.db" OT_SIGNAL_JOURNAL_DIR="$_scratch/signal_journal" OT_LOG_FILE="$_scratch/bot.log" OT_COUNTERFACTUAL_DIR="$_scratch/counterfactual" OT_FEED_DB="$_scratch/feed_store.db" OT_WAREHOUSE_STATE="$_scratch/warehouse_state" OT_PLAN_STATES_FILE="$_scratch/plan_states.json" OT_HEARTBEAT_FILE="$_scratch/BOT_HEARTBEAT" OT_INSTRUMENT="${OT_INSTRUMENT:-QQQ}" python3 "$chk" ) >/dev/null 2>&1; then
       rm -rf "${_scratch:?}"
       pb_clear
       echo "  check: $chk PASS"

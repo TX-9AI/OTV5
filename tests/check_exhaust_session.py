@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """
-tests/check_exhaust_session.py  v5.0
+tests/check_exhaust_session.py  v5.1
+v5.1  2026-10-31  OTV5 r68 (CFG.5) — OT_RESTING_STOP_STATE leaves the scratch env: the resting stop and its state file are deleted
+      (the operator, 2026-10-31: "Resting stop was a study. It failed. Get this the fuck out of here"). No check changed.
 v5.0  2026-10-31  OTV5 r62 (BRK.18) — THE EXHAUSTION EXIT'S ROC5 NEVER REACHES INTO THE PRIOR SESSION. A TRADING FIX; the
       operator, on hearing of it: "this is a fucking problem". exit_engine._momentum_divergence's momentum is the 5m close
       minus the close 5 rows back; until today's sixth 5m bar (09:55 ET) the row 5 back is YESTERDAY's. The 2026-10-30
@@ -49,7 +51,7 @@ sys.path.insert(0, ROOT)
 _s = tempfile.mkdtemp(prefix="check_exhaust_session.")
 for _k, _v in (("OT_TRADES_DB", "trades.db"), ("OT_DERIVED_DB", "derived.db"), ("OT_RESTING_DB", "resting.db"),
                ("OT_FEED_DB", "feed.db"), ("OT_COUNTERFACTUAL_DIR", "cf"), ("OT_LOG_FILE", "bot.log"),
-               ("OT_SIGNAL_JOURNAL_DIR", "sj"), ("OT_RESTING_STOP_STATE", "rs.json"),
+               ("OT_SIGNAL_JOURNAL_DIR", "sj"),
                ("OT_WAREHOUSE_STATE", "ws"), ("OT_PLAN_STATES_FILE", "ps.json")):
     os.environ[_k] = os.path.join(_s, _v)
 os.environ.setdefault("OT_INSTRUMENT", "NFLX")

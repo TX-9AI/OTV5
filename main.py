@@ -1,5 +1,10 @@
 """
-main.py  v5.11
+main.py  v5.12
+v5.12 2026-10-31  OTV5 r68 (CFG.5) — THE SERVICE MODE LINE LOSES resting_stop= AND THE THREE REFUSAL NOTES. The resting
+      stop is deleted (the operator, 2026-10-31: "Resting stop was a study. It failed. Get this the fuck out of here"), and
+      config v5.10 reads no key for the pin gate, Runaway's and Breakout's ends or Breakout no-progress ("I don't want this
+      toggled"), so RUNAWAY_END_ENV_REFUSED / BREAKOUT_END_ENV_REFUSED / BRK_NOPROG_ENV_REFUSED no longer exist.
+      pin_gate=, runaway_end=, breakout_end= and brk_noprog= still print the values in force. No trading line changed.
 v5.11 2026-10-31  OTV5 r67 (PARC.4) — PARC IS NO LONGER ASKED OR EXECUTED. The operator, 2026-10-31: "On PARC, no. It was an idea. It failed. It's done." and "Yes" to removing its code.
       Removed: the Parc import, _attempt_parc and its two calls (the normal dispatch and the capped branch),
       _credit_window_end's PARC window, _STRUCTURE_BY_NAME["PARC"], the Service line's " · parc=<mode>", and
@@ -1490,11 +1495,10 @@ from config import (
     SCALE_ORB, SCALE_BREAKOUT, SCALE_VOLT, ORB_RISK_ENV_IGNORED,   # r161
     CONTRACT_SCALE, CONTRACT_SCALE_SOURCE,                          # r234
     ORCS_ENABLED,                                                   # r235
-    RUNAWAY_CUTOFF_ET, RUNAWAY_END_ENV_REFUSED,                     # r253 (RUNW.2)
-    BREAKOUT_LATEST_ET, BREAKOUT_END_ENV_REFUSED,                   # r265 (BRK.9)
-    BRK_NOPROG_MODE, BRK_NOPROG_ENV_REFUSED,                        # r265 (BRK.8)
+    RUNAWAY_CUTOFF_ET,                                              # r253 (RUNW.2)
+    BREAKOUT_LATEST_ET,                                             # r265 (BRK.9)
+    BRK_NOPROG_MODE,                                                # r265 (BRK.8)
     BRK_STOP5M_MODE, BRK_STOP5M_ENV_REFUSED,                        # r284 (BRK.11)
-    RESTING_STOP_MODE, RESTING_STOP_ENV_REFUSED,                    # r266 (STOP.1)
     COMMIT_GATE_MODE, COMMIT_GATE_ENV_REFUSED,                      # r272 (COMMIT.2)
     CAUTION_SIZE_MODE, CAUTION_SIZE_ENV_REFUSED,                    # r272 (COMMIT.3)
     NOISE_FLOOR_BAR_MULT, NOISE_FLOOR_LOOKBACK_BARS, NOISE_FLOOR_MIN_BARS,
@@ -5701,16 +5705,11 @@ def _sizing_stop_premium(signal) -> float:
 
 def _banner_dials() -> str:
     """r253 (RUNW.2) — the Service mode line's tail: the pin-proximity gate and Runaway's entry end
-    IN FORCE, plus a refused OT_RUNAWAY_END by name. Read from config, never from the unit."""
+    IN FORCE. Read from config, never from the unit. r68 (CFG.5): the pin gate, both ends and no-progress are
+    fixed in config (no key), so no refusal can be named; the fields stay so a reader still sees them."""
     end = f" · runaway_end={RUNAWAY_CUTOFF_ET}"
-    if RUNAWAY_END_ENV_REFUSED:
-        end += f" (OT_RUNAWAY_END={RUNAWAY_END_ENV_REFUSED!r} REFUSED)"
     brk = f" · breakout_end={BREAKOUT_LATEST_ET}"                          # r265 (BRK.9)
-    if BREAKOUT_END_ENV_REFUSED:
-        brk += f" (OT_BREAKOUT_END={BREAKOUT_END_ENV_REFUSED!r} REFUSED)"
     brk += f" · brk_noprog={BRK_NOPROG_MODE}"                              # r265 (BRK.8)
-    if BRK_NOPROG_ENV_REFUSED:
-        brk += f" (OT_BRK_NOPROG={BRK_NOPROG_ENV_REFUSED!r} REFUSED)"
     brk += f" · brk_stop={'5m' if BRK_STOP5M_MODE == 'trade' else '1m'}({BRK_STOP5M_MODE})"   # r284 (BRK.11)
     if BRK_STOP5M_ENV_REFUSED:
         brk += f" (OT_BRK_STOP5M={BRK_STOP5M_ENV_REFUSED!r} REFUSED)"
@@ -5742,11 +5741,6 @@ def _banner_dials() -> str:
         brk += f" (OT_BRK_REARM={BRK_REARM_ENV_REFUSED!r} REFUSED)"
     if HUNT_REARM_ENV_REFUSED:
         brk += f" (OT_HUNT_REARM={HUNT_REARM_ENV_REFUSED!r} REFUSED)"
-    brk += f" · resting_stop={RESTING_STOP_MODE}"                          # r266 (STOP.1)
-    if RESTING_STOP_MODE == "trade" and not PAPER_TRADING:
-        brk += " (LIVE: refused - stops close as before)"
-    if RESTING_STOP_ENV_REFUSED:
-        brk += f" (OT_RESTING_STOP={RESTING_STOP_ENV_REFUSED!r} REFUSED)"
     brk += f" · commit_gate={COMMIT_GATE_MODE}"                            # r272 (COMMIT.2)
     if COMMIT_GATE_MODE == "trade" and not PAPER_TRADING:
         brk += " (LIVE: refused - logs only)"

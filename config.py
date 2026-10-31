@@ -1,5 +1,17 @@
 """
-config.py  v5.9
+config.py  v5.10
+v5.10  2026-10-31  OTV5 r68 (CFG.5) — SIX DIALS LEAVE THE ENV; THE RESTING STOP IS DELETED. The operator, 2026-10-31, on
+      configure.sh's menu: "7. Pin gate, default "on" —remove from the menu"; "9. Scaling, default on—take it out";
+      "10&11–defaults are fine, take them out"; "12, same thing. Trade it—I don't want this toggled"; "13. Resting stop—I
+      NEVER asked for any of this to be added to config. Resting stop was a study. It failed. Get this the fuck out of
+      here". PIN_PROXIMITY_ACTIVE = True, SCALE_BREAKOUT = True, RUNAWAY_END = BREAKOUT_END = (10, 30), BRK_NOPROG_MODE =
+      "trade": constants, no key read (OT_PIN_PROXIMITY_ACTIVE, OT_SCALE_BREAKOUT, OT_RUNAWAY_END, OT_BREAKOUT_END,
+      OT_BRK_NOPROG are ignored), and RUNAWAY_END_ENV_REFUSED / BREAKOUT_END_ENV_REFUSED / BRK_NOPROG_ENV_REFUSED are gone.
+      Every value equals what all 14 boxes ran on 2026-10-31 (pin 1, scaling 1, no end set, no-progress trade), so no box
+      changes behaviour. The only code default that moved is no-progress (unset was log; every box set trade). The half-day
+      clip is entries_open()'s HALF_DAY_ENTRY_LEAD_MIN and never read either key. RESTING_STOP_MODE /
+      RESTING_STOP_ENV_REFUSED / RESTING_STOP_WAIT_S / RESTING_STOP_EMERGENCY_FRAC are deleted with
+      execution/resting_stop.py (off on every box: OT_RESTING_STOP=off x14).
 v5.9  2026-10-31  OTV5 r67 (PARC.4) — PARC IS REMOVED. The operator, 2026-10-31: "On PARC, no. It was an idea. It failed. It's done." and "Yes" to removing its code.
       PARC was a log-only plan (paused at r50, never an active strategy): OT_PARC, PARC_MODE, PARC_ENV_REFUSED,
       PARC_MIN_CREDIT and ENTRY_WINDOWS["PARC"] are gone; CAP_EXCLUDED_STRATEGIES is ("PARK",) again (no PARC row
@@ -889,78 +901,20 @@ EOD_SCHEDULE = {
     "cross_at":     (15, 55),   # anything still open crosses
 }
 
-# ── r189 (RUNW.1) — RUNAWAY'S END IS A PER-BOX SWITCH ────────────────────────
-# Unset = r187's 10:30. OT_RUNAWAY_END="HH:MM" (09:36 .. the entries stop)
-# moves ONLY Runaway's end. A malformed or out-of-range value keeps 10:30 - the
-# stricter end - and is named in RUNAWAY_END_ENV_REFUSED for the WARNING
-# runaway_plan logs at import: "refused" must never look like "applied".
-_RUNAWAY_END_DEFAULT = (10, 30)
-RUNAWAY_END_ENV_REFUSED = ""
+# ── r189 (RUNW.1) / r68 (CFG.5) — RUNAWAY'S END IS 10:30, FIXED ───────────────
+# r187's 10:30. The per-box switch (OT_RUNAWAY_END) is gone: the operator, 2026-10-31, "10&11–defaults are fine, take
+# them out". No key is read; a half day is clipped by entries_open() (HALF_DAY_ENTRY_LEAD_MIN), not by this value.
+RUNAWAY_END = (10, 30)
 
+# ── r265 (BRK.9) / r68 (CFG.5) — BREAKOUT'S END IS 10:30, FIXED ──────────────
+# r187's 10:30. OT_BREAKOUT_END is no longer read (the operator, 2026-10-31: "10&11–defaults are fine, take them out").
+BREAKOUT_END = (10, 30)
 
-def _runaway_end():
-    global RUNAWAY_END_ENV_REFUSED
-    raw = os.environ.get("OT_RUNAWAY_END", "").strip()
-    if not raw:
-        return _RUNAWAY_END_DEFAULT
-    try:
-        parts = raw.split(":")
-        if len(parts) != 2:
-            raise ValueError(raw)
-        hm = (int(parts[0]), int(parts[1]))
-        if not (0 <= hm[1] < 60 and (9, 36) <= hm <= tuple(EOD_SCHEDULE["entries_stop"])):
-            raise ValueError(raw)
-        return hm
-    except ValueError:
-        RUNAWAY_END_ENV_REFUSED = raw
-        return _RUNAWAY_END_DEFAULT
-
-
-RUNAWAY_END = _runaway_end()
-
-# ── r265 (BRK.9) — BREAKOUT'S END IS A PER-BOX SWITCH, THE MIRROR OF r189 ─────
-# Unset = r187's 10:30. OT_BREAKOUT_END="HH:MM" (09:36 .. the entries stop)
-# moves ONLY Breakout's end. A malformed or out-of-range value keeps 10:30 and
-# is named in BREAKOUT_END_ENV_REFUSED (main's Service mode line prints it).
-# The operator, 2026-10-10 13:37 ET: "Yes, to all" - re-open Breakout after
-# 10:29 on QQQ; the cutoff's counterfactual is every Breakout trade entered at
-# or after 10:30 (that trade would not exist under r187).
-_BREAKOUT_END_DEFAULT = (10, 30)
-BREAKOUT_END_ENV_REFUSED = ""
-
-
-def _breakout_end():
-    global BREAKOUT_END_ENV_REFUSED
-    raw = os.environ.get("OT_BREAKOUT_END", "").strip()
-    if not raw:
-        return _BREAKOUT_END_DEFAULT
-    try:
-        parts = raw.split(":")
-        if len(parts) != 2:
-            raise ValueError(raw)
-        hm = (int(parts[0]), int(parts[1]))
-        if not (0 <= hm[1] < 60 and (9, 36) <= hm <= tuple(EOD_SCHEDULE["entries_stop"])):
-            raise ValueError(raw)
-        return hm
-    except ValueError:
-        BREAKOUT_END_ENV_REFUSED = raw
-        return _BREAKOUT_END_DEFAULT
-
-
-BREAKOUT_END = _breakout_end()
-
-# ── r265 (BRK.8) — BREAKOUT'S NO-PROGRESS EXIT ──────────────────────────────
-# off | log | trade. Unset = log: every box RECORDS what the cut would do; only
-# a box set to trade acts on it (QQQ-TEST; SPX-TEST stays log until its own
-# threshold is fitted - its 9 Breakouts moved 1, -910, 10-10).
-BRK_NOPROG_ENV_REFUSED = ""
-_np_raw = os.environ.get("OT_BRK_NOPROG", "").strip().lower()
-if _np_raw in ("off", "log", "trade"):
-    BRK_NOPROG_MODE = _np_raw
-else:
-    BRK_NOPROG_MODE = "log"
-    if _np_raw:
-        BRK_NOPROG_ENV_REFUSED = _np_raw
+# ── r265 (BRK.8) / r68 (CFG.5) — BREAKOUT'S NO-PROGRESS EXIT TRADES, FIXED ──────
+# After BRK_NOPROG_STALL_BARS closed 1m bars with no new favourable extreme and less than BRK_NOPROG_MIN_R of
+# progress, the Breakout is cut. OT_BRK_NOPROG (off|log|trade, unset = log) is no longer read: the operator,
+# 2026-10-31, "12, same thing. Trade it—I don't want this toggled". Every box ran trade by env before this.
+BRK_NOPROG_MODE = "trade"
 # ── r284 (BRK.11) — BREAKOUT'S STOP IS THE 5m SWING, NOT THE 1m BREAK BAR ──────
 # off | log | trade. UNSET = trade (the operator, 2026-10-14 11:47 ET: "Yes, we have
 # to"). trade: the stop is the farther of the break bar's extreme and the extreme
@@ -1105,15 +1059,6 @@ else:
         BRK_DFLOOR_ENV_REFUSED = _bd_raw
 BRK_DELTA_FLOOR = 0.30
 BRK_DFLOOR_AFTER_S = 600
-# ── r266 (STOP.1) — THE RESTING STOP (execution/resting_stop.py) ─────────────
-RESTING_STOP_ENV_REFUSED = ""
-_rs_raw = os.environ.get("OT_RESTING_STOP", "").strip().lower()
-if _rs_raw in ("off", "trade"):
-    RESTING_STOP_MODE = _rs_raw
-else:
-    RESTING_STOP_MODE = "off"
-    if _rs_raw:
-        RESTING_STOP_ENV_REFUSED = _rs_raw
 # ── r272 (COMMIT.2 / COMMIT.3) — ENTER ON COMMITMENT (analysis/commitment.py) ───
 # OT_COMMIT_GATE off | log | trade. UNSET = trade: a directional entry whose side is
 # ABANDONED is not placed (the operator, 2026-10-12 11:35 ET: trading on both paper
@@ -1140,8 +1085,6 @@ else:
         CAUTION_SIZE_ENV_REFUSED = _cz_raw
 # (CD.1) r306/r316 RENT.2/RENT.3 - the 20 s re-entry gate - is SCRAPPED. The operator, 2026-10-24: "The 20 seconds is
 # arbitrary, just like 45 seconds, or 145 seconds. It has zero value. Scrap it." OT_REENTRY_GATE is no longer read.
-RESTING_STOP_WAIT_S = 120.0
-RESTING_STOP_EMERGENCY_FRAC = 0.05
 BRK_NOPROG_STALL_BARS = 2      # consecutive closed 1m bars without a new favourable extreme
 BRK_NOPROG_MIN_R = 0.5         # best progress since entry, in R = |underlying_entry - underlying_stop|
 # ── r54 (BRK.16) — BREAKOUT'S TARGET AND TRAIL ARM, IN MULTIPLES OF THE OPENING RANGE WIDTH W ──────────────────
@@ -1179,9 +1122,9 @@ ENTRY_WINDOWS = {
     # r149: directional debits run ALL DAY to the entries stop (operator: "A").
     # Supersedes criteria.py's 2026-08-29 "Debit entries are finished at 1130".
     "ORBStrategy":          ((9, 35),  EOD_SCHEDULE["entries_stop"]),
-    "RunawayContinuation":  ((9, 35),  RUNAWAY_END),   # r187: 10:29 last entry; r189: OT_RUNAWAY_END per box
+    "RunawayContinuation":  ((9, 35),  RUNAWAY_END),   # r187: 10:29 last entry (r68: fixed, no per-box key)
     "LiquidityHunt":        ((9, 35),  (10, 30)),   # r187
-    "Breakout":             ((9, 35),  BREAKOUT_END),   # r187: 10:29 last entry; r265: OT_BREAKOUT_END per box
+    "Breakout":             ((9, 35),  BREAKOUT_END),   # r187: 10:29 last entry (r68: fixed, no per-box key)
     "VOLT":                 ((9, 35),  (10, 30)),   # r187 (VOLT is also OFF by default)
     "SweepCreditSpread":    ((9, 35),  EOD_SCHEDULE["entries_stop"]),
     "TrendCreditSpread":    ((11, 31), EOD_SCHEDULE["entries_stop"]),
@@ -1426,7 +1369,7 @@ ORB_RISK_ENV_IGNORED = os.environ.get("OT_ORB_RISK_USD", "")
 # ⚠️ ONLY THE LITERAL "1" IS ON, as OT_PIN_PROXIMITY_ACTIVE — so a typo reads
 # as OFF, the smaller position, never as the larger one.
 SCALE_ORB      = os.environ.get("OT_SCALE_ORB", "1") == "1"
-SCALE_BREAKOUT = os.environ.get("OT_SCALE_BREAKOUT", "1") == "1"
+SCALE_BREAKOUT = True   # r68 (CFG.5): OT_SCALE_BREAKOUT no longer read - the operator, 2026-10-31: "9. Scaling, default on—take it out"
 SCALE_VOLT     = os.environ.get("OT_SCALE_VOLT", "1") == "1"
 
 # ── r93 — THE NOISE FLOOR: A STOP INSIDE ONE BAR IS NOT A STOP ────────────
@@ -1478,7 +1421,7 @@ SCALE_VOLT     = os.environ.get("OT_SCALE_VOLT", "1") == "1"
 # regime. That inversion is the corpus test worth more than the filter.
 # ⚠️ §36 SELECTION, not FOUNDATIONAL: it is a measured preference about when a
 # break pays, so it is relaxable and dial-able by env without a revision.
-PIN_PROXIMITY_ACTIVE   = os.environ.get("OT_PIN_PROXIMITY_ACTIVE", "1") == "1"
+PIN_PROXIMITY_ACTIVE   = True   # r68 (CFG.5): OT_PIN_PROXIMITY_ACTIVE no longer read - the operator, 2026-10-31: "7. Pin gate, default "on" —remove from the menu"
 PIN_PROXIMITY_MIN_FRAC = float(os.environ.get("OT_PIN_PROXIMITY_MIN_FRAC", "0.32"))
 
 NOISE_FLOOR_BAR_MULT      = float(os.environ.get("OT_NOISE_FLOOR_BAR_MULT", "0.5"))

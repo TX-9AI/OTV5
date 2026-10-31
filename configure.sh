@@ -1,6 +1,20 @@
 #!/usr/bin/env bash
 # ==========================================================================
-# configure.sh  v5.6
+# configure.sh  v5.7
+# v5.7  2026-10-31  OTV5 r68 (CFG.5) — SEVEN MORE ITEMS LEAVE THE MENU (PARC LEFT IN r67); WHAT IS LEFT IS 1 Instrument, 2 Risk/ramp MIN, 3 Paper /
+#       Live, 4 Telegram, 5 TastyTrade credentials, 6 Catastrophic cap, 7 Ramp TOP (MAX), 8 Data capture, 9 Done. The
+#       operator, 2026-10-31, on the 17-item menu: "7. Pin gate, default "on" —remove from the menu"; "9. Scaling, default
+#       on—take it out"; "10&11–defaults are fine, take them out"; "12, same thing. Trade it—I don't want this toggled";
+#       "13. Resting stop—I NEVER asked for any of this to be added to config. Resting stop was a study. It failed. Get
+#       this the fuck out of here"; "15&16-same thing. These are DEAD thesis. Do NOT add anything else to my config
+#       following a study or test". Gone: the pin gate (OT_PIN_PROXIMITY_ACTIVE), Breakout scaling (OT_SCALE_BREAKOUT),
+#       Runaway's and Breakout's entry ends (OT_RUNAWAY_END, OT_BREAKOUT_END), Breakout no-progress (OT_BRK_NOPROG), the
+#       resting stop (OT_RESTING_STOP) and TCS (OT_TCS_ACTIVE, item 15 after r67): their items, their summary lines, their
+#       labels and every write of their keys. config.py v5.10 fixes the first six in code (gate ON, scaling ON, both ends
+#       10:30, no-progress trade) and reads none of their keys; the resting stop is deleted. TCS keeps its code default
+#       (log, the r57 shadow) with no item. A stored line is NOT removed here (the fleet strip does that once, after the
+#       land); every one of the 14 boxes measured 2026-10-31 already carries the new code value. Data capture's messages
+#       name item 8. Gate: tests/check_config_menu.py.
 # v5.6  2026-10-31  OTV5 r67 (PARC.4) — ITEM 15 (PARC) IS REMOVED: TCS moves 16 -> 15, Done 17 -> 16, the
 #       prompt names 1-16; parc_label / change_parc and the summary's PARC line are gone. The operator, 2026-10-31:
 #       "On PARC, no. It was an idea. It failed. It's done." and "Yes" to removing its code. A box's stale OT_PARC
@@ -216,7 +230,7 @@ BOT_DIR="$HOME/options-trader"
 UNIT_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
 FEED_UNIT_FILE="/etc/systemd/system/candle-feed.service"   # r139: the feed carries its own OT_INSTRUMENT
 FEED_SERVICE="candle-feed"
-# CD.1 — the first start's marker and item 14's recorded choice (setup_ec2 v4.11 writes capture.requested)
+# CD.1 — the first start's marker and item 8's recorded choice (setup_ec2 v4.11 writes capture.requested)
 FIRST_START_FILE="${OT_FIRST_START_FILE:-$HOME/.optbot/first_start_done}"
 CAPTURE_CHOICE_FILE="${OT_CAPTURE_CHOICE_FILE:-$HOME/.optbot/capture.choice}"
 CAPTURE_REQUESTED_FILE="${OT_CAPTURE_REQUESTED_FILE:-$HOME/.optbot/capture.requested}"
@@ -296,7 +310,7 @@ first_start() {
     if [[ "$(capture_choice)" == "managed" ]]; then
         bash "$BOT_DIR/deploy/data_capture.sh" managed && print_ok "Data capture: MANAGED (the warehouse push is ON)."
     else
-        print_ok "Data capture: $(data_capture_label) (item 14 turns the warehouse push on)."
+        print_ok "Data capture: $(data_capture_label) (item 8 turns the warehouse push on)."
     fi
     mkdir -p "$(dirname "$FIRST_START_FILE")"
     date -u +%Y-%m-%dT%H:%M:%SZ > "$FIRST_START_FILE"
@@ -426,15 +440,8 @@ show_config() {
     echo -e "  Risk per trade: ${BOLD}\$${risk:-not set}${RESET}"
     local dll=$(get_env "OT_DAILY_LOSS_LIMIT")
     echo -e "  Loss cap:       ${BOLD}$(fmt_declared "$dll")${RESET} (daily catastrophic)"
-    echo -e "  Pin gate:       ${BOLD}$(pin_gate_label)${RESET}"
-    echo -e "  Scaling:        ${BOLD}Breakout $(scaling_short OT_SCALE_BREAKOUT SCALE_BREAKOUT)${RESET}"
     local old_start=$(get_env "OT_ORB_RISK_USD")
     [[ -n "$old_start" ]] && print_warn "OT_ORB_RISK_USD=${old_start} is NOT read (merged into risk per trade) - item 2 removes it."
-    echo -e "  Runaway end:    ${BOLD}$(runaway_end_label)${RESET}"
-    echo -e "  Breakout end:   ${BOLD}$(breakout_end_label)${RESET}"
-    echo -e "  BRK no-progress:${BOLD}$(brk_noprog_label)${RESET}"
-    echo -e "  Resting stop:   ${BOLD}$(resting_stop_label)${RESET}"
-    echo -e "  TCS:            ${BOLD}$(tcs_label)${RESET}"
     echo -e "  Data capture:   ${BOLD}$(data_capture_label)${RESET}"
     echo -e "  Trading mode:   $(echo -e $mode_label)"
     local rec_pin rec_label
@@ -535,7 +542,7 @@ change_instrument() {
             mkdir -p "$(dirname "$PUSH_PAUSE_FILE")"
             echo "sym=${NEW_INST}: another pusher or an unreadable warehouse at the switch, $(date -u +%Y-%m-%dT%H:%M:%SZ)" \
                 > "$PUSH_PAUSE_FILE"
-            print_warn "Push PAUSED for ${NEW_INST} - nothing is uploaded until item 14 (managed + OVERRIDE) resumes it."
+            print_warn "Push PAUSED for ${NEW_INST} - nothing is uploaded until item 8 (managed + OVERRIDE) resumes it."
         fi
     fi
     print_ok "Instrument updated to ${BOLD}${NEW_INST}${RESET}."
@@ -578,255 +585,6 @@ change_risk() {
         fi
         print_warn "Please enter a positive number (e.g. 200 or 150.50)."
     done
-}
-
-# ── r127 — THE PIN-PROXIMITY GATE (r97), ON OR OFF ─────────────────────────
-# r97 refuses a DIRECTIONAL DEBIT (ORB, Breakout, Runaway, VOLT, the hunt) when
-# GEX reads PINNING and price sits within 0.32 of an expected move of the pin.
-# Operator, 2026-09-24, after it replayed to -$739 net across every fire and cut
-# 18 of 24 trades on 09-21's trend day: *"Turn it off. We need to collect more
-# data before ruling on it."* The data keeps collecting with the gate OFF:
-# every fire_snapshot records pin_em_fraction, pin_strike and gex_environment.
-pin_gate_label() {
-    local v dflt
-    v=$(get_env "OT_PIN_PROXIMITY_ACTIVE")
-    if [[ "$v" == "1" ]]; then printf 'ON'; return; fi
-    if [[ "$v" == "0" ]]; then printf 'OFF'; return; fi
-    if [[ -n "$v" ]]; then printf 'OFF (set to %s; only 1 is on)' "$v"; return; fi
-    # Unset: say so, and name the default from config.py rather than from memory.
-    # The key is removed from THIS shell's env first so the answer is the code's.
-    dflt=$(cd "$BOT_DIR" && env -u OT_PIN_PROXIMITY_ACTIVE python3 -c \
-        "import config; print('ON' if config.PIN_PROXIMITY_ACTIVE else 'OFF')")
-    printf 'not set (code default: %s)' "${dflt:-UNREADABLE - config.py did not import}"
-}
-
-# ── r253 (RUNW.2) — RUNAWAY'S ENTRY END, PER BOX ───────────────────────────
-# Shows what the operator SET, or "not set" with the code's default READ FROM
-# config.py (r91). A set value config.py would refuse is named as refused.
-runaway_end_label() {
-    local v got
-    v=$(get_env "OT_RUNAWAY_END")
-    if [[ -z "$v" ]]; then
-        got=$(cd "$BOT_DIR" && env -u OT_RUNAWAY_END python3 -c \
-            "import config; print(config.RUNAWAY_CUTOFF_ET)")
-        printf 'not set (code default: %s)' "${got:-UNREADABLE - config.py did not import}"
-        return
-    fi
-    got=$(cd "$BOT_DIR" && OT_RUNAWAY_END="$v" python3 -c \
-        "import config; print('REFUSED' if config.RUNAWAY_END_ENV_REFUSED else config.RUNAWAY_CUTOFF_ET)")
-    if [[ "$got" == "REFUSED" ]]; then
-        printf '%s REFUSED by config - Runaway holds the code default' "$v"
-    else
-        printf '%s' "${got:-UNREADABLE - config.py did not import}"
-    fi
-}
-
-change_runaway_end() {
-    local val got
-    echo ""
-    echo "  Runaway entry end: $(runaway_end_label)"
-    echo ""
-    echo "  The LAST entry is one minute before this time (11:30 = last at 11:29)."
-    echo "  HH:MM between 09:36 and the 15:40 entries stop. Blank = clear it"
-    echo "  (the code's default). Only Runaway moves; every exit is unchanged."
-    echo ""
-    read -p "    Runaway entry end (HH:MM, blank to clear): " val
-    val="${val// /}"
-    if [[ -z "$val" ]]; then
-        drop_env "OT_RUNAWAY_END"
-        reload_daemon
-        echo "  Runaway entry end cleared - $(runaway_end_label)."
-        return
-    fi
-    # Ask the CONSUMER, never a copy of its rule: config.py refuses what it would refuse.
-    got=$(cd "$BOT_DIR" && OT_RUNAWAY_END="$val" python3 -c \
-        "import config; print('REFUSED' if config.RUNAWAY_END_ENV_REFUSED else config.RUNAWAY_CUTOFF_ET)")
-    if [[ -z "$got" ]]; then
-        print_warn "REFUSED - config.py did not import, so '$val' could not be checked. Nothing written."
-        return
-    fi
-    if [[ "$got" == "REFUSED" ]]; then
-        print_warn "REFUSED - '$val' is not HH:MM between 09:36 and 15:40. Nothing written."
-        return
-    fi
-    set_env "OT_RUNAWAY_END" "$val"
-    reload_daemon
-    echo "  Runaway entry end set to $got (last entry one minute before)."
-}
-
-# ── r265 (BRK.9) — BREAKOUT'S ENTRY END, PER BOX (the mirror of item 10) ────
-breakout_end_label() {
-    local v got
-    v=$(get_env "OT_BREAKOUT_END")
-    if [[ -z "$v" ]]; then
-        got=$(cd "$BOT_DIR" && env -u OT_BREAKOUT_END python3 -c \
-            "import config; print(config.BREAKOUT_LATEST_ET)")
-        printf 'not set (code default: %s)' "${got:-UNREADABLE - config.py did not import}"
-        return
-    fi
-    got=$(cd "$BOT_DIR" && OT_BREAKOUT_END="$v" python3 -c \
-        "import config; print('REFUSED' if config.BREAKOUT_END_ENV_REFUSED else config.BREAKOUT_LATEST_ET)")
-    if [[ "$got" == "REFUSED" ]]; then
-        printf '%s REFUSED by config - Breakout holds the code default' "$v"
-    else
-        printf '%s' "${got:-UNREADABLE - config.py did not import}"
-    fi
-}
-
-change_breakout_end() {
-    local val got
-    echo ""
-    echo "  Breakout entry end: $(breakout_end_label)"
-    echo ""
-    echo "  The LAST entry is one minute before this time (15:40 = last at 15:39)."
-    echo "  HH:MM between 09:36 and the 15:40 entries stop. Blank = clear it"
-    echo "  (the code's default). Only Breakout moves; every exit is unchanged."
-    echo ""
-    read -p "    Breakout entry end (HH:MM, blank to clear): " val
-    val="${val// /}"
-    if [[ -z "$val" ]]; then
-        drop_env "OT_BREAKOUT_END"
-        reload_daemon
-        echo "  Breakout entry end cleared - $(breakout_end_label)."
-        return
-    fi
-    got=$(cd "$BOT_DIR" && OT_BREAKOUT_END="$val" python3 -c \
-        "import config; print('REFUSED' if config.BREAKOUT_END_ENV_REFUSED else config.BREAKOUT_LATEST_ET)")
-    if [[ -z "$got" ]]; then
-        print_warn "REFUSED - config.py did not import, so '$val' could not be checked. Nothing written."
-        return
-    fi
-    if [[ "$got" == "REFUSED" ]]; then
-        print_warn "REFUSED - '$val' is not HH:MM between 09:36 and 15:40. Nothing written."
-        return
-    fi
-    set_env "OT_BREAKOUT_END" "$val"
-    reload_daemon
-    echo "  Breakout entry end set to $got (last entry one minute before)."
-}
-
-# ── r265 (BRK.8) — BREAKOUT'S NO-PROGRESS EXIT: off | log | trade ───────────
-brk_noprog_label() {
-    local v got
-    v=$(get_env "OT_BRK_NOPROG")
-    got=$(cd "$BOT_DIR" && OT_BRK_NOPROG="$v" python3 -c \
-        "import config; print(config.BRK_NOPROG_MODE + (' (set to ' + config.BRK_NOPROG_ENV_REFUSED + ' - REFUSED)' if config.BRK_NOPROG_ENV_REFUSED else ''))")
-    if [[ -z "$v" ]]; then
-        printf 'not set (code default: %s)' "${got:-UNREADABLE - config.py did not import}"
-    else
-        printf '%s' "${got:-UNREADABLE - config.py did not import}"
-    fi
-}
-
-change_brk_noprog() {
-    local val
-    echo ""
-    echo "  Breakout no-progress exit: $(brk_noprog_label)"
-    echo ""
-    echo "  After 2 closed 1m bars with no new extreme in the trade's direction,"
-    echo "  a Breakout that has made less than 0.5 R of progress is CUT."
-    echo "  trade - cut it (the mark ladder), and record the cut."
-    echo "  log   - record what the cut would do; trade as before."
-    echo "  off   - neither."
-    echo ""
-    read -p "    Mode (trade / log / off, blank to clear): " val
-    val="${val// /}"; val="${val,,}"
-    if [[ -z "$val" ]]; then
-        drop_env "OT_BRK_NOPROG"
-        reload_daemon
-        echo "  No-progress mode cleared - $(brk_noprog_label)."
-        return
-    fi
-    if [[ "$val" != "trade" && "$val" != "log" && "$val" != "off" ]]; then
-        print_warn "REFUSED - '$val' is not trade, log or off. Nothing written."
-        return
-    fi
-    set_env "OT_BRK_NOPROG" "$val"
-    reload_daemon
-    echo "  Breakout no-progress exit set to $val."
-}
-
-# ── r266 (STOP.1) — THE RESTING STOP: off | trade (paper only) ─────────────
-resting_stop_label() {
-    local v got
-    v=$(get_env "OT_RESTING_STOP")
-    got=$(cd "$BOT_DIR" && OT_RESTING_STOP="$v" python3 -c \
-        "import config; print(config.RESTING_STOP_MODE + (' (set to ' + config.RESTING_STOP_ENV_REFUSED + ' - REFUSED)' if config.RESTING_STOP_ENV_REFUSED else ''))")
-    if [[ -z "$v" ]]; then
-        printf 'not set (code default: %s)' "${got:-UNREADABLE - config.py did not import}"
-    else
-        printf '%s' "${got:-UNREADABLE - config.py did not import}"
-    fi
-}
-
-change_resting_stop() {
-    local val
-    echo ""
-    echo "  Resting stop: $(resting_stop_label)"
-    echo ""
-    echo "  trade - a fired hard stop / trail stop RESTS a sell at its own level for"
-    echo "          120 s; filled there if price comes back, else closed at the mark"
-    echo "          (at once if it falls 5% of entry further). PAPER ONLY."
-    echo "  off   - stops close at the mark as before."
-    echo ""
-    read -p "    Mode (trade / off, blank to clear): " val
-    val="${val// /}"; val="${val,,}"
-    if [[ -z "$val" ]]; then
-        drop_env "OT_RESTING_STOP"
-        reload_daemon
-        echo "  Resting stop cleared - $(resting_stop_label)."
-        return
-    fi
-    if [[ "$val" != "trade" && "$val" != "off" ]]; then
-        print_warn "REFUSED - '$val' is not trade or off. Nothing written."
-        return
-    fi
-    set_env "OT_RESTING_STOP" "$val"
-    reload_daemon
-    echo "  Resting stop set to $val."
-}
-
-# ── OTV5 r57 (TCS.LOG1) — TCS: 1 (trade) | log (a shadow trade) | 0 (off), UNSET = log ─────────────
-tcs_label() {
-    local v got
-    v=$(get_env "OT_TCS_ACTIVE")
-    got=$(cd "$BOT_DIR" && OT_TCS_ACTIVE="$v" python3 -c \
-        "import config; print(config.TCS_MODE + (' (set to ' + config.TCS_ENV_REFUSED + ' - REFUSED)' if config.TCS_ENV_REFUSED else ''))")
-    if [[ -z "$v" ]]; then
-        printf 'not set (code default: %s)' "${got:-UNREADABLE - config.py did not import}"
-    else
-        printf '%s' "${got:-UNREADABLE - config.py did not import}"
-    fi
-}
-
-change_tcs() {
-    local val
-    echo ""
-    echo "  TCS: $(tcs_label)"
-    echo ""
-    echo "  The trend credit spread (11:31-15:40): a credit spread on the side"
-    echo "  the trend leaves behind; exits: breach of its bound, the nickel, else"
-    echo "  the end-of-day close."
-    echo "  1   - trade it (retired by ruling 2026-10-03; 1 restores it)."
-    echo "  log - a SHADOW trade: the real entry and exits at the paper fill,"
-    echo "        booked to shadow_trades.db, NEVER ordered (the default since r57)."
-    echo "  0   - off: not asked, nothing written."
-    echo ""
-    read -p "    Mode (1 / log / 0, blank to clear): " val
-    val="${val// /}"; val="${val,,}"
-    if [[ -z "$val" ]]; then
-        drop_env "OT_TCS_ACTIVE"
-        reload_daemon
-        echo "  TCS cleared - $(tcs_label)."
-        return
-    fi
-    if [[ "$val" != "1" && "$val" != "log" && "$val" != "0" ]]; then
-        print_warn "REFUSED - '$val' is not 1, log or 0. Nothing written."
-        return
-    fi
-    set_env "OT_TCS_ACTIVE" "$val"
-    reload_daemon
-    echo "  TCS set to $val - $(tcs_label)."
 }
 
 # ── r136 — DATA CAPTURE: managed (the conductor owns this box's data) or
@@ -885,27 +643,6 @@ capture_guard_ok() {
     [[ "$ans" == "OVERRIDE" ]]
 }
 
-change_pin_gate() {
-    echo ""
-    echo "  Pin-proximity gate: $(pin_gate_label)"
-    echo ""
-    echo "  ON  - a directional debit (ORB, Breakout, Runaway, VOLT, hunt) is"
-    echo "        REFUSED when GEX is PINNING and price is within 0.32 EM of"
-    echo "        the pin. (r97)"
-    echo "  OFF - no refusal. Pin distance is still recorded on every fire."
-    echo "  The GEX pin butterfly is NOT affected either way."
-    echo ""
-    if ask_yn "Turn the pin-proximity gate ON?"; then
-        set_env "OT_PIN_PROXIMITY_ACTIVE" "1"
-        reload_daemon
-        echo "  Pin-proximity gate ON."
-    else
-        set_env "OT_PIN_PROXIMITY_ACTIVE" "0"
-        reload_daemon
-        echo "  Pin-proximity gate OFF."
-    fi
-}
-
 
 
 # ── r203 — SPOT, FOR SIZING THE ORB BUDGET AGAINST ────────────────────────
@@ -930,56 +667,6 @@ change_pin_gate() {
 #   · the r203 land gate RUNS this body against a planted repo and REQUIRES a
 #     Spot line back, and refuses both a literal `data/` path and any
 #     re-suppression of stderr on this call.
-# ── r161 (SIZE.2) — POSITION SCALING PER TRADE, ON OR OFF ──────────────────
-# ON  = the ramp: risk the MIN at the structure stop, up to the TOP deployed.
-# OFF = flat: about the MIN in premium, whatever the stop distance. The
-#       structure stop, the exits and the noise floor do not change.
-# Only the literal "1" is ON in config.py, so a bad value reads as OFF (the
-# smaller position). Unset shows the code default read from config.py (r91).
-scaling_label() {
-    local key="$1" attr="$2" v dflt
-    v=$(get_env "$key")
-    if [[ "$v" == "1" ]]; then printf 'ON'; return; fi
-    if [[ "$v" == "0" ]]; then printf 'OFF'; return; fi
-    if [[ -n "$v" ]]; then printf 'OFF (set to %s; only 1 is on)' "$v"; return; fi
-    dflt=$(cd "$BOT_DIR" && env -u "$key" python3 -c \
-        "import config; print('ON' if config.${attr} else 'OFF')")
-    printf 'not set (code default: %s)' "${dflt:-UNREADABLE - config.py did not import}"
-}
-
-# The summary line's short form: ON / OFF as set, or "unset=ON" naming the
-# code default — still never a value the operator did not choose (r91).
-scaling_short() {
-    local l; l=$(scaling_label "$1" "$2")
-    case "$l" in
-        ON|OFF) printf '%s' "$l" ;;
-        OFF*)   printf 'OFF' ;;
-        "not set (code default: "*) l=${l#not set (code default: }; printf 'unset=%s' "${l%)}" ;;
-        *)      printf '%s' "$l" ;;
-    esac
-}
-
-change_scaling() {
-    local key="$1" attr="$2" name="$3"
-    echo ""
-    echo "  ${name} scaling: $(scaling_label "$key" "$attr")"
-    echo ""
-    echo "  ON  - size on the ramp: risk the MIN at the structure stop,"
-    echo "        up to the ramp TOP deployed (tight stop = bigger size)."
-    echo "  OFF - flat: about the MIN in premium, whatever the stop."
-    echo "  Either way the structure stop and exits are unchanged."
-    echo ""
-    if ask_yn "Turn ${name} scaling ON?"; then
-        set_env "$key" "1"
-        reload_daemon
-        echo "  ${name} scaling ON."
-    else
-        set_env "$key" "0"
-        reload_daemon
-        echo "  ${name} scaling OFF (flat size)."
-    fi
-}
-
 change_orb_budget() {
     local current risk
     current=$(get_env "OT_ORB_BUDGET_USD")
@@ -1228,18 +915,11 @@ while true; do
     echo -e "  ${BOLD}4.${RESET}  Telegram alerts     (chat: $(get_env TELEGRAM_CHAT_ID))"
     echo -e "  ${BOLD}5.${RESET}  TastyTrade credentials"
     echo -e "  ${BOLD}6.${RESET}  Catastrophic cap    (currently: \$$(dll=$(get_env OT_DAILY_LOSS_LIMIT); echo ${dll:-$(get_env OT_RISK_USD)}))"
-    echo -e "  ${BOLD}7.${RESET}  Pin-proximity gate  (currently: $(pin_gate_label))"
-    echo -e "  ${BOLD}8.${RESET}  Ramp TOP (MAX)      (currently: $(fmt_declared "$(get_env OT_ORB_BUDGET_USD)"))"
-    echo -e "  ${BOLD}9.${RESET}  Breakout scaling    (currently: $(scaling_label OT_SCALE_BREAKOUT SCALE_BREAKOUT))"
-    echo -e "  ${BOLD}10.${RESET} Runaway entry end   (currently: $(runaway_end_label))"
-    echo -e "  ${BOLD}11.${RESET} Breakout entry end  (currently: $(breakout_end_label))"
-    echo -e "  ${BOLD}12.${RESET} Breakout no-progress (currently: $(brk_noprog_label))"
-    echo -e "  ${BOLD}13.${RESET} Resting stop        (currently: $(resting_stop_label))"
-    echo -e "  ${BOLD}14.${RESET} Data capture        (currently: $(data_capture_label))"
-    echo -e "  ${BOLD}15.${RESET} TCS                 (currently: $(tcs_label))"
-    echo -e "  ${BOLD}16.${RESET} Done"
+    echo -e "  ${BOLD}7.${RESET}  Ramp TOP (MAX)      (currently: $(fmt_declared "$(get_env OT_ORB_BUDGET_USD)"))"
+    echo -e "  ${BOLD}8.${RESET}  Data capture        (currently: $(data_capture_label))"
+    echo -e "  ${BOLD}9.${RESET}  Done"
     echo ""
-    read -p "    Select [1-16]: " menu_choice
+    read -p "    Select [1-9]: " menu_choice
 
     case "$menu_choice" in
         1) change_instrument; CHANGED=true ;;
@@ -1248,17 +928,10 @@ while true; do
         4) change_telegram;       CHANGED=true ;;
         5) change_tt_credentials; CHANGED=true ;;
         6) change_daily_loss;     CHANGED=true ;;
-        7) change_pin_gate;       CHANGED=true ;;
-        8) change_orb_budget;     CHANGED=true ;;
-        9) change_scaling OT_SCALE_BREAKOUT SCALE_BREAKOUT "Breakout"; CHANGED=true ;;
-        10) change_runaway_end;   CHANGED=true ;;
-        11) change_breakout_end;  CHANGED=true ;;
-        12) change_brk_noprog;    CHANGED=true ;;
-        13) change_resting_stop;  CHANGED=true ;;
-        14) change_data_capture ;;
-        15) change_tcs;           CHANGED=true ;;
-        16) break ;;
-        *) print_warn "Please enter a number between 1 and 16." ;;
+        7) change_orb_budget;     CHANGED=true ;;
+        8) change_data_capture ;;
+        9) break ;;
+        *) print_warn "Please enter a number between 1 and 9." ;;
     esac
     echo ""
 done

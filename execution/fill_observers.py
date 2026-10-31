@@ -1,5 +1,8 @@
 """
-execution/fill_observers.py  v5.0
+execution/fill_observers.py  v5.1
+v5.1  2026-10-31  OTV5 r68 (CFG.5) — watched_stop() no longer asks the resting stop whether a trade rests: the resting stop
+      is deleted (the operator, 2026-10-31: "Resting stop was a study. It failed."). It was off on every box, so is_resting()
+      was always False here and the watched level is unchanged.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.1  2026-10-13  OTV4TEST r280 (EXIT.5 on TEST; the mechanics of otv4 r482 0353b4e) - THE QUOTE WATCH NOW WAKES THE
       TICK. When a Breakout or Runaway single long's own quote (<= 4 s old) is at or below the stop the engine enforces,
@@ -146,9 +149,6 @@ def watched_stop(record) -> Optional[float]:
     """The premium level the engine enforces for this record, or None when it has no watchable premium stop."""
     try:
         if str(record.get("strategy") or "") in EXCLUDED or _contract(record) is None:
-            return None
-        from execution import resting_stop as _rs
-        if _rs.is_resting(str(record.get("trade_id"))):
             return None
         trail = float(record.get("trail_stop") or 0.0)
         if trail > 0:

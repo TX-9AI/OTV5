@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """
-tests/check_fill_observers.py  v5.0
+tests/check_fill_observers.py  v5.1
+v5.1  2026-10-31  OTV5 r68 (CFG.5) — O1's RESTING-ROW CASE LEAVES WITH THE RESTING STOP (deleted; the operator, 2026-10-31: "Resting
+      stop was a study. It failed. Get this the fuck out of here"); the seven other O1 cases are unchanged, and O5 no longer
+      sets config.RESTING_STOP_MODE (the name is gone). No other check changed.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.1  2026-10-13  OTV4TEST r280 (EXIT.5). O3 RE-POINTED, NOT DROPPED (section 38.4): "off" now sets BOTH OT_FILL_OBSERVE and
       OT_FLOOR_WATCH, because the acting watch (default trade) is its own switch; F6 in check_floor_watch pins that.
@@ -8,7 +11,7 @@ TWO FILL OBSERVERS, RECORD ONLY (PMAP.1 + FILL.2, execution/fill_observers.py).
 v1.0  2026-10-11  OTV4TEST r270. The operator, 2026-10-11 19:14 ET: "I think we should have both 1 & 2, observe only to
       see if we can use it to improve fills".
   O1  watched_stop: the trail when armed, else stop_premium, on a single long; NONE for the Hunt (held floor), VOLT
-      (underlying trail), ORB, a butterfly, a spread, and a position already RESTING (r266)
+      (underlying trail), ORB, a butterfly, a spread (r68: the r266 resting-row case left with the resting stop)
   O2  the model: implied vol round-trips Black-Scholes; U* re-prices to the stop level (call and put)
   O3  the watch, on a real sqlite chain_marks: a fresh crossed quote writes ONE row; a stale quote (> 4 s), a quote
       above the level, a Hunt, a second crossing inside 10 s, and OT_FILL_OBSERVE=off write none
@@ -33,12 +36,10 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 _TD = tempfile.mkdtemp(prefix="check_fill_observers_")
 for k, v in {"OT_TRADES_DB": "t.db", "OT_DERIVED_DB": "d.db", "OT_FEED_DB": "f.db", "OT_LOG_FILE": "bot.log",
-             "OT_RESTING_DB": "r.db", "OT_SIGNAL_JOURNAL_DIR": "sj", "OT_COUNTERFACTUAL_DIR": "cf",
-             "OT_RESTING_STOP_STATE": "rest_state.json"}.items():
+             "OT_RESTING_DB": "r.db", "OT_SIGNAL_JOURNAL_DIR": "sj", "OT_COUNTERFACTUAL_DIR": "cf"}.items():
     os.environ[k] = os.path.join(_TD, v)
 os.environ.pop("OT_FILL_OBSERVE", None)
 os.environ.pop("OT_FLOOR_WATCH", None)
-os.environ.pop("OT_RESTING_STOP", None)
 FAILED, RAN = [], []
 NOW = 1791822000.0          # 2026-10-12 12:20 ET - 3 h 40 m before the 10-12 expiry's 16:00 bell
 
@@ -93,7 +94,6 @@ def main():
         import config
         import execution.exit_engine as XE
         import execution.position_manager as PM
-        import execution.resting_stop as RS
     except Exception as exc:                                    # noqa: BLE001
         print(f"NOT RUN - imports unavailable under {sys.executable}: {type(exc).__name__}: {exc}")
         return 2
@@ -105,14 +105,12 @@ def main():
         return 1
 
     # ── O1 watched_stop ─────────────────────────────────────────────────────
-    RS.begin(_rec("rest1"), "hard_stop_50%", 0.95, 1.00, now=NOW)
     got = [F.watched_stop(_rec("a")), F.watched_stop(_rec("b", trail_stop=2.40)),
            F.watched_stop(_rec("c", strategy="LiquidityHunt")), F.watched_stop(_rec("d", strategy="VOLT", trail_stop=752.9)),
            F.watched_stop(_rec("e", strategy="ORBStrategy")), F.watched_stop(_rec("f", center_symbol="x")),
-           F.watched_stop(_rec("g", short_symbol="y", spread_width=2.0)), F.watched_stop(_rec("rest1"))]
-    RS.finish("rest1", 1.0, "filled at the level", now=NOW)
-    check("O1 watched_stop: 1.00 / trail 2.40; None for Hunt, VOLT, ORB, a fly, a spread, a resting row",
-          got == [1.00, 2.40, None, None, None, None, None, None], f"{got}")
+           F.watched_stop(_rec("g", short_symbol="y", spread_width=2.0))]
+    check("O1 watched_stop: 1.00 / trail 2.40; None for Hunt, VOLT, ORB, a fly, a spread",
+          got == [1.00, 2.40, None, None, None, None, None], f"{got}")
 
     # ── O2 the model ────────────────────────────────────────────────────────
     T = 3.5 / (365 * 24)
@@ -165,7 +163,6 @@ def main():
 
     # ── O5 through the REAL _manage_one ─────────────────────────────────────
     XE.is_hard_close_time = lambda *a, **k: False
-    config.RESTING_STOP_MODE = "off"
 
     class _TL:
         def __init__(self): self.exits = []

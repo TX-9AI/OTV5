@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """
-tests/check_eod_expiry_value.py  v5.0
+tests/check_eod_expiry_value.py  v5.1
+v5.1  2026-10-31  OTV5 r68 (CFG.5) — the PM._rs.active_mode stub is gone with the resting stop (deleted; the operator, 2026-10-31:
+      "Resting stop was a study. It failed. Get this the fuck out of here"): it pinned the rest OFF, which is now the only path. No check changed.
 v5.0  2026-10-27  OTV5 r42 (EOD.3) — THE 15:55 ESTIMATE PRICES EACH LEG TO ITS OWN EXPIRY.
       CVX 2026-10-27, trade 006f6eca: a Breakout long 8 x 230P expiring Fri 10-30, entry 3.06. At the 15:55 cross
       the quote was 3.70 / 4.85 (mark 4.225-4.28), but _eod_best_case priced the put with 5 minutes left - its
@@ -95,9 +97,8 @@ def main():
     class _Fill(EE.ExitEngine):                           # the real engine, its fill pinned to the ledger's 1.25
         def place_exit_order(self, record, reason, mark_price=None):
             return EE.FillResult(confirmed=True, fill_price=1.25, detail="replay")
-    _gee, _am = PM.get_exit_engine, PM._rs.active_mode
+    _gee = PM.get_exit_engine
     try:
-        PM._rs.active_mode = lambda paper: "off"
         _fe = _Fill(True)
         PM.get_exit_engine = lambda paper=True: _fe
         try:
@@ -105,7 +106,7 @@ def main():
         except Exception as exc:                                   # noqa: BLE001
             print(f"      (_execute_exit raised after the fill: {type(exc).__name__}: {exc})")
     finally:
-        PM.get_exit_engine, PM._rs.active_mode = _gee, _am
+        PM.get_exit_engine = _gee
     lines = [m for lv, m in cap.recs if "Position closed" in m]
     check("E5 the close line logs the booked fill and the mark beside it",
           len(lines) == 1 and "exit=$1.25" in lines[0] and "mark=$4.28" in lines[0],

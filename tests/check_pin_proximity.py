@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """
-tests/check_pin_proximity.py  v5.0
+tests/check_pin_proximity.py  v5.1
+v5.1  2026-10-31  OTV5 r68 (CFG.5) — P6 RE-POINTED (section 38.4): the gate is fixed ON in config v5.10 and OT_PIN_PROXIMITY_ACTIVE
+      is not read (the operator, 2026-10-31: "7. Pin gate, default "on" —remove from the menu"); P6 asserts ON, not switchable.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.0  2026-09-22  OTV4TEST r97 — born RED at c38abac, where
       `pin_proximity_verdict` does not exist and P0 NAMES that rather than
@@ -151,9 +153,9 @@ check("P5 the floor is 0.32, the value the 36-trade replay was run at",
 # ── P6 — SELECTION, NOT FOUNDATIONAL: IT MUST BE SWITCHABLE ───────────────
 # §36: a measured preference is relaxable. The operator ships this as a TRIAL,
 # so turning it off must not need a revision.
-check("P6 the gate is env-switchable and currently ACTIVE",
+check("P6 the gate is ACTIVE (r68: fixed ON in config, no env key)",
       isinstance(C.PIN_PROXIMITY_ACTIVE, bool) and C.PIN_PROXIMITY_ACTIVE,
-      f"active={C.PIN_PROXIMITY_ACTIVE} (OT_PIN_PROXIMITY_ACTIVE=0 disables)")
+      f"active={C.PIN_PROXIMITY_ACTIVE}")
 
 if FAIL:
     print(f"\nRED — {len(FAIL)} failed: {', '.join(FAIL)}")

@@ -1,5 +1,8 @@
 #!/bin/bash
-# bootstrap.example.sh  v5.3
+# bootstrap.example.sh  v5.4
+# v5.4 — 2026-10-31 — OTV5 r68 (CFG.5). OT_PIN_PROXIMITY_ACTIVE and OT_SCALE_BREAKOUT are gone (config.py fixes both ON
+#         and reads neither; the operator, 2026-10-31: "7. Pin gate, default "on" —remove from the menu", "9. Scaling,
+#         default on—take it out"). configure.sh's menu is 1-9 now: the ramp TOP is item 7, data capture item 8.
 # v5.3 — 2026-10-25 — OTV5 r17 (BOOT.14). TWO INSTALL MODES, ONE INSTALLER. OT_INSTALL_MODE="unattended" (the default:
 #         YOU run this copy - it re-runs itself inside tmux so a dropped connection cannot kill the install, reattaches
 #         your terminal, prints the summary and ends in a login shell) or "controller" (fleet.py builds and runs it from
@@ -84,22 +87,20 @@ fi
 # Installs are ALWAYS paper. Switch to live later, deliberately, via configure.sh.
 export OT_INSTRUMENT="QQQ"              # configure.sh item 1  Instrument
 export OT_RISK_USD="200"               # configure.sh item 2  Risk per trade / ramp MIN
-# export OT_ORB_BUDGET_USD="200"      # configure.sh item 8  Ramp TOP (MAX) (defaults to OT_RISK_USD)
+# export OT_ORB_BUDGET_USD="200"      # configure.sh item 7  Ramp TOP (MAX) (defaults to OT_RISK_USD)
 # export OT_SCALE_ORB="1"             # no configure.sh item since r228 (the ORB trade is off): ORB scaling (1 on, 0 flat)
-# export OT_SCALE_BREAKOUT="1"        # configure.sh item 9  Breakout scaling (1 on, 0 flat)
 # export OT_SCALE_VOLT="1"            # no configure.sh item since r228 (VOLT is off): VOLT scaling (1 on, 0 flat)
 # export OT_DAILY_LOSS_LIMIT="200"    # configure.sh item 6  Daily catastrophic loss cap (defaults to OT_RISK_USD)
-export OT_PIN_PROXIMITY_ACTIVE="0"    # configure.sh item 7  Pin-proximity gate (PIN.1: off pending data)
 
 # ── Box ───────────────────────────────────────────────────────────────────────
 export OT_ROLE="control"        # full checkout: tests/ (the sweep) and docs/ (the agent's brief). "trader" strips both.
 export OT_SWAP_GB="2"           # /swapfile when the box has no swap; 0 = none
 export OT_GIT_REF="main"        # branch, tag or commit to install
 export OT_GIT_PUSH="0"          # 1 = this box may push (stores GITHUB_TOKEN); 0 = pull only
-export OT_DATA_CAPTURE="standalone"  # RECORDED only (CD.1): an install always lands standalone; managed is offered by configure.sh item 14 and applied at Done
+export OT_DATA_CAPTURE="standalone"  # RECORDED only (CD.1): an install always lands standalone; managed is offered by configure.sh item 8 and applied at Done
 # (CD.1) no start-at-install switch: every service ships stopped; ./configure.sh -> Done is the first start.
 # For a managed (S3-pushing) box: tag the instance Name=<SYMBOL>, attach role day-trader-box, launch with
-# the fleet key pair, and choose managed at configure.sh item 14.
+# the fleet key pair, and choose managed at configure.sh item 8.
 
 # ── TastyTrade OAuth ──────────────────────────────────────────────────────────
 export TT_CLIENT_SECRET="REPLACE_ME"

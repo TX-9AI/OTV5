@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """
-tests/check_last_closed_bar.py  v5.0
+tests/check_last_closed_bar.py  v5.1
+v5.1  2026-10-31  OTV5 r68 (CFG.5) — OT_RESTING_STOP_STATE leaves the scratch env: the resting stop and its state file are deleted
+      (the operator, 2026-10-31: "Resting stop was a study. It failed. Get this the fuck out of here"). No check changed.
 v5.0  2026-10-27  OTV5 r44 (BAR.1) — THE LAST CLOSED BAR IS FOUND BY TIME, NOT BY POSITION.
       META 2026-10-27, trade 3f2b1372: a Breakout short fired at 10:10:00 ET. Its plan line logged "1m stop 623.57",
       the 10:08 bar's high (623.5659): the frame's newest row was 10:09 (no 10:10 row existed yet), so iloc[-2] - "the
@@ -36,7 +38,7 @@ sys.path.insert(0, ROOT)
 _s = tempfile.mkdtemp(prefix="check_last_closed_bar.")
 for _k, _v in (("OT_TRADES_DB", "trades.db"), ("OT_DERIVED_DB", "derived.db"), ("OT_RESTING_DB", "resting.db"),
                ("OT_FEED_DB", "feed.db"), ("OT_COUNTERFACTUAL_DIR", "cf"), ("OT_LOG_FILE", "bot.log"),
-               ("OT_SIGNAL_JOURNAL_DIR", "sj"), ("OT_RESTING_STOP_STATE", "rs.json"),
+               ("OT_SIGNAL_JOURNAL_DIR", "sj"),
                ("OT_WAREHOUSE_STATE", "ws"), ("OT_PLAN_STATES_FILE", "ps.json")):
     os.environ[_k] = os.path.join(_s, _v)                  # scratch stores, always (the plan reads the feed store)
 os.environ.setdefault("OT_INSTRUMENT", "QQQ")

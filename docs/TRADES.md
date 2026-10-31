@@ -1,5 +1,6 @@
 # TRADES — the specs
 
+**`TRADES.md` v5.6 · 2026-10-31 · OTV5 r68 (CFG.5) — the pin gate, Breakout scaling, Runaway's and Breakout's entry ends and Breakout no-progress are fixed in code (gate ON, scaled, 10:30, the cut trades), with no env key and no configure.sh item; the resting stop section is deleted with the feature. The operator, 2026-10-31: "Resting stop was a study. It failed. Get this the fuck out of here"; "Do NOT add anything else to my config following a study or test".**
 **`TRADES.md` v5.5 · 2026-10-31 · OTV5 r67 (PARC.4) — PARC is REMOVED: its roster row and section 10 are gone with its code. The operator: "On PARC, no. It was an idea. It failed. It's done." and "Yes" to removing its code.**
 
 **`TRADES.md` v5.4 · 2026-10-30 · OTV5 r60 (PARK.4) — PARK is bought AT THE MARK, not the ask: paper books the mark, live ladders in from the bid to the mark and never posts above it, sized on the mark. The operator: "That's not my spec… you know park is a borrowed trade. To match my spec, we ladder in from aggressive to mark & never worse than mark".**
@@ -28,8 +29,8 @@ is its `docs/PLAN_SPEC.md` section.
 
 | trade | key | default | switch | entries (ET) | spec |
 |---|---|---|---|---|---|
-| Runaway | `RunawayContinuation` | ON | none (`OT_RUNAWAY_END` moves its end) | 09:35-10:30 | PLAN_SPEC §30 |
-| Breakout | `Breakout` | ON | none (`OT_BREAKOUT_END` moves its end) | 09:35-10:30 | section 7 below |
+| Runaway | `RunawayContinuation` | ON | none (its end is fixed; r68) | 09:35-10:30 | PLAN_SPEC §30 |
+| Breakout | `Breakout` | ON | none (its end is fixed; r68) | 09:35-10:30 | section 7 below |
 | Liquidity hunt | `LiquidityHunt` | ON | none | 09:35-10:30 | PLAN_SPEC §37 |
 | ORCS | `OpeningRangeCreditSpread` | OFF | `OT_ORCS` | 09:45-10:30 | PLAN_SPEC §41 |
 | GEX pin butterfly | `GEXPinButterfly` | ON | `OT_GEX_BUTTERFLY` | 13:00-15:00 | PLAN_SPEC §32 |
@@ -78,16 +79,10 @@ Other single legs: **25%** (`MAX_LOSS_PCT`). Butterflies: **40%** of the debit
 its risk, a nickel closes a leg. Every other exit rule lives in `strategy/management.py` and
 `execution/exit_engine.py`, not in a number that can be quoted here.
 
-**The resting stop (r266, STOP.1, paper only).** With `OT_RESTING_STOP=trade`, a fired `hard_stop` or
-`trail_stop_hit` on a single long does not close at the mark that tick: it rests a sell at its own level for
-120 s, filled there if price comes back, else closed at the mark - at once if the mark falls 5% of entry
-further. Unset = off: stops close at the mark as before.
-
 **The fill observers (r270, PMAP.1 + FILL.2).** Every open single long gets a premium-map row a minute, and the
 end-of-tick sleep records when its own quote crosses its premium stop (data/counterfactual/). `OT_FILL_OBSERVE=off` turns
 the recording off. **The floor watch (r280, EXIT.5) WAKES THE TICK:** a Breakout or Runaway whose own quote (at most 4 s
-old) is at or below its enforced premium stop ends the 15 s wait and the tick runs at once; the tick still decides (the
-resting stop included). Nothing here exits or orders. `OT_FLOOR_WATCH=trade|log|off`, unset = trade.
+old) is at or below its enforced premium stop ends the 15 s wait and the tick runs at once; the tick still decides. Nothing here exits or orders. `OT_FLOOR_WATCH=trade|log|off`, unset = trade.
 
 **The re-fire, the Hunt after a losing Breakout, and the 20 s gate (r316, BRK.15 / HUNT.13 / RENT.3; the operator,
 2026-10-24 13:45 and 13:56 ET, "Yes, effective Monday").** A Breakout side fires on a FRESH break: the first 1m close
@@ -119,7 +114,8 @@ Each spec declares its gates in three categories (WA §36):
 | **FEASIBILITY** | the trade cannot win, however good it looks. | never |
 
 ⚠️ **The relaxed toggle is NO LONGER ON `configure.sh` (removed r127, operator: *"we don't do
-relaxed entries here"*); item 7 is now r97's pin-proximity gate.** `OT_RELAXED_ENTRY=1` in the unit
+relaxed entries here"*). Item 7 was r97's pin-proximity gate until r68, which fixed the gate ON
+with no item (the operator, 2026-10-31: *"7. Pin gate, default "on" —remove from the menu"*).** `OT_RELAXED_ENTRY=1` in the unit
 still turns it on (strategy/relaxed.py), per box, paper only, and is unset on this box. It
 exists to get trades *firing* so the sequence can be watched, plumbing errors
 surfaced, and the stops exercised on deliberately mediocre entries. Every relaxed
@@ -714,7 +710,7 @@ recorded and never gated (measured useless, n=736).
 **Geometry.** Stop: the breaking bar's low (long) or high (short). Risk: break close to that
 stop. Reach: the nearer of the measured move (break close plus or minus the range width)
 and the nearest named pool. The contract is chosen at the reach by the ORB's selector.
-It sizes on that geometry (`sizes_on_geometry`), scaled when `OT_SCALE_BREAKOUT=1` (default).
+It sizes on that geometry (`sizes_on_geometry`), always scaled (the ramp; r68 fixed it ON, no key).
 
 **The strategy confirms, it does not search.** On the tick it fires, price must still be
 beyond the edge and the persistent conditions must still read true, or it holds.
@@ -729,9 +725,9 @@ and blocks neither.
 3. `delta_par` - delta at or above `DELTA_PAR` (0.98): it is stock now, get out.
 3a. `no_progress` (r265, BRK.8) - after 2 consecutive CLOSED 1m bars after the entry bar with no
    new favourable extreme, a trade whose best progress since entry is under 0.5 R is cut (decided
-   once; the mark ladder). `OT_BRK_NOPROG`: `trade` cuts, `log` (the default) only records the cut
-   in `data/counterfactual/breakout_no_progress.jsonl`, `off` skips. Operator, 2026-10-10: *"Yes, to
-   all. Study, fit & apply."*
+   once; the mark ladder), and every cut is recorded in `data/counterfactual/breakout_no_progress.jsonl`.
+   It always trades (r68: no key; the operator, 2026-10-31: *"Trade it—I don't want this toggled"*).
+   Operator, 2026-10-10: *"Yes, to all. Study, fit & apply."*
 4. `exhaustion` - a new favourable extreme on WEAKER 5m momentum. This is the trade's
    real exit: it has no target.
 5. the exit engine's trail, as a floor under the trade, and the close schedule in section 0.

@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 """
-tests/check_scaling_toggle.py  v5.1
+tests/check_scaling_toggle.py  v5.2
+v5.2  2026-10-31  OTV5 r68 (CFG.5) — S8/S9 RE-POINTED, NOT DROPPED (section 38.4). The operator, 2026-10-31: "9. Scaling, default
+      on—take it out". config v5.10 fixes SCALE_BREAKOUT = True (OT_SCALE_BREAKOUT is not read), so S8's '0' and junk cases read
+      Breakout ON while ORB and VOLT keep the literal-'1' rule; S9 asserts configure.sh has no change_scaling, no scaling
+      item and no OT_SCALE_* key, and keeps item 2's OT_ORB_RISK_USD removal. S1-S7, S10 (main's bindings, set by setsw) unchanged.
 v5.1  2026-10-26  OTV5 r38 (HYG.18) — scratch no longer names dir="/var/tmp": mkdtemp honours TMPDIR, which boot_sweep and land.sh point
       at a per-run dir they remove (HYG.14), so a sweep leaves nothing behind (237 dirs had piled up on SOFI). No check changed.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
@@ -41,8 +45,8 @@ function bodies against a temp unit and feeds what they write back to config.
   S7  HOP 0: the entry path passes scaled=_scaling_on(signal) to size_for
   S8  config: ORB_RISK_USD IS RISK_PER_TRADE_USD whatever OT_ORB_RISK_USD says
       (and the ignored value is kept for the startup warning); only "1" is ON
-  S9  configure.sh: items 9/10/11 write 1/0 that config reads as True/False,
-      and item 2 removes a leftover OT_ORB_RISK_USD line
+  S9  configure.sh: no scaling item or change_scaling (r68), and item 2 removes a
+      leftover OT_ORB_RISK_USD line
   S10 OFF with one contract dearer than the MIN is REFUSED, never floored to 1
 
 BORN RED on 6e1fa68 (r160) - see the ledger row. Runs under the venv AND the
@@ -266,13 +270,14 @@ got = _cfg({}, "config.SCALE_ORB, config.SCALE_BREAKOUT, config.SCALE_VOLT")
 check("S8 unset switches are ON (a fresh box sizes as today)", got == "True True True", got)
 got = _cfg({"OT_SCALE_ORB": "0", "OT_SCALE_BREAKOUT": "0", "OT_SCALE_VOLT": "0"},
            "config.SCALE_ORB, config.SCALE_BREAKOUT, config.SCALE_VOLT")
-check("S8 '0' is OFF on every switch", got == "False False False", got)
+check("S8 '0' is OFF on the ORB and VOLT switches; Breakout stays ON (r68: OT_SCALE_BREAKOUT is not read)",
+      got == "False True False", got)
 # EVERY switch gets the junk value: a first cut tried it on Breakout alone,
 # and a `!= "0"` mutant of SCALE_ORB (a typo read as ON) survived (M8).
 got = _cfg({"OT_SCALE_ORB": "yes", "OT_SCALE_BREAKOUT": "on", "OT_SCALE_VOLT": "true"},
            "config.SCALE_ORB, config.SCALE_BREAKOUT, config.SCALE_VOLT")
-check("S8 only the literal '1' is ON: 'yes'/'on'/'true' are OFF, the smaller size",
-      got == "False False False", got)
+check("S8 only the literal '1' is ON: 'yes'/'true' are OFF on ORB/VOLT, the smaller size; Breakout is fixed ON",
+      got == "False True False", got)
 
 # ── S9 — configure.sh writes what config reads ─────────────────────────────
 _src = open(os.path.join(ROOT, "configure.sh")).read()
@@ -317,27 +322,14 @@ reload_daemon() {{ echo RELOAD_CALLED >&2; }}
 
 
 _defined = set(re.findall(r"^([a-zA-Z_][a-zA-Z0-9_]*)\(\)", _src, re.M))
-if "change_scaling" not in _defined:
-    check("S9 configure.sh defines change_scaling", False, "absent")
-else:
-    for item, key, attr, name in (("9", "OT_SCALE_ORB", "SCALE_ORB", "ORB"),
-                                  ("10", "OT_SCALE_BREAKOUT", "SCALE_BREAKOUT", "Breakout"),
-                                  ("11", "OT_SCALE_VOLT", "SCALE_VOLT", "VOLT")):
-        disp = re.findall(r"^\s*\d+\)\s*change_scaling %s (\S+)" % key, _src, re.M)
-        if name == "Breakout":
-            d9 = re.findall(r"^\s*9\)\s*change_scaling (\S+) (\S+)", _src, re.M)
-            check(f"S9 item 9 dispatches change_scaling {key} {attr}", d9 == [(key, attr)], f"9) -> {d9}")
-        else:
-            check(f"S9 NO menu item dispatches {key} (r228: the {name} trade is off)", disp == [], f"{disp}")
-        off, p_off = _run(f'change_scaling {key} {attr} "{name}"', {key: "1"}, "n\n")
-        on, p_on = _run(f'change_scaling {key} {attr} "{name}"', {key: "0"}, "y\n")
-        c_off = _cfg({key: off.get(key, "")}, f"config.{attr}")
-        c_on = _cfg({key: on.get(key, "")}, f"config.{attr}")
-        check(f"S9 item {item} 'n' writes {key}=0 and config reads OFF; 'y' writes 1 and reads ON",
-              off.get(key) == "0" and c_off == "False" and on.get(key) == "1" and c_on == "True"
-              and "RELOAD_CALLED" in p_off.stderr and "RELOAD_CALLED" in p_on.stderr
-              and "MISSING_COMMAND" not in p_off.stderr + p_on.stderr,
-              f"n->{off.get(key)!r}/{c_off} y->{on.get(key)!r}/{c_on}")
+# r68 (CFG.5): the operator, 2026-10-31, "9. Scaling, default on—take it out" - no menu item and no
+# change_scaling remain; ORB / VOLT keep their env keys (no item since r228), Breakout is fixed ON in config.
+check("S9 configure.sh defines no change_scaling and no menu line dispatches a scaling switch (r68)",
+      "change_scaling" not in _defined
+      and not re.search(r"^\s*\d+\)\s*change_scaling", _src, re.M)
+      and not re.search(r"\bOT_SCALE_(ORB|BREAKOUT|VOLT)\b",
+                        "\n".join(l for l in _src.splitlines() if not l.lstrip().startswith("#"))),
+      "a scaling item or key is still in configure.sh")
 vals, p = _run("change_risk", {"OT_RISK_USD": "1050", "OT_ORB_RISK_USD": "1001"}, "1100\n")
 check("S9 item 2 sets the MIN and REMOVES the leftover OT_ORB_RISK_USD",
       vals.get("OT_RISK_USD") == "1100" and "OT_ORB_RISK_USD" not in vals

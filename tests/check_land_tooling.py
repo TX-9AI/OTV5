@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """
-tests/check_land_tooling.py  v5.0
+tests/check_land_tooling.py  v5.1
+v5.1  2026-10-31  OTV5 r68 (CFG.5) — T6 RE-POINTED (section 38.4): OT_RESTING_STOP_STATE is no longer required under $_scratch -
+      the resting stop is deleted (the operator, 2026-10-31: "Resting stop was a study. It failed."). Every other store unchanged.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.8  2026-10-25  OTV5 r4 (GATE.6) — T6 also requires OT_HEARTBEAT_FILE under $_scratch on every CHECK line (the watchdog's
       liveness signal; born red on land.sh v1.22).
@@ -125,7 +127,7 @@ def main():
     _need = ('OT_TRADES_DB="$_scratch/', 'OT_DERIVED_DB="$_scratch/',
              'OT_RESTING_DB="$_scratch/', 'OT_SIGNAL_JOURNAL_DIR="$_scratch/',
              'OT_LOG_FILE="$_scratch/', 'OT_COUNTERFACTUAL_DIR="$_scratch/',    # r194, r287
-             'OT_FEED_DB="$_scratch/', 'OT_RESTING_STOP_STATE="$_scratch/',
+             'OT_FEED_DB="$_scratch/',                                           # r68: OT_RESTING_STOP_STATE gone
              'OT_WAREHOUSE_STATE="$_scratch/',                                  # r292 (GATE.1)
              'OT_PLAN_STATES_FILE="$_scratch/',                                 # r307 (GATE.4)
              'OT_HEARTBEAT_FILE="$_scratch/')                                   # OTV5 r4 (GATE.6)
