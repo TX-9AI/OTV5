@@ -1,6 +1,11 @@
 #!/usr/bin/env python3
 """
-warehouse/self_close.py  v5.1
+warehouse/self_close.py  v5.2
+v5.2  2026-10-31  OTV5 r64 (SER.1) — DRIFT NEVER EXCUSES A SERIES BACKLOG. s3_push v5.4 grades --verify SHORT while a series
+      table's confirmed mark is below what the drain owed, and prints `  SERIES_LAG <ns|table> series_lag_s=N`. The
+      COUNTER DRIFT pass (a small consistent prefix shortfall) would have halted such a box anyway; series_lag_max()
+      now cancels it, so the box stays up and its timer keeps shipping. Gate tests/check_series_catchup.py C9.
+      Operator: "yes to all of the prepared solutions" (2026-10-31).
 v5.1  2026-10-26  (TG.2) — THE SELF-CLOSE-HELD PAGE NEVER LEFT THE BOX. On a failed drain the box stays up and pages
       "self-close held — data NOT verified in S3"; the page called `am.send(...)`, but AlertManager has no `send` (its
       one sending method is `_send`), so every held close raised AttributeError, which the surrounding try caught and
@@ -98,6 +103,13 @@ sys.path.insert(0, HERE)
 WAREHOUSE_PY = "/usr/bin/python3" if os.path.exists("/usr/bin/python3") else sys.executable
 
 
+def series_lag_max(out: str) -> int:
+    """v5.2 (SER.1) — the largest `series_lag_s=` on s3_push --verify's SERIES_LAG lines (0 when none)."""
+    import re
+    vals = [int(v) for v in re.findall(r"^\s+SERIES_LAG \S+ series_lag_s=(\d+)", out or "", re.M)]
+    return max(vals or [0])
+
+
 def _log(msg: str) -> None:
     print(f"[self-close] {msg}", flush=True)
 
@@ -146,6 +158,11 @@ def main(argv=None) -> int:
     # SOFI 6 prefixes, mainline 31, measured 2026-09-26 - so a failed PUT HALTED
     # and PURGED instead of holding. The DRAIN line owns failed=; read it there.
     drift = "COUNTER DRIFT" in out and " failed=0 " in line
+    # v5.2 (SER.1) — DRIFT NEVER EXCUSES A SERIES BACKLOG. s3_push v5.4 grades a drain SHORT while any series
+    # table's confirmed mark sits below what the drain owed (`  SERIES_LAG <ns|table> series_lag_s=N`); that is
+    # rows still on this box, not an inflated counter, so the drift pass must not halt over it.
+    if series_lag_max(out) > 0:
+        drift = False
 
     # ⚠️ DRIFT IS NOT LOSS. Same rule as the conductor: a small consistent
     # shortfall across many prefixes is an inflated ledger with every object

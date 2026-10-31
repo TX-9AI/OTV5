@@ -4,9 +4,9 @@
 Do not edit by hand: the generator runs inside the land command and
 the canary fails on drift (WORKING_AGREEMENT 33).
 
-539 Python modules across 12 local packages.
+540 Python modules across 12 local packages.
 
-**Reached by:** 139 imported · 25 declared entry points · 262 referenced from a script, unit or doc but never imported · **113 by nothing here**.
+**Reached by:** 139 imported · 25 declared entry points · 263 referenced from a script, unit or doc but never imported · **113 by nothing here**.
 
 ⚠️ The last group is a REVIEW LIST, not a delete list. A
 `land.spec CHECK` line ships inside a tarball and is never
@@ -42,7 +42,7 @@ execution.exit_engine); every such edge is listed below like any other.
 - `analysis/market_state.py` - the structural state assembly.
   **Carries the vocabulary, classifies nothing.**
 
-**Where the evidence lives:** `tests/` holds 336 standing
+**Where the evidence lives:** `tests/` holds 337 standing
 checks (`check_*.py`, all run by `tools/boot_sweep.py` at boot)
 plus the studies that produced every threshold in
 `docs/TRADES.md`. **A number in a strategy file should be
@@ -1709,6 +1709,10 @@ Change these with the most care; a break here reaches everything downstream.
 - **calls:** `notifications/alert_manager.py`, `warehouse/__init__.py`, `warehouse/retention_purge.py`, `warehouse/self_close.py`
 - **called by:** (not imported) — referenced in `docs/BACKLOG.md`, `docs/ENV.md`
 
+### `tests/check_series_catchup.py`
+- **calls:** `warehouse/__init__.py`, `warehouse/s3_push.py`, `warehouse/self_close.py`
+- **called by:** (not imported) — referenced in `docs/BACKLOG.md`, `docs/ENV.md`
+
 ### `tests/check_session_pin.py`
 - **calls:** `strategy/sweep_credit_spread.py`, `strategy/trend_credit_spread.py`
 - **called by:** (not imported) — referenced in `docs/BACKLOG.md`, `docs/ENV.md`
@@ -2203,7 +2207,7 @@ Change these with the most care; a break here reaches everything downstream.
 
 ### `warehouse/__init__.py`
 - **calls:** (none)
-- **called by:** `tests/check_audit_20260823.py`, `tests/check_candle_closed.py`, `tests/check_level_tape.py`, `tests/check_lineage.py`, `tests/check_purge_lock.py`, `tests/check_purge_pushed.py`, `tests/check_purge_reclaim.py`, `tests/check_push_row_day.py`, `tests/check_reclaim_paths.py`, `tests/check_retention_armed.py`, `tests/check_self_close_hold.py`, `tests/check_symbol_universe.py`, `tests/check_vacuum_headroom.py`, `warehouse/self_close.py`
+- **called by:** `tests/check_audit_20260823.py`, `tests/check_candle_closed.py`, `tests/check_level_tape.py`, `tests/check_lineage.py`, `tests/check_purge_lock.py`, `tests/check_purge_pushed.py`, `tests/check_purge_reclaim.py`, `tests/check_push_row_day.py`, `tests/check_reclaim_paths.py`, `tests/check_retention_armed.py`, `tests/check_self_close_hold.py`, `tests/check_series_catchup.py`, `tests/check_symbol_universe.py`, `tests/check_vacuum_headroom.py`, `warehouse/self_close.py`
 
 ### `warehouse/counter_pop.py`
 - **calls:** (none)
@@ -2219,11 +2223,11 @@ Change these with the most care; a break here reaches everything downstream.
 
 ### `warehouse/s3_push.py`
 - **calls:** `utils/instrument.py`
-- **called by:** `tests/check_candle_closed.py`, `tests/check_data_capture.py`, `tests/check_lineage.py`, `tests/check_purge_pushed.py`, `tests/check_push_row_day.py`, `tests/check_reclaim_paths.py`, `tests/check_tcs_shadow.py`
+- **called by:** `tests/check_candle_closed.py`, `tests/check_data_capture.py`, `tests/check_lineage.py`, `tests/check_purge_pushed.py`, `tests/check_push_row_day.py`, `tests/check_reclaim_paths.py`, `tests/check_series_catchup.py`, `tests/check_tcs_shadow.py`
 
 ### `warehouse/self_close.py`
 - **calls:** `notifications/alert_manager.py`, `utils/instrument.py`, `warehouse/__init__.py`, `warehouse/retention_purge.py`
-- **called by:** `tests/check_audit_20260823.py`, `tests/check_self_close_hold.py`
+- **called by:** `tests/check_audit_20260823.py`, `tests/check_self_close_hold.py`, `tests/check_series_catchup.py`
 
 <!-- REMOVED-ON-PURPOSE -->
 ## Removed on purpose

@@ -1,5 +1,17 @@
 """
-warehouse/s3_push.py  v5.3
+warehouse/s3_push.py  v5.4
+v5.4  2026-10-31  OTV5 r64 (SER.1) — A RUN SHIPS SERIES BATCHES UNTIL CAUGHT UP, AND THE DRAIN OWES THE WHOLE DAY. One 50,000-row
+      object per table per 5-minute run is ~167 rows/s; SPX writes ~310 quote rows/s, so quote_series fell behind every
+      session (15:45 rows reached S3 the NEXT MORNING on 10-21, 10-22, 10-26, 10-28) and on 2026-10-30, taken down at
+      the close, S3 stopped at 13:53 ET (SPX) and 14:38 (QQQ) while the rest stayed on the box. 10-23 is still cut at
+      12:56/14:04. (1) push_series(deadline=): every table gets one batch, then each table whose batch came back FULL
+      gets another, round-robin, until caught up or the budget is spent (OT_S3_SERIES_BUDGET_S, 180 s, shared by the
+      "series" and "derived_series" stages); objects stay SERIES_BATCH_ROWS rows, one batch held at a time (the r20
+      memory bound). A timer run stops taking extras when a --verify is waiting (data file drain_wanted). (2) --verify
+      records MAX(ts_epoch) per series table before it pushes, drains with OT_S3_SERIES_DRAIN_BUDGET_S (420 s), prints
+      `  SERIES_LAG <ns|table> series_lag_s=N` per table BEFORE the DRAIN line (whose shape is unchanged) and grades
+      the box SHORT while any lag is above 0. Prefix counters count objects, so a table hours behind read OK short=0.
+      Gate tests/check_series_catchup.py. Operator: "yes to all of the prepared solutions" (2026-10-31).
 v5.3  2026-10-30  OTV5 r57 (TCS.LOG1) — THE SHADOW TRADES ARE THEIR OWN STREAM. A LOG-only TrendCreditSpread books a shadow
       trade in shadow_trades.db (execution/shadow_book.py), never in trades.db. A "shadow_trades" stage right after
       "trades" pushes it with the SAME push_trades (content-hash CDC per trade_id) under raw/shadow_trades/dt=/sym=/
@@ -1287,10 +1299,99 @@ def push_derived(s3, bucket, db_path, ledger, me, counters=None):
 
 
 SERIES_BATCH_ROWS = int(os.environ.get("OT_S3_SERIES_BATCH", "50000"))
+# ── v5.4 (SER.1) — A RUN KEEPS SHIPPING SERIES BATCHES UNTIL CAUGHT UP OR OUT OF TIME ──
+# One 50,000-row object per table per run is ~167 rows/s at the 5-minute timer; SPX writes ~310 quote rows/s, so
+# its quote_series fell behind every session (2026-10-30: S3 stopped at 13:53 ET, QQQ at 14:38) and only a box
+# left up overnight or woken next morning caught up. The OBJECT stays SERIES_BATCH_ROWS rows (the r20 PUSH.1
+# memory bound is per batch, and one batch is held at a time); a run now repeats the batch while a table's last
+# batch came back FULL and the budget is not spent. The budget is shared by the "series" and "derived_series"
+# stages and checked BEFORE each extra batch, so a run overruns it by at most one batch. Every table still gets
+# its first batch whatever the budget says, so no table is ever starved worse than v5.3 starved it.
+# ⚠️ THE TIMER RUN STAYS INSIDE ITS 5 MINUTES: 180 s of series plus the derived/chain/shadow/journal stages
+# (r20 measured whole runs at 70-95 s). A second timer firing while this one runs is a no-op (oneshot unit, and
+# the flock below), never an overlap.
+SERIES_RUN_BUDGET_S = float(os.environ.get("OT_S3_SERIES_BUDGET_S", "180"))
+# The EOD drain (`--verify`) owes the whole day, so it gets a bigger budget: the conductor allows 900 s per box
+# (DTP_VERIFY_TIMEOUT) and the prefix walk after the drain has taken 120-300 s.
+SERIES_DRAIN_BUDGET_S = float(os.environ.get("OT_S3_SERIES_DRAIN_BUDGET_S", "420"))
+# A waiting `--verify` touches this file; a TIMER run that sees it (newer than the run's own start) stops taking
+# extra batches, so the drain's LOCK_WAIT is never spent behind a long catch-up. The drain itself never yields.
+DRAIN_WANTED_PATH = os.path.join(STATE_DIR, "drain_wanted")
+_RUN_T0 = time.time()
+_YIELD_TO_DRAIN = [True]
+
+
+def _drain_waiting() -> bool:
+    """True when a `--verify` started waiting for the lock after this (timer) run began."""
+    if not _YIELD_TO_DRAIN[0]:
+        return False
+    try:
+        return os.path.getmtime(DRAIN_WANTED_PATH) >= _RUN_T0
+    except OSError:
+        return False
+
+
+def _series_batch(s3, bucket, con, table, lk, ledger, me, counters, push_day):
+    """ONE batch of one series table: -> (pushed, failed, rows_read). rows_read is -1 if the table is absent."""
+    pushed = failed = 0
+    hwm = float(ledger.get(lk, 0) or 0)
+    try:
+        rows = [dict(r) for r in con.execute(
+            "SELECT * FROM %s WHERE ts_epoch > ? ORDER BY ts_epoch"
+            " LIMIT ?" % table, (hwm, SERIES_BATCH_ROWS))]
+    except Exception:
+        return 0, 0, -1                  # table absent on an older schema
+    if not rows:
+        return 0, 0, 0
+    # ── WH.20 (otv4 r417, ported) — `dt=` IS THE ROW'S OWN ET DAY, NEVER THE PUSH DAY ──
+    # The batch is SPLIT at every ET day boundary and each group is filed
+    # under ITS day, so one object can never hold two days and no object
+    # can land in a partition its rows do not belong to. The old
+    # `day = datetime.now(ET)` filed by PUSH time, so a backlog that drained
+    # after midnight (SERIES_BATCH_ROWS caps each run) landed in the NEXT
+    # day's partition - measured on mainline 2026-09-23: 566 of 224,336 raw
+    # series objects in the wrong dt=.
+    groups = {}
+    for r in rows:
+        try:
+            d = datetime.fromtimestamp(
+                float(r["ts_epoch"]),
+                ZoneInfo("America/New_York")).date().isoformat()
+        except (TypeError, ValueError, OSError, OverflowError):
+            # ⚠️ AN UNREADABLE ts_epoch IS FILED UNDER THE PUSH DAY AND NOT
+            # DROPPED: mis-filing one row beats losing it, and the old
+            # behaviour filed EVERY row this way.
+            d = push_day
+        groups.setdefault(d, []).append(r)
+    # ⚠️ THE HIGH-WATER MARK ADVANCES ONLY IF EVERY GROUP LANDED. A partial
+    # batch that advanced the mark would skip the unwritten rows FOREVER -
+    # the box deletes them on its retention clock and S3 is the only durable
+    # home. A re-push writes the same key (the name carries the content hash
+    # of the SAME rows), so the retry is idempotent.
+    all_ok = True
+    for d in sorted(groups):
+        grp = groups[d]
+        top_g = float(grp[-1]["ts_epoch"])
+        sha = _sha256(_canon(grp))
+        body = _wrap(table, grp, me or "UNKNOWN", d,
+                     {"n_rows": len(grp),
+                      "ts_from": float(grp[0]["ts_epoch"]),
+                      "ts_to": top_g})
+        key = "%s/%s/dt=%s/sym=%s/%d-%s.json" % (
+            PREFIX, table, d, me or "UNKNOWN", int(top_g * 1000), sha[:16])
+        if put_and_verify(s3, bucket, key, body, counters):
+            pushed += 1
+        else:
+            failed += 1
+            all_ok = False
+            break
+    if all_ok:
+        ledger[lk] = float(rows[-1]["ts_epoch"])
+    return pushed, failed, len(rows)
 
 
 def push_series(s3, bucket, db_path, ledger, me, counters=None,
-                tables=None, ns="series"):
+                tables=None, ns="series", deadline=None):
     """Series tables — batched, high-water per table.
 
     v4.5: `tables` and `ns` are parameters so the SAME implementation serves
@@ -1298,10 +1399,16 @@ def push_series(s3, bucket, db_path, ledger, me, counters=None,
     call exactly, so every existing caller and test is unaffected.
 
     Same contract as push_candles: rows are append-only and keyed on
-    ts_epoch, so a per-table high-water mark pushes only what is new, as ONE
-    object per table per ET day of its rows per run (WH.20; capped at SERIES_BATCH_ROWS; a backlog drains
-    over successive runs, tail-safe like every other stage). Key carries the
-    batch's top ts + content hash, so a retry overwrites the same object.
+    ts_epoch, so a per-table high-water mark pushes only what is new, in
+    objects of at most SERIES_BATCH_ROWS rows, one per table per ET day of its
+    rows per batch (WH.20). Key carries the batch's top ts + content hash, so a
+    retry overwrites the same object.
+
+    v5.4 (SER.1): `deadline` (epoch seconds). Every table gets one batch; then,
+    while time is left, each table whose last batch came back FULL gets another,
+    round-robin, until it is caught up. `deadline=None` is exactly one batch per
+    table (the v5.3 behaviour). A timer run also stops early when a `--verify`
+    is waiting for the lock (_drain_waiting).
 
     ⚠️ THE LEDGER KEY IS NAMESPACED `series|<table>` — the candle ledger holds
     `SYM|interval` in the same file, and two shapes in one dict is the r82
@@ -1314,63 +1421,69 @@ def push_series(s3, bucket, db_path, ledger, me, counters=None,
     except Exception:
         return 0, 0
     push_day = datetime.now(ZoneInfo("America/New_York")).date().isoformat()
+    behind = []
     for table in (SERIES_TABLES if tables is None else tables):
         lk = "%s|%s" % (ns, table)
-        hwm = float(ledger.get(lk, 0) or 0)
-        try:
-            rows = [dict(r) for r in con.execute(
-                "SELECT * FROM %s WHERE ts_epoch > ? ORDER BY ts_epoch"
-                " LIMIT ?" % table, (hwm, SERIES_BATCH_ROWS))]
-        except Exception:
-            continue                     # table absent on an older schema
-        if not rows:
-            continue
-        # ── WH.20 (otv4 r417, ported) — `dt=` IS THE ROW'S OWN ET DAY, NEVER THE PUSH DAY ──
-        # The batch is SPLIT at every ET day boundary and each group is filed
-        # under ITS day, so one object can never hold two days and no object
-        # can land in a partition its rows do not belong to. The old
-        # `day = datetime.now(ET)` filed by PUSH time, so a backlog that drained
-        # after midnight (SERIES_BATCH_ROWS caps each run) landed in the NEXT
-        # day's partition - measured on mainline 2026-09-23: 566 of 224,336 raw
-        # series objects in the wrong dt=.
-        groups = {}
-        for r in rows:
-            try:
-                d = datetime.fromtimestamp(
-                    float(r["ts_epoch"]),
-                    ZoneInfo("America/New_York")).date().isoformat()
-            except (TypeError, ValueError, OSError, OverflowError):
-                # ⚠️ AN UNREADABLE ts_epoch IS FILED UNDER THE PUSH DAY AND NOT
-                # DROPPED: mis-filing one row beats losing it, and the old
-                # behaviour filed EVERY row this way.
-                d = push_day
-            groups.setdefault(d, []).append(r)
-        # ⚠️ THE HIGH-WATER MARK ADVANCES ONLY IF EVERY GROUP LANDED. A partial
-        # batch that advanced the mark would skip the unwritten rows FOREVER -
-        # the box deletes them on its retention clock and S3 is the only durable
-        # home. A re-push writes the same key (the name carries the content hash
-        # of the SAME rows), so the retry is idempotent.
-        all_ok = True
-        for d in sorted(groups):
-            grp = groups[d]
-            top_g = float(grp[-1]["ts_epoch"])
-            sha = _sha256(_canon(grp))
-            body = _wrap(table, grp, me or "UNKNOWN", d,
-                         {"n_rows": len(grp),
-                          "ts_from": float(grp[0]["ts_epoch"]),
-                          "ts_to": top_g})
-            key = "%s/%s/dt=%s/sym=%s/%d-%s.json" % (
-                PREFIX, table, d, me or "UNKNOWN", int(top_g * 1000), sha[:16])
-            if put_and_verify(s3, bucket, key, body, counters):
-                pushed += 1
-            else:
-                failed += 1
-                all_ok = False
+        p_, f_, n_ = _series_batch(s3, bucket, con, table, lk, ledger, me, counters, push_day)
+        pushed += p_
+        failed += f_
+        if n_ >= SERIES_BATCH_ROWS and not f_:
+            behind.append(table)
+    while behind and deadline is not None:
+        if time.time() >= deadline or _drain_waiting():
+            break
+        flush_all()                      # a long catch-up keeps its progress if it is killed
+        nxt = []
+        for table in behind:
+            if time.time() >= deadline or _drain_waiting():
                 break
-        if all_ok:
-            ledger[lk] = float(rows[-1]["ts_epoch"])
+            lk = "%s|%s" % (ns, table)
+            p_, f_, n_ = _series_batch(s3, bucket, con, table, lk, ledger, me, counters, push_day)
+            pushed += p_
+            failed += f_
+            if n_ >= SERIES_BATCH_ROWS and not f_:
+                nxt.append(table)
+        behind = nxt
     con.close()
     return pushed, failed
+
+
+def series_targets(db_path, tables):
+    """{table: MAX(ts_epoch)} now — what a drain owes. Tables absent or empty are left out."""
+    out = {}
+    try:
+        con = sqlite3.connect("file:%s?mode=ro" % db_path, uri=True, timeout=5)
+    except Exception:
+        return out
+    for t in tables:
+        try:
+            mx = con.execute("SELECT MAX(ts_epoch) FROM %s" % t).fetchone()[0]
+        except Exception:
+            continue
+        if mx is not None:
+            try:
+                out[t] = float(mx)
+            except (TypeError, ValueError):
+                pass
+    con.close()
+    return out
+
+
+def _ceil_s(x) -> int:
+    """Seconds rounded UP: a 0.4 s lag prints 1, never a 0 beside a SHORT verdict."""
+    return int(-(-float(x) // 1))
+
+
+def series_lag(targets, ledger, ns):
+    """{table: seconds the confirmed mark sits below the drain's target} (0 = caught up)."""
+    out = {}
+    for t, mx in targets.items():
+        try:
+            hwm = float(ledger.get("%s|%s" % (ns, t), 0) or 0)
+        except (TypeError, ValueError):
+            hwm = 0.0
+        out[t] = max(0.0, mx - hwm)
+    return out
 
 
 def _push_chain_tree(s3, ledger, counters, files):
@@ -1480,7 +1593,21 @@ def main(argv=None) -> int:
         # A normal run that loses the race exits silently: the run already in
         # flight is doing exactly this work. --verify waits, because the EOD
         # conductor is blocking on its answer, and falls back to verify-only.
+        if do_verify:
+            # v5.4 (SER.1) — the drain never yields, and it tells a timer run mid-catch-up to stop taking extras.
+            _YIELD_TO_DRAIN[0] = False
+            try:
+                os.makedirs(STATE_DIR, exist_ok=True)
+                with open(DRAIN_WANTED_PATH, "w") as _fh:
+                    _fh.write(str(time.time()))
+            except Exception:
+                pass
         lock = acquire_lock(LOCK_WAIT if do_verify else 0)
+        if do_verify:
+            try:
+                os.remove(DRAIN_WANTED_PATH)
+            except Exception:
+                pass
         drained = lock is not None
         if lock is None and not do_verify:
             return 0
@@ -1498,6 +1625,19 @@ def main(argv=None) -> int:
         me = own_symbol()
         total_pushed = 0
         total_failed = 0
+        # v5.4 (SER.1) — ONE series budget for the "series" and "derived_series" stages, started when the first
+        # of them starts. The drain's is larger, and it records what it owes BEFORE it pushes: MAX(ts_epoch) per
+        # series table now. Rows the feed writes after this moment are not owed by this drain.
+        _sdl = []
+
+        def _series_deadline():
+            if not _sdl:
+                _sdl.append(time.time() + (SERIES_DRAIN_BUDGET_S if do_verify else SERIES_RUN_BUDGET_S))
+            return _sdl[0]
+        _owed = []
+        if do_verify:
+            _owed = [("series", series_targets(FEED_DB, SERIES_TABLES)),
+                     ("dseries", series_targets(DERIVED_DB, DERIVED_SERIES_TABLES))]
 
         eod_items = []
         try:
@@ -1535,13 +1675,14 @@ def main(argv=None) -> int:
             # v4.2 — after candles (same store, same perishability), before the
             # bulk streams so a timeout cannot starve the only copy of the
             # greeks/quote tape. Batched: one object per table per run.
-            ("series", lambda: push_series(s3, BUCKET, FEED_DB, c_ledger, me, counters)),
+            ("series", lambda: push_series(s3, BUCKET, FEED_DB, c_ledger, me, counters,
+                                           deadline=_series_deadline())),
             # v4.3 — the biographies. Small tables, but they are the ONLY copy.
             # v4.5 — beside "series", not beside "derived": same shape, same
             # perishability, and both are read by warehouse_source.load_series.
             ("derived_series", lambda: push_series(
                 s3, BUCKET, DERIVED_DB, ds_ledger, me, counters,
-                tables=DERIVED_SERIES_TABLES, ns="dseries")),
+                tables=DERIVED_SERIES_TABLES, ns="dseries", deadline=_series_deadline())),
             # r20 PUSH.1 — opened inside the stage, so a ledger that cannot open fails THIS stage only.
             ("derived", lambda: _derived_stage(s3, me, counters)),
             ("liquidity_ledger", lambda: push_whole_files(
@@ -1577,6 +1718,18 @@ def main(argv=None) -> int:
                 # disk so we verify against ITS progress, not our stale copy.
                 counters = load_ledger(COUNTERS_PATH)
             short, loc, remote = verify(s3, BUCKET, counters)
+            # ── v5.4 (SER.1) — THE DRAIN OWES EVERY SERIES ROW THAT EXISTED WHEN IT STARTED ──
+            # Prefix counters count OBJECTS, so a series table 2 hours behind read `OK short=0` (2026-10-30, SPX and
+            # QQQ quote_series). The lag is the drain's own target minus the confirmed mark, per table.
+            if not drained:
+                c_ledger = load_ledger(CANDLE_LEDGER)
+                ds_ledger = load_ledger(DSERIES_LEDGER)
+            _lags = []
+            for _ns, _tg in _owed:
+                _led = c_ledger if _ns == "series" else ds_ledger
+                for _t, _l in sorted(series_lag(_tg, _led, _ns).items()):
+                    _lags.append(("%s|%s" % (_ns, _t), _l))
+            _max_lag = max([_l for _n, _l in _lags] or [0.0])
             # ── r180 — HEAL LEDGER DRIFT, HOLD FOR REAL LOSS ──────────────
             # Operator, 2026-08-28, after TWO MONTHS of nightly holds in
             # which the data was in the bucket every single time: "whatever
@@ -1619,12 +1772,19 @@ def main(argv=None) -> int:
                         print("  HEALED {} ledger {} -> s3 {} (PUT-count drift; "
                               "failed=0 this drain)".format(_pfx, _was, _now))
                     short, loc, remote = verify(s3, BUCKET, counters)
+            # v5.4 (SER.1): THE PER-TABLE LAG PRINTS BEFORE THE DRAIN LINE, AND THE DRAIN LINE'S SHAPE IS UNCHANGED.
+            # Three parsers read that line: the conductor's DRAIN_RE (the verdict straight after short=),
+            # self_close (`endswith("OK")`) and eod_backfill (`| tail -8`, which keeps the DRAIN line plus up to
+            # seven after it). Any lag above 0 s grades the box SHORT.
+            for _n, _l in _lags:
+                print("  SERIES_LAG {} series_lag_s={}{}".format(
+                    _n, _ceil_s(_l), "" if _l <= 0 else " BEHIND (rows still on this box; the next push run ships them)"))
             print("DRAIN host={} sym={} drained={} pushed={} failed={} "
                   "prefixes={} local={} s3={} short={} {}".format(
                       HOST, me or "?", "yes" if drained else "no",
                       total_pushed, total_failed, len(counters),
                       loc, remote, len(short),
-                      "OK" if (not short and not total_failed) else "SHORT"))
+                      "OK" if (not short and not total_failed and _max_lag <= 0) else "SHORT"))
             for pfx, exp, got in short[:5]:
                 print("  SHORT {} expected>={} got={}".format(pfx, exp, got))
             # ⚠️ WH.6 — SAY WHICH KIND OF SHORTFALL THIS LOOKS LIKE. A counter
