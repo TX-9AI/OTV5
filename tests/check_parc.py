@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """
-tests/check_parc.py  v5.2
+tests/check_parc.py  v5.3
+v5.3  2026-10-30  OTV5 r60 (PARK.4) — P10 RE-POINTED: PARK on P1's tape is the 702 CALL at the MARK ((bid + ask) / 2, floored
+      to the cent), not the ask. The operator, 2026-10-30: "To match my spec, we ladder in from aggressive to mark & never
+      worse than mark". PARC's own entry and every other property unchanged.
 v5.2  2026-10-30  OTV5 r57 (TCS.LOG1) — P13 RE-POINTED, NOT DROPPED (section 38.4): TCS joined configure.sh's menu as item 16, so
       Done is 17 and the prompt names 1-17. PARC stays item 15; properties unchanged.
 v5.1  2026-10-28  OTV5 r50 (PARC.3) — PARC'S DEFAULT IS log (paused). P13 now expects unset -> log/log and an unknown value
@@ -29,7 +32,8 @@ v5.0  2026-10-27  OTV5 r46 (PARC.1) — new. PARC: PARK'S ENTRY, A CREDIT SPREAD
   P8  no delta exit, no PARK lock, no premium stop, no management plan ever fires for PARC
   P9  PARC and PARK both fire in the same 11:01 window on one box (main._attempt_park / _attempt_parc), in the normal
       dispatch and the capped branch; both are admitted, cap-exempt, one per session
-  P10 PARK unchanged: tests/check_park.py green, and PARK on P1's tape is still the 702 CALL at the ask
+  P10 PARK unchanged: tests/check_park.py green, and PARK on P1's tape is still the 702 CALL, at the mark (r60 PARK.4;
+      was the ask)
   P11 the ladder: paper books limit_ladder.paper_fill_credit (the knob moves the booked credit), live posts the
       entry ladder's rung through _post_credit_vertical (key cv:<sym>:PARC:<side>); exits go through _exit_policy /
       _exit_limit (structure stop: floor at the mark; nickel 0.05; EOD resting best case, cross at 15:55)
@@ -520,9 +524,9 @@ def main():
     env.update(OT_INSTRUMENT=SYM, TMPDIR=_TD)
     r10 = subprocess.run([sys.executable, os.path.join(ROOT, "tests", "check_park.py")], env=env,
                          capture_output=True, text=True, timeout=280)
-    check("P10 PARK unchanged: its signal on P1's tape is the 702 CALL at the ask; tests/check_park.py exits 0",
+    check("P10 PARK unchanged: its signal on P1's tape is the 702 CALL at the mark; tests/check_park.py exits 0",
           pk is not None and pk.strategy_name == "PARK" and pk.option_side == "call" and float(pk.strike) == 702
-          and abs(pk.entry_premium - c702.ask) < 1e-9 and float(pk.underlying_stop) == 0 and r10.returncode == 0,
+          and abs(pk.entry_premium - int((c702.bid + c702.ask) / 2.0 * 100.0 + 1e-9) / 100.0) < 1e-9 and float(pk.underlying_stop) == 0 and r10.returncode == 0,
           f"{pk and (pk.option_side, pk.strike, pk.entry_premium)} rc={r10.returncode} {r10.stdout[-300:]}")
 
     # ── P13 config / switch ─────────────────────────────────────────────────

@@ -1,5 +1,7 @@
 # TRADES — the specs
 
+**`TRADES.md` v5.4 · 2026-10-30 · OTV5 r60 (PARK.4) — PARK is bought AT THE MARK, not the ask: paper books the mark, live ladders in from the bid to the mark and never posts above it, sized on the mark. The operator: "That's not my spec… you know park is a borrowed trade. To match my spec, we ladder in from aggressive to mark & never worse than mark".**
+
 **`TRADES.md` v5.3 · 2026-10-30 · OTV5 r57 (TCS.LOG1) — TCS is reactivated as LOG ONLY: OT_TCS_ACTIVE unset = a SHADOW trade (the real entry and exits at the paper fill, booked to shadow_trades.db, never ordered). The operator: "Can you reactivate TCS Monday as 'log only'? But do not trade it." then "Make sure TCS logs everything an executable trade logs."**
 
 **`TRADES.md` v5.2 · 2026-10-28 · OTV5 r50 (PARC.3) — PARC is PAUSED: OT_PARC unset = log (records, never orders) until a better stop placement. The operator: "Don't go live on the PARC tomorrow until we find a better stop placement."**
@@ -795,8 +797,11 @@ the contract and builds the signal.
 - the first hour moved: the 10:30 1m close against the 09:30 1m open, |move| >= 0.20%; its sign
   is the direction;
 - GATE-G: never against the opening gap (09:30 open vs the prior session's last RTH 1m close);
-- the strike nearest the 11:00 1m close, today's expiry, two-sided, ask >= 0.50, bought AT THE ASK;
-- sized flat on the box's own risk, floor(risk / (ask x 100)): $1,050 on QQQ-TEST, $2,500 on
+- the strike nearest the 11:00 1m close, today's expiry, two-sided, ask >= 0.50, bought AT THE MARK
+  ((bid + ask) / 2, floored to the cent; r60 PARK.4, the operator 2026-10-30: "we ladder in from
+  aggressive to mark & never worse than mark"). Paper books the mark; live walks the entry ladder from
+  25% in off the bid toward the mark, one increment a tick, never above it - unfilled by 11:03 is no trade;
+- sized flat on the box's own risk, floor(risk / (mark x 100)): $1,050 on QQQ-TEST, $2,500 on
   SPX-TEST. No scaling, no pin-proximity gate (PIN_EXEMPT); what the gate would have said is a
   counterfactual row on every PARK entry, `data/counterfactual/pin_gate.jsonl`.
 

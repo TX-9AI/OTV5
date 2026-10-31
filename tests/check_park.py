@@ -1,6 +1,11 @@
 #!/usr/bin/env python3
 """
-tests/check_park.py  v5.1
+tests/check_park.py  v5.2
+v5.2  2026-10-30  OTV5 r60 (PARK.4) — K1 PINS THE MARK, NOT THE ASK. The operator, 2026-10-30: "That's not my spec… you
+      know park is a borrowed trade. To match my spec, we ladder in from aggressive to mark & never worse than mark".
+      K1: entry = the mark 1.60 of the 1.58/1.62 quote (was "entry = ask 1.62"). K8's park_signal.jsonl row still
+      carries the real ask 1.62 and now its mark 1.60. K9 sizes on a premium (the mark in production); its numbers
+      are unchanged. The mark entry itself is gated by tests/check_park_entry_mark.py.
 v5.1  2026-10-30  OTV5 r58 (DECAY.1) — OT_DECAY_STOP=0 HERE: this checker pins a pre-decay exit in isolation. K10a2 (mark 1.70 / bid 1.50, then bid 1.20) now closes on the peak-decay stop (p 0.70 -> 0.22), which is the r57 rule working, not the PARK lock;
       the decay stop itself is gated by tests/check_decay_stop.py. No assertion changed.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
@@ -23,7 +28,8 @@ v1.0  2026-10-18  OTV4TEST r288. The operator, 2026-10-17 18:21 ET: "Trade it, d
       PARK (named after my friend)"; on SPX: "Use our actual numbers, trade it"; 18:30 ET: "Make sure when you build it
       it's divided properly between the strategy and the plan". Terms: /var/tmp/sat_1017/cont11/PREREG_CONT11.md (C0)
       and PARK.X (/var/tmp/sat_1017/park, picks sha 85dca420).
-  K1  the plan, 11:01, first hour +0.30%, gap up: READY, a CALL at the strike nearest the 11:00 close, entry = the ASK;
+  K1  the plan, 11:01, first hour +0.30%, gap up: READY, a CALL at the strike nearest the 11:00 close, entry = the MARK
+      (r60 PARK.4; was the ask);
       the signal: strategy PARK, stop_premium 0 (no premium stop), underlying_stop 0
   K2  a quiet first hour (+0.15%): refused at first_hour_move, no signal
   K3  GATE-G: an up first hour on a gap DOWN is refused at gate_g; a put on a gap up is refused
@@ -33,7 +39,7 @@ v1.0  2026-10-18  OTV4TEST r288. The operator, 2026-10-17 18:21 ET: "Trade it, d
       when the store has no prior session
   K7  the contract: ask < 0.50 refused; a one-sided quote (bid 0) refused
   K8  OT_PARK=log: generate_signal returns NOTHING to execute and writes one park_signal.jsonl row
-  K9  the size is the box's own risk, flat: $1,050 at ask 1.62 -> 6; $2,500 at ask 9.00 -> 2 (RiskManager.size_for)
+  K9  the size is the box's own risk, flat: $1,050 at premium 1.62 -> 6; $2,500 at ask 9.00 -> 2 (RiskManager.size_for)
   K10 exits (the REAL ExitEngine.evaluate routes PARK to _evaluate_park):
       a. the lock: bid 1.19 x entry before arming HOLDS; after bid >= 1.60 x entry, bid 1.20 x entry EXITS park_lock
       b. a restart re-arms from the persisted mfe_premium
@@ -152,9 +158,11 @@ def main():
 
     _feed(700.0, 702.1, 702.4, 699.0)                         # +0.30%, gap +1.0
     s1 = ask()
-    check("K1 READY: a CALL at 702 (nearest 702.4), entry = ask 1.62, strategy PARK, stop_premium 0, underlying_stop 0",
+    # r60 (PARK.4), the operator 2026-10-30: "we ladder in from aggressive to mark & never worse than mark" - the mark.
+    check("K1 READY: a CALL at 702 (nearest 702.4), entry = the mark 1.60 (1.58/1.62), strategy PARK, stop_premium 0, "
+          "underlying_stop 0",
           s1 is not None and s1.strategy_name == "PARK" and s1.option_side == "call" and float(s1.strike) == 702
-          and abs(s1.entry_premium - 1.62) < 1e-9 and s1.stop_premium() == 0 and float(s1.underlying_stop) == 0,
+          and abs(s1.entry_premium - 1.60) < 1e-9 and s1.stop_premium() == 0 and float(s1.underlying_stop) == 0,
           f"{s1 and (s1.strategy_name, s1.option_side, s1.strike, s1.entry_premium, s1.stop_premium(), s1.underlying_stop)}")
 
     _feed(700.0, 701.05, 701.2, 699.0)                        # +0.15%
@@ -196,8 +204,9 @@ def main():
     s8 = ask(mode="log")
     f8 = os.path.join(CF, "park_signal.jsonl")
     r8 = [json.loads(x) for x in open(f8)] if os.path.exists(f8) else []
-    check("K8 OT_PARK=log: nothing to execute, one park_signal.jsonl row (call 702 @ 1.62)",
-          s8 is None and len(r8) == 1 and r8[0]["side"] == "call" and r8[0]["strike"] == 702 and r8[0]["ask"] == 1.62,
+    check("K8 OT_PARK=log: nothing to execute, one park_signal.jsonl row (call 702, ask 1.62, mark 1.60)",
+          s8 is None and len(r8) == 1 and r8[0]["side"] == "call" and r8[0]["strike"] == 702 and r8[0]["ask"] == 1.62
+          and abs(float(r8[0].get("mark") or 0) - 1.60) < 1e-9,
           f"{s8} {r8}")
     config.PARK_MODE = "trade"
 

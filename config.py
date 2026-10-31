@@ -1,5 +1,8 @@
 """
-config.py  v5.6
+config.py  v5.7
+v5.7  2026-10-30  OTV5 r60 (PARK.4) — COMMENTS ONLY: PARK is bought at the MARK and sized on it. The operator, 2026-10-30:
+      "To match my spec, we ladder in from aggressive to mark & never worse than mark". ENTRY_WINDOWS["PARK"] and the
+      sizing note said "the ask"; no value changed (PARK_MIN_ASK 0.50 stays the feasibility floor).
 v5.6  2026-10-30  OTV5 r58 (DECAY.1) — THE PEAK-DECAY PROFIT STOP'S KNOBS. The operator, 2026-10-30: "I'm thinking like some
       kind of stop that says we've decayed 20% from the peak so cut it" ... "I want the decay stop running by Monday".
       DECAY_STOP (OT_DECAY_STOP, default 1 = on, 0 = off), DECAY_STOP_X = 0.30 (OT_DECAY_STOP_X: armed, close when
@@ -1059,7 +1062,7 @@ PARK_CLOSE_ET = (15, 45)
 # Its own budget, outside the morning's catastrophic cap (the operator, 2026-10-17):
 # a PARK close never counts toward the cap's realized P&L, and the cap never refuses
 # PARK (position_manager: cap_exempt). Sizing is the box's own RISK_PER_TRADE_USD,
-# flat: floor(risk / (ask x 100)).
+# flat: floor(risk / (mark x 100)) (r60 PARK.4: the mark, was the ask).
 CAP_EXCLUDED_STRATEGIES = ("PARK", "PARC")     # r46 (PARC.1): PARC has its own budget too
 # ── OTV5 r46 (PARC.1) — PARC: PARK'S ENTRY, A CREDIT SPREAD ON THE SAFER SIDE ──────
 # The operator, 2026-10-27: "under identical entry conditions the PARK trade sells a
@@ -1181,7 +1184,7 @@ ENTRY_WINDOWS = {
     "GEXPinButterfly":      ((13, 0),  (15, 0)),   # r273 (BFLY.10): was 12:00; the operator, 2026-10-12: "reduce the fly window to 1300"
     "ATPButterfly":         ((13, 0),  (15, 0)),   # r273 (BFLY.10): was 12:00. r179: was 11:30 here while the plan itself stayed dormant until 12:00; the operator, 2026-09-30: "12:00 is fine"
     "OpeningRangeCreditSpread": ((9, 45), (10, 30)),  # r204 (ORCS): 09:45 beat 09:36; positive to 10:30, gone from 11:00 (X6/X7)
-    "PARK":                 ((11, 1),  (11, 3)),   # r288 (PARK.1): the ask 11:01-11:02 after the 11:00 bar closes
+    "PARK":                 ((11, 1),  (11, 3)),   # r288 (PARK.1): 11:01-11:02 after the 11:00 bar closes; r60 (PARK.4): at the mark, laddered live
     "PARC":                 ((11, 1),  (11, 3)),   # OTV5 r46 (PARC.1): PARK's window, the credit side
 }
 

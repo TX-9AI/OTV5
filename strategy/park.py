@@ -1,5 +1,11 @@
 """
-strategy/park.py  v5.0
+strategy/park.py  v5.1
+v5.1  2026-10-30  OTV5 r60 (PARK.4) — THE ENTRY IS THE MARK, NOT THE ASK. The operator, 2026-10-30: "That's not my
+      spec… you know park is a borrowed trade. To match my spec, we ladder in from aggressive to mark & never worse
+      than mark". The spec below now reads: bought AT THE MARK ((bid + ask) / 2, floored to the cent) - paper books
+      the mark, live walks the r104 ladder from the bid toward the mark and never posts above it, unfilled by 11:03 =
+      no trade; sized on the mark. The contract bar (two-sided, ask >= PARK_MIN_ASK) and the window are unchanged.
+      The plan is strategy/park_plan.py v5.2; gate tests/check_park_entry_mark.py.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.0  2026-10-18  OTV4TEST r288 (PARK.1) — PARK, THE 11:00 FIRST-HOUR CONTINUATION: THE SPECIFICATION. The
       operator, 2026-10-17 18:21 ET: "Trade it, don't just log it. Paper is free. Call it PARK (named after my
@@ -13,8 +19,9 @@ v1.0  2026-10-18  OTV4TEST r288 (PARK.1) — PARK, THE 11:00 FIRST-HOUR CONTINUA
       THE TRADE (his friend's CONT11, frozen in /var/tmp/sat_1017/cont11/PREREG_CONT11.md, cell C0):
         - the first hour moved: the 10:30 1m bar's CLOSE against the 09:30 1m bar's OPEN, |move| >= 0.20%;
         - GATE-G: never against the opening gap (09:30 open vs the prior close);
-        - the strike nearest the 11:00 1m bar's close, today's expiry, bought at the ASK 11:01-11:02;
-        - sized flat on the box's own risk: floor(RISK_PER_TRADE_USD / (ask x 100)) - $1,050 on QQQ-TEST,
+        - the strike nearest the 11:00 1m bar's close, today's expiry, bought AT THE MARK 11:01-11:02 (v5.1;
+          was the ask): paper books the mark, live ladders in from the bid to the mark, never worse than mark;
+        - sized flat on the box's own risk: floor(RISK_PER_TRADE_USD / (mark x 100)) - $1,050 on QQQ-TEST,
           $2,500 on SPX-TEST ("That whole budget goes to contracts", 10-17);
         - its own budget: outside the catastrophic cap both ways (config.CAP_EXCLUDED_STRATEGIES);
         - one per session.
@@ -61,7 +68,7 @@ class Park:
         "gate_g":           ("the direction is never against the opening gap (09:30 open vs the prior close): "
                              "a call needs gap >= 0, a put gap <= 0. MEASURED: halves QQQ's losers, neutral on SPX"),
         "contract":         (f"the strike nearest the 11:00 1m close, today's expiry, two-sided, ask >= "
-                             f"{config.PARK_MIN_ASK:.2f}"),
+                             f"{config.PARK_MIN_ASK:.2f}; bought at the mark, never worse (PARK.4)"),
     }
 
     # Live state re-read on the firing tick: none. Every bar above is a SETTLED fact by 11:01 - the bars

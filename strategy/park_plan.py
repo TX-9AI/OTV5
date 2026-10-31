@@ -1,5 +1,18 @@
 """
-strategy/park_plan.py  v5.1
+strategy/park_plan.py  v5.2
+v5.2  2026-10-30  OTV5 r60 (PARK.4) — PARK BUYS AT THE MARK, NOT THE ASK. The operator, 2026-10-30, on CVX's PARK
+      (235C bought at the ask 1.56 on a 0.97/1.56 quote, mark 1.265, -$657 booked, -$480 at the mark): "That's not my
+      spec… you know park is a borrowed trade. To match my spec, we ladder in from aggressive to mark & never worse
+      than mark". prepare() sets the premium to the MARK, (bid + ask) / 2 of the contract it picked - the same mark
+      data/options_chain and execution/entry_ladder compute - floored to the cent (entry_engine._mark_cap's rule, r224
+      FLY.1; the raw float 1.265 rounded UP to 1.27 in limit_at_mark), so the signal's entry_premium is the mark: paper
+      books the mark (entry_engine._paper_fill_single -> limit_ladder.paper_fill_price), the size is floor(risk / (mark
+      x 100)) and the +60% / +20% lock keys off the booked mark. Live walks the r104 ladder (entry_engine
+      _place_single_leg -> ladder_registry.price_for): 25% in from the bid, one increment a tick toward the mark,
+      never above it; unfilled by 11:03 is no trade. The feasibility bar is unchanged (two-sided, ask >=
+      PARK_MIN_ASK). The FIRE line reads "@ <mark> (mark, bid/ask b/a)"; park_signal.jsonl keeps the real "ask" and
+      "bid" and adds "mark". Every PARK fill 10-26..10-30 (28 of 28) had paid the ask: $651 over the mark, $177 of
+      it CVX 10-30. Gate tests/check_park_entry_mark.py.
 v5.1  2026-10-27  OTV5 r46 (PARC.1) — THE FIRST-HOUR READ IS ONE FUNCTION, SHARED WITH PARC. The operator, 2026-10-27:
       "under identical entry conditions the PARK trade sells a credit spread ... Call it PARC"; "No shadow mode. We're
       paper. It trades tomorrow." read_first_hour() is the block ParkPlan.prepare ran inline - the store read, the
@@ -18,8 +31,9 @@ v1.0  2026-10-18  OTV4TEST r288 (PARK.1) — PARK'S PLAN: READS THE FIRST HOUR, 
       falls back to the caller's `prior_close` (main: the gap's prior_close) only when the store has no prior
       session; which one was used is recorded on the row.
       THE CONTRACT: today's chain, the strike nearest the 11:00 close (ties: the lower strike), its side's
-      contract, two-sided, ask >= PARK_MIN_ASK. ENTRY = THE ASK (the study filled at the ask); the paper fill books
-      entry_premium, and the live ladder never pays more than it.
+      contract, two-sided, ask >= PARK_MIN_ASK. ENTRY = THE MARK (v5.2, the operator 2026-10-30: "we ladder in from
+      aggressive to mark & never worse than mark"; it was the ask, the study's fill); the paper fill books
+      entry_premium, and the live ladder never pays more than the mark.
       THE SIGNAL carries no premium stop and no underlying stop (stop_loss_pct = 1.0, underlying_stop = 0): the
       exits are PARK's own (execution/exit_engine._evaluate_park).
 """
@@ -140,8 +154,8 @@ def _record_would_fire(prep) -> None:
         row = {"ts_epoch": time.time(), "rule": "park_signal", "mode": config.PARK_MODE,
                "direction": prep.direction, "move_pct": prep.move_pct, "gap": prep.gap,
                "strike": float(getattr(c, "strike", 0) or 0), "side": prep.side,
-               "streamer_symbol": getattr(c, "streamer_symbol", ""), "ask": prep.premium,
-               "bid": _f(getattr(c, "bid", None)), "spot_1100": prep.spot}
+               "streamer_symbol": getattr(c, "streamer_symbol", ""), "ask": prep.ask,
+               "bid": prep.bid, "mark": prep.premium, "spot_1100": prep.spot}
         with open(os.path.join(d, "park_signal.jsonl"), "a") as fh:
             fh.write(json.dumps(row) + "\n")
     except Exception as exc:                                    # noqa: BLE001
@@ -152,7 +166,7 @@ class ParkPreparation:
     """What the search found. `ready` is True ONLY when every bar cleared."""
 
     __slots__ = ("tick", "spec", "conditions", "unmet", "ready", "direction", "side", "move_pct", "gap",
-                 "spot", "contract", "premium", "price_now")
+                 "spot", "contract", "premium", "price_now", "bid", "ask")
 
     def __init__(self, tick, spec):
         self.tick, self.spec = tick, spec
@@ -161,6 +175,7 @@ class ParkPreparation:
         self.direction = self.side = ""
         self.move_pct = self.gap = self.spot = None
         self.contract = self.premium = self.price_now = None
+        self.bid = self.ask = None              # v5.2: the quote the mark was taken from
 
     def cond(self, name, current, met, note: str = ""):
         required = self.spec.CONDITIONS.get(name, "")
@@ -172,7 +187,7 @@ class ParkPreparation:
     def trade_line(self) -> str:
         if not self.ready:
             return "no trade prepared"
-        return (f"buy {float(self.contract.strike):g}{self.side[0].upper()} @ {self.premium:.2f} (ask) - first "
+        return (f"buy {float(self.contract.strike):g}{self.side[0].upper()} @ {self.premium:.2f} (mark, bid/ask {self.bid:.2f}/{self.ask:.2f}) - first "
                 f"hour {self.move_pct:+.3f}%, gap {self.gap:+.2f}; exits: lock +{config.PARK_LOCK_ARM:.0%}/"
                 f"+{config.PARK_LOCK_FLOOR:.0%}, |delta| <= {config.PARK_DELTA_FLOOR:.2f} from "
                 f"{config.PARK_DELTA_FROM_ET[0]:02d}:{config.PARK_DELTA_FROM_ET[1]:02d}, else "
@@ -194,7 +209,7 @@ class ParkPreparation:
             underlying_stop=0.0,                 # no structure stop: PARK's exits are its own
             underlying_target=0.0,
             strike=c.strike, expiry=getattr(c, "expiry", ""),
-            entry_premium=float(self.premium),   # THE ASK
+            entry_premium=float(self.premium),   # THE MARK (v5.2; was the ask)
             contract=c,
             entry_delta=getattr(c, "delta", None),
             stop_loss_pct=1.0,                   # no premium stop (stop_premium = 0)
@@ -275,7 +290,12 @@ class ParkPlan:
         if not ok:
             t.refuse("contract", "no two-sided ATM contract with ask >= %.2f" % config.PARK_MIN_ASK)
             return prep
-        prep.contract, prep.premium = k, ask
+        # v5.2 (PARK.4) - THE MARK, NOT THE ASK. The operator, 2026-10-30: "we ladder in from aggressive to mark &
+        # never worse than mark". (bid + ask) / 2 - the mark data/options_chain and the entry ladder use - FLOORED TO
+        # THE CENT, as entry_engine._mark_cap prices the most a buy may post (r224 FLY.1): the raw 1.265 is
+        # 1.2650000000000001 in float and limit_at_mark's round(px, 2) booked it 1.27, a half-cent ABOVE the mark.
+        prep.contract, prep.bid, prep.ask = k, bid, ask
+        prep.premium = int((bid + ask) / 2.0 * 100.0 + 1e-9) / 100.0
         prep.ready = True
         t.anchor(trigger=spot)
         return prep
