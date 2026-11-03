@@ -1,5 +1,13 @@
 """
-notifications/alert_manager.py  v5.2
+notifications/alert_manager.py  v5.3
+v5.3  2026-11-02  (PAGE.2) — ON A MANAGED BOX CONTROL DELIVERS THE ALERT. _send(msg, code, ref, meta=None) hands the
+      unescaped text to notifications/alert_route.route(), which on a managed box writes the full alert as an
+      `[alert] {json}` line for control's router and sends it from the box only when it is critical (always, and
+      control dedups) or control's ack file is stale (fallback); a routed alert control does not ack in 30 s is sent
+      from the box. Not managed: unchanged (the box sends, nothing else). The escape, the ALERT line, the [page] line
+      after it and the return value stay; managed + routed returns True (accepted by control). send_blind_alert,
+      send_sight_restored_alert, send_startup_alert and send_shutdown_alert pass meta (cause, open count, paper,
+      a one-line brief) so control can group them. Gate tests/check_alert_route.py; check_alert_page P1-P9 unchanged.
 v5.2  2026-10-26  (PAGE.1) — THE BOT PAGES CONTROL WITH ONE SHORT LINE IN bot.log. _send(msg, code="MSG", ref="")
       keeps everything it did (escape, Telegram, the ALERT line, the return value) and then, on a managed box, writes
       `[page] <CODE> [ref]` through notifications/pager.py (logger notifications.pager). Each send_* passes its code
@@ -178,6 +186,7 @@ from typing import Optional
 from utils.time_utils import fmt_et_short
 from config import INSTRUMENT
 from notifications.pager import PAGE_CODES, page as _page     # v5.2 (PAGE.1)
+from notifications.alert_route import route as _route          # v5.3 (PAGE.2)
 
 logger = logging.getLogger(__name__)
 
@@ -232,7 +241,7 @@ class AlertManager:
             self._tg      = None
             self._enabled = False
 
-    def _send(self, msg: str, code: str = "MSG", ref: str = "") -> bool:
+    def _send(self, msg: str, code: str = "MSG", ref: str = "", meta: Optional[dict] = None) -> bool:
         """True iff Telegram ACCEPTED the message for delivery (TG.1: the sender queues and retries; a final failure is logged by the courier as DROPPED).
 
         v1.9: TelegramSender.send() has always returned a bool; this discarded
@@ -244,14 +253,23 @@ class AlertManager:
         # so a single unescaped `<` from a position description, a file path, or
         # a forensic field rejects the entire message with a 400. Applied here
         # rather than at each call site so no future alert can forget it.
-        msg = html.escape(msg, quote=False)
-        sent = False
-        if self._enabled and self._tg:
-            try:
-                sent = bool(self._tg.send(msg))
-            except Exception as e:
-                logger.error(f"Telegram send failed: {e}")
-                sent = False
+        raw = str(msg)
+        msg = html.escape(raw, quote=False)
+
+        def _direct() -> bool:
+            if self._enabled and self._tg:
+                try:
+                    return bool(self._tg.send(msg))
+                except Exception as e:
+                    logger.error(f"Telegram send failed: {e}")
+            return False
+
+        # v5.3 (PAGE.2) — who delivers: the box (standalone, critical, control down) or control's router. route()
+        # never raises; the except is belt and braces so a router fault can only ever mean "send it from here".
+        try:
+            _via_box, sent = _route(code, ref, raw, _direct, meta)
+        except Exception:                                       # noqa: BLE001
+            sent = _direct()
         logger.info(f"ALERT: {msg}")
         # v5.2 (PAGE.1) — control's page, AFTER the send and the ALERT line. Managed boxes only; never raises, and
         # `sent` is returned untouched whatever the page does.
@@ -297,7 +315,8 @@ class AlertManager:
             f"\U0001F680 OptionsBot [{mode}] STARTED | "
             f"{instrument}{rt}{ipf}{agentf} | "
             f"{fmt_et_short()}",
-            code="UP",
+            code="UP", meta={"brief": (f"{ip}" if ip else "IP ?") + (f", Claude {agent}" if agent else ""),
+                             "cause": mode + rt},
         )
 
     # ── 1b. Open position resumed after a restart ───────────────────────────
@@ -467,7 +486,9 @@ class AlertManager:
         else:
             msg += "no open positions | "
         msg += fmt_et_short()
-        return self._send(msg, code="BLD")
+        return self._send(msg, code="BLD", meta={"cause": why, "open": n_open, "paper": bool(paper),
+                                                 "drill": bool(drill), "detail": detail,
+                                                 "blind_for_s": round(float(blind_for_s or 0), 1)})
 
     def send_sight_restored_alert(self, instrument: str, blind_for_s: float,
                                   cause: str = "", drill: bool = False) -> bool:
@@ -478,7 +499,8 @@ class AlertManager:
         return self._send(
             f"\u2705 {pre}Sight restored{why} | {instrument} | "
             f"was blind {blind_for_s:.0f}s | {fmt_et_short()}",
-            code="SEE",
+            code="SEE", meta={"cause": cause, "drill": bool(drill),
+                              "blind_for_s": round(float(blind_for_s or 0), 1)},
         )
 
     def send_short_leg_closed_alert(self, instrument: str,
@@ -501,7 +523,7 @@ class AlertManager:
             f"\U0001F534 OptionsBot STOPPED | "
             f"{instrument}{reason_str} | "
             f"{fmt_et_short()}",
-            code="DN",
+            code="DN", meta={"cause": reason or ""},
         )
 
     # ── 3. Trade entered ─────────────────────────────────────────────────────
