@@ -1,0 +1,9 @@
+{
+ "about": "FEED.13 seed: dxlink nodes behind tasty-openapi-dxlink-md-ws.dxfeed.com. OBSERVED 2026-11-02: ten boxes + AMZN/GOOGL resolved 129.153.134.53 (refused 85 min, then HTTP 502 on every upgrade from 14:19 to 15:45 ET), TSLA resolved 184.195.238.144 (recovered 09:40); the zone's Route 53 nameservers answered 184.195.238.144 and 52.6.43.252. OBSERVED 2026-11-03: all 14 boxes connected at the 09:15 wake on 52.6.43.252 (7) and 184.195.238.144 (7); 129.153.134.53 answered 101 again. REMOVED 2026-11-03: 54.204.44.247 (UNH's answer on the morning of 11-02; timed out that evening, failed TLS verification on 11-03 - no longer a dxlink node). Always a candidate; a dead one fails its pre-open probe or cools 5 min. Data, not code - edit here, never in data/candle_feed.py.",
+ "observed": "2026-11-03",
+ "nodes": {
+  "129.153.134.53": {"source": "DNS answer for 10 boxes + AMZN/GOOGL, 2026-11-02; 502 14:19-15:45 ET that day; 101 on 2026-11-03"},
+  "184.195.238.144": {"source": "TSLA's DNS answer 2026-11-02; Route 53 authoritative answer 2026-11-02/03; 7 boxes 2026-11-03"},
+  "52.6.43.252": {"source": "Route 53 authoritative answer 2026-11-02; 7 boxes connected 2026-11-03"}
+ }
+}

@@ -1,5 +1,60 @@
 """
-data/candle_feed.py  v5.5
+data/candle_feed.py  v5.6
+v5.6  2026-11-02  OTV5 r70 (FEED.13) — RELEASE THE OLD, ALWAYS: THE QUOTE TOKEN IS REUSED ACROSS RECONNECTS, THE OLD SOCKET IS
+      CLOSED BEFORE A NEW ONE, AND A SESSION-LIMIT REFUSAL WAITS 120-180 s. 2026-11-02 09:30 ET the DXLink socket dropped on
+      8 boxes at once (WebSocketNetworkError/WouldBlock); AMZN, GOOGL and TSLA were then refused "The number of user
+      sessions has exceeded the configured limit" on every ~60 s retry for 10-25+ minutes. The SDK's
+      DXLinkStreamer.__asynccontextmanager__ GETs /api-quote-tokens on EVERY open, so each retry minted a new token beside
+      the dropped socket's session. SessionReleasingStreamer (a subclass; no SDK file, no venv change) takes the token
+      and dxlink-url from QuoteTokenCache, fetched once and reused until QUOTE_TOKEN_MAX_AGE_S (20 h) or until DXLink
+      rejects it (AUTH_STATE UNAUTHORIZED after AUTH, ERROR UNAUTHORIZED / token-expired, or no AUTHORIZED within
+      AUTH_TIMEOUT_S 45 s); the token is never logged. The SDK path already closes the socket on every exception route
+      (httpx2's shielded close in a finally, then the response and the client); the subclass adds its own finally that
+      closes it explicitly if anything left it open and closes any recorded-open socket before dialling a new one.
+      run(): a session-limit refusal starts a lockout - the next wait is session_limit_wait(0), uniform [120, 180] s, and
+      every wait after it (any error) is [200, 300] s, never under 120 s, until a connection succeeds (subscriptions
+      live), from the very first attempt after a process start (11-02 09:57 AMZN, restarted into the lockout, made ~16
+      refused attempts in 90 s on the 3/6/12 s rungs); each refusal logs one SESSION_LIMIT line with its wait. Without
+      one, every error keeps reconnect_wait()'s jittered 3 -> 60 s ladder unchanged. Why hold that long: 09-29 measured
+      ~36 sessions on the login (17 boxes x 2) and ~14 boxes were live on 11-02, so the ceiling was most likely refused
+      attempts counting as sessions server-side for some minutes, each minting a new token. Operator, 2026-11-02:
+      "Release the old, ALWAYS."
+      THE LIMIT IS PER DXLINK NODE - MEASURED 2026-11-02 10:50 ET: tasty-openapi-dxlink-md-ws.dxfeed.com resolves to
+      different backend nodes; ten boxes and AMZN/GOOGL got 129.153.134.53 on every lookup, TSLA (recovered 09:40) and
+      UNH were on AWS nodes 184.195.238.144 / 54.204.44.247, and AMZN/GOOGL, refused for 85 min on 129.153.134.53,
+      connected at once when pinned (/etc/hosts, temporary) to the AWS nodes - the 09:30 mass reconnect herded boxes onto
+      one node. The operator: "if we have control over the connections, then spread them out." NodeBook keeps every
+      IPv4 A record seen (re-resolved at each connect) and the last node that connected, in data/dxlink_nodes.json beside
+      the feed store; the socket is dialled to the chosen IP with the hostname kept for TLS SNI (httpcore2's
+      `sni_hostname` extension), the certificate check (verify stays on) and the Host header. Choice: the last node that
+      connected (sticky - a working node is never left for spread), else the usable nodes ranked by crc32(symbol), else
+      the first DNS answer, else the plain URL. A session-limit refusal cools that node 30 min, so the next dial goes to
+      another known node; a non-refusal failure before AUTHORIZED cools it 5 min; a node unseen for 14 days is forgotten.
+      The node is logged on every dial, connect, error and SESSION_LIMIT line.
+      The operator then: "Yes, connect to a known new server & if we can probe to spread out our connections prior to
+      the open, it might be worth looking into." (a) IMMEDIATE SWITCH: a refusal with an un-cooled alternate known
+      redials it after node_switch_wait() (1-5 s); the 120-180 / 200-300 s hold applies only when no alternate is left
+      (its rung counts held waits only). (b) FLEET LIST: six public resolvers answered only 129.153.134.53 that
+      afternoon, so DNS alone cannot find the others; warehouse/s3_push.py v5.6 shares every box's book through S3
+      (fleet/dxlink_nodes/) and writes the merge to dxlink_nodes_fleet.json beside the feed store, read at each connect;
+      the 11-02 nodes are seeded from data/dxlink_nodes_seed.json (data, not code). (c) PRE-OPEN SPREAD: before 09:30 ET
+      every usable node gets a TCP+TLS handshake with SNI (_probe_node: no HTTP, no AUTH, no DXLink session) and the box
+      takes crc32(symbol) over the reachable ones, stickiness ignored; in RTH the last good node is kept. Forget window
+      3 -> 14 days. THE PROBE READS THE UPGRADE, NOT ONLY TLS: from 14:19 ET 11-02 129.153.134.53 completed TLS normally
+      and answered every websocket upgrade "HTTP/1.1 502 Bad Gateway", so _probe_node sends ONE bare upgrade request
+      (GET <path>, Host + SNI = hostname, certificate verified), reads only the status line and closes at once (no
+      SETUP, no AUTH, no quote token; the same request as dtp tools/dxlink_probe.py): 101 = usable, 5xx or anything
+      else = not. A 5xx/non-101 upgrade at CONNECT time cools that node 5 min and, with another known node, redials it
+      in 1-5 s (one UPGRADE_REFUSED line with node and status). Gate tests/check_feed_session_release.py S1-S20.
+      THE TOKEN REUSE IS MEASURED (2026-11-03 16:15 ET, QQQ box, after the close): one /api-quote-tokens token AUTHORIZED
+      on five sockets in a row - twice through DNS, then dialled at 52.6.43.252, 184.195.238.144 and 129.153.134.53 with
+      SNI/Host kept - SETUP, AUTH_STATE UNAUTHORIZED, AUTH, AUTH_STATE AUTHORIZED each time, no ERROR: a token is
+      accepted on a new socket and on another node. THE AUTHORITATIVE NAMESERVERS ARE ASKED TOO: the host itself is
+      delegated to Route 53 (ns-313.awsdns-39.com and peers) while recursive resolvers answer one node at a time, so
+      _resolve_nodes() appends the A records the zone's own nameservers give (stdlib UDP, NS set cached 1 h, bounded,
+      never raises) after the recursive answer, order kept. 54.204.44.247 is removed from the seed (timed out the
+      evening of 11-02, failed TLS verification 11-03); 52.6.43.252 (authoritative 11-02, 7 boxes 11-03) is added.
+      Gate S19 (seed) and S21 (authoritative lookup).
 v5.5  2026-10-28  OTV5 r47 (FEED.12) — A FRACTIONAL SHARE SIZE IS PARSED, NOT THROWN AWAY. tastytrade 13.2.3 types `size`
       as int on TimeAndSale (int | None on Trade) and dxFeed sends fractional shares (0.419652): pydantic raised
       int_from_float and the SDK skipped the event - MEASURED 2026-10-27 about half of QQQ's TimeAndSale events
@@ -306,6 +361,14 @@ from typing import Dict, List, Optional, Tuple
 from zoneinfo import ZoneInfo
 
 from tastytrade import DXLinkStreamer           # module-level so tests can patch
+from contextlib import asynccontextmanager                         # v5.6 (FEED.13)
+from anyio import CancelScope, create_task_group, fail_after         # v5.6 (FEED.13): the SDK's own primitives
+from httpx2 import AsyncClient                                       # v5.6 (FEED.13): module-level so the gate can patch
+from httpx2.websockets import WebSocketDisconnect                    # v5.6 (FEED.13)
+from tastytrade.utils import TastytradeError                         # v5.6 (FEED.13)
+import socket                                                        # v5.6 (FEED.13): dxlink node book
+import zlib                                                          # v5.6 (FEED.13): stable symbol hash
+from urllib.parse import urlsplit, urlunsplit                        # v5.6 (FEED.13)
 from tastytrade.dxfeed import (Candle, Greeks, Quote, Trade,
                                Summary, TimeAndSale, Underlying,
                                TheoPrice)
@@ -483,6 +546,706 @@ def reconnect_wait(backoff: float, rng=None) -> float:
     r = rng if rng is not None else random
     return max(float(RECONNECT_MIN_S),
                float(backoff) * r.uniform(1.0 - RECONNECT_JITTER, 1.0 + RECONNECT_JITTER))
+
+
+# ── v5.6 (FEED.13) — RELEASE THE OLD, ALWAYS: ONE QUOTE TOKEN, ONE SOCKET, A LONG WAIT AT THE CEILING ─────────────────
+# 2026-11-02 09:30 ET the DXLink socket dropped on 8 boxes at once; AMZN, GOOGL and TSLA were then refused on every
+# ~60 s retry for 10-25+ minutes: "Fatal streamer error: The number of user sessions has exceeded the configured limit"
+# (one TastyTrade login, 14 boxes). The SDK's DXLinkStreamer.__asynccontextmanager__ calls GET /api-quote-tokens on
+# EVERY open, so every retry minted a NEW token while the server still held the dropped socket's session. The operator,
+# 2026-11-02: "Release the old, ALWAYS."
+#   (1) QuoteTokenCache: the token + dxlink-url are fetched once and REUSED on every reconnect; refreshed only when older
+#       than QUOTE_TOKEN_MAX_AGE_S (20 h; TastyTrade quote tokens live 24 h), when the server answers AUTH with
+#       UNAUTHORIZED, when it sends ERROR UNAUTHORIZED / a token-expired message, or when no AUTHORIZED arrives within
+#       AUTH_TIMEOUT_S (a server that silently ignored a reused token would otherwise hang the feed with no reconnect).
+#       The token itself is never logged.
+#   (2) The SDK's path already closes the socket on every exception route (httpx2's session closes in a shielded
+#       `finally`, then the response and the AsyncClient); SessionReleasingStreamer keeps that body and adds a
+#       `finally` of its own that closes the socket explicitly if anything left it open (bounded by WS_CLOSE_TIMEOUT_S),
+#       and closes any socket still recorded as open BEFORE a new one is dialled.
+#   (3) A session-limit refusal starts a LOCKOUT: the next wait is session_limit_wait(0) - uniform [120, 180] s - and
+#       every wait after it, whatever the error, is session_limit_wait(n >= 1) - [200, 300] s - until a connection
+#       succeeds (subscriptions live), which clears it. This holds from the very first attempt after a process start:
+#       a fresh feed begins on the 3 s rung, and 2026-11-02 09:57 AMZN, restarted into the lockout, made ~16 refused
+#       attempts in 90 s on the 3/6/12 s rungs. Each refusal logs ONE SESSION_LIMIT line with its wait. Without a
+#       session-limit refusal every other error keeps the jittered 3 -> 60 s ladder exactly as before.
+#       WHY A LONG HOLD: 2026-09-29 measured ~36 sessions on the login (17 boxes x 2); on 11-02 ~14 boxes were live,
+#       so the ceiling was most likely reached by refused attempts counting as sessions server-side for some minutes,
+#       each attempt minting a new token - retrying fast only refills the ceiling it is waiting on.
+# No SDK file and no venv is changed: the subclass replaces only the context manager; _reader, _heartbeat and every
+# subscribe call are the SDK's own (they see the socket through _AuthWatch, which forwards everything).
+QUOTE_TOKEN_MAX_AGE_S     = 20 * 3600
+AUTH_TIMEOUT_S            = 45.0
+WS_CLOSE_TIMEOUT_S        = 5.0
+SESSION_LIMIT_WAIT_MIN_S  = 120.0       # the floor of every wait while the lockout is held
+SESSION_LIMIT_WAIT_MAX_S  = 180.0       # the first lockout wait is uniform [MIN, MAX]
+SESSION_LIMIT_WAIT_CAP_S  = 300.0       # later lockout waits: 250 s +/-20% = [200, 300]
+_SESSION_LIMIT_RUNG_S     = (150.0, 250.0)
+_SESSION_LIMIT_TEXT       = "number of user sessions has exceeded"
+
+
+def session_limit_wait(level: int = 0, rng=None) -> float:
+    """Seconds to wait inside a session-limit lockout. level 0 (the refusal just seen) is uniform in
+    [SESSION_LIMIT_WAIT_MIN_S, SESSION_LIMIT_WAIT_MAX_S] = [120, 180]; level >= 1 (still locked out) is 250 s +/-20%,
+    [200, 300]. Never below 120 s, never above SESSION_LIMIT_WAIT_CAP_S. `rng` is for the gate."""
+    r = rng if rng is not None else random
+    rung = _SESSION_LIMIT_RUNG_S[0] if level <= 0 else _SESSION_LIMIT_RUNG_S[1]
+    w = rung * r.uniform(1.0 - RECONNECT_JITTER, 1.0 + RECONNECT_JITTER)
+    return float(min(SESSION_LIMIT_WAIT_CAP_S, max(SESSION_LIMIT_WAIT_MIN_S, w)))
+
+
+def _is_session_limit(e) -> bool:
+    """True when the error (or anything wrapped inside it) is TastyTrade's session-ceiling refusal."""
+    return _SESSION_LIMIT_TEXT in _explain_exc(e).lower()
+
+
+def _is_auth_error_text(text: str) -> bool:
+    t = (text or "").lower()
+    if _SESSION_LIMIT_TEXT in t:
+        return False
+    return "unauthorized" in t or ("token" in t and ("expired" in t or "invalid" in t))
+
+
+class QuoteTokenRejected(Exception):
+    """DXLink refused (or never accepted) the cached quote token; the cache is already invalidated."""
+
+
+class QuoteTokenCache:
+    """The one /api-quote-tokens answer this process holds. `clock` is for the gate."""
+
+    def __init__(self, max_age_s: float = None, clock=None):
+        self.max_age_s = max_age_s
+        self.clock = clock or _time.time
+        self._url = self._token = None
+        self._fetched_at = None
+        self._session_id = None
+        self._stale_reason = None
+        self.fetches = 0
+        self.reuses = 0
+
+    def age_s(self) -> Optional[float]:
+        return None if self._fetched_at is None else self.clock() - self._fetched_at
+
+    def invalidate(self, reason: str) -> None:
+        if self._token is not None:
+            logger.warning("FEED.13 quote token dropped (%s) - the next connect fetches a new one", reason)
+        self._url = self._token = self._fetched_at = None
+        self._stale_reason = reason
+
+    async def get(self, session) -> Tuple[str, str]:
+        max_age = QUOTE_TOKEN_MAX_AGE_S if self.max_age_s is None else self.max_age_s
+        age = self.age_s()
+        if self._token is not None and self._session_id == id(session) and age is not None and age < max_age:
+            self.reuses += 1
+            logger.info("FEED.13 quote token reused (age %.0fs, reuse #%d)", age, self.reuses)
+            return self._url, self._token
+        why = (self._stale_reason or "first connect") if self._token is None else (
+            "older than %.0fs" % max_age if self._session_id == id(session) else "new session")
+        data = await session._get("/api-quote-tokens")
+        self._url, self._token = data["dxlink-url"], data["token"]
+        self._fetched_at, self._session_id, self._stale_reason = self.clock(), id(session), None
+        self.fetches += 1
+        logger.info("FEED.13 quote token fetched (%s; fetch #%d)", why, self.fetches)
+        return self._url, self._token
+
+
+_QUOTE_TOKENS = QuoteTokenCache()
+_OPEN_WS = {"ws": None}          # the one socket this process has open, if any
+
+
+# ── FEED.13 (2) — THE DXLINK NODE IS CHOSEN, A REFUSED NODE IS LEFT AT ONCE, AND THE FLEET SPREADS BEFORE THE OPEN ──
+# MEASURED 2026-11-02 10:50 ET: tasty-openapi-dxlink-md-ws.dxfeed.com resolves to different backend nodes. Ten boxes and
+# AMZN/GOOGL got 129.153.134.53 on every lookup; TSLA (recovered 09:40) and UNH were on AWS nodes 184.195.238.144 and
+# 54.204.44.247. AMZN/GOOGL were refused "user sessions exceeded" for 85 min on 129.153.134.53 and connected AT ONCE when
+# pinned (/etc/hosts, temporary) to the AWS nodes: the session limit is PER NODE, and the 09:30 mass reconnect herded
+# the boxes onto one. Later the same day six public resolvers (Google, Cloudflare, Quad9, OpenDNS) all answered only
+# 129.153.134.53 with no CNAME, so the answer changes over time and one lookup cannot find the others.
+# The operator: "if we have control over the connections, then spread them out", then "Yes, connect to a known new
+# server & if we can probe to spread out our connections prior to the open, it might be worth looking into."
+# CANDIDATES (no IP is written in this code): (a) this box's book, data/dxlink_nodes.json beside the feed store - every
+# IPv4 A record it has resolved (re-resolved at each connect) and every node it connected to or probed; (b) the FLEET
+# list, dxlink_nodes_fleet.json beside it, merged from every box's book by warehouse/s3_push.py through S3
+# (fleet/dxlink_nodes/), so a node any box has seen is known to all; (c) the seed, data/dxlink_nodes_seed.json, the
+# nodes observed 2026-11-02. The socket is dialled to the chosen IP while the URL's hostname stays the TLS SNI name
+# (httpcore2's `sni_hostname` extension), the certificate check (verify stays on) and the Host header. Choice:
+#   PRE-OPEN (ET clock before 09:30): every un-cooled candidate is probed - TCP, TLS with SNI and the certificate
+#      checked, ONE bare websocket upgrade request, the status line read, closed at once (no SETUP, no AUTH, no
+#      quote token); a node answering 101 is usable, a 5xx (129.153.134.53 answered 502 from 14:19 ET 11-02 while
+#      its TLS was normal) or anything else is not; the usable ones are ranked by crc32(symbol) and the box takes its
+#      own - stickiness is ignored, so the fleet starts the session spread instead of herded;
+#   OTHERWISE: 1. the last node that connected, unless it is cooling (sticky: a working node is never left for
+#      spread); 2. else the usable candidates ranked by crc32(symbol); 3. else the first fresh DNS answer, and if DNS
+#      fails too, the plain URL (normal DNS).
+# A node that refused for the session limit cools NODE_REFUSED_COOLDOWN_S (30 min) on this box; one that failed before
+# AUTHORIZED for any other reason (a 502 upgrade among them) cools NODE_FAIL_COOLDOWN_S (5 min). With an un-cooled alternate known, run() redials
+# after node_switch_wait() (1-5 s) instead of the 120-300 s lockout hold. A book or fleet node unseen and unused for
+# NODE_FORGET_S (14 days) is dropped; the seed is always a candidate (a dead one fails its probe or cools 5 min).
+# Never raises: any fault falls back to the plain URL.
+NODE_REFUSED_COOLDOWN_S = 30 * 60
+NODE_FAIL_COOLDOWN_S    = 5 * 60
+NODE_FORGET_S           = 14 * 86400
+NODE_DNS_TIMEOUT_S      = 5.0
+NODE_PROBE_TIMEOUT_S    = 3.0
+NODE_SWITCH_WAIT_S      = (1.0, 5.0)
+_LAST_ATTEMPT = {"ip": None, "authorized": False}     # the node the current/last dial went to
+
+
+def node_switch_wait(rng=None) -> float:
+    """Seconds before redialling a DIFFERENT node after a refusal: uniform in NODE_SWITCH_WAIT_S (1-5 s)."""
+    r = rng if rng is not None else random
+    return float(r.uniform(*NODE_SWITCH_WAIT_S))
+
+
+def _preopen(now_et: Optional[datetime] = None) -> bool:
+    """True before the 09:30 ET open (the 09:15 wake and any restart before the bell)."""
+    t = (now_et or datetime.now(ET)).time()
+    return t < dtime(*SESSION_OPEN_HM)
+
+
+def _nodes_path() -> str:
+    return os.path.join(os.path.dirname(os.path.abspath(feed_db_path())), "dxlink_nodes.json")
+
+
+def _fleet_nodes_path() -> str:
+    return os.path.join(os.path.dirname(os.path.abspath(feed_db_path())), "dxlink_nodes_fleet.json")
+
+
+def _seed_nodes_path() -> str:
+    return os.path.join(os.path.dirname(os.path.abspath(__file__)), "dxlink_nodes_seed.json")
+
+
+def _valid_v4(ip) -> bool:
+    try:
+        import ipaddress
+        return isinstance(ipaddress.ip_address(str(ip)), ipaddress.IPv4Address)
+    except Exception:                                                      # noqa: BLE001
+        return False
+
+
+async def _resolve_v4(host: str, port: int) -> List[str]:
+    """Every IPv4 A record for host, in the resolver's order. [] on any failure."""
+    try:
+        import anyio
+        with fail_after(NODE_DNS_TIMEOUT_S):
+            infos = await anyio.getaddrinfo(host, port, family=socket.AF_INET, type=socket.SOCK_STREAM)
+        out = []
+        for info in infos:
+            ip = info[4][0]
+            if ip not in out:
+                out.append(ip)
+        return out
+    except Exception as exc:                                               # noqa: BLE001
+        logger.warning("FEED.13 dxlink DNS lookup of %s failed (%s)", host, _explain_exc(exc))
+        return []
+
+
+# ── FEED.13 (3) — THE AUTHORITATIVE NAMESERVERS ARE ASKED TOO ─────────────────────────────────────────────────────────
+# MEASURED 2026-11-02/03: the recursive resolvers (the VPC resolver and six public ones) answered ONE node at a time for
+# tasty-openapi-dxlink-md-ws.dxfeed.com (129.153.134.53 on 11-02, 52.6.43.252 / 184.195.238.144 on 11-03), while the
+# zone's own Route 53 nameservers (ns-313.awsdns-39.com and its peers, TTL 60) answered the AWS pair; 54.204.44.247,
+# UNH's answer on the morning of 11-02, timed out that evening and failed TLS verification on 11-03 (it is not a dxlink
+# node any more, and is not in the seed). So every lookup also asks the authoritative nameservers directly: the zone's
+# NS set is found through the system resolver (the host, then its parents, longest first; on 11-03 the host
+# itself is delegated to Route 53 while dxfeed.com is on devexperts.com's servers), each NS name is resolved, and each
+# is asked for the host's A records over UDP (stdlib only - no dnspython on the boxes). The NS set is cached
+# NODE_AUTH_NS_TTL_S (1 h). Their answers are appended AFTER the recursive answer (whose first record is what the
+# plain URL would dial), so the order of fresh[0] is unchanged. Bounded by NODE_DNS_TIMEOUT_S; never raises: any fault
+# returns [] and the recursive answer stands alone. Nothing here sends a token or opens a websocket.
+NODE_AUTH_NS_TTL_S = 3600
+NODE_AUTH_NS_MAX = 4
+NODE_DNS_PORT = 53
+_AUTH_NS_CACHE = {"host": None, "ns": [], "at": 0.0}
+
+
+def _dns_query_bytes(name: str, qtype: int, qid: int) -> bytes:
+    """One standard query (RD set) for name/qtype, class IN."""
+    import struct
+    q = b"".join(bytes([len(lab)]) + lab.encode("ascii") for lab in name.strip(".").split(".") if lab) + b"\0"
+    return struct.pack(">HHHHHH", qid, 0x0100, 1, 0, 0, 0) + q + struct.pack(">HH", qtype, 1)
+
+
+def _dns_read_name(buf: bytes, off: int) -> Tuple[str, int]:
+    """A (possibly compressed) domain name at off -> (name, offset after it). Pointer loops are bounded."""
+    labels, jumped, end, hops = [], False, off, 0
+    while True:
+        if off >= len(buf) or hops > 64:
+            raise ValueError("bad name")
+        n = buf[off]
+        if n & 0xC0 == 0xC0:
+            if off + 1 >= len(buf):
+                raise ValueError("bad pointer")
+            if not jumped:
+                end = off + 2
+            off = ((n & 0x3F) << 8) | buf[off + 1]
+            jumped, hops = True, hops + 1
+            continue
+        if n == 0:
+            if not jumped:
+                end = off + 1
+            return ".".join(labels), end
+        labels.append(buf[off + 1:off + 1 + n].decode("ascii", "replace"))
+        off += 1 + n
+
+
+def _dns_parse(buf: bytes, qid: int, qtype: int) -> List[str]:
+    """The answer section's records of qtype: A -> dotted IPv4, NS -> the nameserver name. [] on a bad/foreign reply."""
+    import struct
+    if len(buf) < 12:
+        return []
+    rid, flags, qd, an, _ns, _ar = struct.unpack(">HHHHHH", buf[:12])
+    if rid != qid or not flags & 0x8000 or flags & 0x000F:
+        return []
+    off = 12
+    for _ in range(qd):
+        _, off = _dns_read_name(buf, off)
+        off += 4
+    out = []
+    for _ in range(an):
+        _, off = _dns_read_name(buf, off)
+        if off + 10 > len(buf):
+            break
+        rtype, _rcls, _ttl, rdlen = struct.unpack(">HHIH", buf[off:off + 10])
+        off += 10
+        rdata_off = off
+        off += rdlen
+        if rtype != qtype:
+            continue
+        if qtype == 1 and rdlen == 4:
+            out.append(".".join(str(b) for b in buf[rdata_off:rdata_off + 4]))
+        elif qtype == 2:
+            out.append(_dns_read_name(buf, rdata_off)[0])
+    return out
+
+
+def _dns_udp(server: str, name: str, qtype: int, timeout: float) -> List[str]:
+    """Ask server (an IPv4 address) for name/qtype over UDP. [] on any failure."""
+    qid = random.randint(1, 0xFFFF)
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+            s.settimeout(max(0.2, timeout))
+            s.sendto(_dns_query_bytes(name, qtype, qid), (server, NODE_DNS_PORT))
+            buf, _ = s.recvfrom(4096)
+        return _dns_parse(buf, qid, qtype)
+    except Exception:                                                      # noqa: BLE001
+        return []
+
+
+def _system_nameservers() -> List[str]:
+    """The IPv4 nameservers in /etc/resolv.conf (the VPC resolver on a box)."""
+    out = []
+    try:
+        with open("/etc/resolv.conf", encoding="utf-8") as fh:
+            for line in fh:
+                parts = line.split()
+                if len(parts) >= 2 and parts[0] == "nameserver" and _valid_v4(parts[1]):
+                    out.append(parts[1])
+    except Exception:                                                      # noqa: BLE001
+        pass
+    return out
+
+
+def _authoritative_ns_ips(host: str, deadline: float, clock=None) -> List[str]:
+    """IPv4 addresses of the authoritative nameservers for host's zone (cached NODE_AUTH_NS_TTL_S)."""
+    now = (clock or _time.time)()
+    c = _AUTH_NS_CACHE
+    if c["host"] == host and c["ns"] and now - c["at"] < NODE_AUTH_NS_TTL_S:
+        return list(c["ns"])
+    resolvers = _system_nameservers()
+    labels = host.strip(".").split(".")
+    names = []
+    for i in range(0, max(1, len(labels) - 1)):             # the host itself first (it is delegated)
+        zone = ".".join(labels[i:])
+        for r in resolvers:
+            left = deadline - _time.monotonic()
+            if left <= 0:
+                return []
+            names = _dns_udp(r, zone, 2, min(1.5, left))
+            if names:
+                break
+        if names:
+            break
+    ips = []
+    for nm in sorted(set(names))[:NODE_AUTH_NS_MAX]:
+        if deadline - _time.monotonic() <= 0:
+            break
+        try:
+            for info in socket.getaddrinfo(nm, NODE_DNS_PORT, family=socket.AF_INET, type=socket.SOCK_DGRAM):
+                ip = info[4][0]
+                if ip not in ips:
+                    ips.append(ip)
+                break
+        except Exception:                                                  # noqa: BLE001
+            continue
+    if ips:
+        c.update(host=host, ns=list(ips), at=now)
+    return ips
+
+
+def _authoritative_v4_sync(host: str, budget: float) -> List[str]:
+    deadline = _time.monotonic() + budget
+    out = []
+    for ns in _authoritative_ns_ips(host, deadline):
+        left = deadline - _time.monotonic()
+        if left <= 0:
+            break
+        for ip in _dns_udp(ns, host, 1, min(1.5, left)):
+            if _valid_v4(ip) and ip not in out:
+                out.append(ip)
+    return out
+
+
+async def _resolve_authoritative(host: str) -> List[str]:
+    """host's A records as its zone's authoritative nameservers answer them. [] on any failure."""
+    try:
+        import anyio
+        with fail_after(NODE_DNS_TIMEOUT_S + 1.0):
+            return await anyio.to_thread.run_sync(_authoritative_v4_sync, host, NODE_DNS_TIMEOUT_S)
+    except Exception as exc:                                               # noqa: BLE001
+        logger.warning("FEED.13 authoritative DNS lookup of %s failed (%s)", host, _explain_exc(exc))
+        return []
+
+
+async def _resolve_nodes(host: str, port: int) -> List[str]:
+    """The recursive answer first (what the plain URL dials), then any node only the authoritative servers named."""
+    rec = await _resolve_v4(host, port)
+    auth = await _resolve_authoritative(host)
+    extra = [ip for ip in auth if ip not in rec]
+    if extra:
+        logger.info("FEED.13 authoritative DNS named %d node(s) the resolver did not (%s)", len(extra), ", ".join(extra))
+    return rec + extra
+
+
+def _upgrade_request(host: str, path: str) -> bytes:
+    """The exact bytes a probe sends: ONE bare websocket upgrade request and nothing else - no SETUP, no AUTH, no quote
+    token (the same request as dtp tools/dxlink_probe.py)."""
+    import base64
+    key = base64.b64encode(os.urandom(16)).decode()
+    return ("GET %s HTTP/1.1\r\nHost: %s\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n"
+            "Sec-WebSocket-Key: %s\r\nSec-WebSocket-Version: 13\r\nUser-Agent: otv5-candle-feed-probe\r\n\r\n"
+            % (path or "/", host, key)).encode("ascii")
+
+
+async def _probe_node(ip: str, host: str, port: int, path: str = "/realtime", ssl_context=None) -> Optional[int]:
+    """Is this node USABLE? TCP to ip, TLS with SNI = host and the certificate checked against host, then one bare
+    websocket upgrade request (Host = host); only the STATUS LINE is read and the socket is closed at once. Returns
+    the HTTP status (101 = usable; 5xx or anything else = not), or None when TCP/TLS/the read failed. MEASURED
+    2026-11-02 from 14:19 ET: 129.153.134.53 completed TLS normally and answered every upgrade "HTTP/1.1 502 Bad
+    Gateway", so a TLS-only probe would have called it reachable. Never raises."""
+    stream = None
+    try:
+        import ssl
+        import anyio
+        ctx = ssl_context or ssl.create_default_context()
+        with fail_after(NODE_PROBE_TIMEOUT_S):
+            stream = await anyio.connect_tcp(ip, port, ssl_context=ctx, tls_hostname=host,
+                                             tls_standard_compatible=False)
+            await stream.send(_upgrade_request(host, path))
+            buf = b""
+            while b"\r\n" not in buf and len(buf) < 1024:
+                chunk = await stream.receive(1024 - len(buf))
+                if not chunk:
+                    break
+                buf += chunk
+        parts = buf.split(b"\r\n", 1)[0].decode("latin-1", "replace").strip().split(" ", 2)
+        if len(parts) >= 2 and parts[0].startswith("HTTP/") and parts[1].isdigit():
+            return int(parts[1])
+        return None
+    except Exception:                                                      # noqa: BLE001
+        return None
+    finally:
+        if stream is not None:
+            try:
+                with CancelScope(shield=True):
+                    with fail_after(1.0):
+                        await stream.aclose()
+            except Exception:                                              # noqa: BLE001
+                pass
+
+
+def _probe_usable(result) -> bool:
+    return result is True or result == 101
+
+
+def _upgrade_status(e, _depth=0) -> Optional[int]:
+    """The HTTP status of a refused websocket upgrade anywhere in e (groups, causes), else None."""
+    if e is None or _depth > 5:
+        return None
+    try:
+        from httpx2.websockets import WebSocketUpgradeError
+        if isinstance(e, WebSocketUpgradeError):
+            code = getattr(getattr(e, "response", None), "status_code", None)
+            return int(code) if code is not None else None
+    except Exception:                                                      # noqa: BLE001
+        pass
+    for sub in list(getattr(e, "exceptions", None) or []) + [getattr(e, "__cause__", None),
+                                                               getattr(e, "__context__", None)]:
+        if sub is not None and sub is not e:
+            c = _upgrade_status(sub, _depth + 1)
+            if c is not None:
+                return c
+    return None
+
+
+class NodeBook:
+    """The dxlink nodes this box knows. Every path, the clock, the resolver and the prober are for the gate."""
+
+    def __init__(self, path: str = None, clock=None, resolver=None, fleet_path: str = None, seed_path: str = None,
+                 prober=None):
+        self._path, self._fleet_path, self._seed_path = path, fleet_path, seed_path
+        self.clock = clock or _time.time
+        self.resolver = resolver or _resolve_nodes                          # v5.6 r70 (3): + authoritative NS
+        self.prober = prober or _probe_node
+        self._data = None
+
+    def path(self) -> str:
+        return self._path or _nodes_path()
+
+    def _load(self) -> dict:
+        if self._data is None:
+            try:
+                with open(self.path(), encoding="utf-8") as fh:
+                    d = json.load(fh)
+                self._data = d if isinstance(d, dict) else {}
+            except Exception:                                              # noqa: BLE001
+                self._data = {}
+            self._data.setdefault("nodes", {})
+        return self._data
+
+    def _save(self) -> None:
+        try:
+            p = self.path()
+            tmp = p + ".tmp"
+            with open(tmp, "w", encoding="utf-8") as fh:
+                json.dump(self._data, fh, indent=1, sort_keys=True)
+            os.replace(tmp, p)
+        except Exception as exc:                                           # noqa: BLE001
+            logger.warning("FEED.13 dxlink node book not saved (%s)", exc)
+
+    @staticmethod
+    def _read_nodes(path: str) -> dict:
+        try:
+            with open(path, encoding="utf-8") as fh:
+                d = json.load(fh)
+            nodes = d.get("nodes", {}) if isinstance(d, dict) else {}
+            return {ip: (n if isinstance(n, dict) else {}) for ip, n in nodes.items() if _valid_v4(ip)}
+        except Exception:                                                  # noqa: BLE001
+            return {}
+
+    def _node(self, ip: str) -> dict:
+        return self._load()["nodes"].setdefault(ip, {})
+
+    def _cool_until(self, ip: str) -> float:
+        n = self._load()["nodes"].get(ip, {})
+        return max(n.get("refused", 0) + NODE_REFUSED_COOLDOWN_S if n.get("refused") else 0,
+                   n.get("failed", 0) + NODE_FAIL_COOLDOWN_S if n.get("failed") else 0)
+
+    def candidates(self) -> List[str]:
+        """Every node known from the book, the fleet list and the seed (the seed is never forgotten)."""
+        now = self.clock()
+
+        def fresh(n):
+            return now - max([float(n.get(k, 0) or 0) for k in ("seen", "ok", "reachable")] or [0]) <= NODE_FORGET_S
+        out = {ip for ip, n in self._load()["nodes"].items() if _valid_v4(ip) and fresh(n)}
+        out |= {ip for ip, n in self._read_nodes(self._fleet_path or _fleet_nodes_path()).items() if fresh(n)}
+        out |= set(self._read_nodes(self._seed_path or _seed_nodes_path()))
+        return sorted(out)
+
+    def usable(self) -> List[str]:
+        now = self.clock()
+        return [ip for ip in self.candidates() if self._cool_until(ip) <= now]
+
+    def alternate_available(self) -> bool:
+        """True when some known node is not cooling - after a refusal (which cools the refusing node) that is a
+        DIFFERENT node, so run() redials at once."""
+        try:
+            return bool(self.usable())
+        except Exception:                                                  # noqa: BLE001
+            return False
+
+    @staticmethod
+    def _by_hash(ips: List[str], symbol: str) -> str:
+        ips = sorted(ips)
+        return ips[zlib.crc32(str(symbol).encode()) % len(ips)]
+
+    async def choose(self, host: str, port: int, symbol: str, preopen: bool = False,
+                     path: str = "/realtime") -> Tuple[Optional[str], str]:
+        """(ip, why). ip None = dial the plain URL (normal DNS)."""
+        try:
+            now = self.clock()
+            fresh = await self.resolver(host, port)
+            d = self._load()
+            for ip in fresh:
+                if _valid_v4(ip):
+                    self._node(ip)["seen"] = now
+            for ip in list(d["nodes"]):
+                n = d["nodes"][ip]
+                if now - max(n.get("seen", 0), n.get("ok", 0), n.get("reachable", 0)) > NODE_FORGET_S:
+                    del d["nodes"][ip]
+            usable = self.usable()
+            if preopen and usable:
+                import anyio
+                res = {}
+
+                async def _one(ip):
+                    res[ip] = await self.prober(ip, host, port, path=path)
+                async with anyio.create_task_group() as tg:
+                    for ip in usable:
+                        tg.start_soon(_one, ip)
+                reach = [ip for ip in usable if _probe_usable(res.get(ip))]
+                for ip in reach:
+                    self._node(ip)["reachable"] = now
+                self._save()
+                logger.info("FEED.13 pre-open probe: %d/%d node(s) reachable (%s)", len(reach), len(usable),
+                            ", ".join("%s %s" % (ip, "ok" if _probe_usable(res.get(ip)) else
+                                                 ("HTTP %s" % res.get(ip) if res.get(ip) else "no answer"))
+                                      for ip in usable))
+                if reach:
+                    return self._by_hash(reach, symbol), ("pre-open spread by symbol hash over %d reachable node(s)"
+                                                          % len(reach))
+            self._save()
+            last = d.get("last_ok")
+            if last in usable:
+                return last, "last good node"
+            if usable:
+                return self._by_hash(usable, symbol), "spread by symbol hash over %d node(s)" % len(usable)
+            if fresh:
+                return fresh[0], "dns (no usable alternate known)"
+            return None, "dns (plain URL; no node known)"
+        except Exception as exc:                                           # noqa: BLE001
+            logger.warning("FEED.13 dxlink node choice failed (%s) - plain URL", _explain_exc(exc))
+            return None, "dns (plain URL; node choice failed)"
+
+    def refused(self, ip: Optional[str]) -> None:
+        if ip:
+            self._node(ip)["refused"] = self.clock()
+            if self._load().get("last_ok") == ip:
+                self._data["last_ok"] = None
+            self._save()
+
+    def failed(self, ip: Optional[str]) -> None:
+        if ip:
+            self._node(ip)["failed"] = self.clock()
+            self._save()
+
+    def ok(self, ip: Optional[str]) -> None:
+        if ip:
+            n = self._node(ip)
+            n["ok"] = self.clock()
+            n.pop("refused", None)
+            n.pop("failed", None)
+            self._data["last_ok"] = ip
+            self._save()
+
+
+_NODES = NodeBook()
+
+
+def _pinned_target(url: str, ip: Optional[str]):
+    """(dial_url, headers, extensions) for a websocket to `url` dialled at `ip`, keeping the hostname for SNI, the
+    certificate check and the Host header. ip None -> the URL unchanged, no headers, no extensions."""
+    if not ip:
+        return url, None, None
+    u = urlsplit(url)
+    host = u.hostname
+    netloc = ip if u.port is None else "%s:%d" % (ip, u.port)
+    host_hdr = host if u.port is None else "%s:%d" % (host, u.port)
+    return urlunsplit((u.scheme, netloc, u.path, u.query, u.fragment)), {"Host": host_hdr}, {"sni_hostname": host}
+
+
+def _ws_closed(ws) -> bool:
+    flag = getattr(ws, "_should_close", None)       # httpx2 AsyncWebSocketSession sets it first thing in close()
+    try:
+        return bool(flag is not None and flag.is_set())
+    except Exception:                                                      # noqa: BLE001
+        return False
+
+
+async def _release_ws(where: str) -> bool:
+    """Close the recorded socket if it is still open. True when an explicit close was needed. Never raises."""
+    ws, _OPEN_WS["ws"] = _OPEN_WS["ws"], None
+    if ws is None or _ws_closed(ws):
+        return False
+    logger.warning("FEED.13 websocket still open %s - closing it before going on", where)
+    with CancelScope(shield=True):
+        try:
+            with fail_after(WS_CLOSE_TIMEOUT_S):
+                await ws.close()
+        except Exception as exc:                                            # noqa: BLE001
+            logger.warning("FEED.13 websocket close %s failed (%s) - aborting its stream", where, _explain_exc(exc))
+            try:
+                with fail_after(WS_CLOSE_TIMEOUT_S):
+                    await ws.stream.aclose()
+            except Exception:                                               # noqa: BLE001
+                pass
+    return True
+
+
+class _AuthWatch:
+    """The SDK's socket, seen by the SDK's own _reader/_heartbeat/subscribe; notes AUTH and reads its answer."""
+
+    def __init__(self, ws, cache: QuoteTokenCache):
+        self._ws, self._cache, self._auth_sent = ws, cache, False
+
+    def __getattr__(self, name):
+        return getattr(self._ws, name)
+
+    async def send_json(self, message, *args, **kwargs):
+        if isinstance(message, dict) and message.get("type") == "AUTH":
+            self._auth_sent = True
+        return await self._ws.send_json(message, *args, **kwargs)
+
+    async def receive_json(self, *args, **kwargs):
+        message = await self._ws.receive_json(*args, **kwargs)
+        if isinstance(message, dict):
+            kind = message.get("type")
+            if kind == "AUTH_STATE" and message.get("state") == "UNAUTHORIZED" and self._auth_sent:
+                self._cache.invalidate("DXLink answered AUTH with UNAUTHORIZED")
+                raise QuoteTokenRejected("DXLink answered AUTH with UNAUTHORIZED - quote token refused")
+            if kind == "ERROR" and (str(message.get("error", "")).upper() == "UNAUTHORIZED"
+                                    or _is_auth_error_text(str(message.get("message", "")))):
+                self._cache.invalidate("DXLink ERROR %s" % message.get("error", "?"))
+        return message
+
+
+class SessionReleasingStreamer(DXLinkStreamer):
+    """DXLinkStreamer with the token reused across reconnects and the old socket always released (FEED.13).
+    The body is the SDK __asynccontextmanager__ (identical in 13.2.2 and the boxes' locked 13.2.3) with three changes: the token comes from `_QUOTE_TOKENS`,
+    the socket is wrapped in _AuthWatch with AUTH bounded by AUTH_TIMEOUT_S, and a `finally` releases the socket."""
+
+    @asynccontextmanager
+    async def __asynccontextmanager__(self):
+        cache = _QUOTE_TOKENS
+        await _release_ws("before a new connect")
+        self._wss_url, self._auth_token = await cache.get(self.session)
+        u = urlsplit(self._wss_url)
+        ip, why = await _NODES.choose(u.hostname, u.port or 443, INSTRUMENT, preopen=_preopen(), path=u.path or "/")
+        _LAST_ATTEMPT["ip"], _LAST_ATTEMPT["authorized"] = ip, False
+        dial_url, headers, extensions = _pinned_target(self._wss_url, ip)
+        logger.info("FEED.13 dxlink node %s for %s (%s)", ip or "dns", u.hostname, why)
+        async with AsyncClient(**self.session.client_kwargs) as client:
+            try:
+                async with client.websocket(dial_url, keepalive_ping_interval_seconds=None,
+                                            headers=headers, extensions=extensions) as raw_ws:
+                    _OPEN_WS["ws"] = raw_ws
+                    self._websocket = _AuthWatch(raw_ws, cache)
+                    async with create_task_group() as tg:
+                        try:
+                            with fail_after(AUTH_TIMEOUT_S):
+                                await tg.start(self._reader)
+                        except TimeoutError:
+                            cache.invalidate("no AUTHORIZED within %.0fs" % AUTH_TIMEOUT_S)
+                            raise QuoteTokenRejected("no AUTHORIZED within %.0fs" % AUTH_TIMEOUT_S) from None
+                        _LAST_ATTEMPT["authorized"] = True
+                        tg.start_soon(self._heartbeat)
+                        yield self
+                        tg.cancel_scope.cancel()
+            except* WebSocketDisconnect as eg:
+                if eg.subgroup(lambda e: getattr(e, "code", None) == 1009):
+                    raise TastytradeError(
+                        "Subscription message too long! Try reducing the number of symbols.") from eg
+                raise
+            finally:
+                await _release_ws("after the stream ended")
 def _is_ext_route(store_symbol: str) -> bool:
     """v3.17 — is this store symbol the extended-hours stream?"""
     return str(store_symbol or "").endswith("_EXT")
@@ -1988,6 +2751,8 @@ class CandleFeed:
     async def run(self, once: bool = False):
         session = get_session()
         backoff = RECONNECT_MIN_S
+        limit_level = None          # v5.6 (FEED.13): None = no session-limit lockout; n = lockout waits so far - 1
+        limit_holds = 0             # v5.6 (FEED.13): lockout waits HELD (no alternate node) - picks the hold's rung
         while True:
             # ── FEED STAND-DOWN GATE ─────────────────────────────────────────
             # HISTORY, kept because it is the reasoning and not the rule.
@@ -2036,8 +2801,9 @@ class CandleFeed:
             if self._feed_stood_down():
                 await asyncio.sleep(60)
                 continue
+            _LAST_ATTEMPT["ip"], _LAST_ATTEMPT["authorized"] = None, False   # v5.6 (FEED.13): this attempt's node
             try:
-                async with DXLinkStreamer(session) as streamer:
+                async with SessionReleasingStreamer(session) as streamer:   # v5.6 (FEED.13)
                     # v3.4: fresh socket — chain subscriptions must be rebuilt
                     self._chain_expiry = ""
                     self._chain_subscribed.clear()
@@ -2067,6 +2833,12 @@ class CandleFeed:
                     logger.info("%d/%d candle subscriptions live", ok_subs, len(self.subs))
                     await self._reconcile_chain_subs(streamer)
                     backoff = RECONNECT_MIN_S
+                    _NODES.ok(_LAST_ATTEMPT["ip"])         # v5.6 (FEED.13): this node works - stay on it
+                    logger.info("FEED.13 connected on dxlink node %s", _LAST_ATTEMPT["ip"] or "dns")
+                    if limit_level is not None:             # v5.6 (FEED.13): a live connection ends the lockout
+                        logger.info("SESSION_LIMIT lockout cleared - connected after %d lockout wait(s), %d held",
+                                    limit_level + 1, limit_holds)
+                        limit_level, limit_holds = None, 0
                     last_flush = 0.0
                     last_prune = _time.time()
                     # ── 🔴 MANIFOLD PART 2 (2026-08-22) — SUBSCRIBE THE REST ─
@@ -2241,9 +3013,52 @@ class CandleFeed:
                 # — the real DXFeed cause is in .exceptions and was thrown away,
                 # leaving XOM in a 60s reconnect loop with NO diagnosable reason
                 # for two days (07-13 -> 07-15).
-                wait = reconnect_wait(backoff)       # v5.2 (TTS.1): jittered, never in lockstep
-                logger.error("feed stream error: %s — reconnecting in %.1fs",
-                             _explain_exc(e), wait)
+                limited = _is_session_limit(e)
+                node = _LAST_ATTEMPT["ip"] or "dns"
+                upgrade_code = None if limited else _upgrade_status(e)   # v5.6 (FEED.13): 502 at the upgrade
+                if limited:
+                    _NODES.refused(_LAST_ATTEMPT["ip"])    # v5.6 (FEED.13): the next dial goes to another node
+                elif not _LAST_ATTEMPT["authorized"]:
+                    _NODES.failed(_LAST_ATTEMPT["ip"])
+                if limited or limit_level is not None:
+                    # v5.6 (FEED.13): the ceiling is per dxlink node - with another node known, redial it in 1-5 s;
+                    # with none, hold >= 120 s (first 120-180 s, then 200-300 s) until a connection succeeds, from
+                    # the very first attempt. The quote token is kept.
+                    limit_level = 0 if limit_level is None else limit_level + 1
+                    switch = _NODES.alternate_available()   # v5.6 (FEED.13): another node known -> go now
+                    if switch:
+                        wait = node_switch_wait()
+                    else:
+                        wait = session_limit_wait(limit_holds)
+                        limit_holds += 1
+                    if limited:
+                        logger.error("SESSION_LIMIT: TastyTrade refused the streamer on dxlink node %s (user sessions "
+                                     "over the configured limit) - %s in %.1fs (lockout wait #%d), quote token "
+                                     "kept (age %s)", node,
+                                     "switching to another known node" if switch else
+                                     "no other node known, holding; next attempt", wait, limit_level + 1,
+                                     "%.0fs" % _QUOTE_TOKENS.age_s() if _QUOTE_TOKENS.age_s() is not None
+                                     else "none")
+                    else:
+                        if _is_auth_error_text(_explain_exc(e)):
+                            _QUOTE_TOKENS.invalidate("auth error: %s" % type(e).__name__)
+                        logger.error("feed stream error on dxlink node %s: %s%s — session-limit lockout %s, "
+                                     "reconnecting in %.1fs", node, _explain_exc(e),
+                                     " (upgrade HTTP %s)" % upgrade_code if upgrade_code is not None else "",
+                                     "switching node" if switch else "held", wait)
+                elif (upgrade_code is not None and upgrade_code != 101 and _LAST_ATTEMPT["ip"]
+                      and _NODES.alternate_available()):
+                    # v5.6 (FEED.13): the node answered the upgrade with an error (502 Bad Gateway, 11-02 14:19 ET);
+                    # it is cooled 5 min above (failed before AUTHORIZED) - go to another known node now.
+                    wait = node_switch_wait()
+                    logger.error("UPGRADE_REFUSED: dxlink node %s answered the websocket upgrade with HTTP %s - "
+                                 "switching to another known node in %.1fs", node, upgrade_code, wait)
+                else:
+                    if _is_auth_error_text(_explain_exc(e)):
+                        _QUOTE_TOKENS.invalidate("auth error: %s" % type(e).__name__)
+                    wait = reconnect_wait(backoff)       # v5.2 (TTS.1): jittered, never in lockstep
+                    logger.error("feed stream error on dxlink node %s: %s — reconnecting in %.1fs",
+                                 node, _explain_exc(e), wait)
                 logger.debug("feed stream traceback:\n%s",
                              "".join(traceback.format_exception(type(e), e, e.__traceback__)))
                 await asyncio.sleep(wait)

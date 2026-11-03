@@ -124,3 +124,8 @@ data/integrator_state.json
 data/level_history/
 data/feed_store.db.pre_rth_purge_*
 cap_counterfactual.jsonl
+# r70 (FEED.13) - the candle feed's dxlink node book (runtime; beside feed_store.db)
+data/dxlink_nodes.json
+data/dxlink_nodes.json.tmp
+data/dxlink_nodes_fleet.json
+data/dxlink_nodes_fleet.json.tmp

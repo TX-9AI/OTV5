@@ -1,5 +1,15 @@
 """
-warehouse/s3_push.py  v5.5
+warehouse/s3_push.py  v5.6
+v5.6  2026-11-02  OTV5 r70 (FEED.13) — THE FLEET SHARES ONE DXLINK NODE LIST. The TastyTrade streamer's session limit is
+      per dxlink node (2026-11-02: AMZN/GOOGL refused 85 min on one node, instant on another), and DNS hands out the
+      other nodes only now and then (six public resolvers all answered one node that afternoon), so a node any box has
+      seen must be known to every box. share_dxlink_nodes(), after the stages and outside their pushed/failed counts
+      (the DRAIN line and the conductor's grading are unchanged): this box's data/dxlink_nodes.json (the candle feed's
+      book) is put, read back and compared, at fleet/dxlink_nodes/sym=<SYM>.json when its content changed; every
+      object under fleet/dxlink_nodes/ is read and merged (per node, the newest seen/ok/reachable and the symbols that
+      know it) into data/dxlink_nodes_fleet.json, which the feed reads at each connect. Outside raw/ (no warehouse
+      reader lists it). A PAUSED box shares nothing (CD.1 unchanged). Never raises. The operator: "if we have control
+      over the connections, then spread them out". Gate tests/check_feed_session_release.py S18.
 v5.5  2026-10-31  OTV5 r68 (CFG.5) — THE PAUSED LINE NAMES configure.sh ITEM 8: data capture moved from 14 to 8 when the
       operator's eight removals left the menu 1-9 (2026-10-31: "Do NOT add anything else to my config following a study or
       test"). Text only; nothing pushes differently.
@@ -1489,6 +1499,89 @@ def series_lag(targets, ledger, ns):
     return out
 
 
+# ── v5.6 (FEED.13) — THE FLEET'S DXLINK NODE LIST ────────────────────────────────────────────────────────────────
+NODES_PREFIX = "fleet/dxlink_nodes"
+NODES_SHARED_SHA = os.path.join(STATE_DIR, "dxlink_nodes_shared.sha")
+
+
+def _v4(ip) -> bool:
+    try:
+        import ipaddress
+        return isinstance(ipaddress.ip_address(str(ip)), ipaddress.IPv4Address)
+    except Exception:
+        return False
+
+
+def _node_fields(n) -> dict:
+    out = {}
+    for k in ("seen", "ok", "reachable"):
+        try:
+            v = float((n or {}).get(k) or 0)
+        except Exception:
+            v = 0.0
+        if v > 0:
+            out[k] = v
+    return out
+
+
+def share_dxlink_nodes(s3, bucket: str, me, data_dir: str = None) -> tuple:
+    """Put this box's node book (when it changed), merge every box's into dxlink_nodes_fleet.json.
+    Returns (nodes merged, objects read). Never raises."""
+    try:
+        data_dir = data_dir or os.path.dirname(FEED_DB)
+        try:
+            with open(os.path.join(data_dir, "dxlink_nodes.json"), encoding="utf-8") as fh:
+                book = json.load(fh).get("nodes", {})
+        except Exception:
+            book = {}
+        mine = {ip: _node_fields(n) for ip, n in book.items() if _v4(ip) and _node_fields(n)}
+        if me and mine:
+            body = json.dumps({"sym": me, "host": HOST, "nodes": mine}, sort_keys=True).encode()
+            sha = _sha256(body)
+            try:
+                old = open(NODES_SHARED_SHA).read().strip()
+            except Exception:
+                old = ""
+            if sha != old and put_and_verify(s3, bucket, "%s/sym=%s.json" % (NODES_PREFIX, me), body):
+                try:
+                    os.makedirs(STATE_DIR, exist_ok=True)
+                    with open(NODES_SHARED_SHA, "w") as fh:
+                        fh.write(sha)
+                except Exception:
+                    pass
+        merged, nobj = {}, 0
+
+        def _merge(sym, nodes):
+            for ip, n in (nodes or {}).items():
+                if not _v4(ip):
+                    continue
+                m = merged.setdefault(ip, {"by": []})
+                for k, v in _node_fields(n).items():
+                    m[k] = max(m.get(k, 0), v)
+                if sym and sym not in m["by"]:
+                    m["by"].append(sym)
+        pg = s3.get_paginator("list_objects_v2")
+        for page in pg.paginate(Bucket=bucket, Prefix=NODES_PREFIX + "/"):
+            for obj in page.get("Contents", []) or []:
+                try:
+                    d = json.loads(s3.get_object(Bucket=bucket, Key=obj["Key"])["Body"].read())
+                    _merge(d.get("sym"), d.get("nodes"))
+                    nobj += 1
+                except Exception:
+                    continue
+        _merge(me, mine)                     # this box's own, even before its put is visible
+        for m in merged.values():
+            m["by"].sort()
+        out = os.path.join(data_dir, "dxlink_nodes_fleet.json")
+        tmp = out + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as fh:
+            json.dump({"merged_at": _now_utc(), "objects": nobj, "nodes": merged}, fh, indent=1, sort_keys=True)
+        os.replace(tmp, out)
+        return len(merged), nobj
+    except Exception:
+        return 0, 0
+
+
 def _push_chain_tree(s3, ledger, counters, files):
     """Chain snapshots across every day-file, as one stage."""
     pushed = failed = 0
@@ -1709,6 +1802,12 @@ def main(argv=None) -> int:
             total_failed += f_
             if p_ or f_:
                 flush_all()            # a stage's progress survives the next one
+
+        if drained:
+            # v5.6 (FEED.13) — the fleet's dxlink node list; never counted in pushed/failed (the DRAIN line is unchanged)
+            _nn, _no = share_dxlink_nodes(s3, BUCKET, me)
+            if report:
+                print("s3_push: dxlink nodes - %d known across %d box object(s)" % (_nn, _no))
 
         flush_all()      # always: a run that pushed nothing may still have
                          # nothing to save, and one that did must not lose it
