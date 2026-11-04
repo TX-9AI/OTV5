@@ -1,5 +1,16 @@
 """
-config.py  v5.10
+config.py  v5.12
+v5.12  2026-11-03  OTV5 r72 (PARK.5) — THE GATE'S TAPE IS WATCHED, REFILLED AND ALARMED BEFORE 11:01. The operator,
+      2026-11-03, on fail-closed: "Fine, but we need to be more responsive when that happens to mitigate impacts to
+      trading"; on the pair tape: "Add it to the manifold & the plan should warn if there's a problem." PARK_TAPE_* (the
+      10:00-11:00 watch, its cadence, the gap that counts, the feed's refill cadence and cap, the forced refill after the
+      10:59 bar) and PARK_PAIR_STALE_S / PARK_PAIR_FRESH_FROM_ET (tools/manifold_health: QQQ's 1m bars on an equity box are
+      RED in RTH from 09:31 when missing or older than this). Constants only - no env key, no configure.sh item.
+v5.11  2026-11-03  OTV5 r72 (PARK.5) — PARK'S COMMITMENT GATE ON EQUITIES, AS CONSTANTS. The operator, 2026-11-03: "Let's
+      modify the park trade on equities using the new filters — add a gate in the code 'is an index=false' and start trading
+      it Monday." PARK_INDEXES ("SPX", "QQQ"), PARK_PAIR_SYMBOL "QQQ", PARK_COMMIT_* (the three leans, the skip count, the
+      fail-closed read thresholds). No env key and no configure.sh item (the operator, 2026-10-31: "Do NOT add anything
+      else to my config following a study or test"). Read by strategy/park_plan v5.4 and data/candle_feed v5.7.
 v5.10  2026-10-31  OTV5 r68 (CFG.5) — SIX DIALS LEAVE THE ENV; THE RESTING STOP IS DELETED. The operator, 2026-10-31, on
       configure.sh's menu: "7. Pin gate, default "on" —remove from the menu"; "9. Scaling, default on—take it out";
       "10&11–defaults are fine, take them out"; "12, same thing. Trade it—I don't want this toggled"; "13. Resting stop—I
@@ -1025,6 +1036,56 @@ PARK_LOCK_FLOOR = 0.20
 PARK_DELTA_FLOOR = 0.30
 PARK_DELTA_FROM_ET = (11, 30)
 PARK_CLOSE_ET = (15, 45)
+# ── r72 (PARK.5) — THE COMMITMENT GATE: PARK ON AN EQUITY TRADES ONLY WHEN THE MARKET COMMITTED ─────────────────────────
+# The operator, 2026-11-03: "Let's modify the park trade on equities using the new filters — add a gate in the code 'is an
+# index=false' and start trading it Monday." The study (~/cont_study score_b.py B2, PARK's 197 real-quote equity fires
+# 08-25..11-02): the gate kept 27 (+$13,596) and skipped 170 (-$11,668), helping in both halves; on the indexes it skipped
+# 3 of PARK's top-5 runners, so an index is NEVER gated. Constants, not env (the operator, 2026-10-31: "Do NOT add
+# anything else to my config following a study or test"): no OT_ key reads any of these and configure.sh has no item.
+#   is_index (symbol in PARK_INDEXES) -> PARK exactly as before: no gate, no extra check rows.
+#   otherwise, after the move and GATE-G: the PAIR - PARK_PAIR_SYMBOL's own first hour (10:30 1m close / 09:30 1m open
+#   - 1) moved >= PARK_MOVE_PCT the SAME way; and the COMMITMENT - skip when >= PARK_COMMIT_SKIP leans are AGAINST on the
+#   name OR on the pair (both read in the name's direction). The leans (the friend's CONT theory, 2026-11-03):
+#     RANGE  - AGAINST if the 09:30 open is NOT beyond the prior RTH session's high (a long) / low (a short);
+#     REJECT - the PARK_COMMIT_HOUR_ET bar built from 1m bars; AGAINST if the wick against the move (a long's high -
+#              max(open, close), a short's min(open, close) - low) / (high - low) >= PARK_COMMIT_WICK;
+#     PART   - PARK_COMMIT_PART_ET volume today / the median of the same window over the prior PARK_COMMIT_LOOKBACK
+#              sessions; AGAINST if < PARK_COMMIT_PART_MIN; a ratio outside PARK_COMMIT_PART_SANE is a data error
+#              (UNKNOWN, not against).
+#   FAILS CLOSED: a tape too thin to read on either name (the PARK_COMMIT_MIN_* bars) is STARVED - no PARK on the equity.
+PARK_INDEXES = ("SPX", "QQQ")
+PARK_PAIR_SYMBOL = "QQQ"             # every equity box also subscribes its 1m bars (data/candle_feed v5.7)
+PARK_COMMIT_SKIP = 2                 # >= 2 AGAINST on either name -> skip
+PARK_COMMIT_HOUR_ET = ((10, 0), (10, 59))
+PARK_COMMIT_WICK = 0.50
+PARK_COMMIT_PART_ET = ((9, 30), (10, 59))
+PARK_COMMIT_LOOKBACK = 5
+PARK_COMMIT_PART_MIN = 1.00
+PARK_COMMIT_PART_SANE = (1.0 / 3.0, 3.0)
+# The fail-closed bars: the hour bar from >= 45 of its 60 1m bars and the participation window from >= 60 of its 90 (the
+# study's own read thresholds, made hard), every window bar with volume, >= 3 prior sessions holding that window, the
+# prior session (the RANGE lean's high / low) from >= PARK_COMMIT_MIN_PRIOR_BARS of its 390 bars, the 10:59 bar present.
+PARK_COMMIT_MIN_HOUR_BARS = 45
+PARK_COMMIT_MIN_PART_BARS = 60
+PARK_COMMIT_MIN_PRIOR = 3
+PARK_COMMIT_MIN_PRIOR_BARS = 370
+# v5.12 — THE TAPE IS WATCHED BEFORE 11:01, NOT ONLY JUDGED AT IT. From PARK_TAPE_WATCH_ET[0] to [1] the PARK plan (bot)
+# reads both tapes every PARK_TAPE_WATCH_EVERY_S and pages ONCE at the first gap (strategy/park_plan.tape_gaps: a missing
+# 09:30 / 10:30 bar, >= PARK_TAPE_GAP_BARS minutes missing since 09:30, a bar without volume, or the prior sessions'
+# fail-closed reads); the candle feed (its own session) re-pulls a short tape's 1m history from today's 09:30 - from
+# PRIME depth when a PRIOR session is short - at most every PARK_TAPE_REFILL_EVERY_S and PARK_TAPE_REFILL_MAX times a day
+# per symbol, plus ONE forced re-pull inside PARK_TAPE_FINAL_REFILL_ET (after the 10:59 bar closes) whatever the cadence
+# says. The plan re-reads every tick of its 11:01-11:03 window, so the window is the bounded wait; only a tape still short
+# then fails closed (paged once more at the window's end).
+PARK_TAPE_WATCH_ET = ((10, 0), (11, 1))
+PARK_TAPE_WATCH_EVERY_S = 60
+PARK_TAPE_GAP_BARS = 3
+PARK_TAPE_REFILL_EVERY_S = 300
+PARK_TAPE_REFILL_MAX = 4
+PARK_TAPE_FINAL_REFILL_ET = ((11, 0), (11, 2))
+# tools/manifold_health — the pair tape is a REAL health item on an equity box (RED in RTH when missing or stale).
+PARK_PAIR_STALE_S = 180
+PARK_PAIR_FRESH_FROM_ET = (9, 31)
 # ── r63 (PARK.LATE1) — THE LATE-DAY PEAK SHADOW. RECORD ONLY: IT NEVER CLOSES OR CHANGES A PARK TRADE ─────────────────
 # The operator, 2026-10-31: "yes to all of the prepared solutions" (the PARK giveback study, scratchpad parkgb: no
 # protection rule was robust over 228 rebuilt PARK trades / 47 days; the best, "late X20 arm+50% from 14:30", is +$5.5k

@@ -1,5 +1,23 @@
 """
-data/candle_feed.py  v5.6
+data/candle_feed.py  v5.8
+v5.8  2026-11-03  OTV5 r72 (PARK.5) — A SHORT GATE TAPE IS RE-PULLED BEFORE 11:01, ON THIS SAME SESSION. The operator,
+      2026-11-03, on PARK failing closed for a thin tape: "Fine, but we need to be more responsive when that happens to
+      mitigate impacts to trading." _maybe_refill_commit_tape(), riding the flush cadence beside the opening-range rescue,
+      on an equity box only (the pair route exists): inside config.PARK_TAPE_WATCH_ET it judges this box's own 1m tape and
+      the pair's with strategy/park_plan.tape_gaps (the plan's own early read) and, when one is short, unsubscribes and
+      re-subscribes that symbol's 1m from today's 09:30 (from PRIME depth when a PRIOR session is short) on the socket it
+      already holds - no new DXLink session. At most every PARK_TAPE_REFILL_EVERY_S and PARK_TAPE_REFILL_MAX times a day
+      per symbol, plus ONE forced re-pull inside PARK_TAPE_FINAL_REFILL_ET (after the 10:59 bar closes) whatever the
+      cadence says. The store upserts the replay (check_replay_overwrite). Never raises. Gate tests/check_park_commit.py
+      T1-T6.
+v5.7  2026-11-03  OTV5 r72 (PARK.5) — EVERY EQUITY BOX ALSO SUBSCRIBES QQQ's 1m RTH BARS, ON ITS OWN SESSION. PARK's
+      commitment gate (strategy/park_plan v5.4; the operator, 2026-11-03: "Let's modify the park trade on equities using the
+      new filters — add a gate in the code 'is an index=false' and start trading it Monday") reads QQQ's first hour, its
+      10:00 hour and its prior sessions' first-90-minute volume at 11:01. _park_pair_symbol() names the pair
+      (config.PARK_PAIR_SYMBOL) unless this box is an index (config.PARK_INDEXES) or is the pair itself; CandleFeed adds
+      ONE subscription (pair, 1m, RTH) routed to store symbol QQQ, beside VIX's - the same socket, no new DXLink session.
+      The first subscribe on a store that never held QQQ primes PRIME_DAYS deep (r16). s3_push uploads only the box's own
+      family, so the rows stay on the box. The QQQ, SPX boxes' routes are unchanged. Gate tests/check_park_commit.py F1-F4.
 v5.6  2026-11-02  OTV5 r70 (FEED.13) — RELEASE THE OLD, ALWAYS: THE QUOTE TOKEN IS REUSED ACROSS RECONNECTS, THE OLD SOCKET IS
       CLOSED BEFORE A NEW ONE, AND A SESSION-LIMIT REFUSAL WAITS 120-180 s. 2026-11-02 09:30 ET the DXLink socket dropped on
       8 boxes at once (WebSocketNetworkError/WouldBlock); AMZN, GOOGL and TSLA were then refused "The number of user
@@ -1337,6 +1355,23 @@ def _referee_dist(v: Tuple, agg: Tuple) -> Tuple:
 VIX_SYMBOL        = os.environ.get("OT_DXFEED_VIX", "VIX")
 VIX_INTERVALS     = ("1m", "1d")
 
+
+def _park_pair_symbol() -> str:
+    """v5.7 (PARK.5) - the pair symbol whose 1m RTH bars this box also subscribes, or "" for none: an index box
+    (config.PARK_INDEXES) or a box whose own symbol (or dx symbol) is the pair subscribes nothing extra. Constants
+    only - no env key (the operator, 2026-10-31: "Do NOT add anything else to my config following a study or test")."""
+    try:
+        from config import PARK_INDEXES, PARK_PAIR_SYMBOL
+    except Exception:                                           # noqa: BLE001
+        return ""
+    pair = str(PARK_PAIR_SYMBOL or "").strip().upper()
+    me = str(INSTRUMENT or "").strip().upper()
+    if not pair or not me or me in tuple(s.upper() for s in PARK_INDEXES):
+        return ""
+    if me == pair or _dxfeed_symbol().strip().upper() == pair:
+        return ""
+    return pair
+
 # Backfill depth per interval: calendar days back from now that comfortably
 # cover TIMEFRAMES count (RTH ~6.5h/day, ~78 5m bars, ~26 15m bars, ~7 1h bars).
 # ── FEED.2 — the overnight (extended-hours) 1h stream ────────────────────────
@@ -2015,6 +2050,18 @@ class CandleFeed:
         for tf in TIMEFRAMES.keys():
             self.subs.append((VIX_SYMBOL, tf, _backfill_start(tf), False))
             self.symbol_map[(VIX_SYMBOL, tf, False)] = "VIX"
+        # ── v5.7 (PARK.5) — QQQ's 1m RTH BARS ON EVERY EQUITY BOX, ON THIS SAME SESSION ─────────────────────
+        # PARK's commitment gate (strategy/park_plan v5.4) reads QQQ's first hour and its prior sessions at 11:01 on
+        # every NON-index box. One more candle subscription on the socket this box already holds - no new DXLink
+        # session (the per-node session limit, FEED.13) and no dependency on another box or on S3's push lag. Stored
+        # under the plain store symbol QQQ: no consumer of this box's own INSTRUMENT moves, s3_push uploads only the
+        # box's own family (r139) so these rows never reach the warehouse, and a store that has never held QQQ primes
+        # PRIME_DAYS deep at the first subscribe (r16; TastyTrade gives ~21 RTH sessions of 1m). The index boxes
+        # (config.PARK_INDEXES) and a box whose own symbol IS the pair subscribe nothing extra.
+        _pair = _park_pair_symbol()
+        if _pair:
+            self.subs.append((_pair, "1m", _backfill_start("1m"), False))
+            self.symbol_map[(_pair, "1m", False)] = _pair
 
         # ── FEED.2 (2026-08-15) — THE OVERNIGHT STREAM ───────────────────────
         # ⚠️ THE TAPE WAS NEVER UNAVAILABLE. WE WERE ASKING DXFEED TO EXCLUDE IT.
@@ -2120,6 +2167,8 @@ class CandleFeed:
         # re-subscribing 5m every tick during an outage is a self-inflicted
         # stampede on the same socket that is already struggling.
         self._orb_rescue_done_for: str = ""
+        # v5.8 (PARK.5) — the gate-tape refill: {store symbol: [day, attempts, last monotonic, final_done]}
+        self._commit_refill: Dict[str, list] = {}
         self._prints_buf: List[tuple] = []
         self._trade_buf: List[tuple] = []
         self._summary_buf: List[tuple] = []
@@ -2443,6 +2492,60 @@ class CandleFeed:
             logger.error("ORB RESCUE failed: %s — the feed is unaffected",
                          _explain_exc(exc))
             return False
+
+    # ── v5.8 (PARK.5) — THE GATE TAPE IS RE-PULLED BEFORE PARK READS IT ─────────────────────────────────────────────
+    def _commit_refill_due(self, sym: str, today: str, now_mono: float, final: bool) -> bool:
+        """Cadence and cap for one store symbol's refill (pure bookkeeping; the caller has found a gap)."""
+        from config import PARK_TAPE_REFILL_EVERY_S, PARK_TAPE_REFILL_MAX
+        rec = self._commit_refill.get(sym)
+        if rec is None or rec[0] != today:
+            rec = [today, 0, 0.0, False]
+            self._commit_refill[sym] = rec
+        if final and not rec[3]:
+            rec[3] = True                                   # the one forced pull after the 10:59 bar
+        elif rec[1] >= PARK_TAPE_REFILL_MAX or (rec[2] and now_mono - rec[2] < PARK_TAPE_REFILL_EVERY_S):
+            return False
+        rec[1] += 1
+        rec[2] = now_mono
+        return True
+
+    async def _maybe_refill_commit_tape(self, streamer, now: Optional[datetime] = None) -> List[str]:
+        """On an equity box, inside PARK_TAPE_WATCH_ET: re-pull a SHORT 1m gate tape (own or pair) from today's 09:30,
+        or PRIME-deep when a prior session is short, on this streamer. Returns the store symbols re-pulled. Never
+        raises."""
+        done: List[str] = []
+        try:
+            pair = _park_pair_symbol()
+            if not pair:
+                return done
+            from config import PARK_TAPE_WATCH_ET, PARK_TAPE_FINAL_REFILL_ET
+            now = now or datetime.now(ET)
+            hm = (now.hour, now.minute)
+            if now.weekday() >= 5 or not (tuple(PARK_TAPE_WATCH_ET[0]) <= hm < tuple(PARK_TAPE_FINAL_REFILL_ET[1])):
+                return done
+            final = tuple(PARK_TAPE_FINAL_REFILL_ET[0]) <= hm < tuple(PARK_TAPE_FINAL_REFILL_ET[1])
+            from strategy.park_plan import session_bars, tape_gaps, judged_upto
+            upto = judged_upto(hm)
+            today = now.date()
+            for store_sym, dx_sym in ((str(INSTRUMENT), self.dx_symbol), (pair, pair)):
+                gaps = tape_gaps(session_bars(store_sym, today), upto)
+                if not gaps or not self._commit_refill_due(store_sym, today.isoformat(), _time.monotonic(), final):
+                    continue
+                prior_short = any("prior" in g for g in gaps)
+                start = (_backfill_start("1m", now_et=now, held=False) if prior_short
+                         else datetime.combine(today, dtime(*SESSION_OPEN_HM), tzinfo=ET))
+                logger.warning("PARK TAPE REFILL: %s 1m short at %s (%s) - re-pulling from %s on this session",
+                               store_sym, now.strftime("%H:%M:%S"), "; ".join(gaps[:3]), start.isoformat())
+                try:
+                    await streamer.unsubscribe_candle(dx_sym, "1m")
+                except Exception as exc:                        # noqa: BLE001
+                    logger.warning("PARK TAPE REFILL: unsubscribe %s 1m failed (%s) - resubscribing anyway",
+                                   dx_sym, _explain_exc(exc))
+                await streamer.subscribe_candle([dx_sym], "1m", start_time=start, extended_trading_hours=False)
+                done.append(store_sym)
+        except Exception as exc:                                # noqa: BLE001
+            logger.error("PARK TAPE REFILL failed: %s - the feed is unaffected", _explain_exc(exc))
+        return done
 
     # ── MANIFOLD PART 2 HANDLERS ────────────────────────────────────────
     # ⚠️ EVERY FIELD THE EVENT CARRIES IS BUFFERED. No selection at capture:
@@ -2937,6 +3040,8 @@ class CandleFeed:
                             # attempt per date.
                             await self._maybe_rescue_opening_range(streamer)
                             n = self._flush()
+                            # v5.8 (PARK.5) — AFTER the flush, so a bar still buffered never reads as a gap
+                            await self._maybe_refill_commit_tape(streamer)
                             last_flush = now
                             if n:
                                 logger.debug("flushed %d bars", n)

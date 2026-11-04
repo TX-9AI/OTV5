@@ -1,6 +1,14 @@
 #!/usr/bin/env python3
 """
-tools/manifold_health.py  v5.0
+tools/manifold_health.py  v5.1
+v5.1  2026-11-03  OTV5 r72 (PARK.5) — QQQ'S BARS ON AN EQUITY BOX ARE A REAL HEALTH ITEM, NOT A FOREIGN LEFTOVER. The operator,
+      2026-11-03: "Add it to the manifold & the plan should warn if there's a problem." r72 subscribes the PARK pair's 1m
+      RTH bars (config.PARK_PAIR_SYMBOL, QQQ) on every equity box; v4.4 painted them n/a under FOREIGN. Now the pair is
+      one of the box's bases (_box_feed_bases) and its 1m row is a PAIR item: during RTH from config.PARK_PAIR_FRESH_FROM_ET
+      (09:31) it is RED when the store holds none (a row is written for it even then) or its newest bar is older than
+      config.PARK_PAIR_STALE_S, GREEN otherwise; outside that window GREY. It counts in the rollup and --bulb like a
+      candle trading needs (PARK's commitment gate fails closed without it). An index box and the QQQ box have no pair
+      row. Gate tests/check_park_commit.py H1-H5.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v4.4 2026-10-05  OTV4TEST r252 (BOX.18) - A FOREIGN SYMBOL'S CANDLES NO LONGER JUDGE THIS BOX, AND THE TAPE QUESTION IS ASKED OF
       THE BOX'S OWN INSTRUMENT. SPX-TEST was AAL until 2026-10-03 and its store still holds AAL rows: the board painted AAL/*
@@ -244,12 +252,50 @@ def _is_after_hours_candle(label: str) -> bool:
 
 def _box_feed_bases() -> set:
     """v4.4 - the base symbols this box's candle feed writes (its instrument and VIX), or
-    an EMPTY set when the instrument is UNSET, which judges every candle as before."""
+    an EMPTY set when the instrument is UNSET, which judges every candle as before.
+    v5.1 - and the PARK pair on an equity box (_box_pair)."""
     from utils.instrument import box_instrument, UNSET
     sym = (box_instrument() or "").strip().upper()
     if not sym or sym == UNSET:
         return set()
-    return {sym, "VIX"}
+    out = {sym, "VIX"}
+    pair = _box_pair(sym)
+    if pair:
+        out.add(pair)
+    return out
+
+
+def _box_pair(sym: str) -> str:
+    """v5.1 - the PARK pair this box's feed subscribes (data/candle_feed._park_pair_symbol's rule: none on an index box
+    or on the pair's own box), or "". Constants only; never raises."""
+    try:
+        from config import PARK_INDEXES, PARK_PAIR_SYMBOL
+    except Exception:                                           # noqa: BLE001
+        return ""
+    pair = str(PARK_PAIR_SYMBOL or "").strip().upper()
+    me = str(sym or "").strip().upper()
+    if not pair or not me or me == pair or me in tuple(s.upper() for s in PARK_INDEXES):
+        return ""
+    return pair
+
+
+def _pair_bulb(rows, age, now_et=None) -> str:
+    """v5.1 - the pair's 1m row: RED in RTH from PARK_PAIR_FRESH_FROM_ET when missing or older than PARK_PAIR_STALE_S,
+    GREEN when fresh, GREY outside that window."""
+    from config import PARK_PAIR_STALE_S, PARK_PAIR_FRESH_FROM_ET
+    from utils.time_utils import ET
+    n = now_et or datetime.now(ET)
+    live = n.weekday() < 5 and dtime(*PARK_PAIR_FRESH_FROM_ET) <= n.time() <= dtime(16, 0)
+    if not live:
+        return GREY
+    if not rows or age is None:
+        return RED
+    # The freshness clock starts at today's 09:30: yesterday's last bar is not "stale" at 09:31:05, before today's
+    # first bar has had time to land; by 09:30 + PARK_PAIR_STALE_S with nothing newer it is.
+    since_open = (n - n.replace(hour=9, minute=30, second=0, microsecond=0)).total_seconds()
+    if min(age, max(since_open, 0.0)) > PARK_PAIR_STALE_S:
+        return RED
+    return GREEN
 
 
 def _is_foreign(label: str, bases: set) -> bool:
@@ -263,7 +309,7 @@ def _is_foreign(label: str, bases: set) -> bool:
 
 
 def collect(feed_db: str, derived_db: str, in_rth: bool,
-            is_index=None) -> dict:
+            is_index=None, now_et=None) -> dict:
     now = time.time()
     # v4.4 - None asks the BOX, never the caller's shell (open_scan passed nothing,
     # devtools sets no OT_INSTRUMENT): a cash index has no tape, whoever asks.
@@ -317,16 +363,35 @@ def collect(feed_db: str, derived_db: str, in_rth: bool,
     except sqlite3.Error:
         rows = []
     bases = _box_feed_bases()
+    # v5.1 — the PARK pair's 1m row on an equity box: judged by _pair_bulb, written even when the store holds none
+    try:
+        from utils.instrument import box_instrument
+        _pair = _box_pair(box_instrument())
+    except Exception:                                           # noqa: BLE001
+        _pair = ""
+    _pair_label = f"{_pair}/1m" if _pair else ""
+    _pair_seen = False
     for sym, iv, n, newest in rows:
         age = now - (newest or 0) / 1000.0
         label = f"{sym}/{iv}"
         ah = _is_after_hours_candle(label)
         foreign = _is_foreign(label, bases)
+        if _pair and label == _pair_label:
+            _pair_seen = True
+            out["candles"].append({
+                "label": label, "rows": n, "age_s": round(age), "after_hours": False, "foreign": False,
+                "pair": True, "bulb": _pair_bulb(n, age, now_et)})
+            continue
+        if _pair and str(sym).upper().split("_")[0] == _pair:
+            foreign = True                  # only the pair's 1m RTH route is subscribed; anything else is a leftover
         out["candles"].append({
             "label": label, "rows": n, "age_s": round(age),
             "after_hours": ah, "foreign": foreign,
             "bulb": NA if foreign else _bulb(n, age, CANDLE_BUDGET.get(iv, 3600),
                                              (not in_rth) if ah else in_rth)})
+    if _pair and not _pair_seen:
+        out["candles"].append({"label": _pair_label, "rows": 0, "age_s": None, "after_hours": False,
+                               "foreign": False, "pair": True, "bulb": _pair_bulb(0, None, now_et)})
 
     if os.path.exists(derived_db):
         dc = sqlite3.connect(f"file:{derived_db}?mode=ro", uri=True)
@@ -398,10 +463,10 @@ def rollup(rep: dict) -> str:
             and not s.get("after_hours") and _in_window(s, in_rth)]
     cand = [c for c in rep["candles"]
             if not c.get("after_hours") and not c.get("foreign")
-            and _in_window(c, in_rth)]
+            and (_in_window(c, in_rth) or c.get("pair"))]
     # ⚠️ "no candles AT ALL" stays RED — that is a dead store, not a window
     # question — but an empty IN-WINDOW set outside RTH is normal.
-    if not [c for c in rep["candles"] if not c.get("foreign")]:
+    if not [c for c in rep["candles"] if not c.get("foreign") and not c.get("pair")]:
         return RED
     if any(s["bulb"] == RED for s in crit):
         return RED
@@ -479,7 +544,9 @@ def main() -> int:
     for c in sorted(rep["candles"], key=lambda x: x["label"]):
         if c.get("after_hours") or c.get("foreign"):
             continue
-        print(f"   {c['bulb']}  {c['label']:<22} rows={c['rows']:<8} age={c['age_s']}s")
+        _age = "—" if c["age_s"] is None else f"{c['age_s']}s"
+        _tag = "  PARK pair (commitment gate)" if c.get("pair") else ""
+        print(f"   {c['bulb']}  {c['label']:<22} rows={c['rows']:<8} age={_age}{_tag}")
 
     # 🔴 AFTER-HOURS — JUDGED OUTSIDE RTH, IDLE DURING IT. These rows are not
     # second-class: outside the session they are the ONLY live ones, and they

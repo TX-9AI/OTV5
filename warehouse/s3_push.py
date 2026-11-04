@@ -1,5 +1,24 @@
 """
-warehouse/s3_push.py  v5.6
+warehouse/s3_push.py  v5.8
+v5.8  2026-11-03  OTV5 r72 (PARK.5) — AN ALLOW-LIST: A BOX UPLOADS ITS OWN SYMBOL AND NOTHING ELSE. The operator, 2026-11-03:
+      "Make sure the boxes not trading qqq are hard blocked from uploading any other symbol." Every stage that ships
+      symbol-labelled data now asks allowed_symbol(sym, me) per row or per file: trades, shadow trades, the circuit-
+      breaker table, ohlc, candles, the seven feed series and the four derived series (row by row, on `symbol` /
+      `streamer_symbol`), the derived lifecycle tables, the liquidity ledger, chain snapshots, shadow and the signal
+      journal. Allowed = the row's FAMILY is this box's own (sym_family: the root before "_" or the option digits, a
+      leading "." dropped, SPXW -> SPX), or the VIX family on the SPX box only (the standing ruling: SPX owns VIX). A row
+      that carries no symbol at all is this box's (it was always filed under its own sym=). Everything else is dropped
+      BEFORE any PUT and counted, and one `FOREIGN DROPPED host= sym= <stage>=N ...` line per run says how many (printed
+      before the DRAIN line, so that line's parsers are unchanged). A series batch made only of foreign rows still
+      advances its high-water mark, so it can never stall the table. AN UNKNOWN OWN SYMBOL UPLOADS NOTHING: main() prints
+      one `S3_PUSH SKIPPED host=...` line, runs no stage, shares no node list and counts one failure (the DRAIN line
+      reads SHORT, so the conductor holds and shows it). Gate tests/check_push_allowlist.py A1-A9 (end to end through
+      main() with a fake boto3), mutation-tested.
+v5.7  2026-11-03  OTV5 r72 (PARK.5) — A BOX THAT CANNOT READ ITS OWN SYMBOL PUSHES NO CANDLES. r72 adds QQQ's 1m bars
+      to every equity box's feed store (the PARK commitment gate's pair tape, stored as QQQ). push_candles keeps only
+      this box's own family, but its filter passes every symbol when own_symbol() comes back empty, so such a box
+      would file QQQ's bars into the warehouse beside the QQQ box's own. push_candles now skips when `me` is empty,
+      prints one CANDLES SKIPPED line and returns one failure (visible on the DRAIN line). Gate tests/check_park_commit.py.
 v5.6  2026-11-02  OTV5 r70 (FEED.13) — THE FLEET SHARES ONE DXLINK NODE LIST. The TastyTrade streamer's session limit is
       per dxlink node (2026-11-02: AMZN/GOOGL refused 85 min on one node, instant on another), and DNS hands out the
       other nodes only now and then (six public resolvers all answered one node that afternoon), so a node any box has
@@ -376,6 +395,7 @@ LEDGER
 import gzip
 import hashlib
 import json
+import re
 import os
 import fcntl
 import socket
@@ -404,6 +424,50 @@ STATE_DIR = os.environ.get("OT_WAREHOUSE_STATE", os.path.join(_HOME, ".vertigo_w
 LEDGER_PATH = os.path.join(STATE_DIR, "chain_ledger.json")
 
 HOST = socket.gethostname()
+
+# ── v5.8 (PARK.5, r72) — THE ALLOW-LIST ─────────────────────────────────────────────────────────────────────────────
+# The operator, 2026-11-03: "Make sure the boxes not trading qqq are hard blocked from uploading any other symbol."
+# r72 puts QQQ's 1m bars in every equity box's feed store (the PARK commitment gate's pair tape); those rows, and any
+# other symbol a store or tree ever holds, must never leave the box. One predicate, asked by every stage.
+_SYM_ALIAS = {"SPXW": "SPX", "SPXPM": "SPX"}
+_FOREIGN = {}            # stage -> rows/files dropped this run (printed once, before the DRAIN line)
+
+
+def sym_family(sym) -> str:
+    """The instrument family of a store/file symbol: "QQQ_EXT" -> QQQ, ".AMZN251103C250" -> AMZN, ".SPXW..." -> SPX,
+    "VIX" -> VIX. "" for an empty or unreadable symbol."""
+    s = str(sym or "").strip().upper().lstrip(".^/$")
+    s = s.split("_")[0]
+    m = re.match(r"[A-Z]+", s)
+    root = m.group(0) if m else ""
+    return _SYM_ALIAS.get(root, root)
+
+
+def allowed_symbol(sym, me) -> bool:
+    """True when a row or file labelled `sym` may be uploaded by the box whose own symbol is `me`. An unknown own
+    symbol allows nothing. A row with no symbol label is the box's own (it is filed under sym=<me>). The VIX family
+    goes from the SPX box only (the standing ruling); every other family must be the box's own."""
+    mf = sym_family(me)
+    if not mf:
+        return False
+    if not str(sym or "").strip():
+        return True
+    f = sym_family(sym)
+    if f == "VIX":
+        return mf == "SPX"
+    return f == mf
+
+
+def _drop(stage: str, n: int = 1) -> None:
+    if n:
+        _FOREIGN[stage] = _FOREIGN.get(stage, 0) + int(n)
+
+
+def _row_symbol(rec) -> str:
+    """The symbol a store row carries (`symbol`, else `streamer_symbol`), or "" when it carries none."""
+    if not isinstance(rec, dict):
+        return ""
+    return str(rec.get("symbol") or rec.get("streamer_symbol") or "")
 
 
 def _now_utc() -> str:
@@ -718,7 +782,7 @@ def trade_envelope(rec: dict, sym: str, day: str, datatype: str = "trade",
 
 
 def push_trades(s3, bucket: str, db_path: str, ledger: dict, counters=None,
-                ns: str = "trades", datatype: str = "trade", src_file: str = "trades.db"):
+                ns: str = "trades", datatype: str = "trade", src_file: str = "trades.db", me=None):
     """Push every trade row whose CONTENT has changed since last push.
 
     Trade rows MUTATE — written at entry, rewritten at exit. So this is not
@@ -748,6 +812,9 @@ def push_trades(s3, bucket: str, db_path: str, ledger: dict, counters=None,
         sha = _sha256(_canon(rec))
         if ledger.get(tid) == sha:
             continue                      # unchanged since last push
+        if me is not None and not allowed_symbol(rec.get("symbol"), me):
+            _drop(ns)                     # v5.8 allow-list: another symbol's row never leaves this box
+            continue
         sym = str(rec.get("symbol") or "UNKNOWN")
         ts = rec.get("entry_time") or ""
         day = _et_day(ts)
@@ -893,6 +960,9 @@ def push_table(s3, bucket, db_path, table, ts_col, datatype, ledger, me, counter
         rid = str(rec.get("id") or sha[:16])
         if seen.get(rid) == sha:
             continue
+        if not allowed_symbol(rec.get("symbol"), me):
+            _drop(datatype)               # v5.8 allow-list
+            continue
         ts = rec.get(ts_col) or ""
         day = _et_day(ts)
         try:
@@ -910,7 +980,7 @@ def push_table(s3, bucket, db_path, table, ts_col, datatype, ledger, me, counter
     return pushed, failed
 
 
-def push_jsonl_tree(s3, bucket, root, datatype, ledger, counters=None):
+def push_jsonl_tree(s3, bucket, root, datatype, ledger, counters=None, me=None):
     """signal_journal and shadow: <date>/<SYM>.jsonl, append-only, plain text.
 
     Same offset-resume contract as the chain archive. `ruleset` and `event` are
@@ -920,6 +990,9 @@ def push_jsonl_tree(s3, bucket, root, datatype, ledger, counters=None):
     """
     pushed = failed = 0
     for path, day, sym in discover(root, ".jsonl"):
+        if me is not None and not allowed_symbol(sym, me):
+            _drop(datatype)               # v5.8 allow-list: another symbol's file is never read or shipped
+            continue
         entry = ledger.get(path) or {}
         start = int(entry.get("n", 0) or 0)
         try:
@@ -952,7 +1025,7 @@ def push_jsonl_tree(s3, bucket, root, datatype, ledger, counters=None):
     return pushed, failed
 
 
-def push_whole_files(s3, bucket, items, datatype, ledger, counters=None):
+def push_whole_files(s3, bucket, items, datatype, ledger, counters=None, me=None):
     """One object per FILE, not per row. For OHLC day-CSVs and the EOD pair.
 
     A day-CSV holds ~390 candles; one object per candle would be 390x the
@@ -962,6 +1035,9 @@ def push_whole_files(s3, bucket, items, datatype, ledger, counters=None):
     """
     pushed = failed = 0
     for path, day, sym in items:
+        if me is not None and not allowed_symbol(sym, me):
+            _drop(datatype)               # v5.8 allow-list
+            continue
         try:
             with open(path, "rb") as fh:
                 raw = fh.read()
@@ -1029,15 +1105,22 @@ def push_candles(s3, bucket, db_path, ledger, me, counters=None):
                  con.execute("SELECT DISTINCT symbol, interval FROM candles")]
     except Exception:
         return 0, 0
+    # v5.7 (PARK.5, r72) — NO OWN SYMBOL, NO CANDLE PUSH. An equity box's store also holds QQQ's 1m bars (the PARK
+    # commitment gate's pair tape), and the family filter below passes EVERY symbol when `me` is empty, so a box
+    # that cannot read its own instrument would file QQQ's bars (and any other foreign rows) into the warehouse
+    # beside the QQQ box's own. Skipped, logged, and counted as one failure so the DRAIN line and the conductor show it.
+    if not str(me or "").strip():
+        print("CANDLES SKIPPED host={}: own symbol unknown (OT_INSTRUMENT, the bot unit's instrument and data/OHLC all "
+              "unread) - pushing would file every symbol in this store, QQQ's gate tape among them".format(HOST),
+              flush=True)
+        return 0, 1
     for sym, iv in pairs:
-        # r136 (mainline r350) — FAMILY MATCH BY ROOT, so VIX_EXT and any future
-        # VIX_W / VIX_9D cannot slip; VIXY does not match (a different product).
-        if str(sym).upper().split("_")[0] in ("VIX", "^VIX") and me != "SPX":
-            continue                                  # SPX owns the VIX family
-        # r139 — only this box's own family (and SPX's VIX): a previous
-        # instrument's rows are never pushed into another box's partition.
-        _root = str(sym).upper().split("_")[0]
-        if me and _root != str(me).upper() and _root not in ("VIX", "^VIX"):
+        # r136 (mainline r350) — FAMILY MATCH BY ROOT, so VIX_EXT and any future VIX_W / VIX_9D cannot slip; VIXY does
+        # not match (a different product). r139 — only this box's own family (and SPX's VIX): a previous instrument's
+        # rows are never pushed into another box's partition. v5.8 — both rules are now allowed_symbol(), the one
+        # allow-list every stage asks; the pair is counted when it is dropped.
+        if not allowed_symbol(sym, me):
+            _drop("candles")
             continue
         lk = "%s|%s" % (sym, iv)
         hwm = int(ledger.get(lk, 0) or 0)
@@ -1290,6 +1373,9 @@ def push_derived(s3, bucket, db_path, ledger, me, counters=None):
                 min_rid = recs[0]["_rid"]
             known = store.get_many(table, [str(r["_rid"]) for r in recs])
             for rec in recs:
+                if not allowed_symbol(rec.get("symbol"), me):
+                    _drop("derived_%s" % table)     # v5.8 allow-list
+                    continue
                 sha = _sha256(_canon(rec))
                 rid = str(rec["_rid"])
                 k = known.get(rid)
@@ -1356,6 +1442,16 @@ def _series_batch(s3, bucket, con, table, lk, ledger, me, counters, push_day):
         return 0, 0, -1                  # table absent on an older schema
     if not rows:
         return 0, 0, 0
+    # v5.8 allow-list — another symbol's rows are dropped before any PUT. The high-water mark still advances past
+    # them (below), so a batch made only of foreign rows can never stall the table.
+    _n_read, _top_read = len(rows), float(rows[-1]["ts_epoch"])
+    _keep = [r for r in rows if allowed_symbol(_row_symbol(r), me)]
+    if len(_keep) != len(rows):
+        _drop(table, len(rows) - len(_keep))
+        rows = _keep
+        if not rows:
+            ledger[lk] = _top_read
+            return 0, 0, _n_read
     # ── WH.20 (otv4 r417, ported) — `dt=` IS THE ROW'S OWN ET DAY, NEVER THE PUSH DAY ──
     # The batch is SPLIT at every ET day boundary and each group is filed
     # under ITS day, so one object can never hold two days and no object
@@ -1399,8 +1495,8 @@ def _series_batch(s3, bucket, con, table, lk, ledger, me, counters, push_day):
             all_ok = False
             break
     if all_ok:
-        ledger[lk] = float(rows[-1]["ts_epoch"])
-    return pushed, failed, len(rows)
+        ledger[lk] = _top_read
+    return pushed, failed, _n_read
 
 
 def push_series(s3, bucket, db_path, ledger, me, counters=None,
@@ -1582,10 +1678,13 @@ def share_dxlink_nodes(s3, bucket: str, me, data_dir: str = None) -> tuple:
         return 0, 0
 
 
-def _push_chain_tree(s3, ledger, counters, files):
+def _push_chain_tree(s3, ledger, counters, files, me=None):
     """Chain snapshots across every day-file, as one stage."""
     pushed = failed = 0
     for path, day, sym in files:
+        if me is not None and not allowed_symbol(sym, me):
+            _drop("chain_snapshots")      # v5.8 allow-list
+            continue
         a, b = push_file(s3, BUCKET, path, day, sym, ledger, counters)
         pushed += a
         failed += b
@@ -1756,17 +1855,17 @@ def main(argv=None) -> int:
         #   shadow  — moderate
         #   journal — largest by far, and the most tolerant of lag
         stages = [
-            ("trades", lambda: push_trades(s3, BUCKET, TRADES_DB, t_ledger, counters)),
+            ("trades", lambda: push_trades(s3, BUCKET, TRADES_DB, t_ledger, counters, me=me)),
             # r57 (TCS.LOG1) — the shadow trades, their own prefix and ledger (absent store: nothing, silently).
             ("shadow_trades", lambda: push_trades(s3, BUCKET, SHADOW_TRADES_DB, st_ledger, counters,
                                                   ns="shadow_trades", datatype="shadow_trade",
-                                                  src_file="shadow_trades.db")),
+                                                  src_file="shadow_trades.db", me=me)),
             ("circuit_breaker", lambda: push_table(
                 s3, BUCKET, TRADES_DB, "circuit_breaker_events", "event_time",
                 "circuit_breaker", t_ledger, me, counters)),
-            ("eod", lambda: push_whole_files(s3, BUCKET, eod_items, "eod", misc, counters)),
+            ("eod", lambda: push_whole_files(s3, BUCKET, eod_items, "eod", misc, counters, me=me)),
             ("ohlc", lambda: push_whole_files(
-                s3, BUCKET, discover(OHLC_ROOT, ".csv"), "ohlc", misc, counters)),
+                s3, BUCKET, discover(OHLC_ROOT, ".csv"), "ohlc", misc, counters, me=me)),
             ("candles", lambda: push_candles(s3, BUCKET, FEED_DB, c_ledger, me, counters)),
             # v4.2 — after candles (same store, same perishability), before the
             # bulk streams so a timeout cannot starve the only copy of the
@@ -1783,13 +1882,24 @@ def main(argv=None) -> int:
             ("derived", lambda: _derived_stage(s3, me, counters)),
             ("liquidity_ledger", lambda: push_whole_files(
                 s3, BUCKET, discover(LIQ_ROOT, ".json"), "liquidity_ledger",
-                misc, counters)),
-            ("chain_snapshots", lambda: _push_chain_tree(s3, ledger, counters, files)),
+                misc, counters, me=me)),
+            ("chain_snapshots", lambda: _push_chain_tree(s3, ledger, counters, files, me=me)),
             ("shadow", lambda: push_jsonl_tree(
-                s3, BUCKET, SHADOW_ROOT, "shadow", misc, counters)),
+                s3, BUCKET, SHADOW_ROOT, "shadow", misc, counters, me=me)),
             ("signal_journal", lambda: push_jsonl_tree(
-                s3, BUCKET, JOURNAL_ROOT, "signal_journal", misc, counters)),
+                s3, BUCKET, JOURNAL_ROOT, "signal_journal", misc, counters, me=me)),
         ]
+        # ── v5.8 (PARK.5, r72) — AN UNKNOWN OWN SYMBOL UPLOADS NOTHING ─────────────────────────────────────────────
+        # The allow-list needs this box's own symbol; without it no row can be shown to be this box's, so no stage
+        # runs and no node list is shared. One line, and one failure, so the DRAIN line reads SHORT and holds the box.
+        _no_me = not str(me or "").strip()
+        if _no_me:
+            print("S3_PUSH SKIPPED host={}: own symbol unknown (OT_INSTRUMENT, the bot unit's instrument and data/OHLC "
+                  "all unread) - nothing uploaded; the allow-list ships only this box's own symbol".format(HOST),
+                  flush=True)
+            stages = []
+            total_failed += 1
+        _FOREIGN.clear()
 
         for name, fn in stages:
             if not drained:
@@ -1803,7 +1913,11 @@ def main(argv=None) -> int:
             if p_ or f_:
                 flush_all()            # a stage's progress survives the next one
 
-        if drained:
+        if _FOREIGN:
+            # v5.8 — ONE line per run, before the DRAIN line (whose parsers read the line itself and up to 7 after it)
+            print("FOREIGN DROPPED host={} sym={} {} (the allow-list ships only this box's own symbol)".format(
+                HOST, me or "?", " ".join("%s=%d" % kv for kv in sorted(_FOREIGN.items()))), flush=True)
+        if drained and not _no_me:
             # v5.6 (FEED.13) — the fleet's dxlink node list; never counted in pushed/failed (the DRAIN line is unchanged)
             _nn, _no = share_dxlink_nodes(s3, BUCKET, me)
             if report:

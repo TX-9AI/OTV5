@@ -1,5 +1,13 @@
 """
-strategy/park.py  v5.1
+strategy/park.py  v5.2
+v5.2  2026-11-03  OTV5 r72 (PARK.5) — ON AN EQUITY, THE MARKET MUST HAVE COMMITTED. The operator, 2026-11-03: "Let's modify
+      the park trade on equities using the new filters — add a gate in the code 'is an index=false' and start trading it
+      Monday." Two conditions, asked only when the symbol is NOT an index (config.PARK_INDEXES: SPX, QQQ - an index trades
+      exactly as before): pair_agrees (QQQ's own first hour moved >= PARK_MOVE_PCT the same way) and commitment (fewer
+      than 2 of the three leans - the open not beyond yesterday's range, a rejection wick on the 10:00 hour, below-normal
+      first-90-minute volume - against on the name AND on QQQ). A tape too thin to read is no trade (fails closed).
+      MEASURED (~/cont_study, PARK's 197 real-quote equity fires 08-25..11-02): kept 27 +$13,596, skipped 170 -$11,668;
+      Aug-Sep kept 7 +$1,375 / skipped -$4,046, Oct-Nov kept 20 +$12,221 / skipped -$7,622. The plan is park_plan v5.4.
 v5.1  2026-10-30  OTV5 r60 (PARK.4) — THE ENTRY IS THE MARK, NOT THE ASK. The operator, 2026-10-30: "That's not my
       spec… you know park is a borrowed trade. To match my spec, we ladder in from aggressive to mark & never worse
       than mark". The spec below now reads: bought AT THE MARK ((bid + ask) / 2, floored to the cent) - paper books
@@ -67,6 +75,14 @@ class Park:
                              f"hour moved, and its sign is the direction"),
         "gate_g":           ("the direction is never against the opening gap (09:30 open vs the prior close): "
                              "a call needs gap >= 0, a put gap <= 0. MEASURED: halves QQQ's losers, neutral on SPX"),
+        # v5.2 (PARK.5) - asked ONLY when the symbol is not an index (config.PARK_INDEXES); an index never writes them.
+        "pair_agrees":      (f"an equity only: {config.PARK_PAIR_SYMBOL}'s own first hour (10:30 1m close / 09:30 1m "
+                             f"open - 1) moved >= {config.PARK_MOVE_PCT:.2f}% the same way"),
+        "commitment":       (f"an equity only: fewer than {config.PARK_COMMIT_SKIP} of the three leans AGAINST on the "
+                             f"name and on {config.PARK_PAIR_SYMBOL} (the open not beyond yesterday's range; the "
+                             f"10:00-10:59 wick against the move >= {config.PARK_COMMIT_WICK:.2f} of its range; "
+                             f"09:30-10:59 volume below the prior {config.PARK_COMMIT_LOOKBACK} sessions' median). "
+                             f"A tape too thin to read is no trade"),
         "contract":         (f"the strike nearest the 11:00 1m close, today's expiry, two-sided, ask >= "
                              f"{config.PARK_MIN_ASK:.2f}; bought at the mark, never worse (PARK.4)"),
     }
@@ -78,6 +94,9 @@ class Park:
     PLAN_CHECKS = tuple(CONDITIONS) + (
         "move_pct", "gap", "open_0930", "close_1030", "spot_1100", "prior_close",
         "strike", "ask", "bid", "delta",
+        # v5.2 (PARK.5) - equities only
+        "is_index", "pair_move_pct", "lean_range", "lean_reject", "lean_part", "against",
+        "pair_lean_range", "pair_lean_reject", "pair_lean_part", "pair_against",
     )
 
     def __init__(self):

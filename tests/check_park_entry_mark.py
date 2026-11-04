@@ -1,6 +1,11 @@
 #!/usr/bin/env python3
 """
-tests/check_park_entry_mark.py  v5.0
+tests/check_park_entry_mark.py  v5.1
+v5.1  2026-11-03  OTV5 r72 (PARK.5) — RE-POINTED, NOT CHANGED: CVX is an equity, so PARK now also reads the commitment
+      gate (park_plan v5.4), and the four-bar fixture starved it ("no signal; the rest cannot run"). _committed_tape()
+      lays a full CVX + QQQ tape that passes the gate under the four fixture bars (prices unchanged; their volume is the
+      tape's, 2000 / 1000, was 1); M1-M8 assert
+      exactly what they did (the mark, the FIRE line, the size, paper, the ladder, the fallback, the window, the floor).
 v5.0  2026-10-30  OTV5 r60 (PARK.4) — new. PARK IS BOUGHT AT THE MARK, NEVER WORSE. The operator, 2026-10-30, on CVX's
       PARK (235C bought at the ask 1.56 on a 0.97/1.56 quote; -$657 booked, -$480 at the mark 1.265): "That's not my
       spec… you know park is a borrowed trade. To match my spec, we ladder in from aggressive to mark & never worse
@@ -84,15 +89,45 @@ def _ms(d, h, m):
     return int(datetime(d.year, d.month, d.day, h, m, tzinfo=ET).timestamp() * 1000)
 
 
+def _committed_tape():
+    """v5.1 (r72) - 1m RTH rows for CVX and QQQ that pass PARK.5's commitment gate (see _feed)."""
+    from datetime import timedelta
+    out = []
+
+    def day_rows(sym, d, o, c1030, c1100, vol):
+        px = [o + (c1030 - o) * i / 60.0 if i <= 60 else c1030 + (c1100 - c1030) * (i - 60) / 30.0 if i <= 90
+              else c1100 for i in range(390)]
+        for i in range(390):
+            a, b = (px[i - 1] if i else o), px[i]
+            out.append((sym, "1m", _ms(d, 9 + (30 + i) // 60, (30 + i) % 60), a, max(a, b) + 0.01,
+                        min(a, b) - 0.01, b, vol))
+    prev, x = [], DAY
+    while len(prev) < 6:
+        x -= timedelta(days=1)
+        if x.weekday() < 5:
+            prev.append(x)
+    for sym, (o, c1030, c1100, pc) in (("CVX", (234.07, 235.57, 235.33, 231.45)),
+                                        ("QQQ", (700.0, 702.1, 702.0, 699.0))):
+        day_rows(sym, DAY, o, c1030, c1100, 2000.0)
+        for d in prev:
+            day_rows(sym, d, pc, pc, pc, 1000.0)
+    return out
+
+
 def _feed():
     c = sqlite3.connect(FEED)
     c.execute("CREATE TABLE IF NOT EXISTS candles (symbol TEXT NOT NULL, interval TEXT NOT NULL, "
               "ts_epoch_ms INTEGER NOT NULL, open REAL, high REAL, low REAL, close REAL, volume REAL, "
               "PRIMARY KEY (symbol, interval, ts_epoch_ms))")
-    rows = [(SYM, "1m", _ms(DAY, 9, 30), 234.07, 234.2, 233.9, 234.1, 1),
-            (SYM, "1m", _ms(DAY, 10, 30), 235.5, 235.6, 235.4, 235.57, 1),
-            (SYM, "1m", _ms(DAY, 11, 0), 235.3, 235.4, 235.2, 235.33, 1),
-            (SYM, "1m", _ms(PREV, 15, 59), 231.5, 231.5, 231.4, 231.45, 1)]
+    # v5.1 (PARK.5, r72): CVX is an equity, so PARK now reads the commitment gate too. A full committed tape is laid
+    # under the four fixture bars (which are written last and unchanged): CVX and QQQ, today and 6 prior sessions,
+    # both opening above yesterday's high, a clean 10:00 hour, today's first 90 minutes at 2x the prior median, QQQ
+    # +0.30% the same way. Nothing here is about the gate - check_park_commit tests it; M1-M8 test the mark.
+    c.executemany("INSERT OR REPLACE INTO candles VALUES (?,?,?,?,?,?,?,?)", _committed_tape())
+    rows = [(SYM, "1m", _ms(DAY, 9, 30), 234.07, 234.2, 233.9, 234.1, 2000.0),
+            (SYM, "1m", _ms(DAY, 10, 30), 235.5, 235.6, 235.4, 235.57, 2000.0),
+            (SYM, "1m", _ms(DAY, 11, 0), 235.3, 235.4, 235.2, 235.33, 2000.0),
+            (SYM, "1m", _ms(PREV, 15, 59), 231.5, 231.5, 231.4, 231.45, 1000.0)]
     c.executemany("INSERT OR REPLACE INTO candles VALUES (?,?,?,?,?,?,?,?)", rows)
     c.commit()
     c.close()

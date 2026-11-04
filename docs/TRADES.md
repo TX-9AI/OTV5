@@ -1,5 +1,6 @@
 # TRADES — the specs
 
+**`TRADES.md` v5.7 · 2026-11-03 · OTV5 r72 (PARK.5) — section 9: on an equity PARK also needs QQQ to agree and the market's commitment (fewer than 2 of 3 leans against on the name and on QQQ); an index (SPX, QQQ) never asks; a tape too thin to read is no trade. The operator, 2026-11-03: "Let's modify the park trade on equities using the new filters —add a gate in the code "is an index=false" and start trading it Monday."**
 **`TRADES.md` v5.6 · 2026-10-31 · OTV5 r68 (CFG.5) — the pin gate, Breakout scaling, Runaway's and Breakout's entry ends and Breakout no-progress are fixed in code (gate ON, scaled, 10:30, the cut trades), with no env key and no configure.sh item; the resting stop section is deleted with the feature. The operator, 2026-10-31: "Resting stop was a study. It failed. Get this the fuck out of here"; "Do NOT add anything else to my config following a study or test".**
 **`TRADES.md` v5.5 · 2026-10-31 · OTV5 r67 (PARC.4) — PARC is REMOVED: its roster row and section 10 are gone with its code. The operator: "On PARC, no. It was an idea. It failed. It's done." and "Yes" to removing its code.**
 
@@ -794,6 +795,21 @@ the contract and builds the signal.
 - the first hour moved: the 10:30 1m close against the 09:30 1m open, |move| >= 0.20%; its sign
   is the direction;
 - GATE-G: never against the opening gap (09:30 open vs the prior session's last RTH 1m close);
+- **on an equity only** (not `config.PARK_INDEXES`, SPX and QQQ - an index never asks; r72 PARK.5, the
+  operator 2026-11-03: "add a gate in the code 'is an index=false' and start trading it Monday"): the
+  PAIR - QQQ's own first hour moved >= 0.20% the same way - and the COMMITMENT - fewer than 2 of three
+  leans against on the name AND on QQQ, read in the name's direction: the 09:30 open not beyond
+  yesterday's high (a long) / low (a short); the 10:00-10:59 bar's wick against the move >= 0.50 of its
+  range; 09:30-10:59 volume below the prior 5 sessions' median (a ratio outside 1/3..3 is unknown, not
+  against). A tape too thin to read on either name is no trade (STARVED, fails closed). Each equity box
+  subscribes QQQ's 1m bars on its own feed session. Measured on PARK's 197 real-quote equity fires
+  08-25..11-02: kept 27 +$13,596, skipped 170 -$11,668, both halves; on the indexes it would have skipped
+  3 of the top-5 runners, so it is not applied there. From 10:00 the box watches both tapes: the first
+  gap is paged (once), the candle feed re-pulls a short tape on its own session (and once more after the
+  10:59 bar closes), and the 11:01-11:03 window re-reads every tick - only a tape still short then is no
+  trade, paged as FAILED CLOSED. QQQ's 1m bars are a health row on the equity box's manifold (RED in RTH
+  from 09:31 when missing or stale), and never leave the box (the warehouse push ships only the box's own
+  symbol);
 - the strike nearest the 11:00 1m close, today's expiry, two-sided, ask >= 0.50, bought AT THE MARK
   ((bid + ask) / 2, floored to the cent; r60 PARK.4, the operator 2026-10-30: "we ladder in from
   aggressive to mark & never worse than mark"). Paper books the mark; live walks the entry ladder from
