@@ -1,5 +1,16 @@
 """
-analysis/get_orb_range.py  v5.1
+analysis/get_orb_range.py  v5.2
+v5.2  2026-11-04  OTV5 r74 (ORP.3) — NEVER ESTABLISHED FROM A PARTIAL TAPE: NEW STATE INCOMPLETE (exit 4). 2026-11-02 the
+      AMZN feed was refused 09:31-10:55 ET; at 10:56:51 the five 1m bars were not all on the feed, so the v5.1 fallback
+      ESTABLISHED the range from the lone 09:30 5m row - captured when the socket dropped (243.02-244.43 against the
+      true 242.28-246.39) - and Hunt traded against it all afternoon. The fallback is removed: the range is ESTABLISHED
+      only from the five 1m bars 09:30-09:34 (the official print, ORP.1), with a 09:35+ 1m row and SETTLE_S as before,
+      AND analysis/opening_tape.problem() finding them complete - all five present and, when today's 09:30 5m row
+      exists, its high and low equal to theirs. From 09:36 a tape that fails that is INCOMPLETE (exit 4): the range
+      carried is the last valid one, the reason is written ("reason") and printed, and main._fetch_orb_range keeps the
+      day's range unestablished, pages once and retries every tick while data/candle_feed re-pulls 1m and 5m from
+      09:30 on its own session. Before 09:36 it is IN_PROGRESS as before; with no tape of today at all it is EXPIRED
+      as before. Gate tests/check_orb_incomplete.py; check_orb_establish_closed C4 re-pointed (v5.1).
 v5.1  2026-10-27  OTV5 r40 (ORP.2) — ESTABLISHED ONLY FROM A CLOSED OPENING RANGE: THE FIVE 1m BARS, THE OFFICIAL PRINT.
       Until now the range was ESTABLISHED the moment the clock passed 09:34:59 and a 09:30 5m row existed - but the
       feed store writes FORMING bars, so that row could still be moving. CRM 2026-10-26 froze H=250.14 at 09:35:01 ET;
@@ -61,7 +72,7 @@ YAHOO-FINANCE PURGE / data stream mapping optimization
         tape the bot trades on. Docstring scrubbed.
 Exit codes (consumed by main._fetch_orb_range):
     0 = ESTABLISHED   1 = hard error (no data / write failure)
-    2 = IN_PROGRESS   3 = EXPIRED
+    2 = IN_PROGRESS   3 = EXPIRED   4 = INCOMPLETE (r74, ORP.3: today's opening tape is short or disagrees)
 """
 
 import json
@@ -74,6 +85,7 @@ from zoneinfo import ZoneInfo
 # bot's own data layer instead of duplicating symbol maps / fetch logic.
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from data.market_data import fetch_candles
+from analysis import opening_tape                     # r74 (ORP.3)
 
 ET = ZoneInfo("America/New_York")
 OUTPUT_PATH = os.path.expanduser("~/options-trader/orb_range.json")
@@ -81,12 +93,15 @@ OUTPUT_PATH = os.path.expanduser("~/options-trader/orb_range.json")
 STATUS_ESTABLISHED = "ESTABLISHED"
 STATUS_IN_PROGRESS = "IN_PROGRESS"
 STATUS_EXPIRED     = "EXPIRED"
+STATUS_INCOMPLETE  = "INCOMPLETE"       # r74 (ORP.3)
 
 EXIT_CODE = {
     STATUS_ESTABLISHED: 0,
     STATUS_IN_PROGRESS: 2,
     STATUS_EXPIRED:     3,
+    STATUS_INCOMPLETE:  4,
 }
+INCOMPLETE_FROM = (9, 36)               # r74 (ORP.3): before this a short tape is still IN_PROGRESS
 
 # Enough 5m candles to always include at least one prior trading day's open
 # (for the EXPIRED/IN_PROGRESS carry) even across a weekend.
@@ -168,22 +183,35 @@ def resolve_orb_range(symbol: str, now: datetime = None) -> dict:
             raise ValueError("no prior valid opening range to carry (IN_PROGRESS)")
         return _candle_to_range(pv[0], pv[1], STATUS_IN_PROGRESS, symbol, now)
 
-    # ── ESTABLISHED: past the window and today's opening range is CLOSED (r40, ORP.2) ──
-    if todays:
-        ts, row = todays[-1]
-        df1 = fetch_candles(symbol, "1m", 400)
+    # ── ESTABLISHED: past the window, today's opening range CLOSED (r40, ORP.2) and COMPLETE (r74, ORP.3) ──
+    df1 = fetch_candles(symbol, "1m", 400)
+    day1 = ([t for t in df1.index if t.date() == today and (t.hour, t.minute) >= (9, 30)]   # RTH rows only
+            if df1 is not None and not getattr(df1, "empty", True) else [])
+    if todays or day1:
+        bars = {}
+        for t in day1:
+            if t.hour == 9 and 30 <= t.minute <= 34:
+                r1 = df1.loc[t]
+                bars[t.minute] = (float(r1["high"]), float(r1["low"]))
+        b5 = (float(todays[-1][1]["high"]), float(todays[-1][1]["low"])) if todays else None
         pr = _closed_print(df1, today, now)
-        if pr is not None:
+        why = opening_tape.problem(bars, b5)
+        if pr is not None and why is None:
+            ts = todays[-1][0] if todays else min(day1)
             return _candle_to_range(ts, {"high": pr[0], "low": pr[1]}, STATUS_ESTABLISHED, symbol, now)
-        # the five 1m bars are not all on the feed: the 5m row, once a later 5m row proves it closed
-        later_5m = any(t.date() == today and (t.hour, t.minute) >= (9, 35) for t in df.index)
-        if later_5m and (now.hour, now.minute) >= (9, 36) and float(row["high"]) > float(row["low"]):
-            return _candle_to_range(ts, row, STATUS_ESTABLISHED, symbol, now)
-        # today's opening range is not proven closed yet: carry the last valid one and retry next tick
+        # r74 (ORP.3): no fallback to the lone 5m row - a partial capture is exactly what it would freeze
+        status = STATUS_INCOMPLETE if (now.hour, now.minute) >= INCOMPLETE_FROM else STATUS_IN_PROGRESS
+        if status == STATUS_INCOMPLETE and why is None:
+            why = "no 1m row at 09:35 or later yet (the 09:34 bar is not proven closed)"
         pv = last_valid_prior()
-        if pv is not None:
-            return _candle_to_range(pv[0], pv[1], STATUS_IN_PROGRESS, symbol, now)
-        # no prior to carry either - fall through to EXPIRED's error.
+        out = (_candle_to_range(pv[0], pv[1], status, symbol, now) if pv is not None else
+               {"status": status, "date": today.strftime("%Y-%m-%d"), "high": 0.0, "low": 0.0, "width": 0.0,
+                "fetched_at": now.strftime("%Y-%m-%d %H:%M:%S ET"), "symbol": symbol})
+        if status == STATUS_INCOMPLETE:
+            out["reason"] = why
+        if pv is not None or status == STATUS_INCOMPLETE:
+            return out
+        # IN_PROGRESS with no prior to carry - fall through to EXPIRED's error.
 
     # ── EXPIRED: pre-open, or today's candle not on the feed yet ──
     pv = last_valid_prior()
@@ -209,7 +237,8 @@ def main():
         sys.exit(1)
 
     print(f"ORB range [{result['status']}]: {result['symbol']} {result['date']} "
-          f"H={result['high']} L={result['low']} W={result['width']}")
+          f"H={result['high']} L={result['low']} W={result['width']}"
+          + (f" | {result['reason']}" if result.get("reason") else ""))
     print(f"Written to: {OUTPUT_PATH}")
     sys.exit(EXIT_CODE.get(result["status"], 1))
 

@@ -1,5 +1,26 @@
 """
-main.py  v5.12
+main.py  v5.13
+v5.13 2026-11-04  OTV5 r74 (BLIND.1 + ORP.3) — A BLIND BOT STAYS UP AND KEEPS MANAGING; A RANGE IS NEVER BUILT FROM A
+      PARTIAL TAPE. BLIND.1: 2026-11-02 the AMZN and GOOGL bots exited 5 times ("Too many errors — shutting down",
+      AMZN 10:12, 10:24, 10:49 ET; systemd restarted each in ~30 s) because run_analysis raised "No 5m data available"
+      on every 15 s tick while the feed was refused, and the loop catch-all sys.exit(1)'d after 30. Worse, a raising
+      tick skips manage_open_position, so an open position would have gone unmanaged for the whole outage. Now
+      run_analysis raises FeedBlind (a ValueError, same text) for no price or no 5m bars; main_loop catches it BEFORE
+      the catch-all, never counts it toward errors_this_hour, and runs _blind_tick: the position manager prices every
+      open record from TastyTrade REST marks (PositionManager.blind_rest_marks; the last known mark if REST fails)
+      and runs the exit engine on them, no new entry is asked, and one line a minute says it is still blind. ONE page
+      per blind episode: the existing BOT IS BLIND page (_check_blindness) carries "bot STAYS UP, managing N open
+      position(s) from TastyTrade REST marks" (operator 2026-11-04 "Yes": fold it in, fewer messages); only if the
+      latch has not paged BLIND_PAGE_FALLBACK_S (90 s) into the episode does _blind_tick send that same BOT IS BLIND
+      page itself, and the latch then does not page it again. The first good tick ends the
+      episode (one line, REST marks off). The 15:40-15:45 manage pass does the same. Any other exception still counts.
+      ORP.3: _fetch_orb_range reads get_orb_range's new exit 4 (INCOMPLETE: the 09:30-09:34 tape is short or the
+      09:30 5m bar disagrees with its five 1m bars); the range stays unestablished, _opening_range returns (None,
+      None) all that day instead of recomputing from the partial tape, one page names it (the plans that need the
+      range are held; the feed is re-pulling from 09:30), and a later ESTABLISHED from a complete tape says so.
+      _verify_official_print no longer latches "unverifiable" while the engine has not loaded the range (11-02 AMZN
+      read 0.00-0.00 at 10:56:51 ET and never checked again). The operator, 2026-11-03: "Yes to the proposal"
+      (build the two outage-path fixes). Gates tests/check_blind_stays_up.py, tests/check_orb_incomplete.py.
 v5.12 2026-10-31  OTV5 r68 (CFG.5) — THE SERVICE MODE LINE LOSES resting_stop= AND THE THREE REFUSAL NOTES. The resting
       stop is deleted (the operator, 2026-10-31: "Resting stop was a study. It failed. Get this the fuck out of here"), and
       config v5.10 reads no key for the pin gate, Runaway's and Breakout's ends or Breakout no-progress ("I don't want this
@@ -1830,6 +1851,11 @@ class BotState:
         # v4.11: pages once per outage when the bot cannot see, and once when
         # sight returns. Instantiated here so the latch state survives ticks.
         self.blind_latch = BlindnessLatch()
+        # r74 (BLIND.1) — the blind-tick episode: when it began, whether its one page went, the last minute line.
+        self.blind_since: Optional[float] = None
+        self.blind_paged: bool = False
+        self.blind_last_line: float = 0.0
+        self.blind_managing: int = 0           # r74 (BLIND.1): open records the last blind tick managed (the page names it)
 
 
 
@@ -1891,13 +1917,20 @@ def _flow_conn():
     return _FLOW_CONN["c"] or None
 
 
+class FeedBlind(ValueError):
+    """r74 (BLIND.1) — run_analysis cannot see the market: no price, or no 5m bars. A ValueError with the same
+    text as before, so every existing `except Exception` still catches it; main_loop catches it FIRST, keeps the
+    process up and manages open positions from REST marks (_blind_tick) instead of counting it toward the
+    30-errors shutdown."""
+
+
 def run_analysis(state: BotState, chain=None) -> dict:
     """Fetch all market data and run analysis pipeline."""
     cache  = get_cache()
     data   = cache.get_all()
     price  = cache.get_price()
     if price is None:
-        raise ValueError("Could not fetch current price")
+        raise FeedBlind("Could not fetch current price")
 
     df_5m  = data.get("5m")
     df_1m  = data.get("1m")
@@ -1905,7 +1938,7 @@ def run_analysis(state: BotState, chain=None) -> dict:
     df_1h  = data.get("1h")
 
     if df_5m is None or df_5m.empty:
-        raise ValueError("No 5m data available")
+        raise FeedBlind("No 5m data available")
 
     df_1h_safe = df_1h if df_1h is not None else df_5m
 
@@ -3724,6 +3757,8 @@ def _verify_official_print(state, df_1m=None) -> str:
         pr = _official_print(df_1m, _now.date())
         eng = get_orb_engine()
         d = eng.data
+        if not (d.orb_high and d.orb_low and d.orb_high > d.orb_low > 0):
+            return ""      # r74 (ORP.3): the engine has not loaded the range yet (11-02 AMZN latched on 0.00-0.00)
         if pr is None:
             if (_now.hour, _now.minute) >= (10, 30):
                 state._orb_print_day = _day
@@ -3799,6 +3834,9 @@ def _opening_range(ctx: dict):
             return float(_oh), float(_ol)
     except Exception:                                          # noqa: BLE001
         pass
+    if _or_incomplete_today():                                 # r74 (ORP.3): the tape IS the partial capture
+        logger.debug("opening range withheld: today's opening tape is INCOMPLETE (%s)", _OR_INCOMPLETE["reason"])
+        return None, None
     try:
         h0, m0 = RTH_OPEN_ET
         start = h0 * 60 + m0
@@ -6350,10 +6388,18 @@ def _check_blindness(state: BotState):
             # blind is more reason to page, not less.
             logger.error(f"blind alert: open-position read failed: {e}")
             descs = ["position read FAILED — check manually"]   # v4.12: no angle brackets; see alert_manager v1.10
-        get_alert_manager().send_blind_alert(
-            instrument, snap, open_positions=descs,
-            paper=state.paper_trading,
-            blind_for_s=state.blind_latch.blind_for_s())
+        # r74 (BLIND.1): one page per blind episode. If _blind_tick's fallback already sent BOT IS BLIND for this
+        # episode, the latch does not page it again; otherwise the page names the REST-marks management.
+        in_episode = getattr(state, "blind_since", None) is not None
+        if in_episode and getattr(state, "blind_paged", False):
+            logger.warning("[blind] BOT IS BLIND already paged for this episode - not paged twice")
+        else:
+            get_alert_manager().send_blind_alert(
+                instrument, snap, open_positions=descs,
+                paper=state.paper_trading,
+                blind_for_s=state.blind_latch.blind_for_s(),
+                managing=getattr(state, "blind_managing", 0) if in_episode else None)
+            state.blind_paged = True
 
     elif verdict == _BLIND_RECOVERED:
         instrument = os.environ.get("OT_INSTRUMENT", INSTRUMENT)
@@ -6423,6 +6469,82 @@ def _page_dispatch_failure(state, err: Exception, where: str) -> None:
             f"process are fine; DECISIONS ARE NOT HAPPENING. {fmt_et_short()}")
     except Exception as _alert_err:                            # noqa: BLE001
         logger.error("dispatch-failure page could not be sent: %s", _alert_err)
+
+
+BLIND_LINE_EVERY_S = 60          # r74 (BLIND.1): one "still blind" line a minute, not one per 15 s tick
+BLIND_PAGE_FALLBACK_S = 90       # r74 (BLIND.1): the latch pages at 3 ticks + 45 s; past this, _blind_tick pages
+
+
+def _blind_tick(state, pos_mgr, err: Exception, now: Optional[float] = None) -> int:
+    """r74 (BLIND.1) — one tick the bot cannot see (run_analysis raised FeedBlind). The process stays up.
+
+    Every open record is managed from TastyTrade REST marks (pos_mgr.blind_rest_marks; the position manager falls
+    back to the last known mark if REST fails) with no bars, so the exit engine's premium rules - the stops, the
+    lock, the floor and the 15:45 close - still act; nothing new is asked. One line a minute. ONE page per episode,
+    and it is BOT IS BLIND: the latch (_check_blindness) sends it with the REST-marks note; this tick sends that same
+    page only if none has gone out BLIND_PAGE_FALLBACK_S into the episode (a blind tick the latch never saw).
+    Returns the number of open records managed. NEVER RAISES: a fault here must not become the shutdown it replaces.
+    """
+    n_open = 0
+    try:
+        now = time.time() if now is None else now
+        first = state.blind_since is None
+        if first:
+            state.blind_since = now
+            _latch = getattr(state, "blind_latch", None)
+            state.blind_paged = bool(_latch is not None and _latch.is_alerted)   # the latch already paged this outage
+            state.blind_last_line = 0.0
+        try:
+            pos_mgr.blind_rest_marks = True
+        except Exception:                                      # noqa: BLE001
+            pass
+        try:
+            if pos_mgr.has_open_position():
+                n_open = len(pos_mgr.get_open_records() or [])
+                pos_mgr.manage_open_position(chain=None, df_1m=None, df_5m=None, vol_state=None, trend=None)
+        except Exception as exc:                               # noqa: BLE001
+            logger.error("[blind] managing open positions from REST marks failed this tick: %s", exc)
+        if first or now - state.blind_last_line >= BLIND_LINE_EVERY_S:
+            state.blind_last_line = now
+            logger.warning("[blind] %s - blind for %.0fs; the bot stays up, %d open position(s) managed from REST "
+                           "marks, no new entries until the bars return", err, now - state.blind_since, n_open)
+        state.blind_managing = n_open
+        if not state.blind_paged and now - state.blind_since >= BLIND_PAGE_FALLBACK_S:
+            state.blind_paged = True
+            try:
+                _latch = getattr(state, "blind_latch", None)
+                snap = (_latch.snapshot if _latch is not None else None) or {
+                    "cause": "FEED_BLIND", "timeframe": "price" if "price" in str(err) else "5m",
+                    "fields": {"error": str(err)}}
+                descs = []
+                try:
+                    descs = [r.get("option_symbol") or r.get("trade_id") or str(r)
+                             for r in (pos_mgr.get_open_records() or [])]
+                except Exception:                              # noqa: BLE001
+                    descs = ["position read FAILED - check manually"] if n_open else []
+                get_alert_manager().send_blind_alert(
+                    os.environ.get("OT_INSTRUMENT", INSTRUMENT), snap, open_positions=descs,
+                    paper=bool(getattr(state, "paper_trading", getattr(pos_mgr, "paper_trading", True))),
+                    blind_for_s=now - state.blind_since, managing=n_open)
+            except Exception as exc:                           # noqa: BLE001
+                logger.error("[blind] the blind page could not be sent: %s", exc)
+    except Exception as exc:                                   # noqa: BLE001
+        logger.error("[blind] blind tick failed: %s", exc)
+    return n_open
+
+
+def _blind_clear(state, pos_mgr) -> None:
+    """r74 (BLIND.1) — the first tick that sees again ends the episode: one line, REST marks off. Never raises."""
+    try:
+        if state.blind_since is None:
+            return
+        logger.warning("[blind] sight restored after %.0fs - positions priced from the chain again",
+                       time.time() - state.blind_since)
+        state.blind_since = None
+        state.blind_paged = False
+        pos_mgr.blind_rest_marks = False
+    except Exception:                                          # noqa: BLE001
+        pass
 
 
 _HEARTBEAT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "BOT_HEARTBEAT")
@@ -6628,6 +6750,7 @@ def main_loop(state: BotState):
                 if pos_mgr.has_open_position() and not _ecd(False):  # held debits managed until 15:50
                     try:
                         _hc_ctx = run_analysis(state)
+                        _blind_clear(state, pos_mgr)
                         pos_mgr.manage_open_position(
                             chain=_hc_ctx.get("chain"),
                             df_1m=_hc_ctx.get("df_1m"),
@@ -6635,6 +6758,9 @@ def main_loop(state: BotState):
                             vol_state=_hc_ctx.get("vol"),
                             trend=_hc_ctx.get("trend"),
                         )
+                    except FeedBlind as _hc_blind:              # r74 (BLIND.1): blind at 15:40 - manage on REST marks
+                        _hc_ctx = None
+                        _blind_tick(state, pos_mgr, _hc_blind)
                     except Exception as _hc_err:                # noqa: BLE001
                         logger.warning("15:40-15:45 vertical manage pass "
                                        "failed: %s", _hc_err)
@@ -6672,7 +6798,16 @@ def main_loop(state: BotState):
                 logger.debug("pre-analysis chain fetch: %s", exc)
 
             # ── Main analysis ─────────────────────────────────────────────
-            ctx = run_analysis(state, chain=_gex_chain)
+            # r74 (BLIND.1) — a blind tick (no price / no 5m bars) is caught HERE, before the loop's catch-all: it
+            # never counts toward the 30-errors shutdown, open positions are managed from REST marks, and the tick
+            # ends. 2026-11-02 the AMZN/GOOGL bots exited 5 times this way while the feed was refused.
+            try:
+                ctx = run_analysis(state, chain=_gex_chain)
+            except FeedBlind as _blind_err:
+                _blind_tick(state, pos_mgr, _blind_err)
+                time.sleep(POLL_INTERVAL_SECONDS)
+                continue
+            _blind_clear(state, pos_mgr)
             _obs_chain = ctx.get("chain")    # r270 (FILL.2)
             # r272 (COMMIT.1) — the commitment state, once per tick, on ctx (the entry gate reads THIS, never the
             # store); one row per side per new closed 1m bar to data/counterfactual/commitment.jsonl. Never raises.
@@ -7461,6 +7596,57 @@ def _recover_open_position(state: BotState, restart_type: str = ""):
 
 
 
+# r74 (ORP.3) — today's opening tape found INCOMPLETE by get_orb_range (exit 4). While `day` is today the range is not
+# established and _opening_range will not recompute one from the tape; one page per day once it has lasted past
+# OR_INCOMPLETE_PAGE_ET (a 5m row a few seconds behind its 1m bars at 09:35-09:36 is not worth a page).
+_OR_INCOMPLETE = {"day": "", "reason": "", "paged": "", "since": 0.0}
+OR_INCOMPLETE_PAGE_ET = (9, 37)
+
+
+def _or_incomplete(line: str) -> None:
+    """Record today's INCOMPLETE verdict; page once a day from OR_INCOMPLETE_PAGE_ET. Never raises."""
+    try:
+        _now = now_et()
+        _day = _now.strftime("%Y-%m-%d")
+        if _OR_INCOMPLETE["day"] != _day:
+            _OR_INCOMPLETE.update(day=_day, since=time.time(), paged="")
+            logger.warning("[orb-range] INCOMPLETE - the opening range is NOT established: %s", line)
+        _OR_INCOMPLETE["reason"] = line
+        if _OR_INCOMPLETE["paged"] != _day and (_now.hour, _now.minute) >= OR_INCOMPLETE_PAGE_ET:
+            _OR_INCOMPLETE["paged"] = _day
+            get_alert_manager()._send(
+                f"\u26A0\uFE0F {os.environ.get('OT_INSTRUMENT', INSTRUMENT)} OPENING RANGE INCOMPLETE - the "
+                f"09:30-09:34 tape is short or disagrees ({line.split('|', 1)[-1].strip()}). The range is NOT "
+                f"established, so every plan that needs it is held; the feed is re-pulling the bars from 09:30 on its "
+                f"own session. {fmt_et_short()}")
+    except Exception as exc:                                   # noqa: BLE001
+        logger.warning("[orb-range] incomplete-range page failed: %s", exc)
+
+
+def _or_complete(line: str) -> None:
+    """A range ESTABLISHED after an INCOMPLETE verdict today: say so once (the page, if one went), clear. Never raises."""
+    try:
+        _day = now_et().strftime("%Y-%m-%d")
+        if _OR_INCOMPLETE["day"] != _day:
+            return
+        _was_paged = _OR_INCOMPLETE["paged"] == _day
+        _OR_INCOMPLETE.update(day="", reason="", paged="")
+        logger.warning("[orb-range] ESTABLISHED LATE from a complete opening tape: %s", line)
+        if _was_paged:
+            get_alert_manager()._send(
+                f"\u2705 {os.environ.get('OT_INSTRUMENT', INSTRUMENT)} opening range ESTABLISHED late from a complete "
+                f"tape ({line.split(':', 1)[-1].strip()}); the plans that need it can act from now. {fmt_et_short()}")
+    except Exception as exc:                                   # noqa: BLE001
+        logger.warning("[orb-range] late-range note failed: %s", exc)
+
+
+def _or_incomplete_today() -> bool:
+    try:
+        return _OR_INCOMPLETE["day"] == now_et().strftime("%Y-%m-%d")
+    except Exception:                                          # noqa: BLE001
+        return False
+
+
 def _fetch_orb_range(instrument: str = "") -> bool:
     """Fetch and write orb_range.json via the standalone get_orb_range.py.
 
@@ -7492,7 +7678,12 @@ def _fetch_orb_range(instrument: str = "") -> bool:
         if _result.returncode == 0:
             _line = _result.stdout.splitlines()[0] if _result.stdout.strip() else ""
             logger.info(f"ORB range: {_line}")
+            _or_complete(_line)                                       # r74 (ORP.3)
             return True
+        if _result.returncode == 4:                                   # r74 (ORP.3)
+            _line = _result.stdout.splitlines()[0] if _result.stdout.strip() else "INCOMPLETE"
+            _or_incomplete(_line)
+            return False
         if _result.returncode == 2:
             logger.debug("ORB range: IN_PROGRESS — today's opening candle forming")
         elif _result.returncode == 3:

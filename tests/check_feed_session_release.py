@@ -1,6 +1,18 @@
 #!/usr/bin/env python3
 """
-tests/check_feed_session_release.py  v5.1
+tests/check_feed_session_release.py  v5.2
+v5.2  2026-11-04  OTV5 r74 (FEED.15): control assigns the node (dtp tools/dxlink_assign.py writes data/dxlink_assign.json
+      after the 09:15 wake; the operator, 2026-11-02: "if we have control over the connections, then spread them out";
+      2026-11-03 "Yes to the proposal"):
+  S22 read_assignment: a fresh file for today and this box gives its node; missing, unreadable, another day, another
+      symbol, stale (> 12 h), from the future and a non-IPv4 node are each ignored with their own reason
+  S23 choose(): in RTH the assigned node beats the last good node; an assigned node that is cooling does not; pre-open
+      it is dialled only after its own probe answers 101 (a 502 falls to the r70 spread, never the assigned node);
+      no file = the r70 choice unchanged
+  S24 run() dials the assigned node first (DNS answering another)
+  S25 the planned switch: before 09:27 an authorized box on another node switches ONCE (09:27 and later, the same node,
+      a cooling node: never); through the real run() a PlannedNodeSwitch raised in the stream redials in 1-5 s, cools no
+      node and logs one FEED.15 line; mkbook isolates every earlier check from any assignment file
 v5.1  2026-11-03  OTV5 r70 (3): the recursive resolvers answer one node at a time while the zone's Route 53 nameservers
       answer the set, and 54.204.44.247 is no longer a dxlink node (timed out 11-02 evening, TLS failed 11-03):
   S19 the seed is 129.153.134.53, 184.195.238.144 and 52.6.43.252 (observed 2026-11-03); 54.204.44.247 is not in it
@@ -199,10 +211,110 @@ class World:
 
 
 def mkbook(cf, path, **kw):
-    """A NodeBook isolated from the repo's seed and any fleet file unless the test names them."""
+    """A NodeBook isolated from the repo's seed, any fleet file and any control assignment unless the test names them."""
     kw.setdefault("fleet_path", os.path.join(_TMP, "no_fleet.json"))
     kw.setdefault("seed_path", os.path.join(_TMP, "no_seed.json"))
+    if "assign_path" in __import__("inspect").signature(cf.NodeBook.__init__).parameters:      # v5.2 (r74)
+        kw.setdefault("assign_path", os.path.join(_TMP, "no_assign.json"))
     return cf.NodeBook(path=path, **kw)
+
+
+ASSIGN_DAY = "2026-11-05"
+
+
+def _write_assign(path, **over):
+    import json as _json
+    d = {"date": ASSIGN_DAY, "symbol": "QQQ", "node": "10.0.0.3", "written_at": 1_000_000.0, "by": "dtp dxlink_assign"}
+    d.update(over)
+    with open(path, "w", encoding="utf-8") as fh:
+        if over.get("_raw") is not None:
+            fh.write(over["_raw"])
+        else:
+            _json.dump({k: v for k, v in d.items() if k != "_raw"}, fh)
+    return path
+
+
+def _assign_read_check(cf):
+    """S22."""
+    p = os.path.join(_TMP, "assign_S22.json")
+    out = {}
+    cases = {"good": {}, "day": {"date": "2026-11-04"}, "sym": {"symbol": "SPX"}, "stale": {"written_at": 1_000_000.0 - 13 * 3600},
+             "future": {"written_at": 1_000_000.0 + 3600}, "v6": {"node": "2001:db8::1"}, "raw": {"_raw": "{not json"}}
+    for k, over in cases.items():
+        _write_assign(p, **over)
+        out[k] = cf.read_assignment(p, "QQQ", 1_000_000.0, ASSIGN_DAY)
+    out["missing"] = cf.read_assignment(os.path.join(_TMP, "nope.json"), "QQQ", 1_000_000.0, ASSIGN_DAY)
+    ok = (out["good"][0] == "10.0.0.3" and all(out[k][0] is None for k in out if k != "good")
+          and len({out[k][1] for k in out if k != "good"}) == len(out) - 1)
+    return ok, "; ".join("%s=%s" % (k, v) for k, v in out.items())
+
+
+def _assign_choose_check(cf, A, B, C):
+    """S23: choose() with an assignment, in RTH and pre-open."""
+    import asyncio as _aio
+    res = {}
+
+    def book(name, assign=None, probe_codes=None, cool=None):
+        ap = os.path.join(_TMP, "assign_S23_%s.json" % name)
+        if assign:
+            _write_assign(ap, node=assign)
+        elif os.path.exists(ap):
+            os.remove(ap)
+        b = mkbook(cf, path=os.path.join(_TMP, "nodes_S23_%s.json" % name), assign_path=ap, symbol="QQQ",
+                   clock=lambda: 1_000_000.0, today=lambda: ASSIGN_DAY)
+        b._load()["nodes"].update({ip: {"seen": 1_000_000.0} for ip in (A, B, C)})
+        b._data["last_ok"] = A
+        if cool:
+            b._node(cool)["refused"] = 1_000_000.0
+
+        async def r(h, p_):
+            return [A]
+
+        async def pr(ip, h, p_, path="/"):
+            return (probe_codes or {}).get(ip, 101)
+        b.resolver, b.prober = r, pr
+        return b
+    res["rth"] = _aio.run(book("rth", assign=C).choose("dxlink.test", 443, "QQQ", preopen=False))
+    res["cool"] = _aio.run(book("cool", assign=C, cool=C).choose("dxlink.test", 443, "QQQ", preopen=False))
+    res["pre"] = _aio.run(book("pre", assign=C).choose("dxlink.test", 443, "QQQ", preopen=True))
+    res["pre502"] = _aio.run(book("pre502", assign=C, probe_codes={C: 502}).choose("dxlink.test", 443, "QQQ",
+                                                                                     preopen=True))
+    res["none"] = _aio.run(book("none").choose("dxlink.test", 443, "QQQ", preopen=False))
+    ok = (res["rth"][0] == C and "control assignment" in res["rth"][1]
+          and res["cool"][0] == A and res["pre"][0] == C and "probe 101" in res["pre"][1]
+          and res["pre502"][0] != C and res["pre502"][0] in (A, B) and res["none"] == (A, "last good node"))
+    return ok, "; ".join("%s=%s" % (k, v) for k, v in res.items())
+
+
+def _assign_follow_check(cf, A, C):
+    """S25 (unit half): _maybe_follow_assignment."""
+    from datetime import datetime as _dt
+    ap = os.path.join(_TMP, "assign_S25.json")
+    _write_assign(ap, node=C)
+    saved = (cf._NODES, dict(cf._LAST_ATTEMPT))
+    out = {}
+    try:
+        b = mkbook(cf, path=os.path.join(_TMP, "nodes_S25.json"), assign_path=ap, symbol="QQQ",
+                   clock=lambda: 1_000_000.0, today=lambda: ASSIGN_DAY)
+        b._load()["nodes"].update({ip: {"seen": 1_000_000.0} for ip in (A, C)})
+        cf._NODES = b
+        cf._LAST_ATTEMPT.update(ip=A, authorized=True)
+        at = lambda hh, mm: _dt(2026, 11, 5, hh, mm, 0, tzinfo=cf.ET)
+        f = cf.CandleFeed.__new__(cf.CandleFeed)
+        out["first"] = f._maybe_follow_assignment(at(9, 20))
+        out["again"] = f._maybe_follow_assignment(at(9, 21))
+        g = cf.CandleFeed.__new__(cf.CandleFeed)
+        out["late"] = g._maybe_follow_assignment(at(9, 27))
+        cf._LAST_ATTEMPT.update(ip=C, authorized=True)
+        out["same"] = g._maybe_follow_assignment(at(9, 20))
+        cf._LAST_ATTEMPT.update(ip=A, authorized=True)
+        b._node(C)["refused"] = 1_000_000.0
+        out["cool"] = g._maybe_follow_assignment(at(9, 20))
+    finally:
+        cf._NODES = saved[0]
+        cf._LAST_ATTEMPT.clear(); cf._LAST_ATTEMPT.update(saved[1])
+    ok = out["first"] == C and out["again"] is None and out["late"] is None and out["same"] is None and out["cool"] is None
+    return ok, "; ".join("%s=%s" % (k, v) for k, v in out.items())
 
 
 def drive(cf, scripts, stops, leaky=False, on_sleep=None, auth_timeout=None, dns=None, book=None, preopen=False,
@@ -909,6 +1021,48 @@ def main():
           "host first; NS set cached 1 h); their extra nodes follow the recursive answer, order kept; the NodeBook's "
           "default resolver is _resolve_nodes; with the nameservers down the recursive answer stands, bounded, no raise",
           *_auth_dns_check(cf))
+
+    # ── S22-S25 (v5.2, r74 FEED.15): control assigns the node ─────────────────────────────────────────────────────
+    if hasattr(cf, "read_assignment"):
+        check("S22 read_assignment: today's file for this box gives its node; missing, unreadable, another day, another "
+              "symbol, stale, future and non-IPv4 are ignored, each with its own reason", *_assign_read_check(cf))
+        check("S23 choose(): the assigned node beats the last good node in RTH; not while cooling; pre-open only after "
+              "its own probe answers 101 (a 502 falls to the spread); no file = the r70 choice", *_assign_choose_check(cf, A, B, C))
+        ap = _write_assign(os.path.join(_TMP, "assign_S24.json"), node=C)
+        bk = mkbook(cf, path=os.path.join(_TMP, "nodes_S24.json"), assign_path=ap, symbol="QQQ",
+                    today=lambda: ASSIGN_DAY)
+        bk._load()["nodes"].update({ip: {"seen": 1_000_000.0} for ip in (A, B)})
+        bk._data["last_ok"] = A
+        w, _, lines = drive(cf, [[UNAUTH, AUTHED, drop()]], stops=1, dns=[A], book=bk)
+        all_lines += lines
+        check("S24 run() dials the assigned node first (DNS answers another, the last good node is another)",
+              [host_of(u) for u in w.urls] == [C], "dialled=%s" % [host_of(u) for u in w.urls])
+        ok_u, det_u = _assign_follow_check(cf, A, C)
+        bk = mkbook(cf, path=os.path.join(_TMP, "nodes_S25run.json"))
+        bk._load()["nodes"].update({ip: {"seen": 1_000_000.0} for ip in (A, B)})
+        bk._data["last_ok"] = A
+        _orig_follow = cf.CandleFeed._maybe_follow_assignment
+        _once = {"n": 0}
+
+        def _follow_once(self, now=None):
+            _once["n"] += 1
+            return B if _once["n"] == 1 else None
+        cf.CandleFeed._maybe_follow_assignment = _follow_once
+        try:
+            w, waits, lines = drive(cf, [[UNAUTH, AUTHED, DELAY, DELAY], [UNAUTH, AUTHED, drop()]], stops=2,
+                                    dns=[A], book=bk)
+        finally:
+            cf.CandleFeed._maybe_follow_assignment = _orig_follow
+        all_lines += lines
+        fl = [x for x in lines if x.startswith("FEED.15") and "planned" in x]
+        no_cool = bk._cool_until(A) <= w.clock["t"] and bk._cool_until(B) <= w.clock["t"]
+        check("S25 the planned switch: once before 09:27 from another node (never at 09:27, on the same node or to a "
+              "cooling one); through run() it redials in 1-5 s, cools no node, one FEED.15 line",
+              ok_u and len(waits) >= 1 and 1.0 <= waits[0] <= 5.0 and len(fl) == 1 and no_cool,
+              "%s | waits=%s lines=%s no_cool=%s" % (det_u, [round(x, 2) for x in waits], fl, no_cool))
+    else:
+        for n in ("S22", "S23", "S24", "S25"):
+            check("%s (FEED.15 not present)" % n, False, "no read_assignment")
 
     leaked = [x for x in all_lines if "SECRET-TOKEN" in x]
     check("S9 the token never appears in a log record", not leaked and len(all_lines) > 0, "leaked: %s" % leaked[:2])

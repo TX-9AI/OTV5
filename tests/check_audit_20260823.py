@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """
-tests/check_audit_20260823.py  v5.0
+tests/check_audit_20260823.py  v5.1
+v5.1  2026-11-04  OTV5 r74 (ORP.3) — A2 RE-POINTED, NOT LOOSENED: the rescue still fires on a store with only a 09:45 bar
+      (the pin), and it now re-pulls BOTH tenors from 09:30 - 5m and 1m, each unsubscribed first - because the range is
+      the five 1m bars (data/candle_feed v5.9; the operator, 2026-11-03: "Yes to the proposal"). The rest is unchanged.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.2  2026-10-19  OTV4TEST r303 (PSTATE.1) — a3 drives IronCondorStrategy's own ledger path, and the condor is DORMANT for
       good (no entry of its own), so a3 lifts the state for that one call; the invariant it pins (an abandoned plan closes its row) is unchanged.
@@ -131,7 +134,7 @@ def a2():
     finally:
         cf.datetime = orig
     check("A2 rescue fires when the 09:30 bar is missing but a later bar exists",
-          attempted is True and calls == ["unsub", "sub"],
+          attempted is True and calls == ["unsub", "sub", "unsub", "sub"],
           f"attempted={attempted} calls={calls}")
 
 

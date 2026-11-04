@@ -1,5 +1,13 @@
 """
-execution/position_manager.py  v5.30
+execution/position_manager.py  v5.31
+v5.31 2026-11-04  OTV5 r74 (BLIND.1) — A BLIND BOT PRICES ITS OPEN POSITIONS FROM TASTYTRADE REST MARKS, ON PAPER TOO.
+      main._blind_tick sets blind_rest_marks while run_analysis cannot see (no price / no 5m bars) and manages with
+      chain=None. Live already took the REST path with no chain; paper took the last stored mark, which never moves,
+      so a stop could not fire for the whole outage. Now, with blind_rest_marks on, paper asks the same REST pricing
+      (_rest_premium, the live branch moved into a method unchanged: a tent is None, a vertical short minus long, a
+      butterfly from its three legs, a single from its own symbol) and only falls back to the last known mark when
+      REST gives nothing. blind_rest_marks is False at every other time, so no other tick changes. Gate
+      tests/check_blind_stays_up.py.
 v5.30 2026-10-31  OTV5 r68 (CFG.5) — THE RESTING STOP IS DELETED. The operator, 2026-10-31: "13. Resting stop—I NEVER asked
       for any of this to be added to config. Resting stop was a study. It failed. Get this the fuck out of here". The three
       r266 (STOP.1) hooks go with execution/resting_stop.py: _manage_one's resolve-first block, _execute_exit's begin-a-rest
@@ -693,6 +701,7 @@ class PositionManager:
         self.paper_trading = paper_trading
         self._open_records: List[TradeRecord] = []
         self._trade_logger = get_trade_logger()
+        self.blind_rest_marks = False      # r74 (BLIND.1): set by main._blind_tick while the bot cannot see
 
     def _exit_engine(self):
         """r57 (TCS.LOG1) — the exit engine this manager decides and closes with (the shadow book has its own)."""
@@ -1307,6 +1316,18 @@ class PositionManager:
                 # r209 — was `pass`: the delta-par exit went dark and nothing said so
                 _delta_readable(record, False, f"{type(_dexc).__name__}: {_dexc}")
 
+        if self.paper_trading and getattr(self, "blind_rest_marks", False):
+            # r74 (BLIND.1) — blind: the stored mark never moves, so ask TastyTrade REST first; the last mark below
+            # is the fallback when REST gives nothing.
+            try:
+                _rest = self._rest_premium(record)
+            except Exception as _rexc:                                # noqa: BLE001
+                logger.warning(f"{str(record.get('trade_id', ''))[:8]}: blind REST mark failed ({_rexc}) - "
+                               f"last known mark")
+                _rest = None
+            if _rest is not None and _rest > 0:
+                return _rest
+
         if self.paper_trading:
             # LAST-KNOWN MARK, not entry (v2.1). Falling back to entry premium
             # here fabricated a $0 P&L on ANY exit taken while the chain was
@@ -1326,6 +1347,12 @@ class PositionManager:
             )
             return record.get("entry_premium", 0.0)
 
+        return self._rest_premium(record)
+
+    def _rest_premium(self, record: TradeRecord) -> Optional[float]:
+        """The no-chain REST pricing (the live branch of _fetch_current_premium, moved here unchanged by r74 so a
+        blind paper box can ask it too). None when a leg cannot be priced."""
+        is_butterfly = bool(record.get("is_butterfly", False))
         client = get_client()
         try:
             # r468 / F4 — dispatch like the chain path above: a leg we cannot
@@ -1365,6 +1392,7 @@ class PositionManager:
             logger.error(f"Premium fetch error: {e}")
             return None
 
+    blind_rest_marks = False                   # r74 (BLIND.1): the class default (instances set their own)
     _mark_fail_warned: set = set()
     MARK_RETRY_BACKOFF_S = (0.5, 1.0, 2.0)     # r496 F4.2: after each 429 -> at most 4 calls, 3.5 s
     MARK_COOLDOWN_S = 10.0                     # after a spent retry: single tries only, this long

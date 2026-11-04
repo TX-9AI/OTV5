@@ -1,5 +1,10 @@
 """
-notifications/alert_manager.py  v5.3
+notifications/alert_manager.py  v5.4
+v5.4  2026-11-04  OTV5 r74 (BLIND.1) — ONE PAGE PER BLIND EPISODE. send_blind_alert(..., managing=None): when the bot
+      is in a blind episode (main._blind_tick: it stays up and manages from REST marks) the caller passes the open
+      count and the BOT IS BLIND page carries "bot STAYS UP, managing N open position(s) from TastyTrade REST marks;
+      no new entries until the bars return" (meta "managing"). The separate "FEED BLIND ... STAYS UP" page r74 first
+      built is gone. managing=None: the page is unchanged. Operator 2026-11-04: "Yes" (fold it into BOT IS BLIND).
 v5.3  2026-11-02  (PAGE.2) — ON A MANAGED BOX CONTROL DELIVERS THE ALERT. _send(msg, code, ref, meta=None) hands the
       unescaped text to notifications/alert_route.route(), which on a managed box writes the full alert as an
       `[alert] {json}` line for control's router and sends it from the box only when it is critical (always, and
@@ -442,7 +447,7 @@ class AlertManager:
     def send_blind_alert(self, instrument: str, snapshot: dict,
                          open_positions: Optional[list] = None,
                          paper: bool = True, blind_for_s: float = 0.0,
-                         drill: bool = False) -> bool:
+                         drill: bool = False, managing: Optional[int] = None) -> bool:
         """The bot cannot see. Page immediately and log what caused it.
 
         `snapshot` is market_data.last_blindness() — the record written at the
@@ -476,6 +481,11 @@ class AlertManager:
         detail = " ".join(f"{k}={v}" for k, v in list(fields.items())[:3])
         msg = (f"\U0001F534 {tag}BOT IS BLIND | {instrument} | {why} | "
                f"blind {blind_for_s:.0f}s | {detail} | ")
+        if managing is not None:
+            # r74 (BLIND.1): the bot is in a blind episode and STAYS UP - its own "stays up" note is folded in here
+            # so a blind episode is ONE page (operator 2026-11-04 "Yes": fewer messages)
+            msg += (f"bot STAYS UP, managing {int(managing)} open position(s) from TastyTrade REST marks; "
+                    f"no new entries until the bars return | ")
         if n_open and not paper:
             # the only line in this file that asks for manual intervention
             descs = "; ".join(str(p) for p in open_positions[:3])
@@ -488,7 +498,8 @@ class AlertManager:
         msg += fmt_et_short()
         return self._send(msg, code="BLD", meta={"cause": why, "open": n_open, "paper": bool(paper),
                                                  "drill": bool(drill), "detail": detail,
-                                                 "blind_for_s": round(float(blind_for_s or 0), 1)})
+                                                 "blind_for_s": round(float(blind_for_s or 0), 1),
+                                                 "managing": None if managing is None else int(managing)})
 
     def send_sight_restored_alert(self, instrument: str, blind_for_s: float,
                                   cause: str = "", drill: bool = False) -> bool:

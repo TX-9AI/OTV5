@@ -1,6 +1,11 @@
 #!/usr/bin/env python3
 """
-tests/check_orb_establish_closed.py  v5.0
+tests/check_orb_establish_closed.py  v5.1
+v5.1  2026-11-04  OTV5 r74 (ORP.3) — C4 RE-POINTED, NOT LOOSENED: A LONE 5m ROW NO LONGER ESTABLISHES THE RANGE. 2026-11-02
+      AMZN's range was ESTABLISHED at 10:56:51 ET from a 09:30 5m row captured when the feed dropped at 09:31
+      (243.02-244.43 against the true 242.28-246.39); that is the path C4 pinned. With no 1m frame, the 5m row is now
+      IN_PROGRESS before 09:36 and INCOMPLETE (exit 4) from 09:36, never ESTABLISHED. C1-C3 and C5 are unchanged.
+      The new contract's own gate is tests/check_orb_incomplete.py.
 v5.0  2026-10-27  OTV5 r40 (ORP.2) — THE OPENING RANGE IS ESTABLISHED ONLY ONCE IT IS CLOSED.
       CRM 2026-10-26: at 09:35:01 ET get_orb_range established H=250.14 from the still-forming 09:30 5m row (the
       feed store writes forming bars); the 09:34 minute closed at its high, 250.38. The fixture is CRM's real 10-26
@@ -9,7 +14,8 @@ v5.0  2026-10-27  OTV5 r40 (ORP.2) — THE OPENING RANGE IS ESTABLISHED ONLY ONC
   C1  09:35:01, the 09:34 1m bar still forming (high 250.14 so far), no 09:35 row: IN_PROGRESS, not ESTABLISHED
   C2  09:35:12, 09:34 final (250.38) and a 09:35 1m row: ESTABLISHED at the official print 250.38 / 247.76
   C3  the five bars and a 09:35 row but only 09:35:04 (inside SETTLE_S): IN_PROGRESS
-  C4  no 1m frame at all: the 5m row alone is ESTABLISHED only once a later 5m row exists and it is 09:36
+  C4  no 1m frame at all: the 5m row alone is NEVER ESTABLISHED - IN_PROGRESS before 09:36, INCOMPLETE from 09:36
+      (r74, ORP.3; until r74 it was ESTABLISHED once a later 5m row existed and it was 09:36)
   C5  pre-open is EXPIRED and inside the opening window is IN_PROGRESS, both carrying the prior range (unchanged)
 
 Born red on f3e3072 at C1 (established 250.14 at 09:35:01), C3 and C4.
@@ -81,9 +87,9 @@ def main():
     r1 = run(None, final_5m, 9, 35, 30)
     r2 = run(None, final_5m, 9, 36, 5)
     r3 = run(None, forming_5m, 9, 40, 0)
-    check("C4 no 1m: the 5m row is ESTABLISHED only with a later 5m row and from 09:36",
-          r1["status"] == "IN_PROGRESS" and r2["status"] == "ESTABLISHED" and r2["high"] == 250.38
-          and r3["status"] == "IN_PROGRESS", f"{r1['status']} {r2['status']} H={r2['high']} {r3['status']}")
+    check("C4 no 1m: the 5m row is never ESTABLISHED - IN_PROGRESS before 09:36, INCOMPLETE from 09:36 (r74)",
+          r1["status"] == "IN_PROGRESS" and r2["status"] == "INCOMPLETE" and r3["status"] == "INCOMPLETE",
+          f"{r1['status']} {r2['status']} {r3['status']}")
     r1 = run(None, [PRIOR_5M], 9, 10, 0)                       # pre-open: only the prior day is on the feed
     r2 = run(final_1m[:2], [PRIOR_5M, forming_5m[1]], 9, 32, 0)
     check("C5 pre-open EXPIRED, inside the window IN_PROGRESS, both the prior range",

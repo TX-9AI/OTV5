@@ -1,5 +1,20 @@
 """
-data/candle_feed.py  v5.8
+data/candle_feed.py  v5.9
+v5.9  2026-11-04  OTV5 r74 (ORP.3 + FEED.15) — THE OPENING TAPE IS RE-PULLED WHEN IT IS PARTIAL, AND CONTROL CAN ASSIGN THE
+      NODE. ORP.3: _maybe_rescue_opening_range asked only "is there a 09:30 5m row?"; 2026-11-02 AMZN held one, captured
+      when the socket dropped at 09:31, so nothing was re-pulled and get_orb_range froze the range from it. It now
+      judges the five 1m bars 09:30-09:34 and the 09:30 5m row with analysis/opening_tape.problem() (the same rule
+      get_orb_range establishes by) and re-pulls BOTH 1m and 5m from 09:30 on this session (unsubscribe first, the
+      store upserts the replay), from 09:36 to ORB_RESCUE_UNTIL_ET 15:00, at most ORB_RESCUE_MAX 6 a session,
+      ORB_RESCUE_EVERY_S 120 s apart (it was once a session, so a tape that returned at 10:55 was never re-pulled).
+      FEED.15: NodeBook.choose() dials control's assigned node first (data/dxlink_assign.json beside the feed store,
+      written by dtp tools/dxlink_assign.py after the 09:15 wake: today's date, this box's symbol, an IPv4 node, at most
+      ASSIGN_MAX_AGE_S 12 h old); pre-open only once that node answers its own upgrade probe 101, never while it is
+      cooling; anything else falls to the r70 order (pre-open hash spread, last good node, hash, DNS). A missing or
+      stale file is one log line a day. Before ASSIGN_SWITCH_BY_ET 09:27 a box connected elsewhere switches to a fresh
+      assignment once a day (PlannedNodeSwitch: the old socket closed first, redial in 1-5 s, no node cooled). The
+      operator, 2026-11-02: "if we have control over the connections, then spread them out"; 2026-11-03 "Yes to the
+      proposal". Gates tests/check_orb_incomplete.py R1-R4, tests/check_feed_session_release.py S22-S25.
 v5.8  2026-11-03  OTV5 r72 (PARK.5) — A SHORT GATE TAPE IS RE-PULLED BEFORE 11:01, ON THIS SAME SESSION. The operator,
       2026-11-03, on PARK failing closed for a thin tape: "Fine, but we need to be more responsive when that happens to
       mitigate impacts to trading." _maybe_refill_commit_tape(), riding the flush cadence beside the opening-range rescue,
@@ -429,6 +444,7 @@ def _accept_fractional_size() -> dict:
 FRACTIONAL_SIZE = _accept_fractional_size()
 
 from config import INSTRUMENT, TIMEFRAMES
+from analysis import opening_tape                                    # v5.9 (r74, ORP.3)
 from data.tasty_client import get_session, get_loop
 
 logger = logging.getLogger(__name__)
@@ -699,6 +715,10 @@ _OPEN_WS = {"ws": None}          # the one socket this process has open, if any
 # after node_switch_wait() (1-5 s) instead of the 120-300 s lockout hold. A book or fleet node unseen and unused for
 # NODE_FORGET_S (14 days) is dropped; the seed is always a candidate (a dead one fails its probe or cools 5 min).
 # Never raises: any fault falls back to the plain URL.
+# v5.9 (r74, ORP.3) — the opening-tape rescue's window and cadence (see _maybe_rescue_opening_range).
+ORB_RESCUE_UNTIL_ET = (15, 0)
+ORB_RESCUE_MAX = 6
+ORB_RESCUE_EVERY_S = 120.0
 NODE_REFUSED_COOLDOWN_S = 30 * 60
 NODE_FAIL_COOLDOWN_S    = 5 * 60
 NODE_FORGET_S           = 14 * 86400
@@ -706,6 +726,69 @@ NODE_DNS_TIMEOUT_S      = 5.0
 NODE_PROBE_TIMEOUT_S    = 3.0
 NODE_SWITCH_WAIT_S      = (1.0, 5.0)
 _LAST_ATTEMPT = {"ip": None, "authorized": False}     # the node the current/last dial went to
+
+# ── v5.9 (r74, FEED.15) — CONTROL ASSIGNS THE NODE ───────────────────────────────────────────────────────────────────
+# dtp tools/dxlink_assign.py (after the 09:15 wake, from control's own probe) writes data/dxlink_assign.json beside the
+# feed store over ssh: {"date": "YYYY-MM-DD" (ET), "symbol": <this box's symbol>, "node": <IPv4>, "written_at": epoch,
+# "by": ...}. choose() dials the assigned node FIRST at every connect (pre-open only after it answers its own probe 101;
+# never while it is cooling), then the normal order above. A file that is missing, unreadable, for another day or
+# symbol, older than ASSIGN_MAX_AGE_S, from the future or naming a non-IPv4 node is ignored, with one log line a day
+# per reason. Before ASSIGN_SWITCH_BY_ET a box already connected elsewhere switches to a fresh assignment ONCE a day
+# (a planned reconnect: the old socket closed first by SessionReleasingStreamer, redial in 1-5 s, no node cooled).
+ASSIGN_MAX_AGE_S = 12 * 3600
+ASSIGN_FUTURE_SLACK_S = 300
+ASSIGN_SWITCH_BY_ET = (9, 27)
+
+
+class PlannedNodeSwitch(Exception):
+    """v5.9 (r74, FEED.15) — raised inside the stream to leave a working node for control's assignment, pre-open."""
+
+
+def _planned_switch(e) -> Optional[BaseException]:
+    """The PlannedNodeSwitch in e or anywhere inside it (an anyio task group wraps the stream body's exceptions in an
+    ExceptionGroup), else None."""
+    seen, stack = 0, [e]
+    while stack and seen < 64:
+        x = stack.pop()
+        seen += 1
+        if isinstance(x, PlannedNodeSwitch):
+            return x
+        stack.extend(getattr(x, "exceptions", None) or ())
+        for nxt in (getattr(x, "__cause__", None), getattr(x, "__context__", None)):
+            if nxt is not None:
+                stack.append(nxt)
+    return None
+
+
+def _assign_path() -> str:
+    return os.path.join(os.path.dirname(os.path.abspath(feed_db_path())), "dxlink_assign.json")
+
+
+def read_assignment(path: str, symbol: str, now_epoch: float, today_et: str) -> Tuple[Optional[str], str]:
+    """(node, why) from control's assignment file; node None when it must be ignored, `why` saying why."""
+    try:
+        with open(path, encoding="utf-8") as fh:
+            d = json.load(fh)
+    except FileNotFoundError:
+        return None, "no control assignment file"
+    except Exception as exc:                                               # noqa: BLE001
+        return None, "control assignment unreadable (%s)" % type(exc).__name__
+    if not isinstance(d, dict):
+        return None, "control assignment is not an object"
+    if str(d.get("date", "")) != today_et:
+        return None, "control assignment is for %s, not today" % d.get("date")
+    if str(d.get("symbol", "")).upper() != str(symbol).upper():
+        return None, "control assignment names %s, not this box" % d.get("symbol")
+    try:
+        age = now_epoch - float(d.get("written_at"))
+    except (TypeError, ValueError):
+        return None, "control assignment has no written_at"
+    if age > ASSIGN_MAX_AGE_S or age < -ASSIGN_FUTURE_SLACK_S:
+        return None, "control assignment is stale (age %.0fs)" % age
+    ip = d.get("node")
+    if not _valid_v4(ip):
+        return None, "control assignment names no IPv4 node (%r)" % ip
+    return str(ip), "control assignment (%s)" % (d.get("by") or "control")
 
 
 def node_switch_wait(rng=None) -> float:
@@ -1008,12 +1091,32 @@ class NodeBook:
     """The dxlink nodes this box knows. Every path, the clock, the resolver and the prober are for the gate."""
 
     def __init__(self, path: str = None, clock=None, resolver=None, fleet_path: str = None, seed_path: str = None,
-                 prober=None):
+                 prober=None, assign_path: str = None, symbol: str = None, today=None):
         self._path, self._fleet_path, self._seed_path = path, fleet_path, seed_path
         self.clock = clock or _time.time
         self.resolver = resolver or _resolve_nodes                          # v5.6 r70 (3): + authoritative NS
         self.prober = prober or _probe_node
         self._data = None
+        self._assign_path, self._symbol = assign_path, symbol               # v5.9 (r74, FEED.15)
+        self._today = today or (lambda: datetime.now(ET).date().isoformat())
+        self._assign_noted: set = set()
+
+    def assignment(self, symbol: str = None) -> Tuple[Optional[str], str]:
+        """v5.9 (r74, FEED.15) — (node, why): control's assignment for this box, or None with the reason (one log line
+        a day per reason). Never raises."""
+        try:
+            sym = symbol or self._symbol or INSTRUMENT
+            ip, why = read_assignment(self._assign_path or _assign_path(), sym, self.clock(), self._today())
+            key = (self._today(), why if ip is None else "ok:" + ip)
+            if key not in self._assign_noted:
+                self._assign_noted.add(key)
+                if ip:
+                    logger.info("FEED.15 %s: node %s", why, ip)
+                else:
+                    logger.info("FEED.15 %s - normal node choice", why)
+            return ip, why
+        except Exception as exc:                                           # noqa: BLE001
+            return None, "control assignment failed (%s)" % type(exc).__name__
 
     def path(self) -> str:
         return self._path or _nodes_path()
@@ -1099,6 +1202,22 @@ class NodeBook:
                 n = d["nodes"][ip]
                 if now - max(n.get("seen", 0), n.get("ok", 0), n.get("reachable", 0)) > NODE_FORGET_S:
                     del d["nodes"][ip]
+            asg, asg_why = self.assignment(symbol)                          # v5.9 (r74, FEED.15): control's node first
+            if asg:
+                self._node(asg)["seen"] = now
+                if self._cool_until(asg) > now:
+                    logger.warning("FEED.15 assigned node %s is cooling on this box - normal node choice", asg)
+                elif preopen:
+                    code = await self.prober(asg, host, port, path=path)
+                    if _probe_usable(code):
+                        self._node(asg)["reachable"] = now
+                        self._save()
+                        return asg, asg_why + ", pre-open probe 101"
+                    logger.warning("FEED.15 assigned node %s failed its pre-open probe (%s) - normal node choice",
+                                   asg, "HTTP %s" % code if code else "no answer")
+                else:
+                    self._save()
+                    return asg, asg_why
             usable = self.usable()
             if preopen and usable:
                 import anyio
@@ -2162,11 +2281,13 @@ class CandleFeed:
         self._greeks_series_buf: List[tuple] = []
         self._quote_series_buf: List[tuple] = []
         # MANIFOLD PART 2 — one append-buffer per new event type.
-        # r72 — the opening-range rescue fires AT MOST ONCE per session.
+        # r72 — the opening-range rescue fired AT MOST ONCE per session; v5.9 (r74, ORP.3) allows ORB_RESCUE_MAX (6),
+        # ORB_RESCUE_EVERY_S (120 s) apart, because a tape that returns at 10:55 needs a pull after it returns.
         # ⚠️ A RETRY LOOP HERE WOULD BE WORSE THAN THE BUG. Fifteen boxes
         # re-subscribing 5m every tick during an outage is a self-inflicted
         # stampede on the same socket that is already struggling.
-        self._orb_rescue_done_for: str = ""
+        self._orb_rescue_done_for: str = ""      # kept for older callers; v5.9 (r74) counts in _orb_rescue
+        self._orb_rescue: list = []                # v5.9 (r74, ORP.3): [day, attempts, last monotonic]
         # v5.8 (PARK.5) — the gate-tape refill: {store symbol: [day, attempts, last monotonic, final_done]}
         self._commit_refill: Dict[str, list] = {}
         self._prints_buf: List[tuple] = []
@@ -2438,60 +2559,100 @@ class CandleFeed:
     # ⚠️ ONCE PER SESSION, GUARDED BY DATE. Worst case is all 15 boxes doing
     # this at the same moment during an unusual event; one extra subscribe each
     # is survivable, a retry loop is not.
-    async def _maybe_rescue_opening_range(self, streamer) -> bool:
-        """If today's 09:30 5m bar is missing after the window, re-pull it.
+    async def _maybe_rescue_opening_range(self, streamer, now: Optional[datetime] = None) -> bool:
+        """If today's opening tape is missing, short or disagreeing after the window, re-pull it on this session.
 
-        Returns True if a rescue was attempted. Never raises.
+        v5.9 (r74, ORP.3): not only a MISSING 09:30 5m bar. 2026-11-02 AMZN held a 09:30 1m and 5m bar captured when
+        the socket dropped, so the v4.8 check (any 09:30 5m row) passed and nothing was re-pulled; get_orb_range then
+        froze the range from it. Now analysis/opening_tape.problem() judges the five 1m bars 09:30-09:34 and the 09:30
+        5m row the way get_orb_range does, and any problem re-pulls BOTH tenors from 09:30 (unsubscribe first, then
+        resubscribe; the store upserts the replay). From 09:36 to ORB_RESCUE_UNTIL_ET, at most ORB_RESCUE_MAX times a
+        session and ORB_RESCUE_EVERY_S apart (the first at once). Returns True if a rescue was attempted. Never raises.
         """
         try:
-            now = datetime.now(ET)
+            now = now or datetime.now(ET)
             today = now.date().isoformat()
-            if self._orb_rescue_done_for == today:
+            if not (now.weekday() < 5 and (9, 36) <= (now.hour, now.minute) < tuple(ORB_RESCUE_UNTIL_ET)):
                 return False
-            # Only between 09:36 (the bar has had a minute to arrive) and the
-            # 11:00 ORB cutoff — after that the rescue cannot help anything.
-            if not (now.weekday() < 5
-                    and ((now.hour == 9 and now.minute >= 36)
-                         or (10 <= now.hour < 11))):
+            rec = getattr(self, "_orb_rescue", None)
+            if not rec or rec[0] != today:
+                rec = [today, 0, 0.0]
+                self._orb_rescue = rec
+            if rec[1] >= ORB_RESCUE_MAX or (rec[1] and _time.monotonic() - rec[2] < ORB_RESCUE_EVERY_S):
                 return False
-            # v4.8 — THE 09:30 BAR ITSELF, not "anything since the open".
             _open_ms = int(datetime.combine(
                 now.date(), dtime(9, 30), tzinfo=ET).timestamp() * 1000)
-            row = self.store.conn.execute(
+            con = self.store.conn
+            # v4.8 — THE 09:30 BAR ITSELF, not "anything since the open".
+            n5 = con.execute(
                 "SELECT COUNT(*) FROM candles WHERE symbol=? AND interval='5m'"
                 " AND ts_epoch_ms >= ? AND ts_epoch_ms < ?",
-                (INSTRUMENT, _open_ms, _open_ms + 300_000)
-            ).fetchone()
-            if row and row[0]:
-                return False                    # the bar is there; nothing to do
-
-            self._orb_rescue_done_for = today   # set BEFORE the attempt
-            logger.warning("ORB RESCUE: today's 09:30 5m bar is MISSING at %s "
-                           "— resubscribing 5m from the open. get_orb_range "
-                           "would otherwise carry YESTERDAY's range as EXPIRED.",
-                           now.strftime("%H:%M:%S"))
+                (INSTRUMENT, _open_ms, _open_ms + 300_000)).fetchone()
+            if not (n5 and n5[0]):
+                why = "today's 09:30 5m bar is MISSING"
+            else:
+                row5 = con.execute(
+                    "SELECT high, low FROM candles WHERE symbol=? AND interval='5m'"
+                    " AND ts_epoch_ms >= ? AND ts_epoch_ms < ? ORDER BY ts_epoch_ms LIMIT 1",
+                    (INSTRUMENT, _open_ms, _open_ms + 300_000)).fetchone()
+                bars = {}
+                for ts, hi, lo in con.execute(
+                        "SELECT ts_epoch_ms, high, low FROM candles WHERE symbol=? AND interval='1m'"
+                        " AND ts_epoch_ms >= ? AND ts_epoch_ms < ?",
+                        (INSTRUMENT, _open_ms, _open_ms + 300_000)).fetchall():
+                    bars[30 + int((int(ts) - _open_ms) // 60_000)] = (hi, lo)
+                why = opening_tape.problem(bars, (row5[0], row5[1]))
+                if why is None:
+                    return False                # the tape is complete; nothing to do
+            rec[1] += 1
+            rec[2] = _time.monotonic()          # set BEFORE the attempt
+            logger.warning("ORB RESCUE: %s at %s - re-pulling 1m and 5m from the open (attempt %d of %d). "
+                           "get_orb_range will not establish the range from this tape.",
+                           why, now.strftime("%H:%M:%S"), rec[1], ORB_RESCUE_MAX)
             start = datetime.combine(now.date(), dtime(9, 30), tzinfo=ET)
-            try:
-                await streamer.unsubscribe_candle(self.dx_symbol, "5m")
-                logger.info("ORB RESCUE: unsubscribed %s 5m", self.dx_symbol)
-            except Exception as exc:                            # noqa: BLE001
-                # ⚠️ NOT FATAL, BUT NAMED. If the unsubscribe fails the
-                # resubscribe below may leave two live subscriptions for one
-                # tenor, so the operator needs to see it rather than have it
-                # swallowed.
-                logger.warning("ORB RESCUE: unsubscribe failed (%s) — "
-                               "resubscribing anyway; watch for duplicate 5m",
-                               _explain_exc(exc))
-            await streamer.subscribe_candle(
-                [self.dx_symbol], "5m", start_time=start,
-                extended_trading_hours=False)
-            logger.warning("ORB RESCUE: resubscribed %s 5m from %s",
-                           self.dx_symbol, start.isoformat())
+            for tf in ("5m", "1m"):
+                try:
+                    await streamer.unsubscribe_candle(self.dx_symbol, tf)
+                    logger.info("ORB RESCUE: unsubscribed %s %s", self.dx_symbol, tf)
+                except Exception as exc:                        # noqa: BLE001
+                    # ⚠️ NOT FATAL, BUT NAMED. If the unsubscribe fails the
+                    # resubscribe below may leave two live subscriptions for one
+                    # tenor, so the operator needs to see it rather than have it
+                    # swallowed.
+                    logger.warning("ORB RESCUE: unsubscribe %s failed (%s) — "
+                                   "resubscribing anyway; watch for duplicate %s",
+                                   tf, _explain_exc(exc), tf)
+                await streamer.subscribe_candle(
+                    [self.dx_symbol], tf, start_time=start,
+                    extended_trading_hours=False)
+                logger.warning("ORB RESCUE: resubscribed %s %s from %s",
+                               self.dx_symbol, tf, start.isoformat())
             return True
         except Exception as exc:                                # noqa: BLE001
             logger.error("ORB RESCUE failed: %s — the feed is unaffected",
                          _explain_exc(exc))
             return False
+
+    def _maybe_follow_assignment(self, now: Optional[datetime] = None) -> Optional[str]:
+        """v5.9 (r74, FEED.15) — the node to switch to, ONCE a day and only before ASSIGN_SWITCH_BY_ET: control has
+        assigned a node this box is not on, the current connection is authorized and the assigned node is not cooling.
+        None otherwise. Never raises."""
+        try:
+            now = now or datetime.now(ET)
+            if now.weekday() >= 5 or (now.hour, now.minute) >= tuple(ASSIGN_SWITCH_BY_ET):
+                return None
+            today = now.date().isoformat()
+            if getattr(self, "_assign_switch_done_for", "") == today or not _LAST_ATTEMPT.get("authorized"):
+                return None
+            asg, _why = _NODES.assignment()
+            if not asg or asg == _LAST_ATTEMPT.get("ip"):
+                return None
+            if _NODES._cool_until(asg) > _NODES.clock():
+                return None
+            self._assign_switch_done_for = today
+            return asg
+        except Exception:                                      # noqa: BLE001
+            return None
 
     # ── v5.8 (PARK.5) — THE GATE TAPE IS RE-PULLED BEFORE PARK READS IT ─────────────────────────────────────────────
     def _commit_refill_due(self, sym: str, today: str, now_mono: float, final: bool) -> bool:
@@ -3039,6 +3200,10 @@ class CandleFeed:
                             # 09:36-11:00 window. Self-disarming after one
                             # attempt per date.
                             await self._maybe_rescue_opening_range(streamer)
+                            _asg = self._maybe_follow_assignment()          # v5.9 (r74, FEED.15)
+                            if _asg:
+                                raise PlannedNodeSwitch("control assigned dxlink node %s; leaving %s"
+                                                        % (_asg, _LAST_ATTEMPT["ip"] or "dns"))
                             n = self._flush()
                             # v5.8 (PARK.5) — AFTER the flush, so a bar still buffered never reads as a gap
                             await self._maybe_refill_commit_tape(streamer)
@@ -3113,6 +3278,12 @@ class CandleFeed:
                 raise
             except Exception as e:
                 self._flush()
+                _sw = _planned_switch(e)
+                if _sw is not None:                                    # v5.9 (r74, FEED.15): leave for control's node
+                    wait = node_switch_wait()
+                    logger.warning("FEED.15 %s - redialling in %.1fs (planned, pre-open; no node cooled)", _sw, wait)
+                    await asyncio.sleep(wait)
+                    continue
                 # v3.8: UNWRAP. asyncio TaskGroup raises an ExceptionGroup whose
                 # str() is only "unhandled errors in a TaskGroup (1 sub-exception)"
                 # — the real DXFeed cause is in .exceptions and was thrown away,
