@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""tests/check_atp_butterfly.py  v5.0
+"""tests/check_atp_butterfly.py  v5.1
+v5.1  2026-11-03  OTV5 r73 (BFLY.17) — M1: the ATP butterfly keeps the two exits the pin fly gave up (the 40% stop and the 15:45
+      flatten); the pin fly now declares the flatten only (the operator, 2026-11-03: "For the GEX fly, I want no stop except
+      hold to close").
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.4  2026-10-19  OTV4TEST r303 (PSTATE.1) — the ATP fly is DORMANT by default and a dormant plan writes nothing by ruling;
       setting the plan's module ENABLED alone no longer switches it on, so this run sets OT_ATP_BUTTERFLY=1 too.
@@ -201,8 +204,10 @@ def main():
     fly = {"trade_id": "atp1", "strategy": "ATPButterfly", "option_side": "put",
            "is_butterfly": True, "entry_premium": 0.56, "current_premium": 0.56,
            "stop_premium": round(0.56 * 0.60, 4), "target_premium": 1.20}
-    check("M1 the management plan covers ATPButterfly with the pin butterfly's exits",
-          covers(fly) and EXIT_CONDITIONS.get("ATPButterfly") == EXIT_CONDITIONS.get("GEXPinButterfly"))
+    check("M1 the management plan covers ATPButterfly with its own two exits (stop + flatten); the pin fly's is the "
+          "flatten only (r73)",
+          covers(fly) and set(EXIT_CONDITIONS.get("ATPButterfly") or {}) == {"stop", "flatten"}
+          and set(EXIT_CONDITIONS.get("GEXPinButterfly") or {}) == {"flatten"})
     df = bars([715.5, 715.6])
     ts[0] += 1.0
     P.begin_tick(ts[0])

@@ -1,5 +1,9 @@
 """
-strategy/management.py  v5.4
+strategy/management.py  v5.5
+v5.5  2026-11-03  OTV5 r73 (BFLY.17) — THE GEX PIN BUTTERFLY DECLARES ONE EXIT: THE 15:45 FLATTEN. The operator, 2026-11-03:
+      "For the GEX fly, I want no stop except hold to close". decide() skips the declared premium stop for a strategy in
+      config.HOLD_TO_CLOSE_STRATEGIES, and EXIT_CONDITIONS["GEXPinButterfly"] is {"flatten"} only; the ATP butterfly (off by
+      default) keeps its own copy of the old two (stop 40%, flatten). Gate tests/check_gex_hold_close.py.
 v5.4  2026-10-31  OTV5 r63 (PARK.LATE1) — THE PARK LATE-DAY PEAK SHADOW'S CHECK ROWS. RECORD ONLY: NO DECISION CHANGES. The
       operator, 2026-10-31: "yes to all of the prepared solutions" (the PARK giveback study's log-only shadow). PARK is not
       a COVERED strategy, so _one() writes its row; right after the decay_* rows it takes exit_engine v5.12's
@@ -217,10 +221,10 @@ EXIT_CONDITIONS: Dict[str, Dict[str, str]] = {
         "premium_stop":   "spread value >= credit x (1 + 25%) while a lone vertical",
     },
     "GEXPinButterfly": {
-        # r169 — operator: "1545 flatten or 25% loss. Whichever comes first."
-        # No target, no max hold: a pin pays into the close.
-        "stop":           "fly value <= entry x (1 - 40%)",          # r24: operator, was 25%
-        "flatten":        "the 15:45 hard close",
+        # r73 (BFLY.17) — operator, 2026-11-03: "For the GEX fly, I want no stop except hold to close". The 40% stop
+        # (r24; r169: "1545 flatten or 25% loss") is gone: the study cut all five outliers with stops. No target, no
+        # max hold, no decay stop: a pin pays into the close.
+        "flatten":        "the 15:45 hard close - the ONLY exit (no premium stop, no decay stop)",
     },
     # r51 (BRK.1) — THE BREAKOUT HAS NO TARGET, SO EXHAUSTION IS ITS EXIT.
     # Operator, 2026-09-18, distinguishing the three ORB-born trades: *"the
@@ -397,7 +401,10 @@ def _record_no_progress(record, verdict: dict, mode: str, prem, price) -> None:
             fh.write(_json.dumps(row) + "\n")
     except Exception as exc:                                     # noqa: BLE001
         logger.warning("[manage] no-progress counterfactual row NOT written for %s: %s", tid[:8], exc)
-EXIT_CONDITIONS["ATPButterfly"] = dict(EXIT_CONDITIONS["GEXPinButterfly"])
+EXIT_CONDITIONS["ATPButterfly"] = {                # r73: its own copy - it keeps the stop the pin fly gave up
+    "stop":           "fly value <= entry x (1 - 40%)",
+    "flatten":        "the 15:45 hard close",
+}
 
 MGMT_CHECKS = ("premium", "entry_premium", "pnl_pct", "stop_premium", "trail_stop",
                "target_premium", "underlying_stop", "dist_to_stop", "mfe_pct",
@@ -679,7 +686,8 @@ class ManagementPlan:
 
             # ── 1. THE DECLARED SPEC CONDITIONS — never outranked ──────────
             intent = None
-            if prem is not None and stop_p and strategy != "TrendCreditSpread":
+            _hold = strategy in tuple(getattr(_cfg, "HOLD_TO_CLOSE_STRATEGIES", ()) or ())     # r73 (BFLY.17)
+            if prem is not None and stop_p and strategy != "TrendCreditSpread" and not _hold:
                 hit = (prem >= stop_p) if credit else (prem <= stop_p)
                 if hit:
                     name = "premium_stop" if credit else ("stop" if strategy in BUTTERFLIES else "hard_stop")
@@ -911,7 +919,8 @@ class ManagementPlan:
     @staticmethod
     def _next_tick_line(record, credit, stop_p, ustop, trail, target) -> str:
         outs = []
-        if stop_p and str(record.get("strategy", "")) != "TrendCreditSpread":
+        _hold = str(record.get("strategy", "")) in tuple(getattr(_cfg, "HOLD_TO_CLOSE_STRATEGIES", ()) or ())  # r73
+        if stop_p and str(record.get("strategy", "")) != "TrendCreditSpread" and not _hold:
             outs.append(f"premium {'>=' if credit else '<='} {stop_p:.2f} -> out (floor)")
         if ustop:
             side = str(record.get("option_side", "") or "")
@@ -925,7 +934,7 @@ class ManagementPlan:
         if target and not credit and str(record.get("strategy", "")) not in BUTTERFLIES:
             outs.append(f"premium >= {target:.2f} -> out (target)")
         if str(record.get("strategy", "")) in BUTTERFLIES:
-            outs.append("15:45 -> flatten (rides to the close)")
+            outs.append("15:45 -> flatten (rides to the close)" + (" - the only exit" if _hold else ""))
         if credit:
             outs.append("value <= nickel -> out")
         return "; ".join(outs) if outs else "no exit condition readable"

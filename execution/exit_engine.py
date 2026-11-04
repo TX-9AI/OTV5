@@ -1,5 +1,12 @@
 """
-execution/exit_engine.py  v5.13
+execution/exit_engine.py  v5.14
+v5.14 2026-11-03  OTV5 r73 (BFLY.17) — THE GEX PIN BUTTERFLY HOLDS TO THE CLOSE. The operator, 2026-11-03: "For the GEX fly, I
+      want no stop except hold to close". _evaluate_butterfly skips its HARD STOP for a strategy in
+      config.HOLD_TO_CLOSE_STRATEGIES (GEXPinButterfly), and evaluate() never asks _decay_read for one
+      (whatever OT_DECAY_STOP_EXEMPT says; _decay_read itself is byte-for-byte unchanged), so the fly's only exit is the 15:45 flatten (15:55 resting close; _eod_due, unchanged).
+      Still able to close a fly early, by design: the emergency watchdog's flatten_all, the broker reconcile's PHANTOM
+      close (the broker no longer holds it), the startup sweep of an EXPIRED orphan, and a person. The ATP butterfly
+      (off by default) keeps its 40% stop. Gate tests/check_gex_hold_close.py.
 v5.13 2026-10-31  OTV5 r67 (PARC.4) — PARC'S EXITS ARE REMOVED: evaluate()'s strategy "PARC" route,
       _evaluate_parc, _parc_nickel and its two uses (paper place_exit_order's nickel booking, _exit_limit's resting
       0.05). The operator, 2026-10-31: "On PARC, no. It was an idea. It failed. It's done." and "Yes" to removing its code. No other strategy reached
@@ -1433,6 +1440,10 @@ class ExitEngine:
             self._park_late_read(record, current_premium, existing_exit=bool(getattr(d, "should_exit", False)))
         except Exception as exc:                                  # noqa: BLE001
             logger.debug("[park-late shadow] read failed for %s: %s", str(record.get("trade_id", ""))[:8], exc)
+        # r73 (BFLY.17) — HOLD TO THE CLOSE: no decay stop for these, whatever OT_DECAY_STOP_EXEMPT says (asked here,
+        # not inside _decay_read, so the decay read stays byte-for-byte what check_park_late_shadow B1 pins).
+        if str(record.get("strategy", "") or "") in tuple(getattr(_cfg, "HOLD_TO_CLOSE_STRATEGIES", ()) or ()):
+            return d
         try:
             rd = self._decay_read(record, current_premium, existing_exit=bool(getattr(d, "should_exit", False)))
         except Exception as exc:                                  # noqa: BLE001
@@ -2974,8 +2985,9 @@ class ExitEngine:
         #    "I want both adjusted for best case. 1545 flatten or 25% loss.
         #    Whichever comes first." A pin play pays as the wings die into the
         #    close; a 150-minute clock sold the thesis before it finished.
-        # 3. HARD STOP
-        if current_premium <= stop_prem:
+        # 3. HARD STOP — r73 (BFLY.17): not for a hold-to-close strategy (the GEX pin fly), whose exit is the flatten.
+        if (str(record.get("strategy", "") or "") not in tuple(getattr(_cfg, "HOLD_TO_CLOSE_STRATEGIES", ()) or ())
+                and current_premium <= stop_prem):
             decision.should_exit = True
             decision.exit_reason = f"stop_hit pnl={pnl_pct:.1%}"
             return decision

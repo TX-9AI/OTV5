@@ -1,5 +1,12 @@
 """
-config.py  v5.12
+config.py  v5.13
+v5.13  2026-11-03  OTV5 r73 (BFLY.17) — THE GEX PIN BUTTERFLY HOLDS TO THE CLOSE, HONOURS ITS VIX RULE, AND IS PICKIER AT THE
+      DOOR. The operator, 2026-11-03: "For the GEX fly, I want no stop except hold to close, I want the VIX rule enforced &
+      I want more discriminatory entries." HOLD_TO_CLOSE_STRATEGIES ("GEXPinButterfly",): no premium stop and no decay stop,
+      whatever OT_DECAY_STOP_EXEMPT says - the 15:45 flatten (15:55 resting close) is its exit. BUTTERFLY_MIN_DEBIT_PCT_WIDTH
+      0.155: the wing search takes the best R only among widths whose debit is >= 15.5% of the width. VIX_BUTTERFLY_DISABLE
+      (20, unchanged) is now READ by the fly (strategy/gex_pin_butterfly v5.14). Constants only - no env key, no
+      configure.sh item.
 v5.12  2026-11-03  OTV5 r72 (PARK.5) — THE GATE'S TAPE IS WATCHED, REFILLED AND ALARMED BEFORE 11:01. The operator,
       2026-11-03, on fail-closed: "Fine, but we need to be more responsive when that happens to mitigate impacts to
       trading"; on the pair tape: "Add it to the manifold & the plan should warn if there's a problem." PARK_TAPE_* (the
@@ -1178,6 +1185,12 @@ _DECAY_EXEMPT_DEFAULT = ("RunawayContinuation", "PARK")
 _dx_raw = os.environ.get("OT_DECAY_STOP_EXEMPT")
 DECAY_STOP_EXEMPT = (_DECAY_EXEMPT_DEFAULT if _dx_raw is None
                      else tuple(x.strip() for x in _dx_raw.split(",") if x.strip()))
+# r73 (BFLY.17) — HOLD TO THE CLOSE. The operator, 2026-11-03: "For the GEX fly, I want no stop except hold to close".
+# These strategies have NO premium stop and NO decay stop (exit_engine._evaluate_butterfly / _decay_read,
+# strategy/management.decide): the 15:45 flatten is the exit. Kept apart from DECAY_STOP_EXEMPT on purpose - an
+# OT_DECAY_STOP_EXEMPT list that omits the fly cannot put a stop back on it. The study (~/gex_study): the decay stop cut
+# all five outliers to +$497 of their +$5,362; the 40% stop cut the other winners (median -41% before they pinned).
+HOLD_TO_CLOSE_STRATEGIES = ("GEXPinButterfly",)
 
 ENTRY_WINDOWS = {
     # r149: directional debits run ALL DAY to the entries stop (operator: "A").
@@ -1327,6 +1340,11 @@ FULL_STRATEGY_INSTRUMENTS    = set(STRIKE_INCREMENTS)
 # reward:risk). Self-normalizing across symbols; needs only marks. PRIOR —
 # calibrate from logged debit-ratio vs outcome once fleet-wide entries accrue.
 BUTTERFLY_MAX_DEBIT_PCT_WIDTH = 0.33
+# r73 (BFLY.17) — THE CHEAP-FLY FLOOR. The wing search (strategy/gex_pin_butterfly) takes the best R ONLY among widths whose
+# debit is >= this fraction of the width, so "max R" can no longer steer to the cheapest, least likely fly. The study
+# (~/gex_study, 75 flies with paths, hold to the close): skipping debit <= 15.5% of width (the train tercile, 0.1547)
+# saved $5,122, both halves, kept all five outliers. CHOSEN POST-HOC AND FAILED BH (q 0.118): forward-scored from 11-09.
+BUTTERFLY_MIN_DEBIT_PCT_WIDTH = 0.155
 # ── Conviction-scaled DISCOUNT gate (v-convdiscount 2026-07-28) ─────────────
 # MEASURED on QQQ's full log: debit ratios 0.41-0.64 (min 0.41, cluster
 # 0.47-0.53) against a flat 0.33 ceiling -> the gate rejected 100% of setups that

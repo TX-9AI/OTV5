@@ -1,5 +1,21 @@
 """
-strategy/gex_pin_butterfly.py  v5.13
+strategy/gex_pin_butterfly.py  v5.14
+v5.14  2026-11-03  OTV5 r73 (BFLY.17) — THE VIX RULE IS ENFORCED, THE DOOR IS NARROWER, AND THE FLY HOLDS TO THE CLOSE. The
+      operator, 2026-11-03: "For the GEX fly, I want no stop except hold to close, I want the VIX rule enforced & I want more
+      discriminatory entries." (1) VIX: a new condition `vix` - the macro snapshot's VIX (the number every trade row
+      stamps as vix_at_entry) must be < VIX_BUTTERFLY_DISABLE (20); at 20.0 or above no fly (data/macro_data's
+      butterfly_allowed had no reader, so the fly fired FULL size at VIX >= 20: META/TSLA 10-30, AMZN 11-02 at 20.02).
+      Half size at 15-20 is unchanged (macro butterfly_half_size -> risk_manager). An unread VIX is STARVED (no fly); the
+      macro's conservative default when TastyTrade cannot be read is 20.0, which disables the fly until a real read.
+      (2) a new condition `open_in_prior_range` - today's 09:30 1m open inside yesterday's RTH high-low (the study's N3:
+      an open beyond it is skipped); an unreadable tape is STARVED. (3) the wing search takes the best R only among
+      widths whose debit is >= BUTTERFLY_MIN_DEBIT_PCT_WIDTH (15.5%) of the width; none passing is a structural decline
+      that names the floor. Both cuts were CHOSEN POST-HOC from ~/gex_study and FAILED the BH correction (N3 q 0.39 on
+      actual P&L; the floor q 0.118 on hold-to-close); they are forward-scored from 11-09. (4) the signal carries
+      stop_loss_pct 1.0 (stop_premium 0, no premium stop): the fly holds to the 15:45 flatten (config
+      HOLD_TO_CLOSE_STRATEGIES; exit_engine v5.14, management v5.5). The survivability bracket in the wing search is
+      unchanged (it still prices BUTTERFLY_STOP_LOSS_PCT), so the widths it admits are the ones the study replayed.
+      Gate tests/check_gex_hold_close.py.
 v5.13  2026-10-28  OTV5 r49 (BFLY.16) — THE WING-SEARCH LINE NAMES ITS PIN, ITS REJECTS AND THE PLAN'S VERDICT. META 2026-10-27
       logged "wing search: 5 qualified, taking the BEST-R wing 7.50" 114 times (13:00-14:59 ET) while the plan HELD and the
       gate said "no wing qualifies at pin 632.5". Both were true, on different ticks: the search line was the smoothed pin
@@ -350,6 +366,11 @@ from data.options_chain import chain_increment as _chain_increment
 logger = logging.getLogger(__name__)
 
 
+def _today_et():
+    from utils.time_utils import now_et as _n
+    return _n().date()
+
+
 def _gate(name: str, reason: str) -> None:
     """r73 — report this rung, edge-triggered. NEVER changes the verdict."""
     try:
@@ -477,7 +498,65 @@ GATES = {
     "EM_MIN_FRAC":   "FEASIBILITY",
     # FOUNDATIONAL: PINNING, the apex ON the pin, and the pin OTM. Tested
     # inline - no knob.
+    # r73 (BFLY.17) — the operator's VIX rule (no fly at VIX >= 20): never relaxed.
+    "VIX_DISABLE":         "FOUNDATIONAL",
+    # r73 (BFLY.17) — the cheap-fly floor: a measured preference (post-hoc, forward-scored). Nothing relaxes it.
+    "MIN_DEBIT_PCT_WIDTH": "SELECTION",
 }
+
+VIX_DISABLE = float(config.VIX_BUTTERFLY_DISABLE)
+MIN_DEBIT_PCT_WIDTH = float(config.BUTTERFLY_MIN_DEBIT_PCT_WIDTH)
+
+
+def vix_now() -> Optional[float]:
+    """r73 — the macro snapshot's VIX as it stands (data/macro_data; run_analysis refreshes it every tick it is due, and
+    every trade row stamps it as vix_at_entry), or None when no snapshot exists. Reads the held snapshot only - never
+    fetches - so the plan never waits on TastyTrade. NEVER raises."""
+    try:
+        from data.macro_data import get_macro_manager
+        snap = getattr(get_macro_manager(), "_snapshot", None)
+        v = float(getattr(snap, "vix", 0.0) or 0.0) if snap is not None else 0.0
+        return v if v > 0 else None
+    except Exception:                                           # noqa: BLE001
+        return None
+
+
+def vix_allows(vix) -> bool:
+    """r73 — the operator's VIX rule: a fly only while VIX < VIX_BUTTERFLY_DISABLE. 20.0 itself disables."""
+    v = safe_float(vix)
+    return bool(v) and v < VIX_DISABLE
+
+
+def prior_range_read(symbol: str, day) -> Optional[tuple]:
+    """r73 — (open_0930, prior_low, prior_high) from the feed store's RTH 1m bars (strategy/park_plan.session_bars: today
+    and the prior session), or None when the 09:30 bar or the prior session is missing. NEVER raises."""
+    try:
+        from strategy.park_plan import session_bars
+        s = session_bars(symbol, day, n_prior=1)
+        if isinstance(s, str):
+            return None
+        b930 = (s.get("today") or {}).get("09:30")
+        prior = (s.get("prior") or [None])[0]
+        if not b930 or not prior:
+            return None
+        return (float(b930[0]), min(x[2] for x in prior.values()), max(x[1] for x in prior.values()))
+    except Exception:                                           # noqa: BLE001
+        return None
+
+
+def open_in_prior_range(read) -> Optional[bool]:
+    """r73 — the study's N3, inverted: True when the 09:30 open is inside [prior low, prior high] (the fly may go on),
+    False when it is beyond either (skip). None when unread."""
+    if not read:
+        return None
+    o, lo, hi = read
+    return lo <= o <= hi
+
+
+def debit_passes_floor(debit, width) -> bool:
+    """r73 — the cheap-fly floor: debit >= BUTTERFLY_MIN_DEBIT_PCT_WIDTH x width."""
+    d, w = safe_float(debit), safe_float(width)
+    return bool(d and w and w > 0) and d / w >= MIN_DEBIT_PCT_WIDTH - 1e-12
 
 
 def expected_move(underlying: float, atm_iv: float, now=None) -> Optional[float]:
@@ -607,6 +686,8 @@ class GEXPinButterflyStrategy:
         "expected_move":     "an expected move from the chain's ATM IV (no fallback)",
         "pin_em_fraction":   f"pin at {EM_MIN_FRAC:.0%}-{EM_MAX_FRAC:.0%} of the expected move (NOT relaxable, r208)",
         "pin_persistence":   "the smoothed pin has held for PERSIST_TICKS ticks (OTV4TEST r6)",
+        "vix":               f"VIX < {float(config.VIX_BUTTERFLY_DISABLE):g} (VIX_BUTTERFLY_DISABLE; r73: at or above, no fly)",
+        "open_in_prior_range": "today's 09:30 open inside yesterday's RTH high-low (r73, the study's N3)",
     }
     STRUCTURAL = ("legs", "debit", "r", "pin_played", "stop_survivable")
     PLAN_CHECKS = tuple(CONDITIONS) + STRUCTURAL + ("gex", "wing_width", "width",
@@ -657,7 +738,7 @@ class GEXPinButterflyStrategy:
         except (TypeError, ValueError):
             pass
 
-    def prepare(self, *, gex, price_now, now_et, atm_iv=None, chain=None,
+    def prepare(self, *, gex, price_now, now_et, atm_iv=None, chain=None, vix=None, prior_range=None,
                 **_ignored) -> ButterflyPreparation:
         t = self.planner.tick(price_now)
         prep = ButterflyPreparation(t)
@@ -676,6 +757,24 @@ class GEXPinButterflyStrategy:
         from strategy import plan_state as _ps                  # r303: LOG is "enabled" too (recorded only)
         _on = bool(ENABLED) or _ps.is_log("GEXPinButterfly")
         prep.cond("enabled", 1.0 if _on else 0.0, self.CONDITIONS["enabled"], _on)
+        # ── r73 (BFLY.17) — THE VIX RULE, ENFORCED. The macro snapshot's VIX (what vix_at_entry stamps); unread is STARVED.
+        _vix = safe_float(vix) if vix is not None else vix_now()
+        if not _vix or _vix <= 0:
+            prep.starved.append("vix")
+            t.starved("vix")
+            return prep
+        prep.cond("vix", _vix, self.CONDITIONS["vix"], vix_allows(_vix))
+        # ── r73 (BFLY.17) — THE OPEN INSIDE YESTERDAY'S RANGE (the study's N3); an unread tape is STARVED.
+        _pr = prior_range if prior_range is not None else prior_range_read(
+            str(getattr(config, "INSTRUMENT", "") or ""), _today_et())
+        _inr = open_in_prior_range(_pr)
+        if _inr is None:
+            prep.starved.append("prior_range")
+            t.starved("prior_range")
+            return prep
+        t.check("prior_low", _pr[1], None)
+        t.check("prior_high", _pr[2], None)
+        prep.cond("open_in_prior_range", _pr[0], self.CONDITIONS["open_in_prior_range"], _inr)
         price_now = safe_float(price_now)
         if not price_now or price_now <= 0:
             prep.starved.append("price_now")
@@ -862,6 +961,7 @@ class GEXPinButterflyStrategy:
                                      for c in (contracts or [])
                                      if float(getattr(c, "strike", 0) or 0) > pin})
                     _cands, _rej_r, _rej_surv, _best_r, _best_ratio = [], 0, 0, None, None
+                    _rej_floor = 0                  # r73 (BFLY.17): widths under the cheap-fly floor
                     for _w in _wings:
                         if _w <= 0 or _w > _cap_dist + 1e-9:
                             continue
@@ -876,6 +976,9 @@ class GEXPinButterflyStrategy:
                         if _r < R_FLOOR:
                             _rej_r += 1
                             continue
+                        if not debit_passes_floor(_d, _w):
+                            _rej_floor += 1         # r73: "max R" may not pick a fly under the floor
+                            continue
                         _b, _a = _structure_quote(_lo, center, _up)
                         _sd = _d * float(getattr(config, "BUTTERFLY_STOP_LOSS_PCT", 0.40))
                         _ok, _why = stop_survivable(_sd, _b, _a)
@@ -888,6 +991,7 @@ class GEXPinButterflyStrategy:
                         _cands.append((_w, _lo, _up, _d, _r, _sd / (_a - _b) if (_a - _b) > 0 else None))
 
                     t.check("wing_candidates", float(len(_cands)))
+                    t.check("wing_under_floor", float(_rej_floor), None)
                     t.check("r", _best_r)
                     t.check("stop_vs_spread", _best_ratio)
                     if not _cands:
@@ -900,7 +1004,8 @@ class GEXPinButterflyStrategy:
                             f"(within {_cap_dist:.2f} of spot): {_rej_r} too wide "
                             f"for R>={R_FLOOR:.2f} (best R {_nr(_best_r)}), "
                             f"{_rej_surv} too narrow to clear their own spread "
-                            f"(best {_nr(_best_ratio)}x of {STOP_VS_SPREAD_MIN:.1f}x)"))
+                            f"(best {_nr(_best_ratio)}x of {STOP_VS_SPREAD_MIN:.1f}x), "
+                            f"{_rej_floor} under the {MIN_DEBIT_PCT_WIDTH:.1%} debit floor"))
                     else:
                         # OTV4TEST r6 — BEST PAYOFF ASYMMETRY, per the operator
                         # (2026-09-09): every listed width is priced and the pick
@@ -970,10 +1075,10 @@ class GEXPinButterflyStrategy:
     # THE STRATEGY — conditions true -> execute the plan's legs.
     # ══════════════════════════════════════════════════════════════════════
     def generate_signal(self, *, gex, price_now: float, now_et: str,
-                        atm_iv: float = None, chain=None,
+                        atm_iv: float = None, chain=None, vix=None, prior_range=None,
                         **_ignored) -> Optional[Signal]:
         prep = self.prepare(gex=gex, price_now=price_now, now_et=now_et,
-                            atm_iv=atm_iv, chain=chain)
+                            atm_iv=atm_iv, chain=chain, vix=vix, prior_range=prior_range)
         if not prep.ready or prep.unmet or prep.structural or prep.starved:
             return prep.tick.already()
         sig = Signal(
@@ -997,7 +1102,9 @@ class GEXPinButterflyStrategy:
             expiry=getattr(prep.center, "expiry", ""),
             entry_premium=round(prep.debit, 4),
             contract=prep.center,
-            stop_loss_pct=float(getattr(config, "BUTTERFLY_STOP_LOSS_PCT", 0.40)),
+            # r73 (BFLY.17): NO premium stop - stop_premium 0 - the fly holds to the 15:45 flatten
+            # (config.HOLD_TO_CLOSE_STRATEGIES; the operator: "no stop except hold to close").
+            stop_loss_pct=1.0,
         )
         sig.center_strike = prep.pin
         sig.pin_concentration = prep.conc

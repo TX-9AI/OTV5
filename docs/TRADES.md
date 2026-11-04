@@ -1,5 +1,7 @@
 # TRADES — the specs
 
+**`TRADES.md` v5.8 · 2026-11-03 · OTV5 r73 (BFLY.17) — section 3: the GEX pin butterfly holds to the close (no premium stop, no decay stop), is never opened at VIX 20 or above, and asks two more things at the door: the 09:30 open inside yesterday's range, and a debit of at least 15.5% of the width. The operator, 2026-11-03: "For the GEX fly, I want no stop except hold to close, I want the VIX rule enforced & I want more discriminatory entries."**
+
 **`TRADES.md` v5.7 · 2026-11-03 · OTV5 r72 (PARK.5) — section 9: on an equity PARK also needs QQQ to agree and the market's commitment (fewer than 2 of 3 leans against on the name and on QQQ); an index (SPX, QQQ) never asks; a tape too thin to read is no trade. The operator, 2026-11-03: "Let's modify the park trade on equities using the new filters —add a gate in the code "is an index=false" and start trading it Monday."**
 **`TRADES.md` v5.6 · 2026-10-31 · OTV5 r68 (CFG.5) — the pin gate, Breakout scaling, Runaway's and Breakout's entry ends and Breakout no-progress are fixed in code (gate ON, scaled, 10:30, the cut trades), with no env key and no configure.sh item; the resting stop section is deleted with the feature. The operator, 2026-10-31: "Resting stop was a study. It failed. Get this the fuck out of here"; "Do NOT add anything else to my config following a study or test".**
 **`TRADES.md` v5.5 · 2026-10-31 · OTV5 r67 (PARC.4) — PARC is REMOVED: its roster row and section 10 are gone with its code. The operator: "On PARC, no. It was an idea. It failed. It's done." and "Yes" to removing its code.**
@@ -244,6 +246,24 @@ no premium stop. Fixed: per-side validation, pairing gate ->
 ---
 
 ## 3. GEX Pin Butterfly — `gex_pin_butterfly.py`
+
+**OTV5 r73 (BFLY.17), 2026-11-03 — what changed, in the operator's words: "For the GEX fly, I want no stop except hold to
+close, I want the VIX rule enforced & I want more discriminatory entries."**
+- **The exit is the 15:45 flatten (the 15:55 resting close) and nothing else.** No 40% stop, no decay stop
+  (config.HOLD_TO_CLOSE_STRATEGIES, whatever OT_DECAY_STOP_EXEMPT says). The debit is the most it can lose; sizing is the
+  risk control. Still able to close a fly early: the emergency watchdog, a broker reconcile that no longer finds it, the
+  startup sweep of an expired orphan, a person. The ATP butterfly (off) keeps its stop.
+- **VIX: no fly at VIX 20 or above** (VIX_BUTTERFLY_DISABLE, read from the macro snapshot every row stamps as
+  vix_at_entry; 20.0 itself disables, and so does the conservative 20.0 the macro uses when VIX cannot be read). Half
+  size at 15-20, unchanged.
+- **The open inside yesterday's range:** today's 09:30 1m open must sit inside the prior session's RTH high-low; an open
+  beyond either is no fly. An unreadable tape is no fly.
+- **The cheap-fly floor:** among the widths that pass R and survivability, the best R is taken only from those whose
+  debit is at least 15.5% of the width; none passing is a decline that names the floor.
+- **Evidence, said plainly:** both entry cuts were chosen AFTER looking (~/gex_study) and failed the multiple-test
+  correction; on the 75 study flies with quotes, holding the 36 the three gates keep made +$6,419 at the mark (+$3,572 at
+  natural fills) before $1,263 of fees, against -$826 as built; all five outliers kept. They are forward-scored from
+  2026-11-09, not proven.
 
 **OTV4TEST r6 — UN-PARKED BY DATA, re-specced with the operator; PLAN_SPEC §32 is the spec.** Real open interest is arriving on the box (2026-09-09); zero OI is now a STARVED input the row states, not a park flag. Where the text below disagrees with §32 (best-R wing, smoothed persistence, firm EM 1.00), §32 wins.
 

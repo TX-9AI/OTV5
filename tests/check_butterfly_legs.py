@@ -1,6 +1,11 @@
 #!/usr/bin/env python3
 """
-tests/check_butterfly_legs.py  v5.0
+tests/check_butterfly_legs.py  v5.1
+v5.1  2026-11-03  OTV5 r73 (BFLY.17) — the fly now also asks VIX < 20 and an open inside yesterday's range (the
+      operator, 2026-11-03: "I want the VIX rule enforced & I want more discriminatory entries"); neither is this
+      check's subject, so vix_now and prior_range_read are pinned to a VIX of 17 and an open inside the range. B2b:
+      the fired fly carries NO premium stop (stop_loss_pct 1.0, stop_premium 0) - it holds to the 15:45 flatten (the
+      operator: "no stop except hold to close").
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v2.4  2026-09-13  OTV4TEST r24 — B2b: the signal generate_signal emits carries the
       operator's 40% floor (was 25%), asserted against the RULED 0.40, not
@@ -112,6 +117,10 @@ def main():
     # ── the butterfly ─────────────────────────────────────────────────────
     from strategy.gex_pin_butterfly import GEXPinButterflyStrategy
     import strategy.gex_pin_butterfly as bf
+    # r73 (BFLY.17): the VIX rule and the prior-range read are not this check's subject - a VIX under 20 and
+    # an open inside yesterday's range, so the fly is judged on what this check is about
+    bf.vix_now = lambda: 17.0
+    bf.prior_range_read = lambda _s, _d: (1.0, 0.0, 2.0)
     bf.ENABLED = True
     bf.EARLIEST_ET, bf.LATEST_ET = "09:30", "16:00"
 
@@ -162,9 +171,9 @@ def main():
           and sig_ok.butterfly_direction == "call" and sig_ok.net_debit > 0,
           f"legs={sig_ok and (sig_ok.lower_contract.strike, sig_ok.center_contract.strike, sig_ok.upper_contract.strike)}")
 
-    check("B2b (r24) the fired fly carries the operator's 40% floor: stop = debit x 0.60",
-          sig_ok is not None and abs(float(sig_ok.stop_loss_pct) - 0.40) < 1e-9
-          and abs(float(sig_ok.stop_premium()) - float(sig_ok.net_debit) * 0.60) < 1e-9,
+    check("B2b (r73) the fired fly carries NO premium stop: stop_loss_pct 1.0, stop_premium 0 - it holds to the close",
+          sig_ok is not None and abs(float(sig_ok.stop_loss_pct) - 1.0) < 1e-9
+          and abs(float(sig_ok.stop_premium())) < 1e-9,
           f"stop_loss_pct={sig_ok and sig_ok.stop_loss_pct} stop={sig_ok and sig_ok.stop_premium()} "
           f"debit={sig_ok and sig_ok.net_debit}")
 

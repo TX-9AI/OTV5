@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""tests/check_butterfly_wing_grid.py  v5.0
+"""tests/check_butterfly_wing_grid.py  v5.1
+v5.1  2026-11-03  OTV5 r73 (BFLY.17) — the fly now also asks VIX < 20 and an open inside yesterday's range (the
+      operator, 2026-11-03: "I want the VIX rule enforced & I want more discriminatory entries"); neither is this
+      check's subject, so vix_now and prior_range_read are pinned to a VIX of 17 and an open inside the range.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.2  2026-09-09  OTV4TEST r6 — the persistence bar is set to 1 for these selection fixtures.
 v1.1  2026-09-01  r208 — W2/W3/W7 RE-DERIVED AGAINST THE SEARCH. The wing is
@@ -64,6 +67,10 @@ def ladder(step, lo, hi):
 
 def main():
     import strategy.gex_pin_butterfly as b
+    # r73 (BFLY.17): the VIX rule and the prior-range read are not this check's subject - a VIX under 20 and
+    # an open inside yesterday's range, so the fly is judged on what this check is about
+    b.vix_now = lambda: 17.0
+    b.prior_range_read = lambda _s, _d: (1.0, 0.0, 2.0)
 
     if not hasattr(b, "_chain_increment"):
         check("W0 the wing grid is read from the chain", False,

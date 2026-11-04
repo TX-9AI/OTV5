@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """
-tests/check_decay_stop.py  v5.1
+tests/check_decay_stop.py  v5.2
+v5.2  2026-11-03  OTV5 r73 (BFLY.17) — THE GEX PIN FLY HOLDS TO THE CLOSE. The operator, 2026-11-03: "For the GEX fly, I want
+      no stop except hold to close". B1's butterfly mechanics now ride the ATP butterfly (the decay stop still applies to it);
+      B2 new: the same marks on a GEXPinButterfly close nothing and keep no reading (config.HOLD_TO_CLOSE_STRATEGIES).
 v5.1  2026-10-31  OTV5 r68 (CFG.5) — OT_RESTING_STOP_STATE leaves the scratch env: the resting stop and its state file are deleted
       (the operator, 2026-10-31: "Resting stop was a study. It failed. Get this the fuck out of here"). No check changed.
 v5.0  2026-10-30  OTV5 r58 (DECAY.1) — THE PEAK-DECAY PROFIT STOP. A TRADING CHANGE, ordered live for Monday 2026-11-02 under
@@ -28,7 +31,8 @@ v5.0  2026-10-30  OTV5 r58 (DECAY.1) — THE PEAK-DECAY PROFIT STOP. A TRADING C
   K1  credit vertical: mark = cost to close, p = entry - mark: a FALLING cost arms and a rebound of 30% of the
       captured credit closes; a RISING cost (a loss) never arms
   B1  butterfly: position_manager prices the net lower + upper - 2 x center, and the decay p is that net - entry;
-      the 29% / 30% boundary on the butterfly
+      the 29% / 30% boundary on the butterfly (ATPButterfly since r73)
+  B2  the GEX pin fly (HOLD_TO_CLOSE_STRATEGIES): the same marks never close on decay, and no reading is kept
   R1  RunawayContinuation: the same path that closes a Breakout does not close it, and no reading is kept
   R2  PARK is exempt by default (no decay close, no reading); with DECAY_STOP_EXEMPT = ("RunawayContinuation",) (what
       OT_DECAY_STOP_EXEMPT=RunawayContinuation sets) the same PARK path closes on decay
@@ -120,8 +124,8 @@ def credit_rec(tid, **kw):
     return r
 
 
-def fly_rec(tid, **kw):
-    r = rec(tid, "GEXPinButterfly", is_butterfly=1, direction="neutral", lower_strike=715.0, center_strike=720.0,
+def fly_rec(tid, strategy="ATPButterfly", **kw):
+    r = rec(tid, strategy, is_butterfly=1, direction="neutral", lower_strike=715.0, center_strike=720.0,
             upper_strike=725.0, entry_premium=1.00, stop_premium=0.50)
     r.update(kw)
     return r
@@ -219,6 +223,11 @@ check("B1 butterfly: the mark is the net lower + upper - 2 x center; p = net - e
       _nets_r == [1.10, 1.20, 1.142, 1.14] and [is_decay(d) for d, _ in b1] == [False, False, False, True]
       and abs((b1[2][1] or {}).get("p", 9) - 0.142) < 1e-9 and abs((b1[2][1] or {}).get("peak_p", 9) - 0.20) < 1e-9,
       f"nets {_nets_r} decays {[is_decay(d) for d, _ in b1]} reading {b1[2][1] if b1 else None}")
+
+b2 = run(fly_rec("b2", strategy="GEXPinButterfly", stop_premium=0.0), _nets_r) if None not in _nets_r else []
+check("B2 the GEX pin fly holds to the close: the B1 marks close nothing on decay and keep no reading",
+      b2 and not any(is_decay(d) for d, _ in b2) and not any(rd for _, rd in b2),
+      f"decays {[is_decay(d) for d, _ in b2]} readings {[rd for _, rd in b2]}")
 
 # ── R exempt, O off ──────────────────────────────────────────────────────────────────────────────────
 r1 = run(rec("r1", "RunawayContinuation", stop_premium=1.0), [2.10, 2.20, 2.15, 2.14, 2.10])

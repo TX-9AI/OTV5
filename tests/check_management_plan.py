@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """
-tests/check_management_plan.py  v5.0  (2026-10-25)
+tests/check_management_plan.py  v5.1  (2026-11-03)
+v5.1  2026-11-03  OTV5 r73 (BFLY.17) — M5 and D12a: the GEX pin fly names the flatten as its only exit and HOLDS below its old floor (the operator, 2026-11-03: "For the GEX
+      fly, I want no stop except hold to close"); the ATP butterfly, which keeps its stop, still CLOSEs at it (D12e).
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ... Previous title: tests/check_management_plan.py  v1.5  (2026-10-03)
 v1.5  OTV4TEST r209 (EXIT.4): M1, M2b, M3, M4 read `touch < 101.00 -> out (breach)` - the narration names the
       structure stop a TOUCH (it reads the forming bar and always has; the operator kept it, 2026-10-03).
@@ -151,8 +153,8 @@ def main():
     P.begin_tick(5.0)
     MP.decide(fly, 0.22, df_1m=None, current_price=100.6, ctx=ctx, exit_engine=None)
     r5 = _row(st, "GEXPinButterfly/manage", 5.0)
-    check("M5 butterfly -> the floor and the 15:45 flatten, no target (r169)",
-          r5 and "premium <= 0.14 -> out (floor)" in r5[1] and "15:45 -> flatten" in r5[1]
+    check("M5 (r73) the GEX pin fly -> the 15:45 flatten as its ONLY exit: no floor, no target",
+          r5 and "(floor)" not in r5[1] and "15:45 -> flatten" in r5[1] and "the only exit" in r5[1]
           and "target" not in r5[1], str(r5))
 
     P.begin_tick(6.0)
@@ -311,7 +313,12 @@ def main():
           f"{it and it.action} {rd12}")
     P.begin_tick(20.5)
     it = MP.decide(dict(bf, current_premium=0.13), 0.13, df_1m=_df([100.9, 101.0]), exit_engine=eng)
-    check("D12a the butterfly at 0.13 <= the 25% floor 0.135 -> CLOSE stop_25%",
+    check("D12a (r73) the GEX pin fly at 0.13 <= its old floor 0.135 -> HOLD: no stop, it holds to the 15:45 flatten",
+          it and it.action == "HOLD", str(it and (it.action, it.reason)))
+    P.begin_tick(20.7)
+    it = MP.decide(dict(bf, trade_id="d12e", strategy="ATPButterfly", current_premium=0.13), 0.13,
+                   df_1m=_df([100.9, 101.0]), exit_engine=eng)
+    check("D12e the ATP butterfly (it keeps its stop) at 0.13 <= the 25% floor 0.135 -> CLOSE stop_25%",
           it and it.action == "CLOSE" and it.condition == "stop" and "25%" in it.reason, str(it and it.reason))
     bfb = next(n for n in ast.walk(ast.parse(esrc if 'esrc' in dir() else open(os.path.join(_root, "execution", "exit_engine.py"), encoding="utf-8").read()))
                if isinstance(n, ast.FunctionDef) and n.name == "_evaluate_butterfly")

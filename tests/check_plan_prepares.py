@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """
-tests/check_plan_prepares.py  v5.1
+tests/check_plan_prepares.py  v5.2
+v5.2  2026-11-03  OTV5 r73 (BFLY.17) — the fly now also asks VIX < 20 and an open inside yesterday's range (the
+      operator, 2026-11-03: "I want the VIX rule enforced & I want more discriminatory entries"); neither is this
+      check's subject, so vix_now and prior_range_read are pinned to a VIX of 17 and an open inside the range.
 v5.1  2026-10-25  OTV5 r9 (GATE.7) — T4-T7 (the tine block) are pinned to the same session open as the S block; they passed no pin, so before 09:30 ET T5 and T7 were red and T4 and T6 passed for the wrong reason. The S-block pins now reach the plan (sweep_credit_spread v5.6). Every expectation is unchanged.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.25  CD.2 (2026-10-24) - seeded REJECTED rows carry their market time; the sweep's session open is pinned
@@ -497,6 +500,10 @@ def main():
     # ── THE BUTTERFLY (r161) — earns its entry; exempt from the slot rule ──
     from strategy.gex_pin_butterfly import GEXPinButterflyStrategy
     import strategy.gex_pin_butterfly as bf
+    # r73 (BFLY.17): the VIX rule and the prior-range read are not this check's subject - a VIX under 20 and
+    # an open inside yesterday's range, so the fly is judged on what this check is about
+    bf.vix_now = lambda: 17.0
+    bf.prior_range_read = lambda _s, _d: (1.0, 0.0, 2.0)
     bf.ENABLED = True
     bf.EARLIEST_ET, bf.LATEST_ET = "09:30", "16:00"
     B = GEXPinButterflyStrategy()

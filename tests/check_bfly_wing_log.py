@@ -1,6 +1,11 @@
 #!/usr/bin/env python3
 """
-tests/check_bfly_wing_log.py  v5.0
+tests/check_bfly_wing_log.py  v5.1
+v5.1  2026-11-03  OTV5 r73 (BFLY.17) — the fly now also asks VIX < 20 and an open inside yesterday's range (the
+      operator, 2026-11-03: "I want the VIX rule enforced & I want more discriminatory entries"); neither is this
+      check's subject, so vix_now and prior_range_read are pinned to a VIX of 17 and an open inside the range. The
+      cheap-fly floor is set to 0 here: META 10-27's 7.50 fly (debit 8.8% of width) is under it, and this check pins
+      the log text.
 v5.0  2026-10-28  OTV5 r49 (BFLY.16) — THE WING-SEARCH LINE SAYS WHICH PIN IT SEARCHED AND WHAT THE PLAN DID WITH IT.
       META 2026-10-27 logged "[gex_bfly] wing search: 5 qualified, taking the BEST-R wing 7.50 (R 10.36, stop 2.64x its
       spread); widest was 17.50" at 13:00:16 ET (114 such lines 13:00-14:59) while the plan HELD and the gate said "no wing
@@ -119,6 +124,13 @@ def run(b, P, cap, gex, spot, chain, em, n=12):
 
 def main():
     import strategy.gex_pin_butterfly as b
+    # r73 (BFLY.17): the VIX rule and the prior-range read are not this check's subject - a VIX under 20 and
+    # an open inside yesterday's range, so the fly is judged on what this check is about
+    b.vix_now = lambda: 17.0
+    b.prior_range_read = lambda _s, _d: (1.0, 0.0, 2.0)
+    # r73: nor is the cheap-fly floor - META 10-27's 7.50 fly is R 10.36 (debit 8.8% of width), under it; the log text
+    # this check pins is read with the floor off (tests/check_gex_hold_close.py checks the floor itself)
+    b.MIN_DEBIT_PCT_WIDTH = 0.0
     from strategy import plan as P
     st = _St(); P.ensure_tables(st); P.bind_store(st)
     b.ENABLED = True
