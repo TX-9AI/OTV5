@@ -6,7 +6,7 @@ the canary fails on drift (WORKING_AGREEMENT 33).
 
 530 Python modules across 12 local packages.
 
-**Reached by:** 130 imported · 25 declared entry points · 271 referenced from a script, unit or doc but never imported · **104 by nothing here**.
+**Reached by:** 130 imported · 25 declared entry points · 272 referenced from a script, unit or doc but never imported · **103 by nothing here**.
 
 ⚠️ The last group is a REVIEW LIST, not a delete list. A
 `land.spec CHECK` line ships inside a tarball and is never
@@ -1527,7 +1527,7 @@ Change these with the most care; a break here reaches everything downstream.
 
 ### `tests/check_probe_intraday_candles.py`
 - **calls:** (none)
-- **called by:** (nothing — no importer and no mention in any script, unit or doc here)
+- **called by:** (not imported) — referenced in `docs/BACKLOG.md`
 
 ### `tests/check_probe_live_mark.py`
 - **calls:** `execution/position_manager.py`
@@ -2083,7 +2083,7 @@ Change these with the most care; a break here reaches everything downstream.
 
 ### `tools/probe_intraday_candles.py`
 - **calls:** `data/tasty_client.py`, `utils/venv_guard.py`
-- **called by:** (not imported) — referenced in `docs/ENV.md`
+- **called by:** (not imported) — referenced in `docs/BACKLOG.md`, `docs/ENV.md`
 
 ### `tools/probe_live_mark.py`
 - **calls:** `data/tasty_client.py`, `execution/position_manager.py`, `utils/venv_guard.py`
