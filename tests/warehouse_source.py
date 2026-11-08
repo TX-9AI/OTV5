@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/warehouse_source.py  v5.1
+tests/warehouse_source.py  v5.2
+v5.2  2026-11-08  OTV5 r85 (CONST.1) — the OTV4TEST block's comment no longer claims OTV5_SINCE mirrors dtp's: it carries only the OTV4TEST boxes' first OTV5 day (dtp strategy_registry.OTV5_SINCE carries all 14), and dtp tests/check_const_parity.py P4 pins the overlap. No value changed.
 v5.1  2026-10-31  OTV5 r65 (RPT.29) — otv4test(rec, day) / mainline(rows, day_of): the OTV4TEST fleet's rows are named in one place.
       raw/ holds both fleets: OTV4TEST's AAL (ip-172-31-1-45) and SOFI (ip-172-31-11-250) pushed beside mainline until
       the 2026-10-25 repoint, and SOFI has pushed as an OTV5 box from the same host since. The discriminator is
@@ -227,8 +228,11 @@ def load_derived(table, dates, s3=None):
 
 
 # ── the OTV4TEST fleet (v5.1, RPT.29) ──────────────────────────────────────
-# ⚠️ THE OPERATOR'S STANDING RULE: OTV4TEST's AAL and SOFI are filtered out of every warehouse measurement. Mirrors
-# day_trader_pro/strategy_registry.py TEST_BOXES and OTV5_SINCE (r508); a box repointed later is added in both.
+# ⚠️ THE OPERATOR'S STANDING RULE: OTV4TEST's AAL and SOFI are filtered out of every warehouse measurement.
+# OTV4TEST_BOXES equals day_trader_pro/strategy_registry.py TEST_BOXES. OTV5_SINCE here carries ONLY the OTV4TEST boxes'
+# first OTV5 day (the only boxes otv4test() asks about); dtp's OTV5_SINCE carries every box (r508). r85 / CONST.1:
+# dtp tests/check_const_parity.py P4 fails when the two disagree on any OTV4TEST box, so a box repointed off OTV4TEST
+# later is added in both or the gate goes red.
 OTV4TEST_BOXES = ("AAL", "SOFI")
 OTV4TEST_LINEAGE = "TEST"
 OTV5_SINCE = {"SOFI": "2026-10-25"}          # the box's first OTV5 day; AAL never ran OTV5
