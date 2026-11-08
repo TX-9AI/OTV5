@@ -1,6 +1,14 @@
 #!/usr/bin/env python3
 """
-tests/stop_sweep.py  v5.0
+tests/stop_sweep.py  v5.1
+v5.1  2026-11-07  OTV5 r75 (REPLAY.1) — THE SURFACE SORT NO LONGER CRASHES ON
+      "NO TAKE-PROFIT". TP_GRID's first cell is None (stop only), and `render`
+      sorted the (stop, tp) keys raw, so the first surface with >= MIN_N rows
+      raised `TypeError: '<' not supported between float and NoneType` at
+      line 143 (measured 11-07 on Runaway call, n 21; every earlier week had
+      too few rows to reach the sort). The key now orders None ("none") first
+      within each stop, explicitly, and the R cells test `is None` rather than
+      truthiness. Same columns, same rows.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.3  2026-09-07  r299 - relaxed rows kept (operator ruling); the dead
 `include_relaxed` assignment goes with the filter it fed.
@@ -125,6 +133,14 @@ def sweep(rows: list) -> list:
     return out
 
 
+def _cell_order(item):
+    """Sort key for a ((stop, tp), cells) item: by stop, then "no TP" (None)
+    before every numeric TP. r75 — the raw tuple sort compared None with a
+    float and crashed the first surface that had enough rows to print."""
+    (stop, tp), _cells = item
+    return (stop, tp is not None, tp if tp is not None else 0.0)
+
+
 def render(rows: list, label: str) -> None:
     cells = sweep(rows)
     if not cells:
@@ -140,13 +156,13 @@ def render(rows: list, label: str) -> None:
     merged = {}
     for c in cells:
         merged.setdefault((c["stop"], c["tp"]), {})[c["bound"]] = c
-    for (stop, tp), b in sorted(merged.items()):
+    for (stop, tp), b in sorted(merged.items(), key=_cell_order):
         p, o = b.get("pess"), b.get("opt")
         if not p or not o:
             continue
         tp_s = f"{tp:.2f}" if tp else "none"
-        rp = f"{p['R']:.2f}" if p["R"] else "  — "
-        ro = f"{o['R']:.2f}" if o["R"] else "  — "
+        rp = f"{p['R']:.2f}" if p["R"] is not None else "  — "
+        ro = f"{o['R']:.2f}" if o["R"] is not None else "  — "
         print(f"  {stop:>5.2f} {tp_s:>5} | {p['net']:>10,.0f} {o['net']:>10,.0f} "
               f"| {rp:>8} {ro:>8} {p['wr']:>4.0f}%")
     print("  ⚠️ a cell is interesting only when its PESSIMISTIC net beats the")
@@ -169,6 +185,14 @@ def selftest() -> int:
     # deliberate failure: ordering must matter — same trade, bars flipped
     A2 = dict(A, mae_bars=30)
     ok &= replay_row(A2, 0.10, None, pessimistic=True) == 300.0
+    # r75 — the (stop, tp) sort with a None tp must not raise and must put
+    # "none" first within a stop.
+    items = [((0.10, 0.50), {}), ((0.10, None), {}), ((0.05, 1.00), {})]
+    try:
+        order = [k for k, _v in sorted(items, key=_cell_order)]
+        ok &= order == [(0.05, 1.00), (0.10, None), (0.10, 0.50)]
+    except TypeError:
+        ok = False
     print("stop_sweep selftest:", "ALL PASS" if ok else "FAIL")
     return 0 if ok else 1
 

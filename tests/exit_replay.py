@@ -1,6 +1,27 @@
 #!/usr/bin/env python3
 """
-tests/exit_replay.py  v5.0
+tests/exit_replay.py  v5.1
+v5.1  2026-11-07  OTV5 r75 (REPLAY.1) — THE S3 PATH STREAMS AND NEVER HOLDS A DAY.
+      `run_s3` called `load_series("quote_series", dates)`, which materialises
+      every quote row of every box for the whole window before the first trade
+      is replayed. Measured 11-07: ONE day is 1,218 objects and 6.2 GB of JSON
+      (SPX alone 1.2 GB), and control (3.8 GB RAM) killed the run, rc 137, on
+      11-02 alone (Saturday brief 11-07 §6). The replay only ever needs the
+      traded contracts inside their own trade windows, so `_S3StreamFetch`
+      plans those windows first, lists each traded box's partition for the
+      trade's own ET day, reads ONLY the objects whose time span (the key's
+      epoch-ms is the batch's `ts_to`) overlaps a window, ONE OBJECT AT A TIME,
+      keeps only the wanted contracts' (ts, bid, ask) inside a window, and
+      drops the day before loading the next (rows replay in entry order).
+      Peak memory is one object plus one day's wanted quotes. A trade whose
+      symbol has no partition that day falls back to every partition, still
+      window-filtered, and is counted in the SOURCE line, never silently.
+      NEW: a second positive control, RECORDED EXIT — the path's value at the
+      recorded exit time against `pnl_usd`, on EVERY replayed trade (the stop
+      control only ever applied to premium-stop rows: 6 of 105 this week). A
+      row reconciles inside 10% of |pnl_usd|, floored at 10% of its entry cost
+      so a scratch trade is not failed on cents; both counts are printed, and
+      the run says VERIFIED only when >= 90% reconcile.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.6  2026-09-19  OTV4TEST r64 — r62'S ORIENTATION REWIRE INVERTED EVERY CREDIT
       VERTICAL. The multi-leg signs already encode favourable orientation
@@ -182,6 +203,8 @@ RECONCILE_TOL = 0.35        # fraction of ENTRY COST, not of risk
 
 TRAILS = [(0.25, 0.10), (0.25, 0.15), (0.50, 0.15), (0.50, 0.25), (0.75, 0.25)]
 STOPS = [0.15, 0.25]
+EXIT_TOL = 0.10            # r75 — recorded-exit control band
+EXIT_PASS = 0.90           # r75 — share that must reconcile
 
 
 def _ts(v):
@@ -409,6 +432,8 @@ def run(rows, fetch) -> int:
     totals = defaultdict(lambda: defaultdict(float))
     counts = defaultdict(int)
     recon_fail = 0
+    exit_n = exit_ok = exit_ok_strict = 0      # r75 — RECORDED EXIT control
+    exit_miss = []
     for r in rows:
         t0, t1 = _ts(r.get("entry_time")), _ts(r.get("exit_time"))
         if not t0 or not t1 or t1 <= t0:
@@ -442,6 +467,24 @@ def run(rows, fetch) -> int:
             recon_applied += 1
             if abs(rec - pnl) > max(50.0, RECONCILE_TOL * entry_prem * lot):
                 recon_fail += 1
+        # 🔑 r75 — THE RECORDED-EXIT CONTROL APPLIES TO EVERY REPLAYED TRADE.
+        # The path's value at the recorded exit, minus its entry value, times
+        # the lot, must land near pnl_usd. The stop control above can only test
+        # premium-stop rows (6 of 105 in 11-02..11-06); this one tests that the
+        # path IS the trade. Tolerance 10% of |pnl|, floored at 10% of entry
+        # cost so a scratch trade is not failed on cents; the strict 10%-of-pnl
+        # count is printed beside it.
+        held = (path[-1][1] - entry_val) * lot
+        tol_pnl = EXIT_TOL * abs(pnl)
+        tol = max(tol_pnl, EXIT_TOL * abs(entry_prem) * lot)
+        exit_n += 1
+        if abs(held - pnl) <= tol:
+            exit_ok += 1
+        else:
+            exit_miss.append((abs(held - pnl), r.get("trade_id"),
+                              r.get("symbol"), r.get("strategy"), pnl, held))
+        if abs(held - pnl) <= tol_pnl:
+            exit_ok_strict += 1
         key = (r.get("strategy") or "?", (r.get("option_side") or "?").lower())
         counts[key] += 1
         totals[key]["recorded"] += pnl
@@ -480,6 +523,21 @@ def run(rows, fetch) -> int:
     elif recon_applied:
         print(f"\n  positive control applied to {recon_applied} of "
               f"{sum(counts.values())} replayed trade(s).")
+    if exit_n:
+        share = exit_ok / exit_n
+        verdict = ("VERIFIED" if share >= EXIT_PASS else
+                   "🔴 NOT VERIFIED — every hypothetical above is suspect")
+        # ⚠️ BOTH COUNTS, ALWAYS, AND THE FLOOR IS NAMED AS POST HOC: the
+        # entry-cost floor was added after the first week's result was seen
+        # (r75). A reader quotes both numbers, never the floored one alone.
+        print(f"\n  RECORDED-EXIT CONTROL (r75): {exit_ok}/{exit_n} reconcile at "
+              f"the FLOORED tolerance (10% of |pnl|, floor 10% of entry cost — "
+              f"the floor set after the first result was seen) · "
+              f"{exit_ok_strict}/{exit_n} at STRICT 10% of |pnl|. Quote both. "
+              f"Verdict on the floored count, bar {EXIT_PASS:.0%} — {verdict}")
+        for gap, tid, sym, strat, pnl, held in sorted(exit_miss, reverse=True)[:8]:
+            print(f"    miss {sym} {strat} {tid}: booked ${pnl:,.0f}, "
+                  f"path at exit ${held:,.0f} (gap ${gap:,.0f})")
     if recon_fail:
         print(f"\n  ⚠️ POSITIVE CONTROL: {recon_fail} trade(s) whose replayed "
               f"recorded-rule pnl did not reconcile with pnl_usd — treat every "
@@ -512,14 +570,177 @@ def run_s3(a) -> int:
         return 1
     rows = [t for t in trades if (t.get("status") or "").lower() == "closed"
 ]
-    # ⚠️ ONE LIST CALL, NOT ONE PER TRADE. The quote batches for the window
-    # are loaded once and indexed per symbol; per-trade fetches against S3
-    # would be the expensive path the handoff warns this tool already is.
-    qrows, m2 = ws.load_series("quote_series", dates)
-    print("  " + m2.banner())
-    if m2.error:
-        return 1
-    return run(rows, _s3_fetch(qrows))
+    # 🔴 r75 (REPLAY.1) — STREAMED, NEVER `load_series`. The old single LIST
+    # call loaded the whole window's quote batches into one list: 6.2 GB of
+    # JSON a day, OOM-killed on control. Rows go in entry order so the fetch
+    # holds one ET day at a time and drops it before the next.
+    rows.sort(key=lambda r: _ts(r.get("entry_time")) or 0.0)
+    fetch = _S3StreamFetch(rows)
+    rc = run(rows, fetch)
+    print("  " + fetch.banner())
+    return 1 if fetch.error else rc
+
+
+_ET = None
+
+
+def _et_day(epoch: float) -> str:
+    global _ET
+    if _ET is None:
+        from zoneinfo import ZoneInfo
+        _ET = ZoneInfo("America/New_York")
+    return datetime.fromtimestamp(epoch, _ET).strftime("%Y-%m-%d")
+
+
+def _key_epoch(key: str):
+    """A quote batch's key is `<ts_to epoch-ms>-<hash>.json` (measured 11-07:
+    the key epoch equals the batch's max ts_epoch). None if it is not."""
+    base = key.rsplit("/", 1)[-1]
+    try:
+        return int(base.split("-", 1)[0]) / 1000.0
+    except ValueError:
+        return None
+
+
+class _S3StreamFetch:
+    """fetch(sym, lo, hi) over raw/quote_series that never holds more than one
+    ET day of the traded contracts' quotes (r75, REPLAY.1).
+
+    ⚠️ IT PLANS FROM THE SAME `legs_of` AND THE SAME ±60 s PAD `path_for` USES,
+    so the rows it keeps are exactly the rows `path_for` would ask for; a
+    fetch outside a planned window returns only what that day's load kept.
+    ⚠️ AN OBJECT WITH AN UNPARSEABLE KEY IS READ, NOT SKIPPED: skipping on a
+    name we did not expect would be a silent hole in the tape.
+    """
+
+    PAD = 60.0
+
+    def __init__(self, rows, s3=None, lister=None, reader=None):
+        self._s3 = s3
+        self._lister = lister          # (prefix) -> [key]; injected by tests
+        self._reader = reader          # (key) -> envelope dict; injected
+        self.plan = defaultdict(lambda: defaultdict(lambda: defaultdict(list)))
+        for r in rows:
+            t0, t1 = _ts(r.get("entry_time")), _ts(r.get("exit_time"))
+            if not t0 or not t1 or t1 <= t0:
+                continue
+            legs, _why = legs_of(r)
+            if legs is None:
+                continue
+            part = str(r.get("symbol") or "").upper()
+            for sym, _sg in legs:
+                self.plan[_et_day(t0)][part][sym].append(
+                    (t0 - self.PAD, t1 + self.PAD))
+        self.day = None
+        self.idx = {}
+        self.listed = self.read = self.skipped = self.bad = 0
+        self.fallback = 0
+        self.kept = self.peak_kept = 0
+        self.error = ""
+
+    # ── S3 access (injectable) ────────────────────────────────────────────
+    def _client(self):
+        if self._s3 is None:
+            import warehouse_source as ws
+            self._s3 = ws.client()
+        return self._s3
+
+    def _list(self, prefix):
+        if self._lister is not None:
+            return list(self._lister(prefix))
+        import warehouse_source as ws
+        meta = ws.Meta(prefix)
+        return list(ws._iter(self._client(), prefix, meta))
+
+    def _get(self, key):
+        if self._reader is not None:
+            return self._reader(key)
+        import json
+        import warehouse_source as ws
+        body = self._client().get_object(Bucket=ws.BUCKET, Key=key)["Body"].read()
+        return json.loads(body)
+
+    def _prefix(self, day, part=None):
+        import warehouse_source as ws
+        base = f"{ws.PREFIX}/quote_series/dt={day}/"
+        return base + (f"sym={part}/" if part else "")
+
+    # ── one day ───────────────────────────────────────────────────────────
+    def _load(self, day):
+        self.idx = {}                  # drop the previous day FIRST
+        self.day = day
+        self.kept = 0
+        for part, wanted in self.plan.get(day, {}).items():
+            spans = sorted(w for ws_ in wanted.values() for w in ws_)
+            try:
+                keys = self._list(self._prefix(day, part)) if part else []
+                if not keys:
+                    # the trade's symbol is not a partition that day: read
+                    # every partition, still window-filtered, and count it.
+                    self.fallback += 1
+                    keys = self._list(self._prefix(day))
+            except Exception as exc:                            # noqa: BLE001
+                self.error = f"{type(exc).__name__}: {exc}"
+                return
+            self.listed += len(keys)
+            for k in self._select(keys, spans):
+                try:
+                    env = self._get(k)
+                    self.read += 1
+                except Exception:                               # noqa: BLE001
+                    self.bad += 1
+                    continue
+                rec = env.get("record") if isinstance(env, dict) else None
+                if not isinstance(rec, list):
+                    continue
+                for q in rec:
+                    if not isinstance(q, dict):
+                        continue
+                    sym = q.get("streamer_symbol")
+                    wins = wanted.get(sym)
+                    if not wins:
+                        continue
+                    ts = q.get("ts_epoch") or 0
+                    if any(lo <= ts <= hi for lo, hi in wins):
+                        self.idx.setdefault(sym, []).append(
+                            (ts, q.get("bid_price"), q.get("ask_price")))
+                        self.kept += 1
+                del env, rec           # one object alive at a time
+        for v in self.idx.values():
+            v.sort()
+        self.peak_kept = max(self.peak_kept, self.kept)
+
+    def _select(self, keys, spans):
+        """Objects whose (previous key epoch, own key epoch] overlaps a span.
+        Unparseable keys are always read."""
+        timed, untimed = [], []
+        for k in keys:
+            e = _key_epoch(k)
+            (untimed if e is None else timed).append((e, k))
+        timed.sort()
+        out = [k for _e, k in untimed]
+        prev = float("-inf")
+        for e, k in timed:
+            if any(lo <= e and prev <= hi for lo, hi in spans):
+                out.append(k)
+            else:
+                self.skipped += 1
+            prev = e
+        return out
+
+    def __call__(self, sym, lo, hi):
+        day = _et_day(lo + self.PAD)
+        if day != self.day:
+            self._load(day)
+        return [p for p in self.idx.get(sym, ()) if lo <= p[0] <= hi]
+
+    def banner(self) -> str:
+        state = f"🔴 {self.error}" if self.error else "ok"
+        return (f"SOURCE: s3 quote_series streamed (r75) — {self.listed} "
+                f"listed, {self.read} read, {self.skipped} skipped outside "
+                f"every trade window, {self.bad} unreadable, "
+                f"{self.fallback} partition fallback(s), peak "
+                f"{self.peak_kept:,} quote rows held — {state}")
 
 
 _OCC = "QQQ   260823C00100000"       # r62 — real OCC, as a trade records it
