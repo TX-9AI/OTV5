@@ -1,6 +1,8 @@
 #!/bin/bash
 # ==========================================================================
-# setup_ec2.sh  v5.4
+# setup_ec2.sh  v5.5
+# v5.5  2026-11-08  OTV5 r94 (CAP.1) — the fresh-box suite also runs deploy/install_capture_timer.sh (tools/capture_all.py:
+#       TastyTrade market metrics, the full chain and corporate events into the warehouse; recording only).
 # v5.4  2026-11-08  OTV5 r76 (RETIRE.1) — THE UNIT NO LONGER CARRIES OT_SCALE_ORB OR OT_SCALE_VOLT (nor their --plan lines).
 #       The ORB and VOLT trades are removed and config.py v5.14 reads neither key; tools/strip_retired_env.sh takes the
 #       stored lines off the 14 live units once, after the land. OT_ORB_BUDGET_USD (the ramp TOP) is unchanged. The
@@ -403,7 +405,7 @@ fi
 
 # The suite, in install order. Each is run with `bash`, so a lost exec bit
 # cannot stop it, and one failure is reported rather than ending the install.
-SUITE="deploy/harden_hosts.sh deploy/install_midnight_halt.sh deploy/install_retention_purge_timer.sh deploy/install_open_scan_timer.sh deploy/install_boot_sweep.sh deploy/install_emergency_watchdog.sh deploy/install_claude.sh"
+SUITE="deploy/harden_hosts.sh deploy/install_midnight_halt.sh deploy/install_retention_purge_timer.sh deploy/install_open_scan_timer.sh deploy/install_capture_timer.sh deploy/install_boot_sweep.sh deploy/install_emergency_watchdog.sh deploy/install_claude.sh"
 [ "$CLAUDE_AT_BOOT" = 1 ] && SUITE="$SUITE deploy/install_claude_boot.sh"
 REQ_FILE="requirements.lock"
 [ -f "$SRC_DIR/$REQ_FILE" ] || REQ_FILE="requirements.txt"

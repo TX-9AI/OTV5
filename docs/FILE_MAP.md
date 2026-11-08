@@ -4,9 +4,9 @@
 Do not edit by hand: the generator runs inside the land command and
 the canary fails on drift (WORKING_AGREEMENT 33).
 
-524 Python modules across 12 local packages.
+526 Python modules across 12 local packages.
 
-**Reached by:** 127 imported · 25 declared entry points · 272 referenced from a script, unit or doc but never imported · **100 by nothing here**.
+**Reached by:** 128 imported · 25 declared entry points · 273 referenced from a script, unit or doc but never imported · **100 by nothing here**.
 
 ⚠️ The last group is a REVIEW LIST, not a delete list. A
 `land.spec CHECK` line ships inside a tarball and is never
@@ -42,7 +42,7 @@ execution.exit_engine); every such edge is listed below like any other.
 - `analysis/market_state.py` - the structural state assembly.
   **Carries the vocabulary, classifies nothing.**
 
-**Where the evidence lives:** `tests/` holds 328 standing
+**Where the evidence lives:** `tests/` holds 329 standing
 checks (`check_*.py`, all run by `tools/boot_sweep.py` at boot)
 plus the studies that produced every threshold in
 `docs/TRADES.md`. **A number in a strategy file should be
@@ -65,7 +65,7 @@ Change these with the most care; a break here reaches everything downstream.
 | `data/candle_feed.py` | 35 | breakout_plan.py, candle_logger.py, check_audit_20260823.py, check_bar_referee.py |
 | `data/derived_store.py` | 34 | anchors.py, breakout_plan.py, check_bfly_vwap_band.py, check_breakout_rearm.py |
 | `execution/position_manager.py` | 34 | check_admission.py, check_admission_wired.py, check_blind_stays_up.py, check_breakout.py |
-| `data/tasty_client.py` | 28 | buying_power.py, candle_feed.py, check_account_lock.py, check_boot_order_sweep.py |
+| `data/tasty_client.py` | 29 | buying_power.py, candle_feed.py, capture_all.py, check_account_lock.py |
 
 ## Every module
 
@@ -231,7 +231,7 @@ Change these with the most care; a break here reaches everything downstream.
 
 ### `data/tasty_client.py`
 - **calls:** `config.py`
-- **called by:** `data/candle_feed.py`, `data/market_data.py`, `data/open_interest.py`, `data/options_chain.py`, `execution/buying_power.py`, `execution/entry_engine.py`, `execution/exit_engine.py`, `execution/order_confirm.py`, `execution/order_guard.py`, `execution/position_manager.py`, `execution/resting_orders.py`, `main.py`, `strategy/condor_roll.py`, `tests/check_account_lock.py`, `tests/check_boot_order_sweep.py`, `tests/check_buying_power.py`, `tests/check_oi_shared_loop.py`, `tests/check_order_guard.py`, `tests/check_reconcile_strict.py`, `tests/check_sdk_async.py`, `tools/emergency_watchdog.py`, `tools/feed_capabilities.py`, `tools/probe_aux_streams.py`, `tools/probe_candle_depth.py`, `tools/probe_daily_candles.py`, `tools/probe_intraday_candles.py`, `tools/probe_live_mark.py`, `tools/probe_order_dryrun.py`
+- **called by:** `data/candle_feed.py`, `data/market_data.py`, `data/open_interest.py`, `data/options_chain.py`, `execution/buying_power.py`, `execution/entry_engine.py`, `execution/exit_engine.py`, `execution/order_confirm.py`, `execution/order_guard.py`, `execution/position_manager.py`, `execution/resting_orders.py`, `main.py`, `strategy/condor_roll.py`, `tests/check_account_lock.py`, `tests/check_boot_order_sweep.py`, `tests/check_buying_power.py`, `tests/check_oi_shared_loop.py`, `tests/check_order_guard.py`, `tests/check_reconcile_strict.py`, `tests/check_sdk_async.py`, `tools/capture_all.py`, `tools/emergency_watchdog.py`, `tools/feed_capabilities.py`, `tools/probe_aux_streams.py`, `tools/probe_candle_depth.py`, `tools/probe_daily_candles.py`, `tools/probe_intraday_candles.py`, `tools/probe_live_mark.py`, `tools/probe_order_dryrun.py`
 
 ### `database/__init__.py`
 - **calls:** (none)
@@ -715,6 +715,10 @@ Change these with the most care; a break here reaches everything downstream.
 
 ### `tests/check_cap_page_once.py`
 - **calls:** `database/__init__.py`, `database/trade_logger.py`, `risk/risk_manager.py`
+- **called by:** (not imported) — referenced in `docs/BACKLOG.md`, `docs/ENV.md`
+
+### `tests/check_capture_all.py`
+- **calls:** `tools/capture_all.py`, `warehouse/retention_purge.py`
 - **called by:** (not imported) — referenced in `docs/BACKLOG.md`, `docs/ENV.md`
 
 ### `tests/check_cascade_constants.py`
@@ -1989,6 +1993,10 @@ Change these with the most care; a break here reaches everything downstream.
 - **calls:** (none)
 - **called by:** (entry point)
 
+### `tools/capture_all.py`
+- **calls:** `data/tasty_client.py`
+- **called by:** `tests/check_capture_all.py`
+
 ### `tools/capture_guard.py`
 - **calls:** (none)
 - **called by:** (not imported) — referenced in `README.md`, `configure.sh`, `docs/BACKLOG.md`, `docs/FIRST_BOOT.md`
@@ -2155,7 +2163,7 @@ Change these with the most care; a break here reaches everything downstream.
 
 ### `warehouse/retention_purge.py`
 - **calls:** (none)
-- **called by:** `tests/check_audit_20260823.py`, `tests/check_level_tape.py`, `tests/check_prime_ramp.py`, `tests/check_purge_batched.py`, `tests/check_purge_lock.py`, `tests/check_purge_pushed.py`, `tests/check_purge_reclaim.py`, `tests/check_reclaim_paths.py`, `tests/check_retention_armed.py`, `tests/check_seed_candles.py`, `tests/check_self_close_hold.py`, `tests/check_series_lookback.py`, `tests/check_symbol_universe.py`, `tests/check_vacuum_headroom.py`, `tools/rebuild_1m_from_last_trade.py`, `tools/seed_candles_from_warehouse.py`, `warehouse/self_close.py`
+- **called by:** `tests/check_audit_20260823.py`, `tests/check_capture_all.py`, `tests/check_level_tape.py`, `tests/check_prime_ramp.py`, `tests/check_purge_batched.py`, `tests/check_purge_lock.py`, `tests/check_purge_pushed.py`, `tests/check_purge_reclaim.py`, `tests/check_reclaim_paths.py`, `tests/check_retention_armed.py`, `tests/check_seed_candles.py`, `tests/check_self_close_hold.py`, `tests/check_series_lookback.py`, `tests/check_symbol_universe.py`, `tests/check_vacuum_headroom.py`, `tools/rebuild_1m_from_last_trade.py`, `tools/seed_candles_from_warehouse.py`, `warehouse/self_close.py`
 
 ### `warehouse/s3_push.py`
 - **calls:** `utils/instrument.py`

@@ -1,4 +1,5 @@
-"""tests/check_bootstrap.py — v5.6
+"""tests/check_bootstrap.py — v5.7
+v5.7  2026-11-08  OTV5 r94 (CAP.1) — G3's planned suite includes deploy/install_capture_timer.sh (setup_ec2.sh v5.5).
 v5.6  2026-11-08  OTV5 r76 (RETIRE.1) — G3/G3c/G5/G17 RE-POINTED (WA 38.4): setup_ec2.sh v5.4 no longer plans or writes OT_SCALE_ORB / OT_SCALE_VOLT
       (the ORB and VOLT trades are removed) and bootstrap.example.sh v5.5 drops their lines, so the checks assert no scale_*
       plan line, no OT_SCALE_* unit key and no OT_SCALE_ORB / OT_SCALE_VOLT export; every other key unchanged.
@@ -323,6 +324,7 @@ for k, v in _WANT.items():
           lambda k=k: "got %r" % plan.get(k))
 _SUITE = ["deploy/harden_hosts.sh", "deploy/install_midnight_halt.sh",
           "deploy/install_retention_purge_timer.sh", "deploy/install_open_scan_timer.sh",
+          "deploy/install_capture_timer.sh",       # r94 CAP.1
           "deploy/install_boot_sweep.sh", "deploy/install_emergency_watchdog.sh",
           "deploy/install_claude.sh",
           "deploy/install_claude_boot.sh"]

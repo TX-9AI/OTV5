@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/gen_file_map.py  v5.0
+tests/gen_file_map.py  v5.1
+v5.1  2026-11-08  OTV5 r94 (CAP.1) — tools/capture_all.py is an entry point (deploy/install_capture_timer.sh launches it).
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v4.19 2026-10-08  OTV4TEST r261 — tools/rebuild_1m_from_last_trade.py (SEED.3) is an entry point: a hand-run repair tool, run on
       the operator's yes; its gate loads it by path, so undeclared it mapped as an orphan.
@@ -180,6 +181,7 @@ ENTRY_POINTS = {
     # point IS.
     "tools/claude_boot.py",
     "tools/open_scan.py",          # r130 — launched by deploy/install_open_scan_timer.sh
+    "tools/capture_all.py",        # r94 CAP.1 — launched by deploy/install_capture_timer.sh
     "tools/boot_sweep.py",         # r132 — launched by deploy/install_boot_sweep.sh
     "tools/emergency_watchdog.py", # r168 — launched by deploy/install_emergency_watchdog.sh
     # r202 — run by the agent session or the operator, found unlisted by the 10-03 audit

@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """
-warehouse/retention_purge.py  v5.2
+warehouse/retention_purge.py  v5.3
+v5.3  2026-11-08  OTV5 r94 (CAP.1) — tools/capture_all.py's local spool (data/capture_spool) is purged at 3 days by mtime;
+      a capture object leaves it on a successful PUT, so only a long S3 failure leaves anything for this to find.
 v5.2  2026-11-07  OTV5 r77 (RET.2) — THE BOX KEEPS TWO WEEKS OF PLAN ROWS AND A MONTH OF NOTES; S3 KEEPS EVERYTHING.
       plan_tick / plan_check 90 -> 14 days; strategy_note leaves NEVER_PURGE and is kept 30 days (DERIVED_CDC_DAYS).
       The operator, 2026-11-07, on SOFI's disk (87.8%, derived_store.db 782M -> 1.03G in a week): "Yes to all of
@@ -650,6 +652,30 @@ def _tree_purge(root: str, days, apply: bool) -> int:
     return removed
 
 
+CAPTURE_SPOOL_DAYS = 3        # r94 CAP.1
+
+
+def _spool_purge(root: str, days: int, apply: bool) -> int:
+    """r94 CAP.1 — remove regular files under `root` (not recursive) older than `days` by mtime. -> files counted."""
+    import time as _t
+    cutoff = _t.time() - days * 86400
+    n = 0
+    try:
+        names = os.listdir(root)
+    except OSError:
+        return 0
+    for f in names:
+        p = os.path.join(root, f)
+        try:
+            if os.path.isfile(p) and not os.path.islink(p) and os.path.getmtime(p) < cutoff:
+                n += 1
+                if apply:
+                    os.remove(p)
+        except OSError:
+            continue
+    return n
+
+
 def _db_stat(path: str) -> dict:
     """page_count / freelist / page_size / wal bytes for one store. Read-only."""
     out = {"live": 0, "free": 0, "wal": 0}
@@ -996,6 +1022,11 @@ def purge(apply: bool = False, feed_db: str = "", derived_db: str = "") -> dict:
         n = _tree_purge(root, days, apply)
         # ⚠️ -1 IS "DECLARED, NOT ENFORCED" AND MUST NOT RENDER AS ZERO.
         removed[f"tree/{tree}"] = ("declared, not enforced" if n < 0 else n)
+
+    # ── r94 CAP.1: tools/capture_all.py's spool. Objects leave it on a successful PUT; anything still here after
+    # CAPTURE_SPOOL_DAYS failed every flush and is removed so a dead S3 path cannot fill the disk. Files only, by mtime.
+    removed["spool/capture_spool"] = _spool_purge(os.path.join(HERE, "data", "capture_spool"),
+                                                  CAPTURE_SPOOL_DAYS, apply)
 
     # ── r255: RECLAIM — checkpoint, then vacuum if it fits ──────────────────
     # 🔑 AFTER the deletions, because a checkpoint before them would return a
