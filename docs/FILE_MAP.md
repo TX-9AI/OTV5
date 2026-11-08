@@ -4,9 +4,9 @@
 Do not edit by hand: the generator runs inside the land command and
 the canary fails on drift (WORKING_AGREEMENT 33).
 
-527 Python modules across 12 local packages.
+528 Python modules across 12 local packages.
 
-**Reached by:** 129 imported · 25 declared entry points · 265 referenced from a script, unit or doc but never imported · **108 by nothing here**.
+**Reached by:** 129 imported · 25 declared entry points · 266 referenced from a script, unit or doc but never imported · **108 by nothing here**.
 
 ⚠️ The last group is a REVIEW LIST, not a delete list. A
 `land.spec CHECK` line ships inside a tarball and is never
@@ -516,6 +516,10 @@ Change these with the most care; a break here reaches everything downstream.
 ### `strategy/trend_credit_spread.py`
 - **calls:** `strategy/base_strategy.py`, `strategy/tcs_plan.py`
 - **called by:** `main.py`, `tests/check_plan_prepares.py`, `tests/check_session_pin.py`, `tests/check_tcs_narrates.py`, `tests/check_tcs_parked.py`, `tests/check_tcs_plan.py`
+
+### `tests/brief_bias_join.py`
+- **calls:** (none)
+- **called by:** (not imported) — referenced in `docs/BACKLOG.md`
 
 ### `tests/butterfly_plan.py`
 - **calls:** (none)
