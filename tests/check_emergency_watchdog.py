@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """
-tests/check_emergency_watchdog.py  v5.0 — the r168 emergency watchdog (EXP.1 item 3).
+tests/check_emergency_watchdog.py  v5.1 — the r168 emergency watchdog (EXP.1 item 3).
+v5.1  2026-11-08  OTV5 r86 (CHK.12) — W16 runs the real installer from a fixture tree that has a venv
+      (red on every land since r54: control and lander scratch trees have no venv, and the installer rightly
+      refuses one it would have to guess); W16b pins that refusal. W1-W15, W17, W18 unchanged.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 
 v1.0  2026-09-27  OTV4TEST r168 — born with WDOG.1: one message per event (the operator's ruling).
@@ -30,6 +33,7 @@ Telegram, the broker or a live store.
   W14 open_positions reads only this mode's open rows; outcomes reads each close's P&L
   W15 flatten_pass never reassigns the manager's open records (a live walk's order id rides there)
   W16 the installer renders a weekday per-minute oneshot as ubuntu; setup_ec2's suite installs it
+  W16b without a venv the installer refuses (rc 1) and renders no unit
   W17 the real page posts ONCE with the kept pair; the real stop is SIGKILL then stop (no SIGTERM page)
   W18 ONE EVENT, ONE MESSAGE: stuck from 09:30 with a position, minute by minute to 16:04 = exactly 1 page
 
@@ -304,24 +308,48 @@ with tempfile.TemporaryDirectory() as td:
         fh.write("#!/bin/bash\nexit 0\n")
     os.chmod(os.path.join(stub, "sudo"), 0o755); os.chmod(os.path.join(stub, "systemctl"), 0o755)
     envx = dict(os.environ, PATH=stub + ":" + os.environ.get("PATH", ""))
-    rc = subprocess.run(["bash", os.path.join(ROOT, "deploy", "install_emergency_watchdog.sh")],
+    # v5.1 (CHK.12, 2026-11-08): the installer REFUSES without $DIR/venv/bin/python
+    # (it will not render a unit with a guessed interpreter). A box has that venv;
+    # the control checkout and every lander scratch tree do not, so W16 was red on
+    # every land since r54 for an ENVIRONMENT reason, not a content one. The case
+    # now runs the real installer from a fixture tree that HAS a venv (python ->
+    # this interpreter) and the real tools/emergency_watchdog.py, and a second
+    # case pins the refusal itself on a tree without one.
+    fx = os.path.join(td, "tree")
+    for sub in ("deploy", "tools", os.path.join("venv", "bin")):
+        os.makedirs(os.path.join(fx, sub))
+    import shutil as _sh
+    _sh.copy(os.path.join(ROOT, "deploy", "install_emergency_watchdog.sh"), os.path.join(fx, "deploy"))
+    _sh.copy(os.path.join(ROOT, "tools", "emergency_watchdog.py"), os.path.join(fx, "tools"))
+    os.symlink(sys.executable, os.path.join(fx, "venv", "bin", "python"))
+    rc = subprocess.run(["bash", os.path.join(fx, "deploy", "install_emergency_watchdog.sh")],
                         env=envx, capture_output=True, text=True).returncode
+    nv = os.path.join(td, "novenv"); os.makedirs(os.path.join(nv, "deploy"))
+    _sh.copy(os.path.join(ROOT, "deploy", "install_emergency_watchdog.sh"), os.path.join(nv, "deploy"))
+    _r = subprocess.run(["bash", os.path.join(nv, "deploy", "install_emergency_watchdog.sh")],
+                        env=envx, capture_output=True, text=True)
+    rc_nv, err_nv = _r.returncode, _r.stderr
     try:
         svc = open(os.path.join(out_dir, "optbot-emergency-watchdog.service")).read()
         tmr = open(os.path.join(out_dir, "optbot-emergency-watchdog.timer")).read()
         cmds = open(os.path.join(out_dir, "cmds")).read()
     except OSError as exc:
         svc = tmr = cmds = f"missing: {exc}"
-exe = [l.split("=", 1)[1] for l in svc.splitlines() if l.startswith("ExecStart=")]
+    exe = [l.split("=", 1)[1] for l in svc.splitlines() if l.startswith("ExecStart=")]
+    # the fixture tree is deleted with td, so the interpreter and script paths
+    # the unit names are checked while it still exists
+    exe_ok = bool(exe) and os.path.isfile(exe[0].split()[1]) and os.access(exe[0].split()[0], os.X_OK)
 tos = [int(l.split("=", 1)[1]) for l in svc.splitlines() if l.startswith("TimeoutStartSec=")]
 suite = [l for l in open(os.path.join(ROOT, "setup_ec2.sh")).read().splitlines() if l.startswith("SUITE=")]
 ok = (rc == 0 and "Type=oneshot" in svc and "User=ubuntu" in svc and exe
-      and os.path.isfile(exe[0].split()[1]) and exe[0].split()[1].endswith("tools/emergency_watchdog.py")
+      and exe_ok and exe[0].split()[1].endswith("tools/emergency_watchdog.py")
       and tos and tos[0] >= 900 and "OnCalendar=Mon..Fri *-*-* 09..16:*:00 America/New_York" in tmr
       and "enable --now optbot-emergency-watchdog.timer" in cmds
       and suite and "deploy/install_emergency_watchdog.sh" in suite[0])
 ck("W16 installer renders a weekday per-minute oneshot as ubuntu; the suite installs it", ok,
    f"rc={rc} exec={exe} timeout={tos} suite={'yes' if suite and 'emergency' in suite[0] else 'no'}")
+ck("W16b without a venv the installer refuses (rc 1) and renders no unit",
+   rc_nv == 1 and "refusing to install" in err_nv, f"rc={rc_nv} {err_nv.strip()[:60]}")
 
 # W17
 r = W.Real(); r._tg = {"TELEGRAM_TOKEN": "T0K", "TELEGRAM_CHAT_ID": "C1"}
