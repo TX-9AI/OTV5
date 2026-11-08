@@ -1,5 +1,9 @@
 """
-strategy/shadow_rules.py  v5.0
+strategy/shadow_rules.py  v5.1
+v5.1  2026-11-08  OTV5 r95 (CHK.13) - GATES DECLARED. tests/check_gates.py walks every strategy/*.py and refuses one with no
+      GATES dict (WA 36); this file shipped at r90 without one, so check_gates was red from r90 to r94. Its five constants are
+      the frozen definition of the two scored rules, so all are FOUNDATIONAL (loosening one scores a different rule than the
+      study froze). DATA ONLY: nothing at runtime reads GATES (the checkers read it); no decision, row or log line changes.
 v5.0  2026-11-08  OTV5 r90 (SHADOW.1) - TWO RULES THAT NEVER DECIDE, RECORDED ON EVERY DECISION THEY WOULD HAVE TOUCHED.
       The operator, 2026-11-08: "this is one time where a log only is worth doing. We've been burned on 'log-only'
       before, so once we start trading on Monday I want immediate feedback that it's really logging. Log only:
@@ -47,6 +51,16 @@ HUNT_OR_EM_THRESHOLD = 0.927          # S5 R1, frozen (design median of or_width
 OR_FIRST_HM, OR_LAST_HM = (9, 30), (9, 44)
 OR_BARS = 15
 SMA_N, SMA_LAG, SMA_MIN_CLOSES = 50, 10, 61
+
+# WA 36 gate categories (tests/check_gates.py; asserted by tests/check_shadow_rules.py G1). These never decide a trade -
+# they define WHICH rule the forward score measures, so none may be relaxed.
+GATES = {
+    "HUNT_OR_EM_THRESHOLD": "FOUNDATIONAL",   # S5 R1 frozen 0.927
+    "OR_BARS":              "FOUNDATIONAL",   # the 09:30-09:44 range the study read
+    "SMA_N":                "FOUNDATIONAL",   # S4 S1d_slope: SMA 50 ...
+    "SMA_LAG":              "FOUNDATIONAL",   # ... against itself 10 sessions earlier
+    "SMA_MIN_CLOSES":       "FOUNDATIONAL",   # 61+ prior closes, else unknown (the study keeps)
+}
 CHECK_HUNT, CHECK_PARK = "shadow_hunt_or_em", "shadow_park_sma50"
 _LOGGED: dict = {}                    # (rule, day, key) -> last verdict logged (PARK: one line per change)
 

@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """
-tests/check_shadow_rules.py  v5.0
+tests/check_shadow_rules.py  v5.1
+v5.1  2026-11-08  OTV5 r95 (CHK.13) - G1: shadow_rules.GATES names every frozen constant FOUNDATIONAL (check_gates was red
+      r90-r94 because the module declared none).
 v5.0  2026-11-08  OTV5 r90 (SHADOW.1) - THE TWO LOG-ONLY RULES RECORD ON EVERY DECISION, MATCH THEIR STUDIES, AND
       CANNOT CHANGE A DECISION. The operator, 2026-11-08: "Log only: opening range rule and SMA 50 rule, confirm it's
       logging Monday morning."
@@ -21,6 +23,7 @@ v5.0  2026-11-08  OTV5 r90 (SHADOW.1) - THE TWO LOG-ONLY RULES RECORD ON EVERY D
       row; a first hour refused at gate_g still carries it; signal / verdict / reason identical on, raising, removed
   L1  PARK logs one line per day and direction (a repeated tick writes its row but no second line)
   S1  tools/shadow_rule_status.py: GREEN when every decision has its row and line; RED when a decision's row is missing
+  G1  shadow_rules.GATES declares HUNT_OR_EM_THRESHOLD, OR_BARS, SMA_N, SMA_LAG, SMA_MIN_CLOSES, each FOUNDATIONAL
   C1  no env knob and no configure item: shadow_rules.py reads no os.environ; config.py names no SHADOW key
 Run:  python3 tests/check_shadow_rules.py
 """
@@ -331,6 +334,13 @@ def main():
     check("S1 status tool: GREEN (rc 0) when every decision has its row and line; RED (rc 1) when a PARK row is missing",
           g.returncode == 0 and '"status": "GREEN"' in g.stdout and rr.returncode == 1
           and "PARK_SMA50  RED" in rr.stdout, f"{g.returncode} {g.stdout[-300:]} | {rr.returncode} {rr.stdout[-300:]}")
+
+    # ── G1 : WA 36 gate declaration ──────────────────────────────────────────────────────────────────────────────
+    from strategy import shadow_rules as _SRG
+    _want = ("HUNT_OR_EM_THRESHOLD", "OR_BARS", "SMA_N", "SMA_LAG", "SMA_MIN_CLOSES")
+    _g = getattr(_SRG, "GATES", None)
+    check("G1 shadow_rules.GATES declares every frozen constant FOUNDATIONAL",
+          isinstance(_g, dict) and all(_g.get(k) == "FOUNDATIONAL" and hasattr(_SRG, k) for k in _want), str(_g))
 
     # ── C1 : defaults live in code ────────────────────────────────────────────────────────────────────────────────
     src = open(os.path.join(ROOT, "strategy", "shadow_rules.py")).read()
