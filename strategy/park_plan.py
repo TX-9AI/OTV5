@@ -1,5 +1,14 @@
 """
-strategy/park_plan.py  v5.6
+strategy/park_plan.py  v5.7
+v5.7  2026-11-08  OTV5 r93 (C8.1) — PARK SKIPS AN ENTRY THE FIRST HOUR HAS ALREADY OUTRUN. The operator, 2026-11-08: "Yes,
+      to both" (C8 passed its blind test, ~/reviews/studies/web_setups_1108, FROZEN 18:57 UTC). first_hour_extended(): a
+      call is skipped when the 10:59 1m bar's CLOSE is ABOVE the highest high of the 09:30-10:29 1m bars, a put when it
+      is BELOW their lowest low (strict: equal is not extended). The 10:59 bar closed at 11:00, before the 11:01 window,
+      so nothing still forming is read. FAILS OPEN: no 10:59 bar, no 09:30-10:29 bar, no direction or an unreadable
+      store = not extended, said on the row (the study kept those trades as "unknown"). No parameter, no toggle. The
+      refusal is condition c8_first_hour_extended (plan_check row + the gate reporter + one [park] SKIP line); it is
+      asked AFTER the r90 shadow row (PARK_SMA50 still writes on every directional tick C8 skips) and after GATE-G and
+      the commitment gate, before the contract. Index and equity alike. Gates tests/check_park_c8.py.
 v5.6  2026-11-08  OTV5 r90 (SHADOW.1) — LOG ONLY: once the first hour gives a direction, and before GATE-G, the commitment
       gate or the contract can refuse it, prepare() records the daily SMA 50 slope's verdict (S4 S1d_slope, on the box's
       own TastyTrade 1d candles) through strategy/shadow_rules.record_park: one plan_check row shadow_park_sma50 per tick,
@@ -172,6 +181,66 @@ def read_first_hour(t, cond, *, symbol: str, day, prior_close=None):
     t.check("gap", gap, None)
     cond("gate_g", gap, bool(direction) and ((gap >= 0) if direction == "long" else (gap <= 0)))
     return {"move_pct": move, "spot": spot, "direction": direction, "gap": gap}
+
+
+# ── v5.7 (C8.1) — THE FIRST HOUR ALREADY OUTRUN ────────────────────────────────────────────────────────────────────
+C8_CLOSE_BAR = "10:59"                  # its close is settled at 11:00, before the 11:01 window (closed bars only)
+C8_IB = ("09:30", "10:29")              # the first hour's 1m bars (bar START stamps), as the frozen study read them
+
+
+def first_hour_extended(today: dict, direction: str) -> dict:
+    """C8, the frozen blind-tested rule: {"extended": True | False | None, "close_1059", "ib_high", "ib_low", "why"}.
+    `today` is session_bars()["today"] ("HH:MM" -> (o, h, l, c, v)). A long is extended when the 10:59 close is ABOVE
+    the 09:30-10:29 high, a short when it is BELOW their low; equality is not extended. None (unknown) when the 10:59
+    bar, every first-hour bar or the direction is missing - the caller treats unknown as NOT extended (fails open).
+    Pure: reads only `today`, never a bar stamped after 10:59."""
+    out = {"extended": None, "close_1059": None, "ib_high": None, "ib_low": None, "why": ""}
+    today = today or {}
+    ib = [today[k] for k in sorted(today) if C8_IB[0] <= k <= C8_IB[1]]
+    if ib:
+        out["ib_high"], out["ib_low"] = max(float(b[1]) for b in ib), min(float(b[2]) for b in ib)
+    b = today.get(C8_CLOSE_BAR)
+    if b is not None:
+        out["close_1059"] = float(b[3])
+    if direction not in ("long", "short"):
+        out["why"] = "no direction"
+    elif out["close_1059"] is None:
+        out["why"] = "no %s 1m bar" % C8_CLOSE_BAR
+    elif not ib:
+        out["why"] = "no %s-%s 1m bar" % C8_IB
+    elif direction == "long":
+        out["extended"] = out["close_1059"] > out["ib_high"]
+    else:
+        out["extended"] = out["close_1059"] < out["ib_low"]
+    return out
+
+
+def c8_read(t, cond, *, symbol: str, day, direction: str) -> dict:
+    """Narrate C8 on tick `t` and write condition c8_first_hour_extended through `cond` (met = NOT extended). Unknown
+    fails open (met, with the reason as the note). Returns the first_hour_extended() dict. NEVER raises."""
+    try:
+        sess = session_bars(symbol, day, n_prior=0)
+        if isinstance(sess, str):
+            r = {"extended": None, "close_1059": None, "ib_high": None, "ib_low": None, "why": sess}
+        else:
+            r = first_hour_extended(sess.get("today") or {}, direction)
+    except Exception as exc:                                    # noqa: BLE001
+        r = {"extended": None, "close_1059": None, "ib_high": None, "ib_low": None,
+             "why": "C8 read failed (%s: %s)" % (type(exc).__name__, exc)}
+    t.check("close_1059", r["close_1059"], None)
+    t.check("ib_high", r["ib_high"], None)
+    t.check("ib_low", r["ib_low"], None)
+    if r["extended"] is None:
+        cond("c8_first_hour_extended", r["close_1059"], True, note="unknown, fails open: " + r["why"])
+    elif r["extended"]:
+        edge = ("above the %s-%s high %.2f" % (C8_IB[0], C8_IB[1], r["ib_high"]) if direction == "long"
+                else "below the %s-%s low %.2f" % (C8_IB[0], C8_IB[1], r["ib_low"]))
+        note = "the %s close %.2f is already %s" % (C8_CLOSE_BAR, r["close_1059"], edge)
+        cond("c8_first_hour_extended", r["close_1059"], False, note=note)
+        logger.info("[park] SKIP c8_first_hour_extended %s %s - %s", symbol, direction, note)
+    else:
+        cond("c8_first_hour_extended", r["close_1059"], True)
+    return r
 
 
 # ── v5.4 (PARK.5) — THE COMMITMENT GATE, EQUITIES ONLY ─────────────────────────────────────────────────────────────
@@ -633,6 +702,14 @@ class ParkPlan:
             if prep.unmet:
                 t.refuse(prep.unmet[0], "not this session — " + ", ".join(prep.unmet))
                 return prep
+
+        # ── v5.7 (C8.1): the first hour already outrun. Index and equity alike; asked AFTER the r90 shadow row (so
+        # PARK_SMA50 still writes on every directional tick C8 skips) and after the commitment gate (whose fail-closed
+        # tape pages are unchanged), before the contract. ──
+        c8_read(t, prep.cond, symbol=sym, day=day, direction=direction)
+        if prep.unmet:
+            t.refuse(prep.unmet[0], "not this session — " + ", ".join(prep.unmet))
+            return prep
 
         # ── the contract ──────────────────────────────────────────────────
         rows = (getattr(chain, "calls", None) if direction == "long" else getattr(chain, "puts", None)) or []

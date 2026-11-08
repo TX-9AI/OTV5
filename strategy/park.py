@@ -1,5 +1,11 @@
 """
-strategy/park.py  v5.2
+strategy/park.py  v5.3
+v5.3  2026-11-08  OTV5 r93 (C8.1) — NOT AFTER THE FIRST HOUR HAS ALREADY BEEN OUTRUN. The operator, 2026-11-08: "Yes, to
+      both". One more condition, index and equity alike: c8_first_hour_extended - a call needs the 10:59 1m close NOT
+      above the 09:30-10:29 high, a put NOT below their low (unknown fails open). BLIND (18 sealed days, frozen
+      2026-11-08 18:57 UTC): skips 13 of 77 (3 W / 10 L), +$4,074 [+982, +7,924]; window 08-25..11-06: skips 63 of
+      254, +$10,128 [-12,022, +30,590]. Picked after the design results; sensitive to the first-hour length (30/45 min
+      flips it negative). The plan is park_plan v5.7; gate tests/check_park_c8.py.
 v5.2  2026-11-03  OTV5 r72 (PARK.5) — ON AN EQUITY, THE MARKET MUST HAVE COMMITTED. The operator, 2026-11-03: "Let's modify
       the park trade on equities using the new filters — add a gate in the code 'is an index=false' and start trading it
       Monday." Two conditions, asked only when the symbol is NOT an index (config.PARK_INDEXES: SPX, QQQ - an index trades
@@ -83,6 +89,9 @@ class Park:
                              f"10:00-10:59 wick against the move >= {config.PARK_COMMIT_WICK:.2f} of its range; "
                              f"09:30-10:59 volume below the prior {config.PARK_COMMIT_LOOKBACK} sessions' median). "
                              f"A tape too thin to read is no trade"),
+        # v5.3 (C8.1) - index and equity alike; unknown (a missing bar) fails open
+        "c8_first_hour_extended": ("a call: the 10:59 1m close NOT above the 09:30-10:29 1m high; a put: NOT below "
+                                   "their low (C8, blind-tested 2026-11-08). Equal is not extended"),
         "contract":         (f"the strike nearest the 11:00 1m close, today's expiry, two-sided, ask >= "
                              f"{config.PARK_MIN_ASK:.2f}; bought at the mark, never worse (PARK.4)"),
     }
@@ -93,6 +102,7 @@ class Park:
 
     PLAN_CHECKS = tuple(CONDITIONS) + (
         "move_pct", "gap", "open_0930", "close_1030", "spot_1100", "prior_close",
+        "close_1059", "ib_high", "ib_low",
         "strike", "ask", "bid", "delta",
         # v5.2 (PARK.5) - equities only
         "is_index", "pair_move_pct", "lean_range", "lean_reject", "lean_part", "against",

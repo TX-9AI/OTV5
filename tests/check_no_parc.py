@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """
-tests/check_no_parc.py  v5.1
+tests/check_no_parc.py  v5.2
+v5.2  2026-11-08  OTV5 r93 (C8.1) — N5 strips exactly PARK's new C8 condition and its rows, and r90's shadow_park_sma50
+      row (red since r90), after asserting C8 fails open on the fixture (no 10:59 bar); the rest equals 93c7f93's.
 v5.1  2026-10-31  OTV5 r68 (CFG.5) — N4 RE-POINTED, NOT DROPPED (section 38.4): seven more items left configure.sh's menu, TCS's
       among them (the operator, 2026-10-31: "15&16-same thing. These are DEAD thesis"; "Just the menu item for TCS, keep
       briefing the shadow."), so Done is 9 and the prompt names 1-9. The PARC property (no item, no key) is unchanged.
@@ -292,7 +294,23 @@ def main():
     except Exception:                                           # noqa: BLE001
         got = {"_error": (r.stderr or r.stdout)[-400:]}
     want = json.load(open(GOLDEN))
+    # r93 (C8.1): PARK gained ONE condition and its three narration rows; r90 (SHADOW.1) added the log-only
+    # shadow_park_sma50 row (N5 had been red on it since r90). The fixture has no 10:59 bar, so C8 is unknown and
+    # FAILS OPEN on the long and the short (the quiet / GATE-G cases refuse before C8 is asked); strip exactly those
+    # keys (after asserting that) and the rest must still equal 93c7f93's. tests/check_park_c8.py owns C8 itself.
+    c8_keys = ("c8_first_hour_extended", "close_1059", "ib_high", "ib_low", "shadow_park_sma50")
+    c8_open = True
+    for case in ("long", "short", "quiet", "gate_g"):
+        pp = (got.get(case) or {}).get("prep") or {}
+        cv = (pp.get("conditions") or {}).get("c8_first_hour_extended")
+        if case in ("long", "short") and not (isinstance(cv, list) and cv[-1] is True):
+            c8_open = False
+        for k in ("checks", "conditions"):
+            for ck in c8_keys:
+                (pp.get(k) or {}).pop(ck, None)
     diff = sorted(k for k in set(want) | set(got) if want.get(k) != got.get(k))
+    if not c8_open:
+        diff.append("c8_not_fail_open")
     check("N5 PARK unchanged on the fixture: prepared checks, conditions, signal (long 702C, short 698P, at the mark), "
           "quiet / GATE-G refusals, the 11:03 dormant minute, admission, size, state, window and cap exclusion equal "
           "93c7f93's",

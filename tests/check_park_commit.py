@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """
-tests/check_park_commit.py  v5.2
+tests/check_park_commit.py  v5.3
+v5.3  2026-11-08  OTV5 r93 (C8.1) — I1 holds PARK's new C8 condition met (its index fixture ramps above its first hour);
+      I1 is about the commitment gate. C8 itself, on indexes and equities, is tests/check_park_c8.py.
 v5.2  2026-11-03  OTV5 r72 (PARK.5) — THE TAPE IS WATCHED, PAGED AND RE-PULLED BEFORE 11:01, AND THE PAIR IS ON THE MANIFOLD.
       The operator, 2026-11-03: "Fine, but we need to be more responsive when that happens to mitigate impacts to
       trading"; "Add it to the manifold & the plan should warn if there's a problem." T1-T6 (park_plan v5.5 tape_gaps /
@@ -365,6 +367,10 @@ def main():
     for sym, o, c1030, c1100, pc in (("QQQ", 700.0, 702.1, 702.4, 699.0), ("SPX", 6000.0, 6015.0, 6018.0, 5990.0)):
         write_store({sym: sess_dict(session(o, c1030, c1100), [flat(pc, pc + 1, pc - 5)] + [flat(pc, pc + 1, pc - 5)] * 5)})
         PP.commitment_read = _boom
+        # r93 (C8.1): this fixture's ramp ends above its first hour, so C8 would skip it; I1 is about the commitment
+        # gate, so C8 is held met here (tests/check_park_c8.py owns C8, on indexes too)
+        _c8 = PP.c8_read
+        PP.c8_read = lambda t, cond, **k: cond("c8_first_hour_extended", None, True)
         try:
             prep, sig = run(P, sym, c1100)
         except AssertionError as exc:
@@ -372,6 +378,7 @@ def main():
             det.append(str(exc))
         finally:
             PP.commitment_read = _real
+            PP.c8_read = _c8
         good = (prep is not None and sig is not None and not any(n in prep.tick.checks for n in NEW_CHECKS)
                 and "pair_agrees" not in prep.conditions and "commitment" not in prep.conditions)
         ok_i &= good
