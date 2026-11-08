@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """
-tests/exit_replay.py  v5.1
+tests/exit_replay.py  v5.2
+v5.2  2026-11-08  OTV5 r80 (RSUITE.2) — `run_s3` drops the OTV4TEST fleet's trades through `r_ledger.mainline_rows`
+      (the one filter every S3 tool shares) before planning a fetch: it read `load_trades` itself, so a window before
+      10-25 replayed AAL and SOFI OTV4TEST trades. The local `--db` path reads one box's own trades.db and is unchanged.
 v5.1  2026-11-07  OTV5 r75 (REPLAY.1) — THE S3 PATH STREAMS AND NEVER HOLDS A DAY.
       `run_s3` called `load_series("quote_series", dates)`, which materialises
       every quote row of every box for the whole window before the first trade
@@ -568,8 +571,8 @@ def run_s3(a) -> int:
     print("  " + m1.banner())
     if m1.error:
         return 1
-    rows = [t for t in trades if (t.get("status") or "").lower() == "closed"
-]
+    from r_ledger import mainline_rows
+    rows = mainline_rows([t for t in trades if (t.get("status") or "").lower() == "closed"])
     # 🔴 r75 (REPLAY.1) — STREAMED, NEVER `load_series`. The old single LIST
     # call loaded the whole window's quote batches into one list: 6.2 GB of
     # JSON a day, OOM-killed on control. Rows go in entry order so the fetch

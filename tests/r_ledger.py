@@ -1,6 +1,14 @@
 #!/usr/bin/env python3
 """
-tests/r_ledger.py  v5.1
+tests/r_ledger.py  v5.2
+v5.2  2026-11-08  OTV5 r80 (RSUITE.2) — THE OTV4TEST FLEET IS FILTERED OUT OF THE S3 BOOK. `load_s3` returned every
+closed row `warehouse_source.load_trades` gave it, and raw/ holds both fleets: a window before 10-25 counted
+OTV4TEST's AAL and SOFI trades in R, capture, giveback, the stop surface and the excursions (the operator's standing
+rule: OTV4TEST is filtered out of every warehouse measurement). NEW `mainline_rows(rows)`: the one call every S3 tool
+makes - `warehouse_source.mainline`, the row's ET session day from `entry_time` (edge_scan's convention), and ONE
+printed line naming what was dropped by symbol (0 is printed too, so silence never reads as a filter that ran).
+`load_s3` applies it; stop_sweep and excursions inherit it through `load_s3`; exit_replay calls it on its own
+`load_trades` (v5.2). Gate tests/check_otv4test_filtered.py.
 v5.1  2026-10-25  (MEAS.6 / RPT.26 / PRE.2) — is_credit(): the flag first, credit_received > 0 as the fallback
 (otv4 r344, ported). No OTV5 entry path writes is_short_position (only broker_reconcile, for an adopted short), so
 every credit trade's MFE and MAE were exchanged in position_dollars and in everything reading it (capture,
@@ -498,6 +506,19 @@ def selftest() -> int:
     return 0 if ok else 1
 
 
+def mainline_rows(rows: list) -> list:
+    """-> rows without the OTV4TEST fleet's (v5.2, RSUITE.2). The operator's standing rule: OTV4TEST's AAL and SOFI
+    are filtered out of every warehouse measurement. The row's day is its ET session day from `entry_time` (a SOFI
+    row before 2026-10-25 is OTV4TEST, after it OTV5; an untagged SOFI row with no day is dropped - never a guess).
+    Prints ONE line, 0 included, so a filter that ran and found nothing reads differently from no filter."""
+    import warehouse_source as ws
+    kept, dropped = ws.mainline(rows, day_of=lambda r: str(r.get("entry_time") or "")[:10])
+    n = sum(dropped.values())
+    print("  OTV4TEST filter: {} row(s) dropped{}".format(
+        n, (" (" + ", ".join("{} {}".format(k, v) for k, v in sorted(dropped.items())) + ")") if n else ""))
+    return kept
+
+
 def load_s3(a):
     import warehouse_source as ws
     dates = ws.dates_of(a)
@@ -505,7 +526,7 @@ def load_s3(a):
     print("  " + meta.banner())
     if meta.error:
         return None
-    out = [r for r in rows if (r.get("status") or "").lower() == "closed"]
+    out = mainline_rows([r for r in rows if (r.get("status") or "").lower() == "closed"])
     # 🔴 r299 — RELAXED ROWS ARE NO LONGER EXCLUDED. Operator,
     # 2026-09-07: *"I don't want relaxed entry trades treated any
     # differently from strict. It's all paper. Leaving it would add a
