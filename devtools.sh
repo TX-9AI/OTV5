@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # ==========================================================================
-# devtools.sh  v5.3  — OTV5 box menu
+# devtools.sh  v5.4  — OTV5 box menu
+# v5.4  2026-11-08  OTV5 r96 (TIMER.2) — REINSTALL TIMERS removed: deploy/reinstall_timers.sh is deleted with the dead eod-bot timer it re-ran.
 # v5.3  2026-11-08  OTV5 r76 (RETIRE.1) — the standing set drops check_orb_plan (deleted with the ORB trade).
 # v5.2  2026-10-25  (MENU.1, BOX.13) — THE OPEN SCAN LABEL FITS 54 COLUMNS, AND THE MENU'S SCRATCH PURGE ARCHIVES, NEVER
 #       DELETES. MENU.1: "OPEN SCAN  today's 09:35 + 09:45 reports" rendered 56 columns against the 54-column phone limit;
@@ -366,7 +367,6 @@ trades_taken()    { echo; echo "  One line per trade, ET, with R and capital at 
 git_pull()  { echo "[pull] git pull --ff-only"; git pull --ff-only; pause; }
 git_state() { git -C "$REPO" log -3 --oneline | cut -c1-110; echo; git -C "$REPO" status -s; echo; tail -1 docs/GENESIS.md | cut -c1-120; pause; }
 mi_land()   { land_tarball; pause; }
-mi_reinstall_timers() { bash "$REPO/deploy/reinstall_timers.sh"; pause; }
 mi_bake()   { bake; pause; }
 
 bake() {
@@ -776,7 +776,6 @@ MENU=(
   "ITEM|git pull --ff-only|git_pull"
   "ITEM|LAND a tarball from ~|mi_land"
   "ITEM|BAKE   stop both, pull, purge, start feed+bot|mi_bake"
-  "ITEM|REINSTALL TIMERS     one-time, after r14|mi_reinstall_timers"
 )
 
 # ── COLOUR, AS ON CONTROL ────────────────────────────────────────────────────
