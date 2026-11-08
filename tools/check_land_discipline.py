@@ -1,5 +1,13 @@
 #!/usr/bin/env python3
-# tools/check_land_discipline.py — v5.2
+# tools/check_land_discipline.py — v5.3
+# v5.3  2026-11-08  OTV5 r89 (LAND.6) — A STANDALONE RUN CAN CHECK THE LAST LANDED REVISION. --rev took only a ledger
+#   label (r88), and --against defaulted to HEAD, so the obvious standalone call `--rev HEAD --against HEAD~1` asked
+#   the ledger for a row named "HEAD" and failed "no row for HEAD" on every OTV5 commit (found on the operator's
+#   attended run of the land checks, 11-08). The lander was never affected: it passes the label. Now --rev also takes
+#   a git ref: it is resolved to the rNN: label at the start of that commit's subject, it must be the tip (the tool
+#   checks the working tree, and the ledger's last-row rule only holds for the newest revision), and --against
+#   defaults to <ref>~1 when it was left at HEAD. A bare run with an empty diff says how to check the last land
+#   instead of only failing BUMP. Labels behave exactly as before. Gate: tests/check_land_discipline_ref.py D1-D6.
 # v5.2  2026-11-08  OTV5 r83 (OTV4DEP.2) — the Run example lands against ~/OTV5 (--rev r82); it named the frozen
 #   ~/options-trader-v4. Comment only; no behaviour changed.
 # v5.1  2026-10-25  (LAND.1) — A RE-ISSUED REVISION'S ROW IS FOUND. §26 suffixes a re-issue of a shipped revision
@@ -68,6 +76,7 @@
 #   green WORKING_AGREEMENT §18 warns about.
 #
 # Run:  python3 tools/check_land_discipline.py --repo ~/OTV5 --rev r82
+#       python3 tools/check_land_discipline.py --repo ~/OTV5 --rev HEAD   (the last landed revision)
 #       python3 tools/check_land_discipline.py --repo ~/day_trader_pro
 #       python3 tools/check_land_discipline.py --selftest
 
@@ -264,7 +273,8 @@ def check(repo, rev, ref, problems, notes, hook=False, ledger="docs/GENESIS.md")
         else:
             problems.append("GENESIS: this repo has a GENESIS ledger but no "
                             "--rev was given, so the row cannot be verified. "
-                            "Pass --rev rNNN, or --hook if this is a hand commit")
+                            "Pass --rev rNNN (or --rev HEAD for the last landed revision), or "
+                            "--hook if this is a hand commit")
     else:
         rows = re.findall(r"^\|\s*\*\*(r\d+[a-z]?(?:_r\d+)?)\*\*\s*\|", open(gpath, encoding="utf-8").read(), re.M)
         n = rows.count(rev)
@@ -305,6 +315,9 @@ def check(repo, rev, ref, problems, notes, hook=False, ledger="docs/GENESIS.md")
     # describing a change that does not exist. Counting the raw diff would let
     # that through, because the ledger row is itself a diff.
     if not any(st != "D" for st, _ in files):
+        if not rev:
+            notes.append("BUMP      hint  — a bare run diffs the working tree against %s. To check the last "
+                         "landed revision instead: --rev HEAD (resolves its rNNN: label, diffs against HEAD~1)" % ref)
         problems.append("BUMP: nothing differs from %s except generated or "
                         "append-only files. A land that changes no source is a "
                         "land that did not happen." % ref)
@@ -491,6 +504,37 @@ def selftest():
     return 0 if ok else 1
 
 
+LABEL = re.compile(r"^r\d+[a-z]?(?:_r\d+)?$")
+SUBJECT_LABEL = re.compile(r"^(r\d+[a-z]?(?:_r\d+)?):")
+
+
+def resolve_rev(repo, rev, against):
+    """v5.3. A ledger label passes through unchanged. Anything else is a git ref:
+    it must name the tip, and it becomes the rNN: label of its commit subject,
+    with --against defaulting to <ref>~1. Returns (label, against, error)."""
+    if not rev or LABEL.match(rev):
+        return rev, against, ""
+    repo = os.path.abspath(os.path.expanduser(repo))
+    p = sh(["git", "rev-parse", "--verify", "--quiet", rev + "^{commit}"], repo)
+    if p.returncode != 0:
+        return "", against, ("--rev %s is neither a ledger label (rNNN) nor a git ref in %s" % (rev, repo))
+    sha = p.stdout.strip()
+    head = sh(["git", "rev-parse", "HEAD"], repo).stdout.strip()
+    if sha != head:
+        return "", against, ("--rev %s is not the tip (HEAD). This tool checks the working tree and the ledger's "
+                             "last-row rule, so only the newest landed revision can be checked standalone; check "
+                             "out that commit first" % rev)
+    subj = sh(["git", "log", "-1", "--format=%s", sha], repo).stdout.strip()
+    m = SUBJECT_LABEL.match(subj)
+    if not m:
+        return "", against, ("--rev %s: its commit subject does not start with a revision label (rNNN:), so the "
+                             "ledger row cannot be named; pass --rev rNNN" % rev)
+    if against == "HEAD":
+        against = sha + "~1"
+    print("  --rev %s resolved to %s (commit %s), diffed against %s" % (rev, m.group(1), sha[:7], against))
+    return m.group(1), against, ""
+
+
 def main(argv):
     ap = argparse.ArgumentParser()
     ap.add_argument("--repo", default=".")
@@ -506,7 +550,12 @@ def main(argv):
     a = ap.parse_args(argv[1:])
     if a.selftest:
         return selftest()
-    return run(a.repo, a.rev, a.against, a.hook, a.ledger)
+    rev, against, err = resolve_rev(a.repo, a.rev, a.against)
+    if err:
+        print("check_land_discipline — %s" % a.repo)
+        print("\n  PROBLEMS (1):\n   ✗ " + err + "\n\nFAIL")
+        return 1
+    return run(a.repo, rev, against, a.hook, a.ledger)
 
 
 if __name__ == "__main__":
