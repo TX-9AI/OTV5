@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """
-tests/check_orb_reentry.py  v5.1
+tests/check_orb_reentry.py  v5.2
+v5.2  2026-11-08  OTV5 r84 (VENV.1) — a bare run (control's /usr/bin/python3 3.14, no pandas) stops with one
+      ModuleNotFoundError line naming the venv to use, not a traceback: utils.venv_guard.require_venv before the first
+      third-party import. Under the venv nothing changes.
 v5.1  2026-11-08  OTV5 r76 (RETIRE.1) — R5/V4 RE-POINTED (WA 38.4): the ORB TRADE's plan (ORBPlan) is removed, so R5 pins it gone and the re-armed
       ENGINE back in WAITING_FOR_BREAK, and V4 reads the refused candidate off the engine's own break_refusal. Every engine
       check (R1-R4, S, V1-V3, L, R6) is unchanged.
@@ -86,6 +89,8 @@ for _sp in _glob.glob(os.path.join(os.path.dirname(os.path.dirname(os.path.abspa
     if _sp not in sys.path: sys.path.insert(1, _sp)
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from utils.venv_guard import require_venv                         # noqa: E402  (stdlib only)
+require_venv('pandas')
 
 import logging                                                   # noqa: E402
 logging.disable(logging.CRITICAL)

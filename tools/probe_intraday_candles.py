@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""tools/probe_intraday_candles.py — v5.0
+"""tools/probe_intraday_candles.py — v5.1
+v5.1  2026-11-08  OTV5 r84 (VENV.1) — a bare run (control's /usr/bin/python3 3.14, no tastytrade) stops with one
+      ModuleNotFoundError line naming the venv to use, not a traceback: utils.venv_guard.require_venv before the first
+      third-party import. Under the venv nothing changes.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 PRB.6: HOW FAR BACK WILL TASTYTRADE SERVE INTRADAY CANDLES, AND WHAT ARE THEY?
 
@@ -43,6 +46,9 @@ from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 sys.path.insert(0, os.path.expanduser("~/options-trader"))
+sys.path.insert(1, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))  # utils.venv_guard on control too
+from utils.venv_guard import require_venv                         # noqa: E402  (stdlib only)
+require_venv('tastytrade')
 from tastytrade import DXLinkStreamer                           # noqa: E402
 from tastytrade.dxfeed import Candle                            # noqa: E402
 from data.tasty_client import get_session                       # noqa: E402

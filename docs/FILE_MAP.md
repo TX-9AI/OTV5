@@ -4,9 +4,9 @@
 Do not edit by hand: the generator runs inside the land command and
 the canary fails on drift (WORKING_AGREEMENT 33).
 
-528 Python modules across 12 local packages.
+530 Python modules across 12 local packages.
 
-**Reached by:** 129 imported · 25 declared entry points · 268 referenced from a script, unit or doc but never imported · **106 by nothing here**.
+**Reached by:** 130 imported · 25 declared entry points · 271 referenced from a script, unit or doc but never imported · **104 by nothing here**.
 
 ⚠️ The last group is a REVIEW LIST, not a delete list. A
 `land.spec CHECK` line ships inside a tarball and is never
@@ -42,7 +42,7 @@ execution.exit_engine); every such edge is listed below like any other.
 - `analysis/market_state.py` - the structural state assembly.
   **Carries the vocabulary, classifies nothing.**
 
-**Where the evidence lives:** `tests/` holds 332 standing
+**Where the evidence lives:** `tests/` holds 333 standing
 checks (`check_*.py`, all run by `tools/boot_sweep.py` at boot)
 plus the studies that produced every threshold in
 `docs/TRADES.md`. **A number in a strategy file should be
@@ -1102,7 +1102,7 @@ Change these with the most care; a break here reaches everything downstream.
 - **called by:** (not imported) — referenced in `docs/BACKLOG.md`, `docs/ENV.md`
 
 ### `tests/check_hunt_wick_since_entry.py`
-- **calls:** `execution/__init__.py`, `execution/exit_engine.py`
+- **calls:** `execution/__init__.py`, `execution/exit_engine.py`, `utils/venv_guard.py`
 - **called by:** (not imported) — referenced in `docs/BACKLOG.md`
 
 ### `tests/check_imports.py`
@@ -1394,19 +1394,19 @@ Change these with the most care; a break here reaches everything downstream.
 - **called by:** (nothing — no importer and no mention in any script, unit or doc here)
 
 ### `tests/check_orb_reentry.py`
-- **calls:** `analysis/orb_engine.py`, `config.py`
-- **called by:** (nothing — no importer and no mention in any script, unit or doc here)
+- **calls:** `analysis/orb_engine.py`, `config.py`, `utils/venv_guard.py`
+- **called by:** (not imported) — referenced in `docs/BACKLOG.md`
 
 ### `tests/check_orb_release.py`
 - **calls:** `analysis/__init__.py`, `analysis/orb_engine.py`, `config.py`, `database/trade_logger.py`, `main.py`, `strategy/__init__.py`, `strategy/plan.py`, `strategy/runaway_plan.py`, `utils/time_utils.py`
 - **called by:** (not imported) — referenced in `docs/BACKLOG.md`, `docs/ENV.md`
 
 ### `tests/check_orb_restart.py`
-- **calls:** `analysis/orb_engine.py`, `config.py`
+- **calls:** `analysis/orb_engine.py`, `config.py`, `utils/venv_guard.py`
 - **called by:** (not imported) — referenced in `docs/WORKING_AGREEMENT.md`
 
 ### `tests/check_orb_resume.py`
-- **calls:** `analysis/orb_engine.py`, `database/trade_logger.py`, `utils/time_utils.py`
+- **calls:** `analysis/orb_engine.py`, `database/trade_logger.py`, `utils/time_utils.py`, `utils/venv_guard.py`
 - **called by:** (nothing — no importer and no mention in any script, unit or doc here)
 
 ### `tests/check_orb_window.py`
@@ -1734,7 +1734,7 @@ Change these with the most care; a break here reaches everything downstream.
 - **called by:** (not imported) — referenced in `docs/BACKLOG.md`
 
 ### `tests/check_spxw_only.py`
-- **calls:** `analysis/tenor_publish.py`, `data/__init__.py`, `data/open_interest.py`, `data/options_chain.py`, `strategy/__init__.py`
+- **calls:** `analysis/tenor_publish.py`, `data/__init__.py`, `data/open_interest.py`, `data/options_chain.py`, `strategy/__init__.py`, `utils/venv_guard.py`
 - **called by:** (not imported) — referenced in `docs/BACKLOG.md`
 
 ### `tests/check_spxw_settle_orcs_live.py`
@@ -1806,12 +1806,12 @@ Change these with the most care; a break here reaches everything downstream.
 - **called by:** (not imported) — referenced in `docs/BACKLOG.md`, `docs/ENV.md`
 
 ### `tests/check_telegram_queue.py`
-- **calls:** `notifications/telegram_sender.py`
+- **calls:** `notifications/telegram_sender.py`, `utils/venv_guard.py`
 - **called by:** (not imported) — referenced in `docs/BACKLOG.md`
 
 ### `tests/check_tent.py`
-- **calls:** `config.py`, `strategy/condor_roll.py`, `strategy/structure.py`
-- **called by:** (nothing — no importer and no mention in any script, unit or doc here)
+- **calls:** `config.py`, `strategy/condor_roll.py`, `strategy/structure.py`, `utils/venv_guard.py`
+- **called by:** (not imported) — referenced in `docs/BACKLOG.md`
 
 ### `tests/check_tick_join.py`
 - **calls:** `data/options_chain.py`, `derived/notes.py`, `strategy/__init__.py`, `strategy/plan.py`
@@ -1826,7 +1826,7 @@ Change these with the most care; a break here reaches everything downstream.
 - **called by:** (not imported) — referenced in `docs/BACKLOG.md`
 
 ### `tests/check_trade_switches.py`
-- **calls:** `analysis/orb_engine.py`, `config.py`, `data/options_chain.py`, `strategy/breakout.py`, `strategy/liquidity_hunt.py`, `strategy/orb_plan.py`, `strategy/runaway_plan.py`
+- **calls:** `analysis/orb_engine.py`, `config.py`, `data/options_chain.py`, `strategy/breakout.py`, `strategy/liquidity_hunt.py`, `strategy/orb_plan.py`, `strategy/runaway_plan.py`, `utils/venv_guard.py`
 - **called by:** (not imported) — referenced in `docs/BACKLOG.md`
 
 ### `tests/check_trail_restart.py`
@@ -1845,12 +1845,16 @@ Change these with the most care; a break here reaches everything downstream.
 - **calls:** `warehouse/__init__.py`, `warehouse/retention_purge.py`
 - **called by:** (not imported) — referenced in `docs/BACKLOG.md`
 
+### `tests/check_venv_guard.py`
+- **calls:** (none)
+- **called by:** (not imported) — referenced in `docs/BACKLOG.md`
+
 ### `tests/check_vix_stamp.py`
 - **calls:** `execution/__init__.py`, `execution/entry_engine.py`, `main.py`
 - **called by:** (not imported) — referenced in `docs/BACKLOG.md`
 
 ### `tests/check_vwap_closed_bars.py`
-- **calls:** `data/market_data.py`, `derived/indicators.py`
+- **calls:** `data/market_data.py`, `derived/indicators.py`, `utils/venv_guard.py`
 - **called by:** (not imported) — referenced in `docs/BACKLOG.md`
 
 ### `tests/check_warehouse_stream.py`
@@ -2038,7 +2042,7 @@ Change these with the most care; a break here reaches everything downstream.
 - **called by:** (entry point)
 
 ### `tools/feed_capabilities.py`
-- **calls:** `config.py`, `data/tasty_client.py`
+- **calls:** `config.py`, `data/tasty_client.py`, `utils/venv_guard.py`
 - **called by:** (entry point)
 
 ### `tools/last_session.py`
@@ -2066,27 +2070,27 @@ Change these with the most care; a break here reaches everything downstream.
 - **called by:** (not imported) — referenced in `README.md`, `configure.sh`, `docs/BACKLOG.md`, `docs/ENV.md` +3
 
 ### `tools/probe_aux_streams.py`
-- **calls:** `config.py`, `data/tasty_client.py`
+- **calls:** `config.py`, `data/tasty_client.py`, `utils/venv_guard.py`
 - **called by:** (entry point)
 
 ### `tools/probe_candle_depth.py`
-- **calls:** `data/tasty_client.py`
+- **calls:** `data/tasty_client.py`, `utils/venv_guard.py`
 - **called by:** (entry point)
 
 ### `tools/probe_daily_candles.py`
-- **calls:** `data/tasty_client.py`
+- **calls:** `data/tasty_client.py`, `utils/venv_guard.py`
 - **called by:** (not imported) — referenced in `docs/BACKLOG.md`, `docs/ENV.md`
 
 ### `tools/probe_intraday_candles.py`
-- **calls:** `data/tasty_client.py`
+- **calls:** `data/tasty_client.py`, `utils/venv_guard.py`
 - **called by:** (not imported) — referenced in `docs/ENV.md`
 
 ### `tools/probe_live_mark.py`
-- **calls:** `data/tasty_client.py`, `execution/position_manager.py`
+- **calls:** `data/tasty_client.py`, `execution/position_manager.py`, `utils/venv_guard.py`
 - **called by:** (not imported) — referenced in `docs/BACKLOG.md`, `docs/ENV.md`
 
 ### `tools/probe_order_dryrun.py`
-- **calls:** `data/tasty_client.py`
+- **calls:** `data/tasty_client.py`, `utils/venv_guard.py`
 - **called by:** (entry point)
 
 ### `tools/rebuild_1m_from_last_trade.py`
@@ -2156,6 +2160,10 @@ Change these with the most care; a break here reaches everything downstream.
 ### `utils/time_utils.py`
 - **calls:** `config.py`, `utils/__init__.py`, `utils/market_calendar.py`
 - **called by:** `analysis/entry_snapshot.py`, `analysis/orb_engine.py`, `analysis/tenor_publish.py`, `analysis/tenor_select.py`, `analysis/trade_readiness.py`, `analysis/trend_engine.py`, `analysis/volatility_measures.py`, `data/macro_data.py`, `data/market_data.py`, `data/options_chain.py`, `database/trade_logger.py`, `derived/levels.py`, `execution/broker_reconcile.py`, `execution/entry_engine.py`, `execution/exit_engine.py`, `execution/fill_observers.py`, `execution/limit_ladder.py`, `execution/order_guard.py`, `execution/position_manager.py`, `execution/resting_orders.py`, `main.py`, `notifications/alert_manager.py`, `risk/risk_manager.py`, `risk/session_guard.py`, `strategy/breakout_plan.py`, `strategy/condor_roll.py`, `strategy/credit_vertical.py`, `strategy/gex_pin_butterfly.py`, `strategy/liquidity_hunt.py`, `strategy/park_plan.py`, `strategy/plan.py`, `strategy/runaway_plan.py`, `strategy/tcs_plan.py`, `tests/check_bar_final_grace.py`, `tests/check_bfly_vwap_band.py`, `tests/check_butterfly_foundational.py`, `tests/check_butterfly_legs.py`, `tests/check_butterfly_wing_grid.py`, `tests/check_condor_spec.py`, `tests/check_decay_stop.py`, `tests/check_entry_floor_env.py`, `tests/check_entry_gate.py`, `tests/check_eod_schedule.py`, `tests/check_exhaust_session.py`, `tests/check_exit_executes.py`, `tests/check_fed_day_record.py`, `tests/check_half_day.py`, `tests/check_holiday_aware.py`, `tests/check_last_closed_bar.py`, `tests/check_live_exit_paths.py`, `tests/check_manage_call.py`, `tests/check_manifold_windows.py`, `tests/check_orb_range_quiet.py`, `tests/check_orb_release.py`, `tests/check_orb_resume.py`, `tests/check_park.py`, `tests/check_park_entry_mark.py`, `tests/check_park_late_shadow.py`, `tests/check_plan_prepares.py`, `tests/check_rehearsal_toggle.py`, `tests/check_snapshot_pin.py`, `tests/check_tcs_parked.py`, `tests/check_tcs_shadow.py`, `tests/check_time_parse.py`, `tools/manifold_health.py`
+
+### `utils/venv_guard.py`
+- **calls:** (none)
+- **called by:** `tests/check_hunt_wick_since_entry.py`, `tests/check_orb_reentry.py`, `tests/check_orb_restart.py`, `tests/check_orb_resume.py`, `tests/check_spxw_only.py`, `tests/check_telegram_queue.py`, `tests/check_tent.py`, `tests/check_trade_switches.py`, `tests/check_vwap_closed_bars.py`, `tools/feed_capabilities.py`, `tools/probe_aux_streams.py`, `tools/probe_candle_depth.py`, `tools/probe_daily_candles.py`, `tools/probe_intraday_candles.py`, `tools/probe_live_mark.py`, `tools/probe_order_dryrun.py`
 
 ### `warehouse/__init__.py`
 - **calls:** (none)

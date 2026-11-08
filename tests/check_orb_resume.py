@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """
-tests/check_orb_resume.py  v5.1
+tests/check_orb_resume.py  v5.2
+v5.2  2026-11-08  OTV5 r84 (VENV.1) — a bare run (control's /usr/bin/python3 3.14, no pandas) stops with one
+      ModuleNotFoundError line naming the venv to use, not a traceback: utils.venv_guard.require_venv before the first
+      third-party import. Under the venv nothing changes.
 v5.1  2026-11-08  OTV5 r76 (RETIRE.1) — R7 RE-POINTED (WA 38.4): the ORB TRADE's fired-vs-missed row (orb_entry_since, the MISSED plan row and its
       journal disposition) is removed with the trade, so R7 pins it gone and R7b pins the ENGINE's resume and reach-back kept;
       R1-R6 (the engine) unchanged.
@@ -35,6 +38,8 @@ import json, os, sys, tempfile
 from datetime import datetime, timedelta
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from utils.venv_guard import require_venv                         # noqa: E402  (stdlib only)
+require_venv('pandas')
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 FAILURES: list = []
 

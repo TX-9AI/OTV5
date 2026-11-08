@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """
-tests/check_spxw_only.py  v5.0
+tests/check_spxw_only.py  v5.1
+v5.1  2026-11-08  OTV5 r84 (VENV.1) — a bare run (control's /usr/bin/python3 3.14, no tastytrade) stops with one
+      ModuleNotFoundError line naming the venv to use, not a traceback: utils.venv_guard.require_venv before the first
+      third-party import. Under the venv nothing changes.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.1  2026-10-04  otv4 r464 — W4 SKIPS where strategy.orcs_plan is absent (ORCS is
       fork-only), as check_zero_bid_refused's Z6 does; nothing else changed.
@@ -37,6 +40,8 @@ from types import SimpleNamespace
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
+from utils.venv_guard import require_venv                         # noqa: E402  (stdlib only)
+require_venv('tastytrade')
 PROBLEMS = []
 
 

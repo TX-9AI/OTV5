@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """
-tests/check_hunt_wick_since_entry.py  v5.1
+tests/check_hunt_wick_since_entry.py  v5.2
+v5.2  2026-11-08  OTV5 r84 (VENV.1) — a bare run (control's /usr/bin/python3 3.14, no pandas) stops with one
+      ModuleNotFoundError line naming the venv to use, not a traceback: utils.venv_guard.require_venv before the first
+      third-party import. Under the venv nothing changes.
 v5.1  2026-10-31  OTV5 r68 (CFG.5) — OT_RESTING_STOP_STATE leaves the scratch env: the resting stop and its state file are deleted
       (the operator, 2026-10-31: "Resting stop was a study. It failed. Get this the fuck out of here"). No check changed.
 v5.0  2026-10-28  OTV5 r52 (HUNT.15) — THE HUNT'S TARGET-WICK TAKE-OFF JUDGES ONLY A BAR THE TRADE LIVED THROUGH.
@@ -29,6 +32,8 @@ from zoneinfo import ZoneInfo
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
+from utils.venv_guard import require_venv                         # noqa: E402  (stdlib only)
+require_venv('pandas')
 _s = tempfile.mkdtemp(prefix="check_hunt_wick_since_entry.")
 for _k, _v in (("OT_TRADES_DB", "trades.db"), ("OT_DERIVED_DB", "derived.db"), ("OT_RESTING_DB", "resting.db"),
                ("OT_FEED_DB", "feed.db"), ("OT_COUNTERFACTUAL_DIR", "cf"), ("OT_LOG_FILE", "bot.log"),

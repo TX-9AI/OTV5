@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """
-tests/check_trade_switches.py  v5.2
+tests/check_trade_switches.py  v5.3
+v5.3  2026-11-08  OTV5 r84 (VENV.1) — a bare run (control's /usr/bin/python3 3.14, no pandas) stops with one
+      ModuleNotFoundError line naming the venv to use, not a traceback: utils.venv_guard.require_venv before the first
+      third-party import. Under the venv nothing changes.
 v5.2  2026-11-08  OTV5 r76 (RETIRE.1) — RE-POINTED (section 38.4): VOLT, the ORB trade and the ATP fly are REMOVED, not
       switched off, so S1-S5, S7 and S10 (their switches) go with them and S0 pins that their modules and keys are
       gone; S6 (Breakout's selector and the ORB ENGINE), S8 (the 10:30 ends), S9 (the fly and TCS windows) and S11
@@ -49,6 +52,8 @@ sys.path.insert(0, _root)
 for _sp in _glob.glob(os.path.join(_root, "venv", "lib", "python*", "site-packages")):
     if _sp not in sys.path:                                  # r106 venv bootstrap
         sys.path.insert(1, _sp)
+from utils.venv_guard import require_venv                         # noqa: E402  (stdlib only)
+require_venv('pandas')
 _S = tempfile.mkdtemp(prefix="check_trade_switches_")
 for _k, _f in (("OT_TRADES_DB", "t.db"), ("OT_DERIVED_DB", "d.db"), ("OT_RESTING_DB", "r.db")):
     os.environ.setdefault(_k, os.path.join(_S, _f))

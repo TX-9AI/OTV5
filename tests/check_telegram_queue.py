@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""tests/check_telegram_queue.py — v5.0
+"""tests/check_telegram_queue.py — v5.1
+v5.1  2026-11-08  OTV5 r84 (VENV.1) — a bare run (control's /usr/bin/python3 3.14, no requests) stops with one
+      ModuleNotFoundError line naming the venv to use, not a traceback: utils.venv_guard.require_venv before the first
+      third-party import. Under the venv nothing changes.
 v5.0  2026-10-26  (TG.1) — new. TELEGRAM NEVER BLOCKS THE CALLER, AND A FAILED ALERT IS RETRIED, NOT LOST.
       2026-10-26, first OTV5 paper session: 70 of 95 fleet alerts failed 09:15-10:00 ET (read timeout=10 and HTTP 429)
       and each failure stalled the trading loop 10 s; on SPX a Runaway hard stop was reached two stalls late and filled
@@ -39,6 +42,8 @@ import time
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
+from utils.venv_guard import require_venv                         # noqa: E402  (stdlib only)
+require_venv('requests')
 BUDGET_S = 90
 
 _fails = []
