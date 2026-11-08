@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_market_time.py  v5.0
+tests/check_market_time.py  v5.1
+v5.1  2026-11-08  OTV5 r76 (RETIRE.1) — M3 (the sweep plan's first look) goes with the sweep plan; every other reader check unchanged.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.0  2026-10-24  CD.2 — EVERY READER OF A DERIVED OR SERIES TABLE JUDGES A ROW BY ITS MARKET TIME. The operator,
       2026-10-24: the primer seeds inputs and derivatives rebuild, and "populating those tables should be harmless" -
@@ -10,7 +11,7 @@ v1.0  2026-10-24  CD.2 — EVERY READER OF A DERIVED OR SERIES TABLE JUDGES A RO
   M1  level_event: latest_rejection() never serves a row without bar_close_epoch, nor one whose bar closed before
       `since`, whatever its write time; a fresh row (bar closed after `since`) is served, newest bar first
   M2  the exit hand-off: a REJECTED whose bar closed BEFORE the entry is not a hand-off; one after it is (r317 + CD.2)
-  M3  sweep_plan: the first look SPENDS the session's existing REJECTED (a restart does not re-fire it); a later fresh
+  M3  (r76: removed with the sweep plan) sweep_plan: the first look SPENDS the session's existing REJECTED (a restart does not re-fire it); a later fresh
       REJECTED on the same level still fires (§37 as tcs_plan r112)
   M4  surface: gamma_regime.level() ignores a row with quote_ts older than 300 s however recent its write time, and a
       row with no quote_ts; anchors.charm_at ignores quote_ts older than 120 s; gex_between is retired (None)
@@ -115,38 +116,6 @@ def main() -> int:
     except Exception as exc:                                    # noqa: BLE001
         check("M2 hand-off", False, f"{type(exc).__name__}: {exc}")
 
-    # ── M3 the sweep's first look spends what exists ──────────────────────────────────────────────────
-    try:
-        import strategy.sweep_plan as SP
-        st = _store()
-        st.mark_level_sync(SYM, now)
-        lid = f"{SYM}:ny:100.00"
-        st.upsert_level((lid, SYM, 100.0, "resistance", "ny", "session", now - 3600, 0, None, 0, None, None, 1))
-        _ev(st, lid, "resistance", now - 300, now - 290, price=100.0)            # exists BEFORE this process looks
-        SP._symbol_of = lambda: SYM
-        plan = SP.SweepPlan(store=st)
-        import pandas as pd
-        idx = pd.date_range(end=pd.Timestamp.now(tz="America/New_York").floor("min"), periods=5, freq="1min")
-        frame = pd.DataFrame({"open": 99.8, "high": 100.2, "low": 99.6, "close": 99.9, "volume": 1}, index=idx)
-        kw = dict(price_now=99.9, now_et="10:32", atr_pct=0.08, orb_high=99.5, orb_low=97.5, chain=None,
-                  df_1m=frame, session_open_epoch=since)
-        try:
-            p1 = plan.prepare(**kw)
-        except TypeError:
-            kw.pop("chain", None)
-            p1 = plan.prepare(**kw)
-        key_old = (lid, datetime.fromtimestamp(now - 360, ET).isoformat())
-        spent_first = key_old in plan._fired_events
-        _ev(st, lid, "resistance", now - 60, now - 50, price=100.0)              # a NEW rejection, after the first look
-        key_new = (lid, datetime.fromtimestamp(now - 120, ET).isoformat())
-        fresh = st.latest_rejection(SYM, since_ts=since)
-        check("M3 sweep first look: the pre-existing REJECTED is spent (never fires); a later fresh one is not spent",
-              spent_first and getattr(p1, "rejected", None) is None and fresh is not None
-              and (fresh["level_id"], fresh["bar_ts"]) == key_new and key_new not in plan._fired_events,
-              f"spent={spent_first} p1.rejected={getattr(p1, 'rejected', None)} fresh={fresh and fresh['bar_ts']} "
-              f"fired={plan._fired_events}")
-    except Exception as exc:                                    # noqa: BLE001
-        check("M3 sweep first look", False, f"{type(exc).__name__}: {exc}")
 
     # ── M4 surface by quote_ts ────────────────────────────────────────────────────────────────────────
     try:

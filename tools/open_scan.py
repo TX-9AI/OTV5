@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tools/open_scan.py  v5.0 — THE DAILY OPEN SCAN: IS THE PIPELINE READY, AND ARE THE
+tools/open_scan.py  v5.1 — THE DAILY OPEN SCAN: IS THE PIPELINE READY, AND ARE THE
+v5.1  2026-11-08  OTV5 r76 (RETIRE.1) — LEVEL_PLANS drops the removed sweep (Hunt, Breakout). The operator, 2026-11-07: "Running dead code and logging dead code activity is unnecessary drag. Yes, I want all of those things fixed."
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 PLANS SEEING WHAT THEY SHOULD?
 
@@ -73,7 +74,7 @@ KNOWN = {
     "snapshot-empty:character": "HYG.15", "snapshot-empty:character_held_s": "HYG.15",
     "snapshot-empty:gap_class": "HYG.15", "snapshot-empty:fork": "HYG.15",
 }
-LEVEL_PLANS = ("SweepCreditSpread", "LiquidityHunt", "Breakout")
+LEVEL_PLANS = ("LiquidityHunt", "Breakout")
 LEVEL_INPUTS = ("levels_above", "levels_below", "nearest_above", "nearest_below",
                 "rails_in_play", "fork_built", "pool_price")
 FIXTURE = re.compile(r"\[rehearsal\]|price 100\.0000")

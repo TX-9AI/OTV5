@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """
-tests/check_orb_release.py  v5.1
+tests/check_orb_release.py  v5.2
+v5.2  2026-11-08  OTV5 r76 (RETIRE.1) — M1 RE-POINTED (WA 38.4): the ORB trade is removed and OT_ORB_TRADE is read by nothing, so a set switch no
+      longer holds the engine (b is True); a stale ORB position still holds it (fails closed), another strategy's does not.
 v5.1  2026-10-31  OTV5 r68 (CFG.5) — OT_RESTING_STOP_STATE leaves the scratch env: the resting stop and its state file are deleted
       (the operator, 2026-10-31: "Resting stop was a study. It failed. Get this the fuck out of here"). No check changed.
 v5.0  2026-10-30  OTV5 r61 (ORB.10) — new. THE RETIRED ORB HELD THE ENGINE OPEN, SO RUNAWAY NEVER SAW THE REVERSAL.
@@ -25,7 +27,7 @@ v5.0  2026-10-30  OTV5 r61 (ORB.10) — new. THE RETIRED ORB HELD THE ENGINE OPE
   U1  release_unowned() is a no-op off OPEN_*; U2 50% accepted -> INVALIDATED runaway; U3 past the cutoff ->
       EXPIRED; U4 a last close inside -> WAITING_FOR_BREAK; U5 else ARMED on the impulse, attempt + 1, the bar
       remembered (the notify_position_closed outcomes)
-  M1  main._orb_release_due: ORB dormant, no offer, no ORB position -> True; OT_ORB_TRADE=1 -> False; an open
+  M1  main._orb_release_due: no offer, no ORB position -> True; OT_ORB_TRADE=1 -> still True (r76: removed); an open
       ORB position -> False
   M2  main.run_analysis releases right after get_orb_engine().update() and before orb_state.json is written, and
       the reach-back is called with release_open
@@ -345,8 +347,9 @@ if M is not None:
         finally:
             M.get_position_manager = _real_pm
             os.environ.pop("OT_ORB_TRADE", None)
-        check("M1 _orb_release_due: dormant ORB True, OT_ORB_TRADE=1 False, open ORB position False, other "
-              "strategy's position True", a is True and b is False and c is False and d_ is True,
+        check("M1 _orb_release_due: no ORB owner True, and still True with OT_ORB_TRADE=1 (r76: the trade is removed, its "
+              "switch reads nothing); a stale ORB position False; another strategy's position True",
+              a is True and b is True and c is False and d_ is True,
               f"dormant={a} active={b} orb_open={c} other_open={d_}")
     import inspect
     src = inspect.getsource(M.run_analysis)

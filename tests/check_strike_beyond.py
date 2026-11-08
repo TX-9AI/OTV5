@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """
-tests/check_strike_beyond.py  v5.0
+tests/check_strike_beyond.py  v5.1
+v5.1  2026-11-08  OTV5 r76 (RETIRE.1) — S0-S4 (the sweep's level ranker and plan telemetry) go with the sweep; P1-P5 drive strike_beyond_sweep, which the
+      TCS shadow still reads, unchanged.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.1  2026-09-22  OTV4TEST r102 - S3 RE-POINTED AT THE PLAN, AND IT WAS
       HIDING A REAL LOSS. The AttributeError killed the run before S3, and
@@ -108,64 +110,17 @@ def main():
     check("P5 a wick past the end of the chain declines",
           f(7000.0, 7639.01, False, contracts=ks) is None)
 
-    # ══ S1 — NEAREST LEVEL WINS, NOT THE FRESHEST RAID. The distant level is
-    # a bar fresher; under the old min(bars_ago) rule it won.
+    # ══ S0-S4 r76: the sweep's level ranker (level_rank) and its plan are removed with the sweep; the strike
+    # helper above (P1-P5) is what the TCS shadow still reads.
     import strategy.sweep_credit_spread as S
-
-    # ⚠️ NAMED FAILURE, NOT AN AttributeError. At a HEAD without the
-    # extracted ranker every S-check would die on one traceback, and "the
-    # checker crashed" must not look like "the invariant is violated".
-    if not hasattr(S, "level_rank"):
-        check("S0 sweep_credit_spread exposes level_rank", False,
-              "the level ranker is not extracted — nothing to drive")
-        print()
-        print("RED — 1 failed: level_rank absent")
-        return 1
-    near, far = SW(99.4, bars=5), SW(97.0, bars=1)
-
-    def pick(cands, price):
-        # \u26a0\ufe0f DRIVES THE REAL `level_rank`, not a copy of it (C.23).
-        r = [(S.level_rank(x, price), x) for x in cands]
-        r = [(a, b) for a, b in r if a is not None]
-        return min(r, key=lambda rs: rs[0])[1] if r else None
-
-    check("S1 the NEAREST pool wins over a fresher distant one",
-          pick([far, near], 100.0) is near)
-    # ══ S2 — recency is the TIE-BREAK, not the key
-    a, b = SW(99.4, bars=9), SW(99.4, bars=2)
-    check("S2 equal distance is broken by freshness", pick([a, b], 100.0) is b)
-
-    # ══ S4 — a sweep with no pool price DROPS OUT, it does not sort last.
-    # A missing field becoming "a far-away level" is the absent-is-not-zero
-    # failure this repo keeps paying for.
-    check("S4 an unusable pool price is None, never a large distance",
-          S.level_rank(SW(0.0), 100.0) is None)
-    check("S4b it is excluded from the pick rather than losing to it",
-          pick([SW(0.0), SW(99.4)], 100.0).pool_price == 99.4)
-
-    # ══ S3 — the real module ranks the same way (not a copy of the test's)
-    # 🔴 r102 — TWO FAULTS WERE STACKED HERE AND THE FIRST HID THE SECOND.
-    # (1) The declaration site moved: `SweepCreditSpreadStrategy.PLAN_CHECKS`
-    # is set on the INSTANCE in __init__, so CLASS access raised AttributeError
-    # and this file died before S3 ever ran. (2) Behind that crash, the three
-    # fields were GENUINELY ABSENT — mainline r233 added them record-only, r5
-    # rewrote the sweep into `sweep_plan.py` and carried the header paragraph
-    # promising them WITHOUT the code. r102 restores them at the new site.
-    try:
-        from strategy.sweep_plan import SweepPlan as _SP
-        _decl = set(getattr(_SP, "PLAN_CHECKS", ()) or ())
-    except Exception as _e:                                   # noqa: BLE001
-        _decl = set()
-        check("S3pre the sweep's declaration site is readable", False, repr(_e))
-    _want = {"pierce_pts", "level_dist_pts", "level_dist_pct"}
-    check("S3 the plan declares the record-only telemetry", _want <= _decl,
-          f"missing: {sorted(_want - _decl) or 'none'}")
+    check("S0 r76: the sweep's level ranker is gone; strike_beyond_sweep stays", not hasattr(S, "level_rank")
+          and callable(getattr(S, "strike_beyond_sweep", None)))
 
     print()
     if FAILED:
         print(f"RED — {len(FAILED)} failed: {', '.join(FAILED)}")
         return 1
-    print("GREEN — 12 checks")
+    print("GREEN — every check passed")
     return 0
 
 

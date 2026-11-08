@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
-"""tests/check_structure_viable.py  v5.0
+"""tests/check_structure_viable.py  v5.1
+v5.1  2026-11-08  OTV5 r76 (RETIRE.1) — RE-POINTED (WA 38.4): the sweep is removed, so V6a/V6b (its plan applying the gate) and V8-V12 (its spent levels)
+      go with it and V7 reads the TCS plan's declaration; V1-V5 (stop_survivable) and V6c (search_wing calls it) unchanged.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.3  2026-09-24  OTV4TEST r128: V6 AND V7 RE-POINTED AT strategy/sweep_plan.py AND
       strategy/credit_vertical.py. Fork r5 (8a36b6f) moved the sweep's selection
@@ -113,26 +115,6 @@ def main():
     # the check lives in credit_vertical.search_wing, which SweepPlan._structure
     # calls; a refused wing becomes `prep.structural`, and prepare() refuses
     # and returns before `prep.ready = True`.
-    from types import SimpleNamespace as _NS
-    from strategy.sweep_plan import SweepPlan, Candidate
-
-    def _structure_with_short_ask(ask):
-        puts = [_NS(strike=198.0, bid=2.40, ask=ask, mark=round((2.40 + ask) / 2, 3)),
-                _NS(strike=197.0, bid=0.40, ask=0.42, mark=0.41),
-                _NS(strike=196.0, bid=0.10, ask=0.12, mark=0.11),
-                _NS(strike=195.0, bid=0.03, ask=0.05, mark=0.04),
-                _NS(strike=193.0, bid=0.01, ask=0.02, mark=0.015)]
-        return SweepPlan()._structure(
-            Candidate({"level_id": "v6", "price": 198.0, "kind": "support",
-                       "provenance": "PDL"}), _NS(calls=[], puts=puts))
-    _ctl = _structure_with_short_ask(2.44)      # a 4c quote: sellable
-    _wide = _structure_with_short_ask(6.00)     # the SAME chain, a $3.60 quote
-    check("V6a the sweep's own structure step refuses a wing its quote would stop out "
-          "(stop_vs_spread), and sells the same chain on a tight quote",
-          _ctl.sellable and not _wide.sellable and _wide.why_key == "stop_vs_spread",
-          f"control sellable={_ctl.sellable} ({_ctl.why_key or 'ok'}); "
-          f"wide sellable={_wide.sellable} key={_wide.why_key!r} {_wide.why[:60]}")
-
     def _fn(tree, name, cls=None):
         for n in ast.walk(tree):
             if cls and isinstance(n, ast.ClassDef) and n.name == cls:
@@ -141,34 +123,6 @@ def main():
             if not cls and isinstance(n, ast.FunctionDef) and n.name == name:
                 return n
         return None
-
-    _sp_tree = ast.parse(open(os.path.join(_root, "strategy", "sweep_plan.py"),
-                              encoding="utf-8").read())
-    _prep_fn = _fn(_sp_tree, "prepare", cls="SweepPlan")
-    i_struct = i_refuse = i_ready = None
-    if _prep_fn is not None:
-        for n in ast.walk(_prep_fn):
-            if (i_struct is None and isinstance(n, ast.Call)
-                    and isinstance(n.func, ast.Attribute) and n.func.attr == "_structure"):
-                i_struct = n.lineno
-            if (isinstance(n, ast.If) and "prep.structural" == ast.unparse(n.test).strip()
-                    and any(isinstance(b, ast.Return) for b in n.body)
-                    and "refuse(" in ast.unparse(n)):
-                i_refuse = n.lineno if i_refuse is None else min(i_refuse, n.lineno)
-            if (isinstance(n, ast.Assign) and ast.unparse(n).strip() == "prep.ready = True"):
-                i_ready = n.lineno if i_ready is None else min(i_ready, n.lineno)
-    _exe = []
-    for _f in ("sweep_plan.py", "sweep_credit_spread.py"):
-        _t = ast.parse(open(os.path.join(_root, "strategy", _f), encoding="utf-8").read())
-        _exe += [f"{_f}:{n.lineno}" for n in ast.walk(_t)
-                 if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)
-                 and n.func.attr == "executable"]
-    check("V6b SweepPlan.prepare builds the structure, refuses a structural fault, and "
-          "only then marks ready; no muteable executable() hurdle in the sweep",
-          None not in (i_struct, i_refuse, i_ready) and i_struct < i_refuse < i_ready
-          and not _exe,
-          f"_structure@L{i_struct} refuse(structural)@L{i_refuse} ready@L{i_ready} "
-          f"executable()={_exe or 'none'}")
 
     _cv_tree = ast.parse(open(os.path.join(_root, "strategy", "credit_vertical.py"),
                               encoding="utf-8").read())
@@ -179,51 +133,11 @@ def main():
     check("V6c credit_vertical.search_wing calls stop_survivable",
           bool(_sv_calls), f"calls @L{_sv_calls or 'none'}")
 
-    check("V7 the sweep declares stop_vs_spread as a plan check",
-          "stop_vs_spread" in SweepPlan.PLAN_CHECKS,
-          f"SweepPlan.PLAN_CHECKS has {len(SweepPlan.PLAN_CHECKS)} names")
-
-    # ── 🔴 V8 — A SPENT LEVEL DOES NOT RE-ARM ────────────────────────────
-    # The second half of the CVX loop: nothing remembered the previous attempt,
-    # so the level re-qualified every time price wandered back to its side.
-    # `LiquiditySweep.invalidated` (LIQ.3) answers "has the TAPE accepted
-    # through" — it cannot answer "did WE already try this and lose".
-    import strategy.sweep_credit_spread as scs
-    import tempfile as _tfv
-    import database.trade_logger as _TLV
-    from datetime import datetime, timedelta, timezone
-    _TLV._trade_logger = _TLV.TradeLogger(os.path.join(_tfv.mkdtemp(), "v.db"))
-
-    def _row(**kv):
-        c = _TLV.get_trade_logger()._connect()
-        try:
-            c.execute(f"INSERT INTO trades ({','.join(kv)}) VALUES ({','.join('?' * len(kv))})",
-                      tuple(kv.values()))
-            c.commit()
-        finally:
-            c.close()
-    _t = lambda m: (datetime.now(timezone.utc) - timedelta(minutes=m)).isoformat()
-    check("V8 a fresh level is not spent",
-          not scs.is_spent("CVX", "put", 198.0)[0])
-    _row(trade_id="v9b", symbol="CVX", strategy="SweepCreditSpread", option_side="put", pool_price=201.0,
-         status="closed", pnl_usd=-60.0, entry_time=_t(40), exit_time=_t(35),
-         exit_reason="premium_stop_15% pnl=-16.0%")
-    check("V9b (r5) a STOPPED-OUT level is NOT spent — acceptance only",
-          not scs.is_spent("CVX", "put", 201.0)[0])
-    _row(trade_id="v9", symbol="CVX", strategy="SweepCreditSpread", option_side="put", pool_price=198.0,
-         status="closed", pnl_usd=0.0, entry_time=_t(30), exit_time=_t(25),
-         exit_reason="sweep_breach_accepted: 2 closes beyond the pool 198.00 — the level is SPENT")
-    check("V9 a level whose sweep exited on its BREACH is spent (read from trades.db)",
-          scs.is_spent("CVX", "put", 198.0)[0])
-    # ⚠️ ROUNDED TO THE CENT — the pool is recomputed per tick and drifts in the
-    # last decimal; an exact-float key would never match itself and the lock
-    # would silently never fire.
-    check("V10 float drift still matches the spent key",
-          scs.is_spent("CVX", "put", 198.004)[0])
-    check("V11 the other side of the same price is a different level",
-          not scs.is_spent("CVX", "call", 198.0)[0])
-    check("V12 a different level is untouched",
-          not scs.is_spent("CVX", "put", 202.0)[0])
+    # r76: V6a/V6b/V7 (the sweep plan applying it) and V8-V12 (the sweep's spent levels) are removed with the sweep;
+    # the TCS plan applies the same gate through search_wing (V6c) and pins it in check_stop_spread_report S2.
+    from strategy.tcs_plan import TCSPlan
+    check("V7 the TCS plan declares stop_vs_spread as a plan check (r76: the sweep's declaration removed with it)",
+          "stop_vs_spread" in TCSPlan.PLAN_CHECKS, f"TCSPlan.PLAN_CHECKS has {len(TCSPlan.PLAN_CHECKS)} names")
 
     print()
     if _fails:

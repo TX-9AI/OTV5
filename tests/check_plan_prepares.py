@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """
-tests/check_plan_prepares.py  v5.2
+tests/check_plan_prepares.py  v5.3
+v5.3  2026-11-08  OTV5 r76 (RETIRE.1) — RE-POINTED (WA 38.4): the sweep is removed, so the S block (S1-S9b, the sweep's plan on the store) and T4-T7 (a
+      tine as a sweep level) go with it; the condor, butterfly, TCS and runaway blocks are unchanged.
 v5.2  2026-11-03  OTV5 r73 (BFLY.17) — the fly now also asks VIX < 20 and an open inside yesterday's range (the
       operator, 2026-11-03: "I want the VIX rule enforced & I want more discriminatory entries"); neither is this
       check's subject, so vix_now and prior_range_read are pinned to a VIX of 17 and an open inside the range.
@@ -11,7 +13,7 @@ v1.25  CD.2 (2026-10-24) - seeded REJECTED rows carry their market time; the swe
       LevelEngine.board() now fails closed as not_synced until a book sync against a recent closed 1m bar has been
       recorded (derived/levels v6.10). Every expectation is unchanged.
 v1.24 2026-10-19  OTV4TEST r303 (PSTATE.1) — its subject SweepCreditSpread / TrendCreditSpread is DORMANT by default and a dormant plan now writes
-      nothing by ruling, so this run switches it ACTIVE (OT_SWEEP_CS=1, OT_TCS_ACTIVE=1); what it pins is unchanged.
+      nothing by ruling, so this run switches it ACTIVE (OT_TCS_ACTIVE=1; r76: OT_SWEEP_CS no longer read); what it pins is unchanged.
 v1.23 2026-10-05  OTV4TEST r255 — PINNED TO QQQ, the instrument its fixtures are written for (found and named by
       SPX-TEST): M2/M3 build a 1-wide QQQ grid, and under OT_INSTRUMENT=SPX config.STRIKE_INCREMENT is 5, so
       condor_roll's proximity read the call as TESTED (M2) and priced the roll on SPX's grid (M3). Red on
@@ -183,7 +185,6 @@ import sys
 
 _root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, _root)
-os.environ["OT_SWEEP_CS"] = "1"     # r303: the subjects write (check_plan_states pins dormant)
 os.environ["OT_TCS_ACTIVE"] = "1"
 # ⚠️ r106 — THE LANDER RUNS CHECKS UNDER SYSTEM `python3`, NOT THE VENV, and
 # the repo imports below reach `tastytrade`, which lives only in the venv — so
@@ -281,142 +282,9 @@ def main():
     st = _Store()
     P.bind_store(st)
     os.environ["OT_RELAXED_ENTRY"] = "0"
-    # ── the sweep (OTV4TEST r5) — the plan reads levels from the STORE and
-    #    fires on the REJECTED fact; the old liq_map fixtures are retired ──
-    import time as _time
-    import tempfile as _tf
-    import strategy.sweep_plan as swp
-    import strategy.sweep_credit_spread as sw
-    from data.derived_store import DerivedStore
-    _ds = DerivedStore(path=os.path.join(_tf.mkdtemp(), "derived.db"))
-    _ds.mark_level_sync("TST", time.time())        # CD.2: the book is synced "now"
-    swp._symbol_of = lambda: "TST"
-    sw._symbol_of = lambda: "TST"
-    S = sw.SweepCreditSpreadStrategy()
-    S.plan._store = _ds
-    S.planner.symbol = "TST"
-    _now = _time.time()
-    def _level(price, kind, prov, retired=None):
-        lid = f"TST:{prov}:{price:.2f}"
-        _ds.upsert_level((lid, "TST", price, kind, prov, "session", _now - 3600, 0, None, 0,
-                          retired, ("ACCEPTED_THROUGH" if retired else None), 1))
-        return lid
-    def _reject(lid, price, kind, prov, age_s=30.0, pierce=0.0018, depth="shallow", bar="10:31"):
-        _ds.insert_level_event(("TST", lid, f"2026-09-09 {bar}:00", _now - age_s, "REJECTED",
-                                price, kind, prov, pierce, depth, 1, price + (0.1 if kind == "support" else -0.1),
-                                _now - age_s))                  # CD.2: the bar's close (market time)
+    # r76: the sweep (S block) is removed; its puts chain stays for the condor's management cases below
     good_puts = [_C(97.5, 2.40, 2.50), _C(95, 1.40, 1.44), _C(92.5, 0.08, 0.10),
                  _C(90, 0.03, 0.05), _C(87.5, 0.02, 0.03)]
-    poor_puts = [_C(97.5, 2.40, 2.50), _C(95, 0.30, 0.34), _C(92.5, 0.20, 0.22),
-                 _C(90, 0.12, 0.14), _C(87.5, 0.08, 0.10)]
-    # CD.2: the session open is PINNED - the sweep reads today's session by market time with no pre-open fallback,
-    # so a checker run before 09:30 ET must say which session it means (CHK.12: no gate red by the clock)
-    common = dict(price_now=96.6, now_et="10:32", atr_pct=0.08, orb_high=99.5, orb_low=97.5,
-                  session_open_epoch=_now - 7200.0)
-    lid_ny = _level(96.0, "support", "ny")
-    _level(101.0, "resistance", "prev_day")
-    P.begin_tick(1.0)
-    sig = S.generate_signal(chain=_Chain(good_puts), **common)
-    r1 = _row(st, "SweepCreditSpread", 1.0)
-    check("S1 no rejection yet -> HOLD with BOTH sides prepared, waiting on REJECTED",
-          sig is None and r1 and r1[0] == "HOLD" and "would sell 95/" in r1[1]
-          and "Waiting on: REJECTED" in r1[1], str(r1))
-    P.begin_tick(2.0)
-    _reject(lid_ny, 96.0, "support", "ny")
-    sig = S.generate_signal(chain=_Chain(good_puts), **common)
-    r2 = _row(st, "SweepCreditSpread", 2.0)
-    check("S2 a fresh REJECTED on the level in play -> STRATEGY fires the prepared structure",
-          sig is not None and r2 and r2[0] == "TAKE" and sig.pool_price == 96.0
-          and float(sig.short_call_contract.strike if sig.option_side == "call"
-                    else sig.short_put_contract.strike) == 95.0
-          and sig.option_side == "put" and sig.entry_premium > 0, str(r2))
-    check("S2b the short anchors on THE LEVEL (first strike at/beyond 96.0 = 95), not the wick",
-          sig is not None and float(sig.strike) == 95.0 and sig.richness_at_entry is not None)
-    P.begin_tick(2.5)
-    sig = S.generate_signal(chain=_Chain(good_puts), **common)
-    check("S2c the same REJECTED event does not fire twice",
-          sig is None and _row(st, "SweepCreditSpread", 2.5)[0] == "HOLD")
-    P.begin_tick(3.0)
-    _reject(lid_ny, 96.0, "support", "ny", bar="10:33")
-    sig = S.generate_signal(chain=_Chain(poor_puts), **common)
-    r3 = _row(st, "SweepCreditSpread", 3.0)
-    check("S3 trigger true but no wing clears R 1.00 -> DECLINE naming the wing, no fire",
-          sig is None and r3 and r3[0] == "DECLINE", str(r3))
-    P.begin_tick(4.0)
-    sig = S.generate_signal(chain=None, **common)
-    r4 = _row(st, "SweepCreditSpread", 4.0)
-    check("S4 no chain -> NO PLAN naming chain", sig is None and r4 and r4[0] == "NO PLAN"
-          and "chain" in r4[1], str(r4))
-    P.begin_tick(5.0)
-    # 🔴 r92 — THE PROBE TIME IS DERIVED, NOT WRITTEN. It passed a literal
-    # "14:30", which r81 moved INSIDE the sweep's window when every credit END
-    # became 15:40 — so this asserted DORMANT at a time the plan is awake.
-    # ⚠️ AND THE DOCSTRING WAS STALE TOO, WHICH IS WHY A LITERAL IS THE WRONG
-    # FIX: line ~122 still describes this case as "10:15 — outside the slot",
-    # from an era when the sweep opened at 13:00 (see S8b, "the 13:00 floor is
-    # gone"). MEASURED: the sweep's window is 09:35 -> 15:40, so BOTH the code's
-    # 14:30 and the prose's 10:15 sit inside it. Two stale numbers disagreeing
-    # about which one was wrong.
-    # 🔑 SO THE TIME COMES FROM THE PLAN'S OWN BOUND, five minutes past its
-    # close. This case cannot rot again when the window next moves.
-    import strategy.sweep_plan as _sp
-    _lh, _lm = _sp.LATEST_ET
-    _outside = f"{_lh:02d}:{_lm + 5:02d}" if _lm < 55 else f"{_lh + 1:02d}:{(_lm + 5) % 60:02d}"
-    sig = S.generate_signal(chain=_Chain(good_puts), **dict(common, now_et=_outside))
-    r5 = _row(st, "SweepCreditSpread", 5.0)
-    check("S5 past the sweep's own close -> DORMANT, nothing selected",
-          sig is None and r5 and r5[0] == "DORMANT", f"{_outside}: {r5}")
-    P.begin_tick(6.0)
-    _reject(lid_ny, 96.0, "support", "ny", bar="10:34")
-    sig = S.generate_signal(chain=_Chain(good_puts, calls=[_C(101, 1.0, 1.1), _C(103, 0.3, 0.35)]),
-                            required_side="put", **common)
-    check("S6 call vertical open (put authorized): only supports are prepared, the put fires",
-          sig is not None and sig.option_side == "put")
-    P.begin_tick(7.0)
-    _book_row(trade_id="sw-s7", symbol="TST", strategy="SweepCreditSpread", option_side="put",
-              pool_price=96.0, swept_level_name="ny", status="closed", pnl_usd=-20.0,
-              entry_time=_now_iso(30), exit_time=_now_iso(20),
-              exit_reason="sweep_breach_accepted: 2 closes beyond the pool 96.00 — the level is SPENT")
-    _reject(lid_ny, 96.0, "support", "ny", bar="10:35")
-    sig = S.generate_signal(chain=_Chain(good_puts), **common)
-    r7 = _row(st, "SweepCreditSpread", 7.0)
-    check("S7 a spent pool -> DECLINE spent_level even with the trigger true",
-          sig is None and r7 and r7[0] == "DECLINE" and r7[1].startswith("spent_level"), str(r7))
-    _bind_book()
-    P.begin_tick(8.0)
-    _ds.conn.execute("UPDATE level_event SET ts_epoch = ts_epoch - 3600"); _ds.conn.commit()
-    _reject(lid_ny, 96.0, "support", "ny", age_s=600.0, bar="10:20")
-    sig = S.generate_signal(chain=_Chain(good_puts), **common)
-    r8 = _row(st, "SweepCreditSpread", 8.0)
-    # 🔴 r106 — THIS CHECK INVERTS. It pinned the freshness prior: a REJECTED
-    # older than REJECTION_FRESH_BARS left `chosen` unset and the trade never
-    # fired. Operator, 2026-09-22: *"I'm done with rejection fresh bars, get rid
-    # of it altogether."* A previously held extreme that was swept and rejected
-    # is the setup whether that happened two bars ago or twenty — PLAN_SPEC
-    # 31.1, *"Age does not matter. A previously held extreme is enough."*
-    # ⚠️ RE-FIRE IS STILL PREVENTED, and by the right mechanism: `_fired_events`
-    # keyed on (level_id, bar_ts). S6 already pins that; the clock never was
-    # what stopped a repeat.
-    check("S8 (r106) a REJECTED 10 bars old IS a trigger — age no longer gates",
-          sig is not None and r8 and r8[0] == "TAKE", str(r8))
-    P.begin_tick(9.0)
-    _reject(lid_ny, 96.0, "support", "ny", pierce=0.006, depth="deep", bar="10:36")
-    sig = S.generate_signal(chain=_Chain(good_puts), **common)
-    r9 = _row(st, "SweepCreditSpread", 9.0)
-    # 🔴 r113 — THIS CHECK INVERTS. It pinned the pierce CEILING ("a deep
-    # pierce is a WEAK level"). The operator's HELD has no depth — "NO grading,
-    # depth, ranking" — so a deep pierce that closed back is a HELD like any other.
-    check("S9 (r113) a 0.60% pierce (deep) FIRES — depth no longer grades a HELD",
-          sig is not None and r9 and r9[0] == "TAKE" and "ny 96.00 REJECTED (deep" in r9[1], str(r9))
-    # S9b — the FLOOR is gone too: 0.005% is a quarter of the old 0.02% minimum
-    # ("a touch, not a sweep"), which was this box's most common sweep refusal.
-    P.begin_tick(9.5)
-    _reject(lid_ny, 96.0, "support", "ny", pierce=0.00005, depth="shallow", bar="10:41")
-    sig = S.generate_signal(chain=_Chain(good_puts), **common)
-    r9b = _row(st, "SweepCreditSpread", 9.5)
-    check("S9b (r113) a 0.005% pierce FIRES — no floor either; the pierce is recorded, not graded",
-          sig is not None and r9b and r9b[0] == "TAKE" and "ny 96.00 REJECTED" in r9b[1], str(r9b))
-
     # ── the condor ────────────────────────────────────────────────────────
     from strategy.iron_condor_strategy import IronCondorStrategy
     IC = IronCondorStrategy()
@@ -653,70 +521,8 @@ def main():
     check("B7 add_open_position APPENDS — the vertical under management is not dropped",
           [r["trade_id"] for r in pm._open_records] == ["v1", "bf1"])
 
-    # ── T1–T3 (r163) RETIRED AT r126 WITH THE MAPPER THEY DROVE ───────────
-    # They tested analysis/liquidity_mapper.publish_tines. T1/T2's property — a
-    # SLOPED rail is judged where it STOOD on the bar's minute — MOVED to
-    # check_rails_book R8/R9 on the live path (`_rails_sync`). T1b (the tine as a
-    # moving pool on the map object) went with the map. T3 (two closes beyond
-    # invalidate the rail) was reversed by the operator's r116 ruling: a fork
-    # lives while its builder can build it.
     import pandas as pd
-
-    # T4: the sweep's plan takes the TOUCH as leg one: short beyond the move's
-    # extreme, no reclaim required. Price is back inside (99.6 < 100).
-    # ── T4–T7 RE-DERIVED (OTV4TEST r5): a tine is a LEVEL in the store, keyed
-    #    on the tine; its REJECTED event is the trigger; a tine TOUCH is not ──
-    S2 = sw.SweepCreditSpreadStrategy(); S2.planner.symbol = "TST"
-    S2.plan._store = _ds
-    calls_t = [_C(k, m - 0.02, m + 0.02) for k, m in
-               ((100, 1.30), (101, 0.70), (102, 0.35), (103, 0.15), (104, 0.06), (105, 0.03))]
-    # 🔴 r106 — AGEING NO LONGER MAKES AN EVENT INERT, so this fixture had to
-    # change with the rule it depends on. It pushed the S-block events an hour
-    # back to mean "history"; with the freshness prior gone, an hour-old
-    # REJECTED is still a live trigger and the plan fired on `ny 96.00` instead
-    # of reporting the tine. DELETED rather than aged — "no rejection yet" is
-    # now expressed by there being no rejection.
-    _ds.conn.execute("DELETE FROM level_event"); _ds.conn.commit()
-    tine_id = "TST:fork1h/upper:0.00"
-    _ds.upsert_level((tine_id, "TST", 100.0, "resistance", "fork1h/upper", "1h", _now - 3600, 0, None, 0, None, None, 1))
-    P.begin_tick(30.0)
-    sigt = S2.generate_signal(chain=_Chain([], calls_t), price_now=99.6, now_et="10:40",
-                              atr_pct=0.08, orb_high=99.2, orb_low=98.4,
-                              session_open_epoch=_now - 7200.0)   # CD.2: pinned, as the S block
-    rt4 = _row(st, "SweepCreditSpread", 30.0)
-    check("T4 the upper tine is in play as a resistance; no rejection yet -> HOLD naming it",
-          sigt is None and rt4 and rt4[0] == "HOLD" and "fork1h/upper" in rt4[1], str(rt4))
-    P.begin_tick(31.0)
-    _reject(tine_id, 100.0, "resistance", "fork1h/upper", bar="10:41")
-    sigt = S2.generate_signal(chain=_Chain([], calls_t), price_now=99.6, now_et="10:41",
-                              atr_pct=0.08, orb_high=99.2, orb_low=98.4,
-                              session_open_epoch=_now - 7200.0)   # CD.2: pinned, as the S block
-    check("T5 the tine REJECTED -> a call spread with the short at/beyond the tine (100), classed 1h_fork",
-          sigt is not None and sigt.option_side == "call" and float(sigt.strike) == 100.0
-          and sigt.condor_trigger_source == "1h_fork" and sigt.touch_of_tine is True,
-          f"sig={sigt and (sigt.option_side, sigt.strike, sigt.condor_trigger_source)}")
-    _ds.upsert_level((tine_id, "TST", 100.3, "resistance", "fork1h/upper", "1h", _now - 3600, 0, None, 2, _now, "ACCEPTED_THROUGH", 1))
-    P.begin_tick(32.0)
-    _reject(tine_id, 100.3, "resistance", "fork1h/upper", bar="10:42")
-    sigt = S2.generate_signal(chain=_Chain([], calls_t), price_now=99.6, now_et="10:42",
-                              atr_pct=0.08, orb_high=99.2, orb_low=98.4,
-                              session_open_epoch=_now - 7200.0)   # CD.2: pinned, as the S block
-    rt6 = _row(st, "SweepCreditSpread", 32.0)
-    check("T6 an ACCEPTED (retired) tine is not in play — a stale REJECTED on it does not fire",
-          sigt is None and rt6 and rt6[0] == "HOLD", str(rt6))
-    _ds.upsert_level((tine_id, "TST", 100.6, "resistance", "fork1h/upper", "1h", _now - 3600, 0, None, 0, None, None, 1))
-    _book_row(trade_id="sw-t7", symbol="TST", strategy="SweepCreditSpread", option_side="call",
-              pool_price=100.6, swept_level_name="fork1h/upper", status="closed", pnl_usd=-15.0,
-              entry_time=_now_iso(30), exit_time=_now_iso(20),
-              exit_reason="sweep_breach_accepted: 2 closes beyond the pool — the level is SPENT")
-    P.begin_tick(33.0)
-    _reject(tine_id, 100.6, "resistance", "fork1h/upper", bar="10:43")
-    sig7 = S2.generate_signal(chain=_Chain([], calls_t), price_now=99.6, now_et="10:43",
-                              atr_pct=0.08, orb_high=99.2, orb_low=98.4,
-                              session_open_epoch=_now - 7200.0)   # CD.2: pinned, as the S block
-    rt7 = _row(st, "SweepCreditSpread", 33.0)
-    check("T7 a spent tine stays SPENT by name although its price has moved",
-          sig7 is None and rt7 and rt7[0] == "DECLINE" and "spent_level" in rt7[1], str(rt7))
+    # ── r76: T4-T7 (a tine as a sweep LEVEL) are removed with the sweep plan they drove ──
     _bind_book()
     # ── TCS (r164) — the plan prepares off the ORB bound; the vote fires it ──
     import strategy.trend_credit_spread as tcs

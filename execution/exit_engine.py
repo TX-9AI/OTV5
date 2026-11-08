@@ -1,5 +1,6 @@
 """
-execution/exit_engine.py  v5.14
+execution/exit_engine.py  v5.15
+v5.15  2026-11-08  OTV5 r76 (RETIRE.1) — THE REMOVED TRADES' EXITS GO: the ORBStrategy and VOLT routes, _evaluate_volt, _sweep_breach_accepted (sweep verticals only), the velocity stall (it measured only the ORB trade and never cut anything else - _velocity_stall, its call, VELOCITY_* import), the Hunt's handoff GRANT to the sweep (its hunt_target_wicked exit is unchanged; the reason text loses "; handoff granted to the sweep"), and three uncalled helpers (_get_bos_tracker, _held_minutes, _underlying_from_5m). STRUCTURE_TRAIL_STRATEGIES is ("Breakout",). Runaway, Hunt, Breakout, PARK and the GEX fly route and decide exactly as before. The operator, 2026-11-07: "Running dead code and logging dead code activity is unnecessary drag. Yes, I want all of those things fixed."
 v5.14 2026-11-03  OTV5 r73 (BFLY.17) — THE GEX PIN BUTTERFLY HOLDS TO THE CLOSE. The operator, 2026-11-03: "For the GEX fly, I
       want no stop except hold to close". _evaluate_butterfly skips its HARD STOP for a strategy in
       config.HOLD_TO_CLOSE_STRATEGIES (GEXPinButterfly), and evaluate() never asks _decay_read for one
@@ -949,8 +950,7 @@ from config import (
     BUTTERFLY_MAX_HOLD_MIN, TRAIL_LOCK_PCT, TRAIL_ACTIVATION_PCT, FVG_MIN_SIZE_PCT,
     THETA_LOOKAHEAD_MIN, RTH_MINUTES, FVG_TRAIL_ARM_PCT, FVG_TRAIL_LOCK_PCT,
     THESIS_BAND_WICKS, THESIS_BAND_LOOKBACK, TRAIL_GAIN_LOCK,
-    VOLT_TRAIL_ARM_R, VOLT_TRAIL_LOCK_FRAC, HARD_CLOSE_ET,
-    VOLT_DELTA_PAR,                                         # r79/r82 EXT.1
+    HARD_CLOSE_ET,
     CONT_INSURANCE_STOP,
     MAX_LOSS_PCT, POST_TARGET_TRAIL_LOCK_PCT, FVG_FLOOR_MAX_LOCK_PCT,
     USE_5M_FVG_TRAIL, SWEEP_POST_TARGET_TRAIL,
@@ -1040,10 +1040,6 @@ logger = logging.getLogger(__name__)
 # that has had time to develop and still won't reach the trail. Without these
 # the check fires on the first green tick (see v1.5 header note).
 THETA_MIN_HOLD_MIN       = 20      # blackout: no theta exit in the first N min after entry
-from config import (VELOCITY_STALL_ENABLED, VELOCITY_STALL_ENFORCE,   # VEL.1
-                    VELOCITY_GRACE_MIN, VELOCITY_STRICTNESS,
-                    VELOCITY_CONFIRM_TICKS, VELOCITY_FLOOR_BY_MIN,
-                    VELOCITY_MEASURED_STRATEGIES)
 # r155 — the lone-vertical stop, anchored to RISK rather than credit.
 from config import LONE_STOP_PCT_OF_RISK
 THETA_MIN_GAIN_PCT       = 0.10    # gain floor: don't protect a gain smaller than this
@@ -1273,7 +1269,7 @@ class BOSTracker:
 # survives the rehydrate that killed `is_trend_credit` (§22); and
 # `tests/check_structure_trail.py` pins this set against the strategies that
 # actually declare geometry sizing, so adding one cannot silently miss here.
-STRUCTURE_TRAIL_STRATEGIES = ("ORBStrategy", "Breakout")
+STRUCTURE_TRAIL_STRATEGIES = ("Breakout",)
 
 
 # ── r54 (BRK.16) — BREAKOUT'S TRAIL ARMS AT 0.5W ────────────────────────────
@@ -1370,7 +1366,6 @@ class ExitEngine:
         # VEL.1 - consecutive velocity breaches per trade. WITHOUT THIS the
         # check AttributeErrors on first call and the except swallows it,
         # leaving a permanent silent no-op.
-        self._vel_breaches: dict = {}          # trade_id -> consecutive breaches
         self._trade_logger  = get_trade_logger()
         self._live_exit_alerted: set = set()  # (trade_id, kind) — one page per failure kind
 
@@ -1676,8 +1671,6 @@ class ExitEngine:
             return self._evaluate_condor_leg(record, current_premium, df_1m=df_1m)
         elif strategy == "ADOPTED":
             return self._evaluate_adopted(record, current_premium)
-        elif strategy == "ORBStrategy":
-            return self._evaluate_orb(record, current_premium, df_1m, df_5m)
         elif strategy == "RunawayContinuation":
             # ⚠️ AUDIT F10 (2026-08-20): the flagship fell into the else below —
             # a fall-through whose comment still named SweepReversal, DELETED at
@@ -1694,14 +1687,6 @@ class ExitEngine:
         elif strategy == "PARK":
             # r288 (PARK.1) — its own exits; none of the sweep defaults (25% stop, trail) apply.
             return self._evaluate_park(record, current_premium)
-        elif strategy == "VOLT":
-            # r72 — THE CONTROL ARM GETS ITS OWN EVALUATOR, AND THAT IS THE
-            # POINT. Routing it to `_evaluate_orb` would hand it theta bleed,
-            # the FVG trail and the 100%-TP ladder — ORB-specific machinery
-            # that would make VOLT a variant of the ORB instead of a yardstick
-            # for it. Four rules, matching the operator's spec verbatim:
-            # a STRUCTURE stop and a trail that arms on STOP DISTANCE.
-            return self._evaluate_volt(record, current_premium, df_1m, df_5m)
         else:
             # Unknown directional strategies take the sweep rules (25% stop,
             # hard close — survivable defaults), but NEVER silently: an
@@ -1812,202 +1797,6 @@ class ExitEngine:
                 fh.write(_json.dumps(out) + "\n")
         except Exception as exc:                                # noqa: BLE001
             logger.warning("[park] exit counterfactual row NOT written for %s: %s", tid[:8], exc)
-
-    def _evaluate_volt(self, record: TradeRecord,
-                       current_premium: float,
-                       df_1m: Optional[pd.DataFrame],
-                       df_5m: Optional[pd.DataFrame] = None) -> ExitDecision:
-        """VOLT exits. FIRST MATCH WINS, and there are only four:
-          1. HARD CLOSE     — the universal 15:45 flatten.
-          2. CATASTROPHIC FLOOR — premium <= entry*(1-MAX_LOSS_PCT). §36 calls
-                              the catastrophic cap UNIVERSAL and FOUNDATIONAL,
-                              so it is not a VOLT gate and is not up for
-                              simplification.
-          3. STRUCTURE STOP — last CLOSED 5m candle closes through
-                              `underlying_stop`, which IS THE ENTRY (OTV4TEST
-                              r72: "a close beyond where the trade opened is a
-                              dead thesis"), and only a bar newer than the
-                              entry counts (r75). Close-based on iloc[-2] so an
-                              intrabar wick survives.
-          4. R-TRAIL        — arms when the UNDERLYING has travelled
-                              VOLT_TRAIL_ARM_R x R in favour on 5m closes. R is
-                              the signal bar's range, read back as
-                              |underlying_target - entry| (|entry - stop| is 0
-                              by design). Once armed the floor is
-                              `entry + L x (peak - entry)` on the UNDERLYING.
-
-        🔑 WHY THE TRAIL IS ON DISTANCE AND NOT PREMIUM — the operator's spec
-        ("arms at 50% based on stop distance") and r44's scar. The old trail
-        floor was a fraction of PREMIUM and could sit BELOW ENTRY: at a +20%
-        arm an 80% lock floors at 0.96 of entry, so ARMING THE TRAIL COULD
-        GUARANTEE A LOSS. `entry + L x (peak - entry)` is >= entry by
-        construction, and measuring it on the underlying means option decay
-        cannot arm or disarm it.
-        """
-        decision = ExitDecision()
-        trade_id = str(record.get("trade_id", ""))
-        entry_prem = float(record.get("entry_premium", 0.0) or 0.0)
-        direction = record.get("direction", "long")
-        if entry_prem > 0:
-            decision.current_pnl_pct = (current_premium - entry_prem) / entry_prem
-            decision.current_pnl_usd = ((current_premium - entry_prem)
-                                        * float(record.get("contracts", 0) or 0)
-                                        * CONTRACT_MULTIPLIER)
-
-        # 1 ── HARD CLOSE
-        # ⚠️ DERIVED from HARD_CLOSE_ET, not spelled. r71 established the rule:
-        # a label reading 15:45 on a trade that closed at another minute is a
-        # FALSE RECORD of what happened. The five pre-existing literals are the
-        # older sites check_late_credit_window W7 pins; a NEW one would make
-        # six and would go stale the day that constant moves.
-        if _eod_due(record):                                   # r149: per-position EOD clock
-            decision.should_exit = True
-            decision.exit_reason = _eod_label(record)
-            return decision
-
-        # 2 ── CATASTROPHIC FLOOR (universal, never a VOLT decision)
-        stop_prem = float(record.get("stop_premium", 0.0) or 0.0) or (
-            entry_prem * (1 - MAX_LOSS_PCT))
-        if stop_prem > 0 and current_premium <= stop_prem:
-            decision.should_exit = True
-            decision.exit_reason = (f"volt_premium_floor: {current_premium:.2f} "
-                                    f"<= {stop_prem:.2f}")
-            logger.info("VOLT FLOOR: %s %s", trade_id[:8], decision.exit_reason)
-            return decision
-
-        # 2b ── PAR DELTA (r79/r80/r82, EXT.1) — THE OPERATOR'S RULING,
-        #    2026-09-21: *"When Delta reaches PAR, we need to get the fuck out."*
-        # 🔑 AT PAR DELTA THIS IS NO LONGER AN OPTION. It is stock carrying an
-        # expiry: convexity, the cheap tail and defined risk have all been
-        # spent, and what remains is a 1.0-delta directional bet whose
-        # give-back is dollar-for-dollar with the underlying. MEASURED LIVE on
-        # 81b1afae: $45 of theta risk left against $2,880 of trail leash.
-        # 🔴 r82 — DELTA ONLY. THE EXTRINSIC LIMB IS REMOVED AND THE REASON IS
-        # A MEASUREMENT, NOT A PREFERENCE. r79 read extrinsic as a proxy for
-        # delta and r80 promoted it to a peer; measured over the whole trade,
-        # EXTRINSIC-FROM-MID REACHES ZERO AT DELTA 0.82 — 11:39 ET, mark 3.11 —
-        # because an ITM 0DTE bid sits at parity and the mid carries no
-        # extrinsic long before the option is actually stock. Had r80 been
-        # live from entry it would have exited at 3.11 instead of 5.83,
-        # costing $2,500 on this trade. Using the ask does not repair it: the
-        # extrinsic is genuinely small while real optionality remains.
-        # ⚠️ AND r79 NEVER NEEDED THE WIDENING. Delta crossed 0.98 at 13:44,
-        # fell back to 0.9675, and crossed again at 14:11. I sampled it once in
-        # the trough and concluded the rule was broken; it was about to fire.
-        # ⚠️ NO DELTA MEANS HOLD, NOT GUESS (§0.5 cuts both ways). The
-        # catastrophic floor and the structure stop still cover the trade, and
-        # a silent proxy that fires two hours early is worse than a rung that
-        # waits for its instrument.
-        _delta = abs(float(record.get("current_delta", 0.0) or 0.0))
-        if _delta >= VOLT_DELTA_PAR:
-            decision.should_exit = True
-            decision.exit_reason = (f"volt_delta_par: delta {_delta:.3f} "
-                                    f">= par {VOLT_DELTA_PAR:.2f}")
-            logger.info("VOLT PAR DELTA: %s %s", trade_id[:8], decision.exit_reason)
-            return decision
-
-        # 🔑 THE FRAME IS THE OPERATOR'S RULING, 2026-09-21, AND IT IS NOT A
-        # DETAIL. VOLT enters off a 5-MINUTE volume bar, so its invalidation is
-        # read on the frame it fires on. MEASURED over 19 sessions x 4 symbols
-        # with the real plan, the SAME rule on three frames:
-        #     15s closes   134 trades  win  3.7%  meanR -0.055  trail exits  4
-        #     1m closes    117 trades  win  6.8%  meanR -0.030  trail exits  5
-        #     5m closes     96 trades  win 18.8%  meanR +0.067  trail exits 13
-        # At 1m, 93% of trades die on the stop and almost none live long enough
-        # to arm the trail — the thesis never gets to express itself.
-        # ⚠️ FAILS CLOSED-ISH: without the 5m frame the structure stop cannot be
-        # read at all, so the trade is held on the catastrophic premium floor
-        # alone. Said once per trade rather than silently.
-        frame = df_5m
-        _cp5 = _closed_pos(frame, now_et(), 300.0)     # r44 (BAR.1): the newest CLOSED 5m bar, by time
-        # 🔴 r75 — THE BAR MUST POSTDATE THE ENTRY. Found LIVE on 2026-09-21:
-        # VOLT took SEVEN trades in 90 seconds, every one stopped in ~14s by
-        # `1m close 731.22 below structure` — and 731.22 was the close of the
-        # 09:45 bar, which had already happened when the 09:52 trade opened.
-        # The stop EQUALS the entry (r72's ruling), so any completed bar whose
-        # close sits the wrong side of entry kills the trade instantly, and a
-        # STALE bar does it before the trade has existed for one tick.
-        # ⚠️ THE REPLAY HAD THIS GUARD AND THE SHIPPED CODE DID NOT — the
-        # harness skipped closes at or before the entry, so the defect was
-        # invisible in every measurement that authorised the design.
-        # ⚠️ IT FAILS CLOSED: with no bar NEWER than the entry there is nothing
-        # to test the thesis against yet, so the trade is held on the
-        # catastrophic premium floor alone rather than exited on stale data.
-        if frame is not None and len(frame) >= 2:
-            try:
-                _entry_ts = record.get("entry_time")
-                if _entry_ts:
-                    _et = pd.Timestamp(_entry_ts)
-                    if _et.tzinfo is not None:
-                        _et = _et.tz_convert(None)
-                    _bar_ts = pd.Timestamp(frame.index[_cp5])
-                    if _bar_ts.tzinfo is not None:
-                        _bar_ts = _bar_ts.tz_convert(None)
-                    if _bar_ts <= _et:
-                        if not record.get("_volt_stale_said"):
-                            record["_volt_stale_said"] = 1
-                            logger.info("[exit] VOLT %s: newest completed 5m bar "
-                                        "(%s) predates the entry (%s) — holding "
-                                        "until a bar exists that can test it.",
-                                        trade_id[:8], _bar_ts, _et)
-                        return decision
-            except (ValueError, TypeError, AttributeError, IndexError) as _exc:
-                logger.debug("volt: entry/bar timestamp compare skipped: %s", _exc)
-        if frame is None or len(frame) < 2:
-            if not record.get("_volt_no5m"):
-                record["_volt_no5m"] = 1
-                logger.warning("[exit] VOLT %s has no 5m frame — structure stop "
-                               "cannot be evaluated; premium floor is the only "
-                               "stop this tick.", trade_id[:8])
-            return decision
-        last_close = float(frame.iloc[_cp5]["close"])
-        entry_px = float(record.get("underlying_entry", 0.0) or 0.0)
-        stop_px = float(record.get("underlying_stop", 0.0) or 0.0)
-
-        # 3 ── STRUCTURE STOP — a close THROUGH the structural extreme
-        if stop_px > 0:
-            through = (last_close < stop_px) if direction == "long" else (last_close > stop_px)
-            if through:
-                decision.should_exit = True
-                decision.exit_reason = (
-                    f"volt_structure_stop: 5m close {last_close:.2f} "
-                    f"{'below' if direction == 'long' else 'above'} "
-                    f"structure {stop_px:.2f}")
-                logger.info("VOLT STOP: %s %s", trade_id[:8], decision.exit_reason)
-                return decision
-
-        # 4 ── THE R-TRAIL, on the UNDERLYING
-        # 🔴 R DOES NOT COME FROM THE STOP. Under r72's ruling the stop IS the
-        # entry, so `abs(entry - stop)` is ZERO and a trail scaled on it would
-        # NEVER ARM — the trade would hold to the structure stop or the hard
-        # close with no lock, every time. R is the signal bar's range, carried
-        # on the record as `underlying_target` (the plan sets target = entry +
-        # 1R), so this reads it back out of a persisted column rather than
-        # recomputing anything.
-        target_px = float(record.get("underlying_target", 0.0) or 0.0)
-        if entry_px <= 0 or target_px <= 0:
-            return decision                      # inert without both ends
-        risk = abs(target_px - entry_px)
-        if risk <= 0:
-            return decision
-        gain = (last_close - entry_px) if direction == "long" else (entry_px - last_close)
-        peak = float(record.get("_volt_peak", entry_px) or entry_px)
-        peak = max(peak, last_close) if direction == "long" else min(peak, last_close)
-        record["_volt_peak"] = peak
-        if gain < VOLT_TRAIL_ARM_R * risk:
-            return decision                      # not armed yet
-        floor = (entry_px + VOLT_TRAIL_LOCK_FRAC * (peak - entry_px) if direction == "long"
-                 else entry_px - VOLT_TRAIL_LOCK_FRAC * (entry_px - peak))
-        decision.new_trail_stop = floor
-        breached = (last_close < floor) if direction == "long" else (last_close > floor)
-        if breached:
-            decision.should_exit = True
-            decision.exit_reason = (
-                f"volt_trail_stop: 5m close {last_close:.2f} through the "
-                f"{VOLT_TRAIL_LOCK_FRAC:.0%} lock {floor:.2f} "
-                f"(armed at {VOLT_TRAIL_ARM_R:g}R, peak {peak:.2f})")
-            logger.info("VOLT TRAIL: %s %s", trade_id[:8], decision.exit_reason)
-        return decision
 
     def _evaluate_orb(self, record: TradeRecord,
                        current_premium: float,
@@ -2165,26 +1954,6 @@ class ExitEngine:
             decision.should_exit = True
             decision.exit_reason = f"theta_bleed pnl={pnl_pct:.1%}"
             return decision
-        # 2c. VELOCITY STALL - "is this thing MOVING at all?"
-        # ORDER IS DELIBERATE AND MUST NOT BE SWAPPED: theta_bleed evaluates
-        # FIRST so a trade that is up 10-20% and stalled exits GREEN via that
-        # path, rather than falling through to a velocity check that would
-        # let it drift back toward flat before firing.
-        # These are INDEPENDENT gates, never a combined score. The 2026-08-12
-        # QQQ failure was two mechanisms each correctly answering "not my
-        # problem" while nothing aggregated that into "then NOBODY is
-        # watching." A blended score would have averaged three healthy-ish
-        # signals into inaction; separate gates, any one of which can fire,
-        # fails safe.
-        # v4.11 (OTV4TEST r2) — no velocity stall on ORB, by ruling; the
-        # runaway (same evaluator) keeps it until its own spec is untangled.
-        if record.get("strategy") != "ORBStrategy":
-            _vel = self._velocity_stall(record, pnl_pct, df_1m)
-            if _vel is not None:
-                decision.should_exit = True
-                decision.exit_reason = _vel
-                return decision
-
         # 3. PAST 100% TP \u2014 switch to tightened FVG-aware trail, no hard exit
         if current_premium >= target:
             if not self._post_target_trail.get(trade_id, False):
@@ -2371,12 +2140,8 @@ class ExitEngine:
             d = str(record.get("direction") or "")
             wicked = (hi >= tgt and close < tgt) if d == "long" else (lo <= tgt and close > tgt)
             if wicked:
-                from execution import handoff as _H
-                _H.grant("LiquidityHunt", "SweepCreditSpread", tgt,
-                         "call" if d == "long" else "put",
-                         why=f"target {tgt:.2f} wicked (close {close:.2f}) — the reversal is the sweep's")
                 return (f"hunt_target_wicked: target {tgt:.2f} reached on a wick, close {close:.2f} "
-                        f"— off; handoff granted to the sweep")
+                        f"— off")
         except Exception as exc:                                # noqa: BLE001
             logger.debug("hunt target read failed: %s", exc)
         return ""
@@ -2589,161 +2354,6 @@ class ExitEngine:
         except Exception as exc:                                # noqa: BLE001
             logger.debug("final-form read failed: %s", exc)
         return ""
-
-    def _sweep_breach_accepted(self, record, df_1m) -> str:
-        """SWEEP verticals only. The pool BREACHED since entry, on the operator's
-        definition -> the exit reason, else "".
-
-        r120 — `derived/level_rules.judge` over the 1m bars since the entry
-        minute, INCLUDING the forming bar: a close beyond the pool, then the next
-        bar's OPEN beyond it. The forming bar contributes only its open to that
-        verdict (judge() reads the open first and stops at the breach); its
-        partial high/low/close can at most open a pending that nothing yet
-        follows. Judging every bar since entry, not the last pair, means a
-        breach is not forgotten because one poll missed its minute — a breached
-        level is dead (the book retires it for good)."""
-        try:
-            if str(record.get("setup_type") or "") != "sweep_credit_spread":
-                return ""
-            pool = float(record.get("pool_price") or 0.0)
-            if pool <= 0 or df_1m is None or len(df_1m) < 2:
-                return ""
-            import pandas as pd
-            from derived import level_rules as LR
-            side = LR.RESISTANCE if str(record.get("option_side") or "") == "call" else LR.SUPPORT
-            idx = df_1m.index
-            since = None
-            try:
-                et = pd.Timestamp(str(record.get("entry_time") or ""))
-                tz = getattr(idx, "tz", None)
-                if tz is not None:
-                    et = (et.tz_localize("UTC") if et.tzinfo is None else et).tz_convert(tz)
-                elif et.tzinfo is not None:
-                    et = et.tz_convert("America/New_York").tz_localize(None)
-                since = et.floor("min")
-            except Exception:                                   # noqa: BLE001
-                since = None
-            if since is None:
-                return ""                                       # no entry minute, no judgement
-            frame = df_1m[idx >= since]
-            if len(frame) < 2:
-                return ""
-            bars = [(i, float(r.open), float(r.high), float(r.low), float(r.close))
-                    for i, r in enumerate(frame.itertuples())]
-            events = LR.judge(bars, (pool, pool), side)
-            at = LR.first(events, LR.BREACHED)
-            if at is None:
-                return ""
-            c_prev, o_now = bars[at - 1][4], bars[at][1]
-            when = frame.index[at]
-            return (f"sweep_breach_accepted: BREACHED — 1m close {c_prev:.2f} beyond the pool "
-                    f"{pool:.2f}, next open {o_now:.2f} beyond ({when:%H:%M}) — the level is SPENT")
-        except Exception as exc:                                # noqa: BLE001
-            logger.debug("sweep breach read failed: %s", exc)
-        return ""
-
-    def _velocity_stall(self, record: TradeRecord, pnl_pct: float,
-                        df_1m) -> Optional[str]:
-        """Is the underlying still delivering fast enough to beat decay?
-
-        Returns an exit_reason when the position should be cut, else None.
-        NEVER RAISES - an exit path that can throw is worse than one that
-        occasionally declines to act.
-
-        THE QUESTION NOTHING ELSE ASKS. `orb_structure_stop` asks whether the
-        thesis broke; `_theta_bleed` asks whether a GAIN is about to evaporate
-        (its gate 1 is a gain floor, so a LOSING position is invisible to it).
-        A losing position that has STOPPED MOVING answers no to both, and the
-        -40% percentage floor eventually catching it is the ABSENCE of a
-        mechanism rather than one. On 2026-08-12 that cost a QQQ trade 50
-        minutes and -42.2% while the underlying sat BELOW the short entry the
-        entire time - directionally right, and bleeding anyway.
-
-        NO TARGET IS USED. bev = |theta| / (|delta| * 1440) is the option's own
-        physics, so this generalises to EVERY long-premium strategy rather than
-        only ORB. The target-based form of the same idea was MEASURED AND
-        REJECTED: feasibility ratio at entry ran HIGHER for losers than winners
-        at every percentile (losers p50 5.05 vs winners 3.87, n=145) - a wide
-        range gives a distant target AND a big required move, so feasibility and
-        difficulty turn out to be the same axis pointing opposite ways. Do not
-        reintroduce it.
-
-        FOUR GATES:
-          (1) GRACE    - no evaluation before VELOCITY_GRACE_MIN. Forced by the
-                         data, not chosen: winners p10 at 5 minutes is -21.1,
-                         i.e. the bottom decile of eventual WINNERS was moving
-                         AWAY. Any earlier check kills those trades.
-          (2) MEASURED - a strategy with no measured floor is evaluated and
-                         LOGGED but never cut, whatever ENFORCE says.
-          (3) FLOOR    - ratio must hold above winners-p10 * STRICTNESS at the
-                         largest mark <= held.
-          (4) CONFIRM  - VELOCITY_CONFIRM_TICKS consecutive breaches. QQQ crossed
-                         back ABOVE breakeven at minutes 41-61 before dying at
-                         70; a single-tick rule oscillates.
-        """
-        try:
-            if not VELOCITY_STALL_ENABLED:
-                return None
-            trade_id = str(record.get("trade_id", ""))
-            entry_time = record.get("entry_time")
-            if not entry_time:
-                return None
-            entry_dt = entry_time if isinstance(entry_time, datetime) else None
-            if entry_dt is None:
-                try:
-                    entry_dt = datetime.fromisoformat(str(entry_time))
-                except ValueError:
-                    return None
-            held = minutes_since(entry_dt)
-            if held < VELOCITY_GRACE_MIN:                      # (1) grace
-                self._vel_breaches.pop(trade_id, None)
-                return None
-            delta = abs(float(record.get("current_delta", 0.0) or 0.0))
-            theta = abs(float(record.get("current_theta", 0.0) or 0.0))
-            if delta <= 1e-6 or theta <= 0.0:
-                return None                    # no live Greeks -> do not guess
-            und_entry = float(record.get("underlying_entry", 0.0) or 0.0)
-            if und_entry <= 0 or df_1m is None or len(df_1m) == 0:
-                return None
-            und_now = float(df_1m["close"].iloc[-1])
-            short = str(record.get("direction", "")) == "short"
-            travelled = (und_entry - und_now) if short else (und_now - und_entry)
-            delivered = travelled / max(held, 1e-9)
-            bev = theta / (delta * 1440.0)
-            if bev <= 0:
-                return None
-            ratio = delivered / bev
-            marks = [m for m in sorted(VELOCITY_FLOOR_BY_MIN) if m <= held]
-            if not marks:
-                return None
-            floor = VELOCITY_FLOOR_BY_MIN[marks[-1]] * VELOCITY_STRICTNESS
-            if ratio >= floor:                                 # (3) floor
-                self._vel_breaches.pop(trade_id, None)
-                return None
-            n = self._vel_breaches.get(trade_id, 0) + 1
-            self._vel_breaches[trade_id] = n
-            if n < VELOCITY_CONFIRM_TICKS:                     # (4) confirm
-                return None
-            strategy = str(record.get("strategy", ""))
-            measured = strategy in VELOCITY_MEASURED_STRATEGIES
-            if not (VELOCITY_STALL_ENFORCE and measured):      # (2) measured
-                logger.info(
-                    "VELOCITY STALL (observe-only%s): %s %s held=%.1fm "
-                    "ratio=%.1f floor=%.1f delivered=%.4f bev=%.4f pnl=%.1f%%",
-                    "" if measured else ", UNMEASURED strategy",
-                    trade_id[:8], strategy, held, ratio, floor,
-                    delivered, bev, pnl_pct * 100.0)
-                return None
-            logger.info(
-                "VELOCITY STALL EXIT: %s held=%.1fm ratio=%.1f < floor=%.1f "
-                "(delivered %.4f pts/min vs breakeven %.4f) pnl=%.1f%%",
-                trade_id[:8], held, ratio, floor, delivered, bev,
-                pnl_pct * 100.0)
-            return (f"velocity_stall ratio={ratio:.1f}<{floor:.1f} "
-                    f"held={held:.0f}m")
-        except Exception as exc:                                # noqa: BLE001
-            logger.debug("velocity stall check failed: %s", exc)
-            return None
 
     def _theta_bleed(self, record: TradeRecord, current_premium: float,
                      pnl_pct: float) -> bool:
@@ -3096,24 +2706,6 @@ class ExitEngine:
         except Exception as exc:                                # noqa: BLE001
             logger.debug("stop-suppression bookkeeping: %s", exc)
 
-    @staticmethod
-    def _held_minutes(record) -> float:
-        try:
-            et = record.get("entry_time")
-            if not et:
-                return 0.0
-            t = datetime.fromisoformat(str(et).replace("Z", "+00:00"))
-            # r125 — the NAIVE fallback compared a UTC box clock against an
-            # entry_time with no zone, so a mixed pair silently measured hold
-            # time in the wrong frame. Records carry +00:00 today, making this
-            # unreachable — fixed anyway, because "unreachable" is what the
-            # 15:40 flatten branch was too.
-            from utils.time_utils import ET as _ET
-            now = datetime.now(t.tzinfo) if t.tzinfo else datetime.now(_ET)
-            return (now - t).total_seconds() / 60.0
-        except Exception:
-            return 0.0
-
     def _evaluate_condor_leg(self, record: TradeRecord,
                               current_premium: float,
                               df_1m=None) -> ExitDecision:
@@ -3448,15 +3040,6 @@ class ExitEngine:
         # commit, because a guard outliving the thing it guarded is this repo's
         # most-repeated bug shape.
 
-        # v4.13 (OTV4TEST r5) — the sweep's thesis is the level HOLDS; its
-        # BREACH (r120: the operator's close-then-open, level_rules) is the negation. AFTER the 15%-of-risk stop by the
-        # operator's ruling: "2 minutes into a dead thesis could rack up some
-        # serious losses" — the floor answers first, the breach names the reason.
-        _sb = self._sweep_breach_accepted(record, df_1m)
-        if _sb:
-            decision.should_exit = True
-            decision.exit_reason = _sb
-            return decision
         if current_premium <= CONDOR_NICKEL_CLOSE:
             decision.should_exit = True
             decision.exit_reason = f"nickel_close pnl={pnl_pct:.1%}"
@@ -3583,28 +3166,6 @@ class ExitEngine:
                 decision.exit_reason = f"adopted_trail pnl={pnl_pct:.1%}"
 
         return decision
-
-    def _get_bos_tracker(self, trade_id: str,
-                          direction: str,
-                          entry_price: float,
-                          min_dist: float = 0.0) -> BOSTracker:
-        """v4.15 — `min_dist` defaults to 0.0 so every existing caller is
-        byte-identical in behaviour. It is supplied ONLY by the continuation
-        path, which seeds with `underlying_entry` and can therefore express a
-        distance in ATR (underlying) units.
-
-        ⚠️ DO NOT PASS min_dist FROM THE GENERIC/ORB CALLER AT ~966 WITHOUT
-        FIXING IT FIRST: that site seeds with `entry_prem` — the OPTION premium
-        — and BOSTracker compares against df_1m UNDERLYING closes. A ~$1.26
-        premium against ~$352 closes means the very first bar always beats
-        `peak_close`, so that path seeds a protected level immediately on bar
-        one regardless of structure. Pre-existing, out of scope here, and
-        recorded rather than silently patched — an ATR distance in premium
-        units would be meaningless anyway."""
-        if trade_id not in self._bos_trackers:
-            self._bos_trackers[trade_id] = BOSTracker(direction, entry_price,
-                                                      min_dist=min_dist)
-        return self._bos_trackers[trade_id]
 
     def trail_armed(self, record) -> bool:
         """r54 (BRK.16) - may this trade's TRAIL govern? True for every strategy but Breakout (unchanged). A Breakout's
@@ -3786,14 +3347,6 @@ class ExitEngine:
     # — same midline/momentum the entry judged against). Falls back to values
     # RECOMPUTED from df_5m when the state isn't available (restart recovery,
     # adopted positions) so this NEVER raises — it only degrades precision.
-    def _underlying_from_5m(self, df_5m: Optional[pd.DataFrame]) -> Optional[float]:
-        if df_5m is None or len(df_5m) == 0:
-            return None
-        try:
-            return float(df_5m["close"].iloc[-1])
-        except Exception:
-            return None
-
     def _midline_atr(self, vol_state, df_5m):
         """Prefer live vol_state; else recompute midline (20-SMA 5m close) + ATR."""
         midline = None

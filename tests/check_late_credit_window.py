@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""tests/check_late_credit_window.py — v5.0
+"""tests/check_late_credit_window.py — v5.1
+v5.1  2026-11-08  OTV5 r76 (RETIRE.1) — W1 and the DEBIT / CREDIT sets drop the removed trades (sweep, ATP fly, ORB); W2-W7 unchanged.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.1  2026-09-26 — OTV4TEST r149 (EOD.1) — W4 and W7 RE-POINTED to the operator's end of day
       ("Resting limit orders at 1545, ladder exits at 1550 if they're not the assignment risk
@@ -23,7 +24,7 @@ GEX crossed zero into TRENDING at 15:00:15 with 5.2 points still to come. **The
 sweep — the strategy whose entire job is trading swept levels — was DORMANT from
 14:00**, and the box held nothing in the direction of the day's defining move.
 
-  W1  SWEEP and TCS both close at 15:40
+  W1  TCS closes at 15:40 (r76: the sweep is removed)
   W2  🔑 STRUCTURAL: every DEBIT strategy closes AT OR BEFORE the flatten
       ladder opens, so a debit can never be widened into its own flatten
   W3  🔑 STRUCTURAL: every CREDIT strategy closes STRICTLY BEFORE the vertical
@@ -93,9 +94,9 @@ VHOLD = tuple(config.VERTICAL_HOLD_TO_ET)
 
 # Which structures pay a debit. MEASURED on the book 2026-09-20: both
 # butterflies carry net_debit (0.26, 0.47) and credit_received 0.0.
-DEBIT = {"GEXPinButterfly", "ATPButterfly", "ORBStrategy", "RunawayContinuation",
-         "LiquidityHunt", "Breakout"}
-CREDIT = {"SweepCreditSpread", "TrendCreditSpread"}
+DEBIT = {"GEXPinButterfly", "RunawayContinuation",
+         "LiquidityHunt", "Breakout"}                       # r76: the ATP fly and the ORB trade removed
+CREDIT = {"TrendCreditSpread"}                              # r76: the sweep removed
 
 
 def _close(name):
@@ -103,9 +104,8 @@ def _close(name):
     return tuple(r.window[1]) if r else None
 
 
-guard("W1 SWEEP and TCS both close at 15:40",
-      lambda: _close("SweepCreditSpread") == (15, 40)
-      and _close("TrendCreditSpread") == (15, 40),
+guard("W1 TCS closes at 15:40 (r76: the sweep is removed)",
+      lambda: _close("TrendCreditSpread") == (15, 40) and _close("SweepCreditSpread") is None,
       lambda: "sweep=%s tcs=%s" % (_close("SweepCreditSpread"), _close("TrendCreditSpread")))
 
 

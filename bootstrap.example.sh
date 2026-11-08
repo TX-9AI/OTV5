@@ -1,5 +1,7 @@
 #!/bin/bash
-# bootstrap.example.sh  v5.4
+# bootstrap.example.sh  v5.5
+# v5.5 — 2026-11-08 — OTV5 r76 (RETIRE.1). OT_SCALE_ORB and OT_SCALE_VOLT are gone: the ORB and VOLT trades are removed
+#         and config.py reads neither key.
 # v5.4 — 2026-10-31 — OTV5 r68 (CFG.5). OT_PIN_PROXIMITY_ACTIVE and OT_SCALE_BREAKOUT are gone (config.py fixes both ON
 #         and reads neither; the operator, 2026-10-31: "7. Pin gate, default "on" —remove from the menu", "9. Scaling,
 #         default on—take it out"). configure.sh's menu is 1-9 now: the ramp TOP is item 7, data capture item 8.
@@ -88,8 +90,6 @@ fi
 export OT_INSTRUMENT="QQQ"              # configure.sh item 1  Instrument
 export OT_RISK_USD="200"               # configure.sh item 2  Risk per trade / ramp MIN
 # export OT_ORB_BUDGET_USD="200"      # configure.sh item 7  Ramp TOP (MAX) (defaults to OT_RISK_USD)
-# export OT_SCALE_ORB="1"             # no configure.sh item since r228 (the ORB trade is off): ORB scaling (1 on, 0 flat)
-# export OT_SCALE_VOLT="1"            # no configure.sh item since r228 (VOLT is off): VOLT scaling (1 on, 0 flat)
 # export OT_DAILY_LOSS_LIMIT="200"    # configure.sh item 6  Daily catastrophic loss cap (defaults to OT_RISK_USD)
 
 # ── Box ───────────────────────────────────────────────────────────────────────

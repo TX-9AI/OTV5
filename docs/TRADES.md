@@ -1,5 +1,7 @@
 # TRADES — the specs
 
+**`TRADES.md` v5.9 · 2026-11-08 · OTV5 r76 (RETIRE.1) — the retired trades are REMOVED with their code: the ORB break + retest, VOLT, the sweep credit spread, the ATP butterfly and ORCS leave the roster, and sections 2, 4 and 8 are gone. The opening-range ENGINE stays (Runaway, Breakout and the Hunt read it). The operator, 2026-11-07: "Running dead code and logging dead code activity is unnecessary drag. Yes, I want all of those things fixed."**
+
 **`TRADES.md` v5.8 · 2026-11-03 · OTV5 r73 (BFLY.17) — section 3: the GEX pin butterfly holds to the close (no premium stop, no decay stop), is never opened at VIX 20 or above, and asks two more things at the door: the 09:30 open inside yesterday's range, and a debit of at least 15.5% of the width. The operator, 2026-11-03: "For the GEX fly, I want no stop except hold to close, I want the VIX rule enforced & I want more discriminatory entries."**
 
 **`TRADES.md` v5.7 · 2026-11-03 · OTV5 r72 (PARK.5) — section 9: on an equity PARK also needs QQQ to agree and the market's commitment (fewer than 2 of 3 leans against on the name and on QQQ); an index (SPX, QQQ) never asks; a tape too thin to read is no trade. The operator, 2026-11-03: "Let's modify the park trade on equities using the new filters —add a gate in the code "is an index=false" and start trading it Monday."**
@@ -35,18 +37,13 @@ is its `docs/PLAN_SPEC.md` section.
 | Runaway | `RunawayContinuation` | ON | none (its end is fixed; r68) | 09:35-10:30 | PLAN_SPEC §30 |
 | Breakout | `Breakout` | ON | none (its end is fixed; r68) | 09:35-10:30 | section 7 below |
 | Liquidity hunt | `LiquidityHunt` | ON | none | 09:35-10:30 | PLAN_SPEC §37 |
-| ORCS | `OpeningRangeCreditSpread` | OFF | `OT_ORCS` | 09:45-10:30 | PLAN_SPEC §41 |
 | GEX pin butterfly | `GEXPinButterfly` | ON | `OT_GEX_BUTTERFLY` | 13:00-15:00 | PLAN_SPEC §32 |
-| ATP butterfly | `ATPButterfly` | OFF | `OT_ATP_BUTTERFLY` | 13:00-15:00 | PLAN_SPEC §39 |
-| VOLT | `VOLT` | OFF | `OT_VOLT` | 09:35-10:30 | section 8 below |
-| ORB break + retest | `ORBStrategy` | OFF | `OT_ORB_TRADE` | 09:35-15:40 | PLAN_SPEC §29 |
-| Sweep credit spread | `SweepCreditSpread` | OFF | `OT_SWEEP_CS` | 09:35-15:40 | PLAN_SPEC §31 |
-| Trend credit spread | `TrendCreditSpread` | OFF | `OT_TCS_ACTIVE` | 11:31-15:40 | PLAN_SPEC §34; LOG since r57: unset = `log`, a SHADOW trade (execution/shadow_book.py, never ordered); `1` trades it, `0` stops it; configure.sh item 16 |
+| Trend credit spread | `TrendCreditSpread` | OFF | `OT_TCS_ACTIVE` | 11:31-15:40 | PLAN_SPEC §34; LOG since r57: unset = `log`, a SHADOW trade (execution/shadow_book.py, never ordered); `1` trades it, `0` stops it |
 | PARK | `PARK` | ON | none (`OT_PARK=log` records it, `off` stops it) | 11:01-11:03 | section 9 below |
 
 A window's end is exclusive: 10:30 means the last entry is 10:29. A switch is ACTIVE at
-`1` or `active` (r303 below). ORCS is RETIRED (r249, the operator 2026-10-04: "Retire it on this repo"; PLAN_SPEC §41.13) - OT_ORCS=1 restores it, PAPER ONLY (a live box refuses it); since r303 its plan is DORMANT with it and records nothing (the operator, 2026-10-19: "1. Yes"). The ORB trade is retired but
-the opening-range ENGINE is not: Runaway, Breakout and the Hunt read it, and since r222 its
+`1` or `active` (r303 below). The ORB trade, VOLT, the sweep credit spread, the ATP butterfly and ORCS are REMOVED (r76,
+RETIRE.1); the opening-range ENGINE is not removed: Runaway, Breakout and the Hunt read it, and since r222 its
 range is checked against the official print. The condor is a management plan with no entry
 of its own; with both credit entries retired it has nothing to manage.
 
@@ -77,9 +74,7 @@ above as EOD_SCHEDULE).
 (`HUNT_MAX_LOSS_PCT`, also used to pick its contract) and the exit engine HOLDS through it,
 logging "would-have-floored" (r209; corrected r227 - r226 wrote this line as if it stopped).
 Other single legs: **25%** (`MAX_LOSS_PCT`). Butterflies: **40%** of the debit
-(`BUTTERFLY_STOP_LOSS_PCT`; section 3's 15% is stale). ORCS: the condor's rules since r230
-(PLAN_SPEC §41.11) - no stop while both sides are open, a lone leg stops at credit + 15% of
-its risk, a nickel closes a leg. Every other exit rule lives in `strategy/management.py` and
+(`BUTTERFLY_STOP_LOSS_PCT`; section 3's 15% is stale). Every other exit rule lives in `strategy/management.py` and
 `execution/exit_engine.py`, not in a number that can be quoted here.
 
 **The fill observers (r270, PMAP.1 + FILL.2).** Every open single long gets a premium-map row a minute, and the
@@ -170,81 +165,6 @@ book, so **BOS is not used.**
 
 ---
 
-## 2. Sweep Credit Spread — `sweep_credit_spread.py`
-
-**OTV4TEST r5 — re-specced with the operator; PLAN_SPEC §31 is the spec.** The text below is the pre-fork record, kept for its measurements (the pierce-depth finding stands and is a bar). Where they disagree §31 wins: the trigger is the derived REJECTED fact, levels come from the store (3 up, 3 down, the 1h tines), the short anchors on the level, the window is 09:35–14:00, the age rule is retired, and the exits are hard close → 15% of risk → breach accepted → nickel.
-
-> **r163 (2026-08-27) — THE FORK'S TINES ARE LEVELS THIS STRATEGY MAY USE, ON A
-> TOUCH.** Operator: *"it's basically a moving level that sweep is allowed to
-> use, but with a touch, not a reject. The plan would still need to select a
-> strike beyond the move that caused the touch."* The liquidity mapper
-> publishes every active 1h/1d tine as a MOVING named pool (price is a
-> function of time — slope × minutes) and emits a TOUCH event when a 1m bar
-> reaches the rail *where it was on that bar*; two closes beyond it since the
-> touch invalidate it. The sweep's plan prepares the spread beyond the
-> touching extreme and fires **leg one** on the touch, classed `{tf}_fork`.
-> **Leg two never takes a touch** — a rejection at the site is required. The
-> spent lock is keyed by the tine's NAME. The 1d fork strategy
-> (`daily_fork_credit_spread.py`) is retired: its whole job is now the
-> mapper's publication plus this plan. See PLAN_SPEC §12.
-
-**A named pool was swept and rejected. Sell the boundary it just became.**
-
-    sweep UP into a pool, rejected   -> CEILING -> CALL credit spread
-    sweep DOWN into a pool, rejected -> FLOOR   -> PUT credit spread
-
-**Credit, not long, and that is the point.** A long reversal needs price to
-*travel*: 155 of 190 directionally-**correct** continuation entries — **82%** —
-never reached +25% MFE, because a 0.30-0.60 delta 0DTE contract needs a 0.90%
-move to pay that after the spread, and the tape delivers it in a specified
-direction on 22% of windows. **A credit spread needs the level to hold**, and
-two thirds of 90-minute windows produce no 0.5% move at all.
-
-**Short strike** — the **first strike beyond the sweep extreme**: the one price
-pierced when it cleared one, the next one out when it did not. Never a strike
-inside the pool. Further from spot than the boundary: less credit, more room, and
-the position is threatened only if price returns to a level it already failed at.
-
-⚠️ **AMENDED r107 (operator, 2026-08-24: "It swept. That's legitimately a sweep.
-Sell the 7635").** The old wording required a strike to have been TRADED
-THROUGH, which collides with this section's own preference for a SHALLOW pierce:
-SPX swept the NY Low by 0.84 pts on a 5-wide chain, cleared no strike, and a
-fully-qualified setup was declined 608 times in one session. The collision only
-bites on wide-strike symbols — seven of the fifteen boxes — so it read as "no
-setups" rather than as a rule. **Strikes are read from the LIVE CHAIN**, not
-`STRIKE_INCREMENT`: SPX 0DTE is 5-wide near the money and 25-wide in the tails.
-
-**FOUNDATIONAL**
-· the pool is **NAMED**. An unnamed swing high is not a liquidity pool.
-· it **RECLAIMED** — a bar *closed* back inside. A wick is a touch, not a
-  decision.
-· it is **NOT INVALIDATED**. Reclaimed-then-accepted-through is a **breakout**,
-  and selling a boundary that already gave way is the worst version of this.
-· price is already on the profitable side.
-
-**SELECTION**, all measured on **2,169 sweep events**
-· window **13:00–15:00** → 09:45–15:30. *(39% survival vs 26% before 10:30)*
-· pierce ceiling **0.25%** → 0.75%. *(33-34% survival vs 19-21% deeper)*
-· max age **6 bars** → 18, measured from the **reclaim**.
-
-⚠️ **A DEEP PIERCE MEANS A WEAK LEVEL, NOT A STRONG REJECTION** — 1.28% median
-adverse against 0.46%. Price went that far because it was willing to.
-
-**FEASIBILITY** — ATR ≤ 0.20%. Above it the tape produced a 0.5% move on **92%
-of 90-bar windows**; a boundary does not hold in that.
-
-**Exit — exactly two.** 15% stop, and the 15:45 hard close. **No trail, no
-profit target**, exempt from the 15:40 flatten ladder as a credit vertical.
-
-⚠️ **r99: this trade could not fire and, had it fired, would not have been
-managed as written.** `is_valid` demanded four contracts (every sweep died
-`Invalid signal`); a valid one would have gone down the DEBIT dispatch and
-bought its own short strike; and `structure.of` filed it under TC.6, which has
-no premium stop. Fixed: per-side validation, pairing gate ->
-`_execute_condor_leg`, CONDOR_LEG (lone-vertical) management.
-
----
-
 ## 3. GEX Pin Butterfly — `gex_pin_butterfly.py`
 
 **OTV5 r73 (BFLY.17), 2026-11-03 — what changed, in the operator's words: "For the GEX fly, I want no stop except hold to
@@ -298,55 +218,6 @@ positioning sits at a strike. **It costs nothing while it waits**: no position
 slot, no capital, no competition. Its evidence will be **structural, not
 statistical** — the test is *"when it fires, does the payoff justify keeping
 it?"*, answerable on a small sample in a way a win rate is not.
-
----
-
-## 4. Opening Range Breakout — `orb_strategy.py`
-
-**The one strategy with a positive record, and the reason is in the spec: it
-never asked permission.**
-
-`orb_trail_stop` — **96% win / 85 trades / +$30,696, worst −$16.** ORB
-consulted no regime label, so it kept working while every gated strategy
-degraded on a classifier picking the wrong side 55% of the time. Operator:
-*"every day where P&L was green or very green is nearly entirely based on the
-ORB trade and the quality of our stops."*
-
-**Trigger** — the opening range breaks and **retests**, confirmed by 1m
-body/wick rules. Self-validating geometry.
-**Direction** — from which side broke. Not forecast.
-**Targets** — `tp50` and the 100% range extension.
-**Exit** — `MAX_LOSS_PCT` at entry, then the trailing stop. **No BOS** —
-`bos_exit` measured 34% / 217 trades / **−$7,085** with the largest single loss
-in the v3 book.
-
-**FOUNDATIONAL** — the break AND the retest. A break alone is not the setup.
-**SELECTION** — the confluence notes (named level in the break, VWAP alignment,
-clear liquidity path) describe the setup; **none of them gate it.**
-**FEASIBILITY** — the range must exist. `_opening_range` reads today's 09:30
-bar, after TCS.3 found the 60-bar 1m frame no longer reached it by 10:35.
-
-**OTV4TEST r2 (2026-09-08) — the spec as the operator stated it, and what
-came out.** Parts: range/width · impulsive candle H/L · direction · one of
-three consequences (retest → fire / runaway → hand off / re-entry → thesis
-over) · the sizing constraint · the stops. **Deleted by ruling:** the 12-bar
-"stale retest" re-arm (*"if it doesn't retest, it's outside the range — how
-would there be another break?"*) and the ATR floor (*"makes no sense"* for
-this setup). **Stops:** structure stop = the impulsive candle's LOW (long) /
-HIGH (short), body or wick, fired on a 1m CLOSE through it — *wicks are tests,
-closes are acceptance*; every other ORB exit kept except velocity stall
-(*"theta bleed should catch whatever a stall would have stood in for"*).
-**Plan provides:** stop, 100%/50% levels, target strike at ±width, the
-contract, floor premium, provisional size — from the impulsive candle's close,
-both sides priced from 09:35. Full contract: PLAN_SPEC §29.
-
-⚠️ **v4.0 MADE IT PURELY MECHANICAL.** Three vestigial reads went: the regime
-label stamped onto the signal, a confluence note for regime agreement that could
-never fire, and `signal.conviction += regime.conviction * 0.7`. All were inert —
-`regime.conviction` is permanently 0.0 — **but a dead branch reads as a live one
-to anyone auditing the file.** The remaining conviction additions are structural
-facts (a named level in the break, a Fed day); they describe the setup and do not
-authorise it.
 
 ---
 
@@ -754,49 +625,6 @@ and blocks neither.
 5. the exit engine's trail, as a floor under the trade, and the close schedule in section 0.
 
 **Open:** the dials are unfitted (BRK.5); no exit candidate beat this stack on 266 days.
-
----
-
-## 8. VOLT — `volt_plan.py` + `volt_strategy.py`
-
-**Written 2026-10-03 (OTV4TEST r227) from the code as it runs. OFF since r187 (operator,
-2026-10-02); `OT_VOLT=1` restores it exactly as described here.**
-
-**What it is.** A volume-expansion trade with two selection gates and nothing else, kept
-deliberately short: a third gate belongs in a new strategy.
-
-**Entry, 09:35-10:30 ET, on completed 1m bars** (it needs `VOLT_MIN_BARS` + 1 = 4 of them):
-1. **Direction** - the last completed bar's close against the session's first open. Above is
-   long (a call), below is short (a put). No threshold, nothing to tune.
-2. **Volume** - the last completed bar's volume is at least `VOLT_VOL_MULT` (1.25x) the mean
-   of the `VOLT_VOL_LOOKBACK_BARS` (5) bars before it.
-
-The contract is the first out-of-the-money strike from the current price with a quote; the
-budget (`OT_VOLT_BUDGET_USD`) must buy at least one. **One at a time.**
-
-**The stop is the entry** (operator, 2026-09-21: *"Use a structural stop. A close beyond
-where the trade opened is a dead thesis."*). `underlying_stop` equals the entry price by
-design.
-
-**Exits (`exit_engine._evaluate_volt`, first match wins).**
-1. The close schedule in section 0.
-2. Premium floor - premium at or below the stop premium (else `MAX_LOSS_PCT`, 25%).
-3. Par delta - delta at or above 0.98.
-4. Structure stop - the last COMPLETED 5m bar that POSTDATES the entry closes back through
-   the entry price. With no such bar yet, it holds on the premium floor alone.
-5. Trail - arms once the 5m close has travelled `VOLT_TRAIL_ARM_R` (0.50) of the
-   entry-to-target distance; then exits on a 5m close through entry plus
-   `VOLT_TRAIL_LOCK_FRAC` (0.50) of the peak gain. The floor is never below entry.
-
-**Two things in the code that disagree with the above and are NOT fixed here** (VOLT is
-off; BACKLOG DOC.31): the exit reason text says "1m close" while the bar read is 5m, and
-`_evaluate_volt`'s docstring still describes a "3x5m structural extreme" stop.
-
----
-
-**The Liquidity Hunt** is PLAN_SPEC §37 and **ORCS** is PLAN_SPEC §41; section 0 above
-carries where each now differs (the Hunt's window ends 10:30, not 11:30; its premium floor
-is recorded and never acted on, as §37 says: "no premium stop").
 
 ---
 

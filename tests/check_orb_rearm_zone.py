@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """
-tests/check_orb_rearm_zone.py  v5.0
+tests/check_orb_rearm_zone.py  v5.1
+v5.1  2026-11-08  OTV5 r76 (RETIRE.1) — Z1d/Z1d2 state the confirmation-spent predicate locally: strategy/orb_strategy.py (its home) is removed with the
+      ORB trade; what they pin - the ENGINE's seqs across notify_position_closed - is unchanged.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.6  2026-10-11  OTV4TEST r269 (OPS.22, mirror of otv4 r479) - the zone NAME is "America/New_York", the zone the legacy link
       US/Eastern pointed to: identical rules, no behaviour change. tzdata 2026c moved the US/* links into tzdata-legacy;
@@ -165,6 +167,11 @@ def main():
     # retest fire three times once the flag turned out never to be set on the
     # single-leg path. The latch is now per-confirmation: the seq is what
     # re-opens the gate, so clearing the flag here would restore the defect.
+    def _spent(d):
+        # r76: the ORB trade (strategy/orb_strategy.confirmation_spent) is removed; the ENGINE's two seqs are what this
+        # pins, so the one-line predicate is stated here: a confirmation is spent once an order was placed against it.
+        return int(d.confirmation_seq or 0) > 0 and int(d.order_placed_seq or 0) >= int(d.confirmation_seq or 0)
+
     e2, _ = armed_long_engine()
     e2._data.confirmation_seq = 1
     e2._data.order_placed = True
@@ -176,13 +183,11 @@ def main():
     check("Z1d the SPENT confirmation survives the close (r235)",
           # spent stays spent across the close, AND a fresh retest re-opens it
           d2.order_placed_seq == d2.confirmation_seq == 1
-          and __import__("strategy.orb_strategy", fromlist=["x"]
-                         ).confirmation_spent(d2),
+          and _spent(d2),
           f"cseq={d2.confirmation_seq} oseq={d2.order_placed_seq}")
     d2.confirmation_seq += 1                      # a genuinely new retest
     check("Z1d2 and a FRESH qualifying retest re-opens the gate",
-          not __import__("strategy.orb_strategy", fromlist=["x"]
-                         ).confirmation_spent(d2),
+          not _spent(d2),
           f"cseq={d2.confirmation_seq} oseq={d2.order_placed_seq}")
     d2.confirmation_seq -= 1
     check("Z1e and the other per-confirmation fields reset",

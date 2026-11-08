@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """
-tests/check_orb_resume.py  v5.0
+tests/check_orb_resume.py  v5.1
+v5.1  2026-11-08  OTV5 r76 (RETIRE.1) — R7 RE-POINTED (WA 38.4): the ORB TRADE's fired-vs-missed row (orb_entry_since, the MISSED plan row and its
+      journal disposition) is removed with the trade, so R7 pins it gone and R7b pins the ENGINE's resume and reach-back kept;
+      R1-R6 (the engine) unchanged.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 
 r103 — THE ORB STATE IS WRITTEN DOWN, TRUSTED, AND THE MISS IS ADJUDICATED.
@@ -143,19 +146,18 @@ want = {"orb_high", "orb_low", "break_candle_high", "retest_depth_px",
 check("R6 the missed payload carries the setup's geometry", want <= payload_keys,
       f"missing {sorted(want - payload_keys)}")
 
-# ── R7 main adjudicates fired-vs-missed before writing the row ───────────────
+# ── R7 r76: the ORB TRADE's missed-row adjudication is removed with the trade ─────────────────────
 msrc = open(os.path.join(ROOT, "main.py")).read()
 mtree = ast.parse(msrc)
 fn = next(n for n in ast.walk(mtree)
           if isinstance(n, ast.FunctionDef) and n.name == "run_analysis")
 fsrc = ast.unparse(fn)
-check("R7a main asks the trades table whether it FIRED",
-      "orb_entry_since" in fsrc)
-check("R7b and journals the miss as a disposition",
-      'outcome=\'missed\'' in fsrc or 'outcome="missed"' in fsrc)
 from database.trade_logger import get_trade_logger
-check("R7c orb_entry_since exists and fails soft",
-      hasattr(get_trade_logger(), "orb_entry_since"))
+check("R7 the ORB trade's MISSED row is gone: run_analysis asks no orb_entry_since and writes no ORBStrategy plan row",
+      "orb_entry_since" not in fsrc and "'ORBStrategy'" not in fsrc and '"ORBStrategy"' not in fsrc
+      and not hasattr(get_trade_logger(), "orb_entry_since"))
+check("R7b the ENGINE still resumes from its state file and still replays the tape (the reach-back is kept)",
+      "load_state_file" in fsrc and "rebuild_from_tape" in fsrc)
 
 print(f"\n{'PASS' if not FAILURES else 'FAIL'}: {len(FAILURES)} problem(s) {FAILURES}")
 sys.exit(1 if FAILURES else 0)

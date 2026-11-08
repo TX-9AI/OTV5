@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """
-tests/check_time_parse.py  v5.0
+tests/check_time_parse.py  v5.1
+v5.1  2026-11-08  OTV5 r76 (RETIRE.1) — T2/T3 drop the removed plans (sweep, ORCS, ORB, VOLT); T3's readable-clock control is the Runaway at 09:50.
+      T1 and T4 unchanged.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.1  2026-10-19  OTV4TEST r303 (PSTATE.1) — its subject ORCS / SweepCreditSpread / TrendCreditSpread (T3) is DORMANT by default and a dormant plan now
       writes nothing by ruling, so this run switches it ACTIVE (OT_ORCS=1, OT_SWEEP_CS=1, OT_TCS_ACTIVE=1); what it pins is unchanged.
@@ -32,8 +34,6 @@ import tempfile
 
 _root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, _root)
-os.environ["OT_ORCS"] = "1"   # r303: the subject writes (check_plan_states pins dormant)
-os.environ["OT_SWEEP_CS"] = "1"   # r303: the subject writes (check_plan_states pins dormant)
 os.environ["OT_TCS_ACTIVE"] = "1"   # r303: the subject writes (check_plan_states pins dormant)
 for _sp in _glob.glob(os.path.join(_root, "venv", "lib", "python*", "site-packages")):
     if _sp not in sys.path:                                  # r106 venv bootstrap
@@ -76,13 +76,12 @@ def main():
         TU = None
 
     try:
-        import strategy.sweep_plan as SP, strategy.liquidity_hunt as LH, strategy.runaway_plan as RP
-        import strategy.tcs_plan as TP, strategy.orcs_plan as OP, strategy.orb_plan as OB
-        import strategy.volt_plan as VP, strategy.breakout_plan as BP
-        mods = {"sweep_plan": SP._hm, "liquidity_hunt": LH._hm, "runaway_plan": RP._hm, "tcs_plan": TP._hm,
-                "orcs_plan": OP._hm, "orb_plan": OB._hhmm, "volt_plan": VP._hhmm, "breakout_plan": BP._hm}
+        import strategy.liquidity_hunt as LH, strategy.runaway_plan as RP
+        import strategy.tcs_plan as TP, strategy.breakout_plan as BP
+        mods = {"liquidity_hunt": LH._hm, "runaway_plan": RP._hm, "tcs_plan": TP._hm, "breakout_plan": BP._hm}
         own = sorted(k for k, f in mods.items() if TU is None or f is not TU.parse_hm)
-        check("T2 all eight plans use utils.time_utils.parse_hm - no private copy left", not own, f"still private: {own}")
+        check("T2 all four plans use utils.time_utils.parse_hm - no private copy left (r76: the sweep, ORCS, ORB and "
+              "VOLT plans are removed)", not own, f"still private: {own}")
     except Exception as exc:                                  # noqa: BLE001
         check("T2 (did not run)", False, f"{type(exc).__name__}: {exc}")
 
@@ -102,20 +101,16 @@ def main():
             res["Runaway"] = last("RunawayContinuation")
             LH.LiquidityHunt().prepare(orb=None, price_now=750.0, now_et="garbage")
             res["Hunt"] = last("LiquidityHunt")
-            OP.ORCSPlan().prepare(price_now=750.0, now_et="garbage")
-            res["ORCS"] = last("OpeningRangeCreditSpread")
-            SP.SweepPlan().prepare(price_now=750.0, now_et="garbage")
-            res["Sweep"] = last("SweepCreditSpread")
             TP.TCSPlan().prepare(price_now=750.0, now_et="garbage")
             res["TCS"] = last("TrendCreditSpread")
             bad = {k: v for k, v in res.items() if not (v[0] == "DORMANT" and "clock could not be read" in (v[1] or ""))}
             P._DORMANT.clear()
             P.begin_tick(2000.0)
-            OP.ORCSPlan().prepare(price_now=750.0, now_et="09:50", chain=None)
-            ok_clock = last("OpeningRangeCreditSpread")
+            RP.RunawayPlan().prepare(orb=None, atr_pct=0.1, price_now=750.0, now_et="09:50")
+            ok_clock = last("RunawayContinuation")
         finally:
             P.bind_store(None)
-        check("T3 Runaway, Hunt, ORCS, sweep and TCS are DORMANT on an unreadable clock; a readable one passes this rule",
+        check("T3 Runaway, Hunt and TCS are DORMANT on an unreadable clock; a readable one passes this rule",
               not bad and "clock could not be read" not in (ok_clock[1] or ""), f"not dormant: {bad}; readable -> {ok_clock}")
     except Exception as exc:                                  # noqa: BLE001
         check("T3 (did not run)", False, f"{type(exc).__name__}: {exc}")

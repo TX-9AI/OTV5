@@ -1,6 +1,11 @@
 #!/bin/bash
 # ==========================================================================
-# setup_ec2.sh  v5.3
+# setup_ec2.sh  v5.4
+# v5.4  2026-11-08  OTV5 r76 (RETIRE.1) — THE UNIT NO LONGER CARRIES OT_SCALE_ORB OR OT_SCALE_VOLT (nor their --plan lines).
+#       The ORB and VOLT trades are removed and config.py v5.14 reads neither key; tools/strip_retired_env.sh takes the
+#       stored lines off the 14 live units once, after the land. OT_ORB_BUDGET_USD (the ramp TOP) is unchanged. The
+#       operator, 2026-11-07: "Running dead code and logging dead code activity is unnecessary drag. Yes, I want all of
+#       those things fixed."
 # v5.3  2026-10-31  OTV5 r68 (CFG.5) — THE UNIT NO LONGER CARRIES OT_SCALE_BREAKOUT OR OT_PIN_PROXIMITY_ACTIVE (nor their
 #       --plan lines). config.py v5.10 fixes both ON and reads neither key; the operator, 2026-10-31: "7. Pin gate, default
 #       "on" —remove from the menu"; "9. Scaling, default on—take it out". This also ends a contradiction: this installer
@@ -269,9 +274,8 @@ RISK_USD="${OT_RISK_USD:-200}"
 PAPER_TRADING="True"
 # r132 — the keys configure.sh grew after v3, primed so a fresh box shows values
 # the operator chose. Defaults match config.py's. r68 (CFG.5): the pin gate and Breakout
-# scaling are fixed ON in config.py and are no longer written here.
-SCALE_ORB="${OT_SCALE_ORB:-1}"                  # r161 — configure.sh items 9-11
-SCALE_VOLT="${OT_SCALE_VOLT:-1}"
+# scaling are fixed ON in config.py and are no longer written here. r76 (RETIRE.1): nor the ORB / VOLT
+# scaling switches - both trades are removed and config.py reads neither key.
 ORB_BUDGET_USD="${OT_ORB_BUDGET_USD:-$RISK_USD}"
 DAILY_LOSS_LIMIT="${OT_DAILY_LOSS_LIMIT:-$RISK_USD}"
 SWAP_GB="${OT_SWAP_GB:-2}"
@@ -412,8 +416,6 @@ if [ "$PLAN" = 1 ]; then
     echo "PLAN instrument=$INSTRUMENT"
     echo "PLAN paper=$PAPER_TRADING"
     echo "PLAN risk_usd=$RISK_USD"
-    echo "PLAN scale_orb=$SCALE_ORB"
-    echo "PLAN scale_volt=$SCALE_VOLT"
     echo "PLAN orb_budget_usd=$ORB_BUDGET_USD"
     echo "PLAN daily_loss_limit=$DAILY_LOSS_LIMIT"
     echo "PLAN swap_gb=$SWAP_GB"
@@ -546,8 +548,6 @@ Environment=TELEGRAM_TOKEN=${TELEGRAM_TOKEN}
 Environment=TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID}
 Environment=GITHUB_TOKEN=${GITHUB_TOKEN}
 Environment=GITHUB_REPO=${GITHUB_REPO}
-Environment=OT_SCALE_ORB=${SCALE_ORB}
-Environment=OT_SCALE_VOLT=${SCALE_VOLT}
 Environment=OT_ORB_BUDGET_USD=${ORB_BUDGET_USD}
 Environment=OT_DAILY_LOSS_LIMIT=${DAILY_LOSS_LIMIT}
 ExecStartPre=/bin/bash -c 'touch ${INSTALL_DIR}/bot.log ${INSTALL_DIR}/trades.db && chown ${USER}:${USER} ${INSTALL_DIR}/bot.log ${INSTALL_DIR}/trades.db'

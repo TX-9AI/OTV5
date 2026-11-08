@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """
-tests/check_atr_units.py  v5.0
+tests/check_atr_units.py  v5.1
+v5.1  2026-11-08  OTV5 r76 (RETIRE.1) — U3/U5 RE-POINTED (WA 38.4): the ORB trade and the sweep are removed, so their ATR floor / ceiling
+      checks become one check that both modules are gone; U1/U2 (the producer's percent and Runaway's floor) and U6 unchanged.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.1  2026-09-08  OTV4TEST r2 — U2–U4 RE-POINTED AT THE RUNAWAY. The ORB ATR
       floor they executed is deleted by the operator's ruling (orb_strategy
@@ -108,18 +110,9 @@ def main() -> int:
     check("U2b and the fraction would NOT have — this is the live failure",
           nflx.atr_normalized < _RW_FLOOR and _rw_delta(nflx.atr_normalized) is None,
           f"{nflx.atr_normalized} < {_RW_FLOOR}")
-    import strategy.orb_strategy as OS
-    check("U3 ORB carries NO ATR floor (deleted OTV4TEST r2; check_orb_plan P15 fires at 0.01%)",
-          not hasattr(OS, "ORB_ATR_FLOOR_PCT"))
-
-    # ── U5: THE SWEEP CEILING IS ALIVE AGAIN ─────────────────────────────────
-    # The other direction. Fed the fraction, a MAX of 0.20 could never trip.
-    from strategy.sweep_credit_spread import ATR_MAX_PCT
-    hot = _Vol(0.004)                 # 0.4% — genuinely above the 0.20% ceiling
-    hot_read = hot.atr_pct
-    check("U5 a hot tape now trips the sweep ceiling",
-          hot_read > ATR_MAX_PCT and hot.atr_normalized < ATR_MAX_PCT,
-          f"pct={hot_read} frac={hot.atr_normalized} ceiling={ATR_MAX_PCT}")
+    import importlib.util as _ilu
+    check("U3/U5 the ORB trade and the sweep (and their ATR floor / ceiling) are removed (r76)",
+          __import__("retired_names").retired("strategy.orb_strategy", "strategy.sweep_plan"))
 
     # ── U6: THE THRESHOLDS ARE ALL ON THE SAME SCALE ─────────────────────────
     # A sanity band. Every ATR threshold in the tree is a small percent; any
@@ -128,8 +121,7 @@ def main() -> int:
                                                ATR_DEEP_PCT)
     consts = {"RUNAWAY_ATR_FLOOR_PCT": ATR_FLOOR_PCT,
               "RUNAWAY_ATR_VETO_PCT": ATR_HARD_VETO_PCT,
-              "RUNAWAY_ATR_DEEP_PCT": ATR_DEEP_PCT,
-              "SWEEP_CS_ATR_MAX_PCT": ATR_MAX_PCT}
+              "RUNAWAY_ATR_DEEP_PCT": ATR_DEEP_PCT}
     odd = {k: v for k, v in consts.items() if not (0.0 < v < 5.0)}
     check("U6 every ATR threshold is on the percent scale", not odd, str(odd))
 

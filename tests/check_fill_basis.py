@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """
-tests/check_fill_basis.py  v5.0
+tests/check_fill_basis.py  v5.1
+v5.1  2026-11-08  OTV5 r76 (RETIRE.1) — F5 reads the five live strategies (the ORB trade and the sweep removed; Breakout, the Hunt and PARK added -
+      a wider sweep of the same claim); F7 RE-POINTED (WA 38.4): the ORB standing offer, the one ladder exemption, is removed
+      with the ORB trade, so F7 pins it gone.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.4  2026-09-24  OTV4TEST r128 — F6 AND F6b MOVED, NOT DROPPED (WORKING_AGREEMENT
       38.4). Both grepped the WHOLE of main.py for r220's inline names
@@ -206,9 +209,8 @@ def main():
     # on a backslash-n collapsing a level inside a generator — the same trap
     # that broke a shell command earlier today. Iterating lines needs no
     # escapes at all, so there is nothing to get wrong.
-    paths = ("orb_strategy.py", "runaway_continuation.py",
-             "gex_pin_butterfly.py", "sweep_credit_spread.py",
-             "trend_credit_spread.py")
+    paths = ("runaway_continuation.py", "breakout.py", "liquidity_hunt.py", "park.py",
+             "gex_pin_butterfly.py", "trend_credit_spread.py")       # r76: the ORB trade and the sweep are removed
     bad = []
     for fn in paths:
         src = open(os.path.join(_root, "strategy", fn), encoding="utf-8")
@@ -377,23 +379,11 @@ def main():
     check("F6c the structure quote is built from the four leg quotes",
           "_sa - _lb" in mainsrc and "_sb - _la" in mainsrc)
 
-    # ── F7 — ORB STAYS EXEMPT ───────────────────────────────────────────
-    # ⚠️ THE CARVE-OUT IS DELIBERATE AND MUST SURVIVE. A standing offer that
-    # walks is not a standing offer.
+    # ── F7 — r76: THE ORB STANDING OFFER IS REMOVED WITH THE ORB TRADE ─────
     eesrc = open(os.path.join(_root, "execution", "entry_engine.py"),
                  encoding="utf-8").read()
-    offer = eesrc[eesrc.index("def _place_standing_offer"):]
-    offer = offer[:offer.index("def _place_butterfly")]
-    # ⚠️ CODE LINES ONLY. The first draft matched the COMMENT that documents
-    # the carve-out — "NO `_walk_price`, NO `ladder_registry`" — and went red
-    # on the very prose asserting the property it was checking. Same class as
-    # the §20 canaries that keep matching changelog text.
-    _code = [l for l in offer.splitlines()
-             if l.strip() and not l.strip().startswith(("#", '"', "⚠", "🔑", "🔴"))]
-    _code = "\n".join(_code)
-    check("F7 ORB's standing offer still does NOT walk",
-          "self._walk_price(" not in _code and "_lr.price_for(" not in _code,
-          "the carve-out is deliberate: a standing offer that walks is not one")
+    check("F7 the ORB standing offer is gone (r76): every single-leg entry now walks the ladder",
+          "def _place_standing_offer" not in eesrc and "def _is_standing_offer" not in eesrc)
 
     print()
     if _fails:

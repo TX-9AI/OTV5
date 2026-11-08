@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """
-tests/check_offer_fill_price.py  v5.0
+tests/check_offer_fill_price.py  v5.1
+v5.1  2026-11-08  OTV5 r76 (RETIRE.1) — F3 RE-POINTED (WA 38.4): the ORB standing offer and its paper filler are removed with the ORB trade, so F3 pins
+      them gone; F1/F2 (resting_orders.note_fill_price on a scratch store) unchanged.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.0  2026-10-03  OTV4TEST r210 (AUD.9) — A FILLED STANDING OFFER RECORDS THE PRICE IT FILLED AT.
 
@@ -12,8 +14,7 @@ v1.0  2026-10-03  OTV4TEST r210 (AUD.9) — A FILLED STANDING OFFER RECORDS THE 
   F1  the REAL resting_orders on a scratch db: placed, closed FILLED, price
       noted -> the row carries state FILLED and the price
   F2  a note for an order that does not exist changes nothing and raises nothing
-  F3  the paper filler notes the price right beside its close_out (a source
-      check, stated as one - the live proof is the next paper ORB offer)
+  F3  r76: the paper standing-offer filler is removed with the ORB trade; F1/F2 pin the store it wrote
 
 Run:  python3 tests/check_offer_fill_price.py   (exit 0 green, 1 red)
 """
@@ -66,20 +67,11 @@ def main():
     except Exception as exc:                                  # noqa: BLE001
         check("F1 (did not run)", False, f"{type(exc).__name__}: {exc}")
         check("F2 (did not run)", False, "see F1")
-    try:
-        src = open(os.path.join(_root, "execution", "entry_engine.py")).read()
-        tree = ast.parse(src)
-        ok = False
-        for node in ast.walk(tree):
-            if isinstance(node, ast.If) and "paper_trading" in ast.dump(node.test):
-                calls = [(n.lineno, n.func.attr) for n in ast.walk(node) if isinstance(n, ast.Call)
-                         and isinstance(n.func, ast.Attribute) and n.func.attr in ("close_out", "note_fill_price")]
-                co = [l for l, a in calls if a == "close_out"]; nf = [l for l, a in calls if a == "note_fill_price"]
-                if co and nf and any(0 < b - a <= 3 for a in co for b in nf):
-                    ok = True
-        check("F3 the paper filler notes the fill price right after it closes the offer FILLED (source check)", ok)
-    except Exception as exc:                                  # noqa: BLE001
-        check("F3 (did not run)", False, f"{type(exc).__name__}: {exc}")
+    _t = ast.parse(open(os.path.join(_root, "execution", "entry_engine.py")).read())
+    _names = {n.name for n in ast.walk(_t) if isinstance(n, ast.FunctionDef)}
+    _calls = {getattr(n.func, "attr", getattr(n.func, "id", "")) for n in ast.walk(_t) if isinstance(n, ast.Call)}
+    check("F3 r76: the paper standing-offer filler is removed with the ORB trade (entry_engine places no offer)",
+          not ({"_place_standing_offer", "_record_offer"} & (_names | _calls)))
     if FAILED:
         print(f"\nRED — {len(FAILED)} check(s): {FAILED}")
         return 1

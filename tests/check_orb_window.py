@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
-"""tests/check_orb_window.py  v5.0
+"""tests/check_orb_window.py  v5.1
+v5.1  2026-11-08  OTV5 r76 (RETIRE.1) — W5-W7b (the ORB TRADE's target, level and strike rules) go with strategy/orb_strategy.py, replaced by one check
+      that the file is gone; W1-W4 (the ENGINE's 15:40 window, the debit block, every copy, the engine's own comparison) kept.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.2  2026-09-26  OTV4TEST r149 (EOD.1) — W1 RE-POINTED: the ORB window closes at 15:40, the operator's
       "extend the debit window to all day" and "Stop entries at 1540" (was 11:30). W2's single boundary holds.
@@ -120,24 +122,9 @@ def main():
             return src                                # never hide a parse error
         return " ".join(out)
 
-    _raw = open(os.path.join(_root, "strategy", "orb_strategy.py"),
-                encoding="utf-8").read()
-    st = _code_only(_raw)
-    check("W5 the target is the plan's measured move — an ASSIGNMENT, not a pool",
-          "target_100 , target_50 = prep . target_100 , prep . target_50" in st
-          and "adjusted_target\"]" not in st)
-    check("W6 no level surface reaches this file at all: no import, no parameter, no method",
-          "LiquidityMap" not in st
-          and "liq_map:" not in st
-          and "def _analyze_liquidity" not in st
-          and "liq_result" not in st,
-          "one of: LiquidityMap import / liq_map param / _analyze_liquidity / liq_result")
-    check("W7 the contract comes from the PLAN on every path — no strike is re-derived here",
-          "contract = prep . direction , prep . side , prep . contract" in st
-          and "round_to_strike" not in st
-          and "select_orb_strike" not in st)
-    check("W7b ...and the conviction bump that rode on a named level is gone",
-          "conviction+=0.15" not in st.replace(" ", ""))
+    import importlib.util as _ilu
+    check("W5-W7 r76: the ORB TRADE (strategy/orb_strategy.py, whose target / level / strike rules W5-W7b pinned) is removed;"
+          " the ENGINE window above (W1-W4) is what remains", __import__("retired_names").retired("strategy.orb_strategy"))
 
     print()
     if _fails:

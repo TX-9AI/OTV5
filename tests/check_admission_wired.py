@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """
-tests/check_admission_wired.py  v5.0
+tests/check_admission_wired.py  v5.1
+v5.1  2026-11-08  OTV5 r76 (RETIRE.1) — A3 RE-POINTED (WA 38.4): the ORB trade and its "ORB" dispatch alias are removed, so A3 pins
+      that a live label IS its table key (Breakout asked when admitted, not when only PARK is) and the alias map is gone;
+      A2/A5's placeholder admitted set names PARK, not the removed sweep.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.5  2026-10-19  OTV4TEST r303 (PSTATE.1) — A3's ORB trade is DORMANT by default and a dormant plan is never asked by ruling,
       so this run switches it ACTIVE (OT_ORB_TRADE=1). A5 asks a name NEITHER table carries (UnlistedStrategy):
@@ -40,7 +43,6 @@ import tempfile
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
-os.environ["OT_ORB_TRADE"] = "1"   # r303: A3's subject is active (check_plan_states pins dormant)
 os.environ.setdefault("OT_TRADES_DB", os.path.join(tempfile.mkdtemp(), "t.db"))
 os.environ.setdefault("OT_DERIVED_DB", os.path.join(tempfile.mkdtemp(), "d.db"))
 FAILED, RAN = [], []
@@ -85,20 +87,20 @@ def main():
     guard("A1 an ADMITTED strategy is asked and its signal returned",
           lambda: probe("GEXPinButterfly", ["GEXPinButterfly"]) == (True, "SIGNAL"))
     guard("A2 a strategy NOT admitted this tick is NEVER ASKED — fn does not run",
-          lambda: probe("GEXPinButterfly", ["SweepCreditSpread"]) == (False, None),
+          lambda: probe("GEXPinButterfly", ["PARK"]) == (False, None),
           "this is what removes the NOT ASKED rows: no ask, so no refusal to journal")
 
     # ── A3 — the ORB dispatches under a label the table does not use ────────
-    guard("A3 the dispatch label 'ORB' resolves to the table key 'ORBStrategy'",
-          lambda: probe("ORB", ["ORBStrategy"])[0] is True
-          and probe("ORB", ["SweepCreditSpread"])[0] is False,
-          "an alias miss would silently gate the ORB shut in its own window")
+    guard("A3 a live dispatch label IS its table key: Breakout asked when admitted, not when only PARK is; no alias map",
+          lambda: probe("Breakout", ["Breakout"])[0] is True
+          and probe("Breakout", ["PARK"])[0] is False and not hasattr(M, "_ADMISSION_ALIAS"),
+          "an alias left behind would gate a label nobody dispatches")
 
     # ── A4/A5 — fails OPEN, in both directions ─────────────────────────────
     guard("A4 with NO admission computed, every strategy is asked (pre-r40 exactly)",
           lambda: probe("GEXPinButterfly", None)[0] is True)
     guard("A5 a name the table does not carry is asked — admission has no opinion",
-          lambda: probe("UnlistedStrategy", ["SweepCreditSpread"])[0] is True,     # r303: IronCondorStrategy is DORMANT
+          lambda: probe("UnlistedStrategy", ["PARK"])[0] is True,     # r303: IronCondorStrategy is DORMANT
           "IronCondorStrategy is retired as an entry; a silent veto would hide that")
     guard("A5b a management dispatch is never gated by the entry table",
           lambda: probe("CondorManagement", [])[0] is True)

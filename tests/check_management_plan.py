@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 """
-tests/check_management_plan.py  v5.1  (2026-11-03)
+tests/check_management_plan.py  v5.2  (2026-11-03)
+v5.2  2026-11-08  OTV5 r76 (RETIRE.1) — RE-POINTED (WA 38.4): the sweep and the ATP fly are removed from the management plan, so M3, D5-D7 (the
+      sweep vertical) and D12e (the ATP fly) go with them; M7's ids and M11's roster drop them (and M11 pins them absent);
+      D10's formed condor is two TCS legs; D12b/D12d (sweep_credit_spread.is_spent, read only by the removed sweep plan)
+      go with it. Every other check unchanged.
 v5.1  2026-11-03  OTV5 r73 (BFLY.17) — M5 and D12a: the GEX pin fly names the flatten as its only exit and HOLDS below its old floor (the operator, 2026-11-03: "For the GEX
       fly, I want no stop except hold to close"); the ATP butterfly, which keeps its stop, still CLOSEs at it (D12e).
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ... Previous title: tests/check_management_plan.py  v1.5  (2026-10-03)
@@ -39,7 +43,7 @@ Born red at 1b83ee0 (r165): strategy/management.py does not exist.
       the hard stop, the structure stop and the target with the record's
       OWN numbers, says the trail is not armed, carries MFE.
   M2  the same trade after the trail arms -> "premium <= trail -> out".
-  M3  a sweep credit spread -> credit semantics: pnl positive when the
+  M3  (r76: removed with the sweep) a sweep credit spread -> credit semantics: pnl positive when the
       spread's value FALLS; the premium stop reads ">=".
   M4  TCS -> breach of the ORB bound, no premium stop, nickel.
   M5  a butterfly -> stop and target, from the record.
@@ -127,16 +131,6 @@ def main():
     r2b = _row(st, "RunawayContinuation/manage", 2.5)
     check("M2b a SHORT runaway is hurt by a close ABOVE its stop — the row reads '>'",
           r2b and "touch > 100.00 -> out (breach)" in r2b[1], str(r2b))
-    sweep = {"trade_id": "sw1", "strategy": "SweepCreditSpread", "option_side": "put",
-             "is_credit_vertical": True, "entry_premium": 1.30, "current_premium": 0.90,
-             "stop_premium": 1.495, "underlying_stop": 96.0, "excursion_ticks": 8}
-    P.begin_tick(3.0)
-    MP.decide(sweep, 0.90, df_1m=None, open_records=[sweep], current_price=97.4, ctx=ctx, exit_engine=None)
-    r3 = _row(st, "SweepCreditSpread/manage", 3.0)
-    check("M3 a credit spread: value fell 1.30 -> 0.90 reads as +31%, the floor reads '>='",
-          r3 and "credit" in r3[1] and "(+31%)" in r3[1] and "premium >= 1.50 -> out (floor)" in r3[1]
-          and "touch < 96.00 -> out (breach)" in r3[1], str(r3))
-
     tcs = {"trade_id": "tc1", "strategy": "TrendCreditSpread", "option_side": "put",
            "is_credit_vertical": True, "is_trend_credit": True, "entry_premium": 1.30,
            "current_premium": 1.10, "underlying_stop": 351.88, "excursion_ticks": 3}
@@ -164,8 +158,8 @@ def main():
     notes = st.conn.execute("SELECT strategy, outcome, trade_id, payload FROM strategy_note "
                             "WHERE outcome='manage' ORDER BY rowid").fetchall()
     check("M7 the r66 vector is written per open position with outcome 'manage' and the trade_id",
-          len(notes) >= 5 and all(n[1] == "manage" for n in notes)
-          and {n[2] for n in notes} >= {"rw1", "sw1", "tc1", "bf1"},
+          len(notes) >= 4 and all(n[1] == "manage" for n in notes)
+          and {n[2] for n in notes} >= {"rw1", "tc1", "bf1"},
           f"{len(notes)} notes, ids {sorted({n[2] for n in notes})}")
     tcs_note = next((json.loads(n[3]) for n in notes if n[0] == "TrendCreditSpread"), None)
     spec = (tcs_note or {}).get("specific", {})
@@ -199,8 +193,9 @@ def main():
           i_m != -1 and i_p != -1 and i_m < i_p and in_try, f"manage@{i_m} plan@{i_p} try={in_try}")
 
     check("M11 every strategy that opens a position declares its exit conditions",
-          {"RunawayContinuation", "ORBStrategy", "SweepCreditSpread", "TrendCreditSpread",
-           "IronCondorStrategy", "GEXPinButterfly"} <= set(EXIT_CONDITIONS))
+          {"RunawayContinuation", "TrendCreditSpread", "IronCondorStrategy", "GEXPinButterfly"}
+          <= set(EXIT_CONDITIONS)
+          and not ({"ORBStrategy", "SweepCreditSpread", "ATPButterfly"} & set(EXIT_CONDITIONS)))
 
     # ══ r167 — THE PLAN DECIDES ═══════════════════════════════════════════
     import pandas as pd
@@ -263,24 +258,7 @@ def main():
     check("D4b the intent converts to the engine's ExitDecision the executor already understands",
           d.should_exit and d.exit_reason.startswith("theta_bleed"))
 
-    sw = {"trade_id": "d5", "strategy": "SweepCreditSpread", "option_side": "put",
-          "is_credit_vertical": True, "is_condor_leg": True, "entry_premium": 1.30,
-          "current_premium": 1.52, "stop_premium": 1.495, "underlying_stop": 96.0}
-    eng = _Engine()
-    P.begin_tick(14.0)
-    it = MP.decide(sw, 1.52, df_1m=_df([96.6, 96.4]), open_records=[sw], exit_engine=eng)
-    check("D5 a lone sweep vertical at 1.52 >= the 15% floor 1.495 -> CLOSE premium_stop_15%",
-          it and it.action == "CLOSE" and it.condition == "premium_stop" and "15%" in it.reason,
-          str(it and it.reason))
-    P.begin_tick(15.0)
-    it = MP.decide(dict(sw, current_premium=1.20), 1.20, df_1m=_df([96.4, 95.7]),
-                   open_records=[sw], exit_engine=eng)
-    check("D6 a 1m close 95.70 through the pool 96.00 -> CLOSE acceptance",
-          it and it.action == "CLOSE" and it.condition == "acceptance", str(it and it.reason))
-    P.begin_tick(16.0)
-    it = MP.decide(dict(sw, current_premium=0.04), 0.04, df_1m=_df([96.6, 96.7]),
-                   open_records=[sw], exit_engine=eng)
-    check("D7 value at the nickel -> CLOSE nickel", it and it.condition == "nickel")
+    eng = _Engine()                                  # a fresh calculator (r76: the sweep block that reset it is removed)
     tc = {"trade_id": "d8", "strategy": "TrendCreditSpread", "option_side": "put",
           "is_credit_vertical": True, "is_condor_leg": True, "is_trend_credit": True,
           "entry_premium": 1.30, "current_premium": 1.80, "underlying_stop": 351.88}
@@ -293,11 +271,11 @@ def main():
     check("D9 TCS: a 1m close 351.50 through the bound 351.88 -> CLOSE breach",
           it and it.condition == "breach")
 
-    leg2 = dict(sw, trade_id="d10b", option_side="call")
+    leg2 = dict(tc, trade_id="d10b", option_side="call")
     P.begin_tick(19.0)
-    it = MP.decide(sw, 1.20, df_1m=_df([96.6, 96.7]), open_records=[sw, leg2], exit_engine=eng)
+    it = MP.decide(tc, 1.20, df_1m=_df([352.6, 352.7]), open_records=[tc, leg2], exit_engine=eng)
     check("D10 a FORMED condor (two legs) is not the plan's to decide -> None (the ladder decides)",
-          it is None and not covers(sw, [sw, leg2]))
+          it is None and not covers(tc, [tc, leg2]))
     check("D11 ORB, ADOPTED and a tent are never the plan's",
           not covers({"strategy": "ORBStrategy"}) and not covers({"strategy": "ADOPTED"})
           and not covers({"strategy": "SweepCreditSpread", "is_tent": True}))
@@ -315,11 +293,6 @@ def main():
     it = MP.decide(dict(bf, current_premium=0.13), 0.13, df_1m=_df([100.9, 101.0]), exit_engine=eng)
     check("D12a (r73) the GEX pin fly at 0.13 <= its old floor 0.135 -> HOLD: no stop, it holds to the 15:45 flatten",
           it and it.action == "HOLD", str(it and (it.action, it.reason)))
-    P.begin_tick(20.7)
-    it = MP.decide(dict(bf, trade_id="d12e", strategy="ATPButterfly", current_premium=0.13), 0.13,
-                   df_1m=_df([100.9, 101.0]), exit_engine=eng)
-    check("D12e the ATP butterfly (it keeps its stop) at 0.13 <= the 25% floor 0.135 -> CLOSE stop_25%",
-          it and it.action == "CLOSE" and it.condition == "stop" and "25%" in it.reason, str(it and it.reason))
     bfb = next(n for n in ast.walk(ast.parse(esrc if 'esrc' in dir() else open(os.path.join(_root, "execution", "exit_engine.py"), encoding="utf-8").read()))
                if isinstance(n, ast.FunctionDef) and n.name == "_evaluate_butterfly")
     bfs = "\n".join(l for l in ast.unparse(bfb).split("\n") if not l.strip().startswith("#"))
@@ -327,37 +300,7 @@ def main():
           "target_hit" not in bfs and "butterfly_max_hold" not in bfs and "stop_hit" in bfs)
     # D12b/D12d (OTV4TEST r25) — the plan's OWN breach close must spend the level it
     # sold against, read back from trades.db the way the TCS/sweep plans read it.
-    import tempfile as _tfd
-    from datetime import datetime as _dtd, timedelta as _tdd, timezone as _tzd
-    import database.trade_logger as _TLD
-    import strategy.sweep_credit_spread as _scd
-    _TLD._trade_logger = _TLD.TradeLogger(os.path.join(_tfd.mkdtemp(), "d12.db"))
-    tcs = {"trade_id": "d12b", "strategy": "TrendCreditSpread", "option_side": "put",
-           "is_credit": True, "entry_premium": 0.40, "current_premium": 0.55,
-           "stop_premium": 0.0, "underlying_stop": 100.50}
-    P.begin_tick(21.0)
-    it_b = MP.decide(tcs, 0.55, df_1m=_df([100.7, 100.3]), exit_engine=eng)
-
-    def _closed_row(tid, bound, reason):
-        _now = _dtd.now(_tzd.utc)
-        c = _TLD.get_trade_logger()._connect()
-        try:
-            c.execute("INSERT INTO trades (trade_id, symbol, strategy, option_side, underlying_stop,"
-                      " status, pnl_usd, entry_time, exit_time, exit_reason) VALUES (?,?,?,?,?,?,?,?,?,?)",
-                      (tid, "TST", "TrendCreditSpread", "put", bound, "closed", -15.0,
-                       (_now - _tdd(minutes=20)).isoformat(), (_now - _tdd(minutes=5)).isoformat(), reason))
-            c.commit()
-        finally:
-            c.close()
-    if it_b is not None and it_b.action == "CLOSE":
-        _closed_row("d12b", 100.50, it_b.reason)
-    check("D12b a TCS closed by the plan's OWN breach (1m close through its bound) spends that level (TCS keys on the bound)",
-          it_b is not None and it_b.action == "CLOSE" and _scd.is_spent("TST", "put", 100.50)[0],
-          f"{it_b and it_b.reason} -> spent={_scd.is_spent('TST', 'put', 100.50)}")
-    _closed_row("d12d", 99.00, "premium_stop_15% pnl=-16.0%")
-    check("D12d (r5) the same spread stopped out on premium does NOT spend its level — acceptance only",
-          not _scd.is_spent("TST", "put", 99.00)[0], str(_scd.is_spent("TST", "put", 99.00)))
-
+    # r76: D12b/D12d read the sweep module's is_spent, whose only consumer (the sweep plan) is removed with the sweep.
     esrc = open(os.path.join(_root, "execution", "exit_engine.py"), encoding="utf-8").read()
     ecode = "\n".join(l for l in esrc.split("\n") if not l.strip().startswith("#"))
     check("D13 BOS is retired from the exit engine's decision path",

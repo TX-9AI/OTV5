@@ -1,5 +1,6 @@
 """
-execution/fill_observers.py  v5.1
+execution/fill_observers.py  v5.2
+v5.2  2026-11-08  OTV5 r76 (RETIRE.1) — EXCLUDED drops the removed VOLT and ORB trades (LiquidityHunt stays). The operator, 2026-11-07: "Running dead code and logging dead code activity is unnecessary drag. Yes, I want all of those things fixed."
 v5.1  2026-10-31  OTV5 r68 (CFG.5) — watched_stop() no longer asks the resting stop whether a trade rests: the resting stop
       is deleted (the operator, 2026-10-31: "Resting stop was a study. It failed."). It was off on every box, so is_resting()
       was always False here and the watched level is unchanged.
@@ -56,7 +57,7 @@ WATCH_EVERY_S = 2.0          # the sleep slice
 WATCH_MAX_AGE_S = 4.0        # two chain_marks flush cycles
 WATCH_MIN_GAP_S = 10.0       # at most one would-wake per position per 10 s
 MAP_EVERY_S = 60.0           # one map row per position per minute
-EXCLUDED = ("LiquidityHunt", "VOLT", "ORBStrategy")
+EXCLUDED = ("LiquidityHunt",)
 WAKE_STRATEGIES = ("Breakout", "RunawayContinuation")   # r280: the strategies whose crossed stop WAKES the tick
 
 

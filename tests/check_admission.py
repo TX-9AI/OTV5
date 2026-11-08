@@ -1,6 +1,11 @@
 #!/usr/bin/env python3
 """
-tests/check_admission.py  v5.2
+tests/check_admission.py  v5.3
+v5.3  2026-11-08  OTV5 r76 (RETIRE.1) — RE-POINTED (section 38.4): the ORB trade, VOLT, the sweep, the ATP fly and ORCS are
+      REMOVED from the table, so SPEC / ALL hold the six that remain and A0 pins exactly those. A8 keeps the 10:29 debit
+      end, TCS's 11:31 start, the fly's 13:00 start and the 15:40 stop; B8: every strategy capped at ONE; B8b's None
+      sentinel and the D/E/F/H/X checks run on live strategies (Breakout where they used the ORB trade, TCS at 13:00
+      where they used the sweep). The operator, 2026-11-07: "Yes, I want all of those things fixed."
 v5.2  2026-10-31  OTV5 r67 (PARC.4) — PARC LEAVES SPEC AND `ALL` (WA section 38.4): PARC is removed.
       The operator, 2026-10-31: "On PARC, no. It was an idea. It failed. It's done." and "Yes" to removing its code. Every other row unchanged.
 v5.1  2026-10-27  OTV5 r46 (PARC.1) — PARC JOINS SPEC AND `ALL`: 11:01-11:03, cap 1, ONE try per session, by ruling (the
@@ -99,7 +104,7 @@ def check(name, ok, detail=""):
 
 def main():
     from execution.position_manager import decide, Facts, rules, gates, AdmissionRule
-    from execution.position_manager import ORB, RUNAWAY, HUNT, BREAKOUT, SWEEP, TCS, GEXFLY, ATPFLY, VOLT, ORCS
+    from execution.position_manager import RUNAWAY, HUNT, BREAKOUT, TCS, GEXFLY
 
     T = rules()
     # ⚠️ r78 — BREAKOUT WAS IN SPEC BUT NOT IN `ALL`, so every B-section cap
@@ -107,7 +112,7 @@ def main():
     #    stacked — 19 positions off one opening range — was the one this
     #    checker never asked about. Added; it is not a new belief, it is the
     #    belief SPEC already held going unexercised since r51.
-    ALL = [ORB, RUNAWAY, HUNT, BREAKOUT, SWEEP, TCS, GEXFLY, ATPFLY, VOLT, ORCS, "PARK"]   # r292: PARK was in SPEC, not here (the r78 defect again)
+    ALL = [RUNAWAY, HUNT, BREAKOUT, TCS, GEXFLY, "PARK"]   # r292: PARK was in SPEC, not here (the r78 defect again); r76: the retired five removed
 
     def ok(strategy, hhmm, **kw):
         return decide(Facts(strategy=strategy, now_et=hhmm, orb_established=True, **kw))
@@ -116,7 +121,6 @@ def main():
     #    same dict the code reads. §0.4: a fixture built from the belief under
     #    test cannot fail. These numbers come from his message, not from rules().
     SPEC = {
-        ORB:     (((9, 35), (15, 40)), 1, None),   # r149 EOD.1: all day, entries stop 15:40
         RUNAWAY: (((9, 35), (10, 30)), 1, None),   # r187 ROSTER.1: directional debits stop at 10:29
         HUNT:    (((9, 35), (10, 30)), 1, None),   # r187 ROSTER.1: directional debits stop at 10:29
         # r51 (BRK.1) — the operator's 2026-09-18 ruling, restated from his own
@@ -131,18 +135,8 @@ def main():
         # they are the only ones that move; the debit windows below still close
         # at 15:00 because a debit is flattened by the 15:40 ladder and an entry
         # inside its own flatten window is an entry with no hold time at all.
-        # r72 — VOLT, THE CONTROL ARM. Restated from the operator's request
-        # (2026-09-20: *"construct 1 more trade strategy & plan… as a control
-        # group… a window of 0935 to 1130"*), NOT read from rules().
-        # ⚠️ ITS WINDOW MUST EQUAL THE ORB'S — a control measured over a
-        # different period measures the period. check_volt_plan V1b pins that
-        # equality from the other side.
-        VOLT:    (((9, 35), (10, 30)), 1, None),   # r187 ROSTER.1: directional debits stop at 10:29
-        SWEEP:   (((9, 35), (15, 40)), 2, None),
         TCS:     (((11, 31), (15, 40)), 1, None),   # r148: the minute its plan opens (AFD.1)
         GEXFLY:  (((13, 0), (15, 0)), 1, 1),     # r273: was 12:00
-        ATPFLY:  (((13, 0), (15, 0)), 1, 1),     # r273: was 12:00 (r179: was 11:30)
-        ORCS:    (((9, 45), (10, 30)), 2, None),  # r204
         "PARK":  (((11, 1), (11, 3)), 1, 1),      # r288 (PARK.1): the ask 11:01-11:02, one per session
     }
     # ⚠️ r76 — CAPS RESTATED FROM THE OPERATOR'S RULING, 2026-09-21: *"With
@@ -170,11 +164,10 @@ def main():
               f"{before}={bool(ok(s,before))} {at_start}={bool(ok(s,at_start))} "
               f"{before_end}={bool(ok(s,before_end))} {at_end}={bool(ok(s,at_end))}")
 
-    check("A8 r149/r187: the ORB IN at 11:30, Runaway/Hunt/Breakout/VOLT IN at 10:29 and OUT at 10:30, the TCS OUT until 11:31, the ATP fly OUT until 13:00 (r273); at 15:40 every directional and credit entry is OUT",
-          bool(ok(ORB, (11, 30)))
-          and all(bool(ok(x, (10, 29))) and not ok(x, (10, 30)) for x in (RUNAWAY, HUNT, BREAKOUT, VOLT))
-          and not ok(TCS, (11, 30)) and bool(ok(TCS, (11, 31))) and not ok(ATPFLY, (12, 59)) and bool(ok(ATPFLY, (13, 0)))
-          and not any(ok(x, (15, 40)) for x in (ORB, RUNAWAY, HUNT, BREAKOUT, VOLT, SWEEP, TCS)),
+    check("A8 r187: Runaway/Hunt/Breakout IN at 10:29 and OUT at 10:30, the TCS OUT until 11:31, the GEX fly OUT until 13:00 (r273); at 15:40 every directional and credit entry is OUT",
+          all(bool(ok(x, (10, 29))) and not ok(x, (10, 30)) for x in (RUNAWAY, HUNT, BREAKOUT))
+          and not ok(TCS, (11, 30)) and bool(ok(TCS, (11, 31))) and not ok(GEXFLY, (12, 59)) and bool(ok(GEXFLY, (13, 0)))
+          and not any(ok(x, (15, 40)) for x in (RUNAWAY, HUNT, BREAKOUT, TCS)),
           "directional debits stop at 10:29 (operator 2026-10-02); the TCS's one-minute gap is its plan's own (AFD.1)")
 
     check("A9 the GEX fly runs to 15:00 (its 14:00 cutoff was raised by ruling)",
@@ -211,10 +204,8 @@ def main():
     # Breakouts / $78,954 landed off ONE opening range in five minutes. The
     # contract is now the operator's sentence: ONE OF EACH, SWEEP ALONE AT TWO.
     _uncapped = {s for s in ALL if SPEC[s][1] is None}
-    check("B8 EVERY strategy is capped, and ONLY the sweep and ORCS carry 2",
-          not _uncapped
-          and SPEC[SWEEP][1] == 2 and SPEC[ORCS][1] == 2      # r204: ORCS is a put spread and a call spread
-          and {SPEC[s][1] for s in ALL if s not in (SWEEP, ORCS)} == {1},
+    check("B8 EVERY strategy is capped at ONE (r76: the two that carried 2, the sweep and ORCS, are removed)",
+          not _uncapped and {SPEC[s][1] for s in ALL} == {1},
           f"uncapped={sorted(_uncapped)}; "
           f"caps={ {s: SPEC[s][1] for s in ALL} }")
 
@@ -224,9 +215,9 @@ def main():
     # and `max_tries_per_session` in the same dataclass means None the same way.
     # Driven through REAL admission on a SYNTHETIC rule, per §21: text proves
     # nothing about runtime.
-    _unl = dict(T); _unl[ORB] = AdmissionRule(((9, 35), (11, 30)), None)
-    _deep = [decide(Facts(strategy=ORB, now_et=(9, 36), orb_established=True,
-                          open_by_strategy={ORB: n}), table=_unl)
+    _unl = dict(T); _unl[BREAKOUT] = AdmissionRule(((9, 35), (11, 30)), None)
+    _deep = [decide(Facts(strategy=BREAKOUT, now_et=(9, 36), orb_established=True,
+                          open_by_strategy={BREAKOUT: n}), table=_unl)
              for n in (1, 3, 25)]
     check("B8b the None sentinel STILL means unlimited: 1, 3 and 25 all admit",
           all(bool(d) for d in _deep),
@@ -234,69 +225,68 @@ def main():
 
     check("B9 TCS+TCS is impossible, which is the condor rule with no special case",
           ok(TCS, (13, 0), open_by_strategy={TCS: 1}).gate == "max_open_of_type"
-          and bool(ok(TCS, (13, 0), open_by_strategy={SWEEP: 1})),
-          "TCS+TCS refused, TCS+SWEEP admitted")
+          and bool(ok(TCS, (13, 0), open_by_strategy={GEXFLY: 1})),
+          "TCS+TCS refused, TCS beside another type admitted")
 
     # ── C — tries per session ───────────────────────────────────────────────
-    for s in (GEXFLY, ATPFLY):
+    for s in (GEXFLY,):
         mid = (13, 0)
         check(f"C {s} one attempt per session: 0 used admits, 1 used refuses",
               bool(ok(s, mid, tries_used=0))
               and ok(s, mid, tries_used=1).gate == "tries_per_session",
               f"{ok(s, mid, tries_used=1).gate}")
-    check("C3 every other strategy is UNLIMITED attempts (r2: ORB uncapped; r3: runaway per break)",
-          all(T[s].max_tries_per_session is None for s in (ORB, RUNAWAY, HUNT, SWEEP, TCS))
-          and bool(ok(ORB, (10, 0), tries_used=99)),
+    check("C3 every other strategy is UNLIMITED attempts (r3: runaway per break)",
+          all(T[s].max_tries_per_session is None for s in (RUNAWAY, HUNT, BREAKOUT, TCS))
+          and bool(ok(RUNAWAY, (10, 0), tries_used=99)),
           "99 attempts still admits")
 
     # ── D — THE INTENT: conflicting theses run together ─────────────────────
     intent = [
-        ("D1 sweep admits with a runaway open", SWEEP, (10, 0), {RUNAWAY: 1}),
-        ("D2 ATP admits with a GEX fly open", ATPFLY, (13, 0), {GEXFLY: 1}),
-        ("D3 TCS admits with a sweep open", TCS, (13, 0), {SWEEP: 1}),
-        ("D4 hunt admits with an ORB open (the paired comparison)", HUNT, (10, 0), {ORB: 1}),
-        ("D5 runaway admits with an ORB and a hunt open", RUNAWAY, (10, 0), {ORB: 1, HUNT: 1}),
+        ("D1 Breakout admits with a runaway open", BREAKOUT, (10, 0), {RUNAWAY: 1}),
+        ("D2 the GEX fly admits with a TCS open", GEXFLY, (13, 0), {TCS: 1}),
+        ("D3 TCS admits with a GEX fly open", TCS, (13, 0), {GEXFLY: 1}),
+        ("D4 hunt admits with a Breakout open (the paired comparison)", HUNT, (10, 0), {BREAKOUT: 1}),
+        ("D5 runaway admits with a Breakout and a hunt open", RUNAWAY, (10, 0), {BREAKOUT: 1, HUNT: 1}),
     ]
     for name, s, hhmm, openmap in intent:
         check(name, bool(ok(s, hhmm, open_by_strategy=openmap)), str(openmap))
 
     check("D6 NOTHING caps the TOTAL number of open positions",
-          bool(ok(SWEEP, (13, 0),
-                  open_by_strategy={ORB: 1, RUNAWAY: 1, HUNT: 1, TCS: 1,
-                                    GEXFLY: 1, ATPFLY: 1, SWEEP: 1})),
-          "seven open, an eighth still admits")
+          bool(ok(GEXFLY, (13, 0),
+                  open_by_strategy={RUNAWAY: 1, HUNT: 1, TCS: 1, BREAKOUT: 1, "PARK": 1})),
+          "five open, a sixth still admits")
 
     # ── E — the universals, each refusing on its own name ───────────────────
-    check("E1 not a trading day", decide(Facts(ORB, (10, 0), trading_day=False)).gate == "trading_day")
+    check("E1 not a trading day", decide(Facts(BREAKOUT, (10, 0), trading_day=False)).gate == "trading_day")
     check("E2 opening range not established",
-          decide(Facts(ORB, (10, 0), orb_established=False)).gate == "orb_range")
+          decide(Facts(BREAKOUT, (10, 0), orb_established=False)).gate == "orb_range")
     check("E3 catastrophic cap",
-          decide(Facts(ORB, (10, 0), orb_established=True, cap_intact=False)).gate == "catastrophic_cap")
+          decide(Facts(BREAKOUT, (10, 0), orb_established=True, cap_intact=False)).gate == "catastrophic_cap")
     check("E4 past the hard close",
-          decide(Facts(ORB, (10, 0), orb_established=True, past_hard_close=True)).gate == "hard_close")
+          decide(Facts(BREAKOUT, (10, 0), orb_established=True, past_hard_close=True)).gate == "hard_close")
     check("E5 the universals are asked of EVERY strategy, not just some",
           all(decide(Facts(s, (13, 0), orb_established=False)).gate == "orb_range" for s in ALL),
-          "all seven refuse on orb_range")
+          "all six refuse on orb_range")
 
     # ── F — the blocking matrix, BOTH directions, through an override ───────
     blocked = dict(T)
-    blocked[SWEEP] = AdmissionRule(T[SWEEP].window, T[SWEEP].max_open_of_type,
-                          T[SWEEP].max_tries_per_session,
+    blocked[TCS] = AdmissionRule(T[TCS].window, T[TCS].max_open_of_type,
+                          T[TCS].max_tries_per_session,
                           blocks=frozenset(), blocked_by=frozenset({RUNAWAY}))
     check("F1 blocked_by: a named strategy being open refuses this one",
-          decide(Facts(SWEEP, (10, 0), orb_established=True,
+          decide(Facts(TCS, (13, 0), orb_established=True,
                        open_by_strategy={RUNAWAY: 1}), blocked).gate == "blocked_by")
     check("F2 ...and only the NAMED one — an unnamed open strategy does not block",
-          bool(decide(Facts(SWEEP, (10, 0), orb_established=True,
-                            open_by_strategy={ORB: 1}), blocked)),
-          "ORB open, sweep still admits")
+          bool(decide(Facts(TCS, (13, 0), orb_established=True,
+                            open_by_strategy={BREAKOUT: 1}), blocked)),
+          "Breakout open, TCS still admits")
 
     blocks = dict(T)
     blocks[RUNAWAY] = AdmissionRule(T[RUNAWAY].window, T[RUNAWAY].max_open_of_type,
                            T[RUNAWAY].max_tries_per_session,
-                           blocks=frozenset({SWEEP}), blocked_by=frozenset())
+                           blocks=frozenset({TCS}), blocked_by=frozenset())
     check("F3 blocks: expressed from the OTHER end, it refuses just the same",
-          decide(Facts(SWEEP, (10, 0), orb_established=True,
+          decide(Facts(TCS, (13, 0), orb_established=True,
                        open_by_strategy={RUNAWAY: 1}), blocks).gate == "blocks",
           "a half-configured matrix cannot silently do nothing")
     check("F4 the shipped table blocks NOTHING — that is the ruling, not an oversight",
@@ -325,11 +315,11 @@ def main():
             delattr(_cfg, "ADMISSION_RULES")
 
     # ── H — purity ──────────────────────────────────────────────────────────
-    f = Facts(SWEEP, (10, 0), orb_established=True, open_by_strategy={RUNAWAY: 1})
+    f = Facts(TCS, (13, 0), orb_established=True, open_by_strategy={RUNAWAY: 1})
     v1, v2 = decide(f), decide(f)
     check("H1 same facts, same verdict — no hidden state", v1 == v2, f"{v1} / {v2}")
     check("H2 the caller's facts are not mutated",
-          f.open_by_strategy == {RUNAWAY: 1} and f.strategy == SWEEP)
+          f.open_by_strategy == {RUNAWAY: 1} and f.strategy == TCS)
     # ── H3 — decide() REACHES NOTHING OUTSIDE THE ADMISSION BLOCK ──────────
     # ⚠️ TWO EARLIER CUTS OF THIS CHECK ARE RECORDED RATHER THAN REPLACED.
     # (1) The first read `for m in {}.get(...) and []` — iterating an EMPTY LIST,
@@ -387,9 +377,9 @@ def main():
             for hhmm in ((3, 0), (10, 0), (13, 0)):
                 seen.add(decide(Facts(s, hhmm, **kw)).gate)
     seen |= {decide(Facts("Nope", (10, 0), orb_established=True)).gate}
-    seen |= {decide(Facts(SWEEP, (10, 0), orb_established=True,
+    seen |= {decide(Facts(TCS, (13, 0), orb_established=True,
                           open_by_strategy={RUNAWAY: 1}), blocked).gate,
-             decide(Facts(SWEEP, (10, 0), orb_established=True,
+             decide(Facts(TCS, (13, 0), orb_established=True,
                           open_by_strategy={RUNAWAY: 1}), blocks).gate}
     missing = set(gates()) - seen
     check("X3 EVERY gate in gates() is reachable — none is decorative",

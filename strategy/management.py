@@ -1,5 +1,6 @@
 """
-strategy/management.py  v5.5
+strategy/management.py  v5.6
+v5.6  2026-11-08  OTV5 r76 (RETIRE.1) — EXIT_CONDITIONS, BUTTERFLIES and COVERED drop the removed ORB, sweep and ATP trades. The live strategies' conditions are unchanged. The operator, 2026-11-07: "Running dead code and logging dead code activity is unnecessary drag. Yes, I want all of those things fixed."
 v5.5  2026-11-03  OTV5 r73 (BFLY.17) — THE GEX PIN BUTTERFLY DECLARES ONE EXIT: THE 15:45 FLATTEN. The operator, 2026-11-03:
       "For the GEX fly, I want no stop except hold to close". decide() skips the declared premium stop for a strategy in
       config.HOLD_TO_CLOSE_STRATEGIES, and EXIT_CONDITIONS["GEXPinButterfly"] is {"flatten"} only; the ATP butterfly (off by
@@ -201,17 +202,6 @@ EXIT_CONDITIONS: Dict[str, Dict[str, str]] = {
         "trail":          "premium <= trail_stop, once the trail has armed at +50%",
         "target":         "premium >= target_premium, then the tightening off the peak",
     },
-    "ORBStrategy": {
-        "hard_stop":      "premium <= stop_premium",
-        "structure_stop": "a touch through underlying_stop (the impulsive-candle extreme; the forming 1m bar)",
-        "trail":          "premium <= trail_stop, once the trail has armed",
-        "target":         "premium >= target_premium",
-    },
-    "SweepCreditSpread": {
-        "premium_stop":   "spread value >= stop_premium (credit + 15% of the risk, width - credit)",
-        "acceptance":     "a touch through the swept pool (the level failed; the forming 1m bar)",
-        "nickel":         "spread value <= the nickel — let it go",
-    },
     "TrendCreditSpread": {
         "breach":         "a touch through the ORB bound (underlying_stop; the forming 1m bar) — no premium stop",
         "nickel":         "spread value <= the nickel",
@@ -265,7 +255,7 @@ EXIT_CONDITIONS: Dict[str, Dict[str, str]] = {
     },
 }
 # OTV4TEST r26 — the ATP butterfly's exits are the pin butterfly's, by construction. — the ATP butterfly's exits are the pin butterfly's, by construction.
-BUTTERFLIES = ("GEXPinButterfly", "ATPButterfly")
+BUTTERFLIES = ("GEXPinButterfly",)
 # r82 — strategies whose winner is ended by PAR DELTA rather than a premium
 # target. VOLT is NOT here: it owns `_evaluate_volt` and carries its own rung.
 DELTA_PAR_STRATEGIES = ("Breakout",)
@@ -401,10 +391,6 @@ def _record_no_progress(record, verdict: dict, mode: str, prem, price) -> None:
             fh.write(_json.dumps(row) + "\n")
     except Exception as exc:                                     # noqa: BLE001
         logger.warning("[manage] no-progress counterfactual row NOT written for %s: %s", tid[:8], exc)
-EXIT_CONDITIONS["ATPButterfly"] = {                # r73: its own copy - it keeps the stop the pin fly gave up
-    "stop":           "fly value <= entry x (1 - 40%)",
-    "flatten":        "the 15:45 hard close",
-}
 
 MGMT_CHECKS = ("premium", "entry_premium", "pnl_pct", "stop_premium", "trail_stop",
                "target_premium", "underlying_stop", "dist_to_stop", "mfe_pct",
@@ -495,8 +481,8 @@ def _record_exhaust_checks(t, ev) -> None:
     except Exception as exc:                                   # noqa: BLE001
         logger.debug("[manage] exhaustion check rows not written: %s", exc)
 
-COVERED = ("RunawayContinuation", "GEXPinButterfly", "SweepCreditSpread",
-           "TrendCreditSpread", "ATPButterfly", "Breakout")
+COVERED = ("RunawayContinuation", "GEXPinButterfly",
+           "TrendCreditSpread", "Breakout")
 NICKEL = 0.05
 
 

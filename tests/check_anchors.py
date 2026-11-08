@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_anchors.py  v5.0
+tests/check_anchors.py  v5.1
+v5.1  2026-11-08  OTV5 r76 (RETIRE.1) — A4/A5 drop orb_plan.py's ORBPlan and sweep_plan.py: both plans are removed with their trades.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.1  2026-09-10  A1 stubs the store accessor, not the singleton: a box with a live
       derived_store.db opened it lazily and returned real VWAP. Found on the first land.
@@ -57,7 +58,7 @@ def main():
           str({k: v for k, v in t.checks.items() if k.startswith("anchor_")}))
     check("A3 a direction string is mapped to ±1", t.checks.get("anchor_fork15") == (-1.0, None))
     t.hold("done"); P.close_tick(st, "TST")
-    plans = ["strategy/orb_plan.py", "strategy/runaway_plan.py", "strategy/sweep_plan.py",
+    plans = ["strategy/runaway_plan.py",                                  # r76: the ORB and sweep plans are removed
              "strategy/tcs_plan.py", "strategy/gex_pin_butterfly.py", "strategy/iron_condor_strategy.py"]
     missing = [p for p in plans if "_A.stamp(" not in open(os.path.join(_root, p), encoding="utf-8").read()]
     check("A4 every plan stamps at least one anchor", not missing, str(missing))

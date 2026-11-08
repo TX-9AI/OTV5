@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
-"""check_wing_search.py  v5.0
+"""check_wing_search.py  v5.1
+v5.1  2026-11-08  OTV5 r76 (RETIRE.1) — RE-POINTED (WA 38.4): the sweep plan is removed, so W2b, W3 and W7 (its selection) and its W9-W11 row go with it;
+      W1, W2 (search_wing), W4-W6, W8, the TCS W9-W11 row and W16-W19 (the condor) unchanged.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.4  2026-09-24  OTV4TEST r128 — RE-POINTED AT WHERE THE CODE LIVES. Fork r5
       moved the sweep's selection into strategy/sweep_plan.py and fork r9 moved
@@ -201,9 +203,6 @@ def _fixed_offset_lookups(node):
 
 def main():
     from strategy.criteria import R_FLOOR
-    _sp_tree = _tree("strategy/sweep_plan.py")
-    _sp_code = _code(_tree("strategy/sweep_plan.py"))
-    _sp_struct = _method(_sp_tree, "SweepPlan", "_structure")
     _tp_tree = _tree("strategy/tcs_plan.py")
     _tp_code = _code(_tree("strategy/tcs_plan.py"))
     _tp_struct = _method(_tp_tree, "TCSPlan", "_structure")
@@ -243,43 +242,6 @@ def main():
     check("W2 every strike beyond the short is considered, best wins",
           _res.long is not None and _res.long.strike == _best.strike,
           f"{_res.long and _res.long.strike} vs {_best.strike}")
-    # 🔴 r128 — MOVED, NOT DROPPED: fork r5 put the sweep's selection in
-    # SweepPlan._structure (sweep_plan.py:342). AST: the call is to the shared
-    # `cv.search_wing`; EXECUTED: on W2's chain the plan takes exactly the wing
-    # the shared searcher takes (97 — neither the narrowest nor the widest,
-    # so a bespoke or fixed-width search picks differently).
-    _w2b_exec, _w2b_why = None, ""
-    try:
-        from strategy import sweep_plan as _spm
-
-        class _Ch:
-            puts, calls = [_sh] + _wings, []
-        _cand = _spm.Candidate(dict(level_id="W2b", price=100.0, kind="support",
-                                    provenance="W2b"))
-        _cand = _spm.SweepPlan._structure(_spm.SweepPlan.__new__(_spm.SweepPlan),
-                                          _cand, _Ch())
-        _w2b_exec = _cand.long is not None and _res.long is not None \
-            and _cand.long.strike == _res.long.strike
-        _w2b_why = f"plan {_cand.long and _cand.long.strike} vs search_wing {_res.long and _res.long.strike}"
-    except Exception as exc:                                    # noqa: BLE001
-        _w2b_why = f"{type(exc).__name__}: {exc}"
-    check("W2b the sweep calls the SHARED searcher",
-          _sp_struct is not None and bool(_search_calls(_sp_struct)) and _w2b_exec,
-          _w2b_why)
-
-    # ── 🔴 W3 — R IS READ DIRECTLY, NOT THROUGH THE MUTED HURDLE ─────────
-    # `r_hurdle()` returns None under relaxed. If the search consulted it, the
-    # floor would vanish in exactly the mode that produced the loop.
-    # 🔴 r128 — was HOLLOW: "R_FLOOR" in sweep_credit_spread.py matched a
-    # docstring and "r_hurdle" was absent because the code had left. Now the
-    # floor the searcher is HANDED is R_FLOOR itself, imported from
-    # strategy.criteria and never re-bound (sweep_plan.py:116, :342).
-    _fa = [_floor_arg(c) for c in _search_calls(_sp_struct)] if _sp_struct else []
-    check("W3 the search reads R_FLOOR, not r_hurdle()",
-          bool(_fa) and all(isinstance(a, ast.Name) and a.id == "R_FLOOR" for a in _fa)
-          and _floor_bound_by_criteria(_sp_tree, "R_FLOOR"),
-          "floor arg: " + ", ".join(ast.unparse(a) if a is not None else "None" for a in _fa))
-
     # ── W4 — the CVX chain that looped is REFUSED ────────────────────────
     cvx = [(196.5, 0.60), (195.5, 0.43), (194.5, 0.32),
            (192.5, 0.22), (190.0, 0.13)]
@@ -305,23 +267,6 @@ def main():
     check("W6 a chain that clears the floor selects a wing",
           b2 is not None and b2[0] >= R_FLOOR,
           f"R {b2[0]:.3f} at wing {b2[1]} ({b2[3]:.1f} wide)")
-
-    # ── W7 — the refusal explains that this is STRUCTURE ─────────────────
-    # 🔴 r128 — MOVED, NOT DROPPED. The refusal TEXT went with fork r5; the
-    # RULE is what matters: the plan's R gate compares against R_FLOOR
-    # (sweep_plan.py:550) and nothing in the plan asks the muted hurdle —
-    # `r_hurdle()` returns None under relaxed (criteria.py:231), `r_verdict`
-    # rides on it, and `relaxed_active` is the switch itself.
-    _rgate = [c for c in ast.walk(_sp_tree) if isinstance(c, ast.Call)
-              and isinstance(c.func, ast.Attribute) and c.func.attr == "check"
-              and c.args and isinstance(c.args[0], ast.Constant) and c.args[0].value == "r"]
-    _rgate_ok = bool(_rgate) and all(
-        len(c.args) >= 3 and _compares_to(c.args[2], "R_FLOOR")
-        and not (_idents(c.args[2]) & set(_MUTED)) for c in _rgate)
-    _muted_here = sorted(_idents(ast.parse(_sp_code)) & set(_MUTED))
-    check("W7 the refusal says relaxed does not waive it",
-          _rgate_ok and not _muted_here,
-          f"r gate on R_FLOOR: {_rgate_ok}; muted hurdle consulted: {_muted_here or 'none'}")
 
     # ── 🔴 W8 — RELAXED STILL LOOSENS THE EVIDENCE DIALS ─────────────────
     # The trade was not "stop relaxing"; it was "relax evidence, never
@@ -389,9 +334,6 @@ def main():
         for n in _tp_tree.body)
 
     _plans = (
-        ("sweep_plan.py", _sp_tree, _sp_code, _sp_struct, "R_FLOOR",
-         _sp_struct is not None and bool(_search_calls(_sp_struct))
-         and _rgate_ok, "search_wing + R gate on R_FLOOR"),
         ("tcs_plan.py", _tp_tree, _tp_code, _tp_struct, "TCS_R_FLOOR_EXPIRY",
          _tcs_floor_decl and _tp_struct is not None
          and bool(_compares_to(_tp_struct, "TCS_R_FLOOR_EXPIRY")) and _tcs_exec,

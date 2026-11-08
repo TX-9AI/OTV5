@@ -1,5 +1,6 @@
 """
-strategy/plan.py  v5.2
+strategy/plan.py  v5.3
+v5.3  2026-11-08  OTV5 r76 (RETIRE.1) — DISPATCH_ALIAS drops ORB and SweepForLeg2; OWN_LEDGER drops ORBStrategy. Nothing a live plan reads changes. The operator, 2026-11-07: "Running dead code and logging dead code activity is unnecessary drag. Yes, I want all of those things fixed."
 v5.2  2026-10-26  OTV5 r35 (PLN.3) — A CLOSED POSITION'S MANAGE VERDICT LEAVES THE [plans] LINE. A /manage plan runs
       only while its position is open (r303's condition gate), so after the close nothing reset its last verdict and
       board_line printed it for the rest of the day: SPX's "RunawayContinuation/manage=CLOSE(... -34%)" stood from
@@ -255,12 +256,8 @@ REGISTRY: Dict[str, "Plan"] = {}
 _MANAGEMENT_PLANS = {"CondorManagement", "CreditRoll"}
 
 DISPATCH_ALIAS = {
-    "ORB": "ORBStrategy",
     "CondorPlan": "IronCondorStrategy",
     "CondorLeg": "IronCondorStrategy",
-    # the second-leg window (main_loop, position open) — r160: the sweep is
-    # asked under the condor's authorization and writes under its own name
-    "SweepForLeg2": "SweepCreditSpread",
 }
 
 
@@ -857,9 +854,9 @@ class PlanTick:
                    f"R {_n(self.r)} · " if self.r is not None else "", reason)
 
 
-# r211 — the strategies that open their OWN plan_ledger rows (main.py for the ORB; the
-# condor's `_plan_id`). Everything else gets its row from take() / ledger_open().
-OWN_LEDGER = frozenset({"ORBStrategy", "IronCondorStrategy", "CondorManagement", "CreditRoll"})
+# r211 — the strategies that open their OWN plan_ledger rows (the condor's `_plan_id`).
+# Everything else gets its row from take() / ledger_open().
+OWN_LEDGER = frozenset({"IronCondorStrategy", "CondorManagement", "CreditRoll"})
 
 
 class Plan:

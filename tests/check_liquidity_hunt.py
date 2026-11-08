@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """
-tests/check_liquidity_hunt.py  v5.2
+tests/check_liquidity_hunt.py  v5.3
+v5.3  2026-11-08  OTV5 r76 (RETIRE.1) — H6/H10 RE-POINTED (WA 38.4): the Hunt's target-wick exit is unchanged, but it no longer grants a handoff -
+      its only taker, the sweep, is removed with execution/handoff.py; H10 pins the module gone.
 v5.2  2026-10-31  OTV5 r68 (CFG.5) — OT_RESTING_STOP_STATE leaves the scratch env: the resting stop and its state file are deleted
       (the operator, 2026-10-31: "Resting stop was a study. It failed. Get this the fuck out of here"). No check changed.
 v5.1  2026-10-26  OTV5 r38 (HYG.18) — scratch no longer names dir="/var/tmp": mkdtemp honours TMPDIR, which boot_sweep and land.sh point
@@ -42,7 +44,7 @@ v1.0  2026-09-10  OTV4TEST r12 — THE LIQUIDITY HUNT AND THE HANDOFF GRANT, ON
   H7   the target ACCEPTED (close beyond) -> no wick exit; hold (over-delivered)
   H8   thesis dead: a close back through the ENTRY boundary (A2: the far one), not the 50
   H9   slot: an open hunt is NOT blocking; an open ORB does not block a hunt entry
-  H10  the grant: live -> consumed on fire / expired after TTL, both recorded
+  H10  r76: the grant is removed (its only taker, the sweep, is removed)
   H11  HUNT.9: a far-side re-close then back inside RECORDS the re-armed A2, never fires it; A1 unchanged
 
 Born red at r11: every H (no module).
@@ -94,7 +96,6 @@ def main():
     st = St(); P.ensure_tables(st); P.bind_store(st)
     from data.derived_store import DerivedStore
     import strategy.liquidity_hunt as LH
-    from execution import handoff as H
     ds = DerivedStore(path=os.path.join(tempfile.mkdtemp(), "derived.db"))
     ds.mark_level_sync("TST", time.time())        # CD.2: the book is synced "now"
     LH._symbol_of = lambda: "TST"
@@ -106,7 +107,7 @@ def main():
     calls = [_G(101, 0.95, 0.46, 0.05), _G(102, 0.48, 0.30, 0.058), _G(103, 0.20, 0.17, 0.04), _G(104, 0.10, 0.08, 0.02)]
     chain = types.SimpleNamespace(calls=calls, puts=[])
     hunt = LH.LiquidityHunt(); hunt._store = ds; hunt.planner.symbol = "TST"
-    LH.FINISHED.clear(); H.reset()
+    LH.FINISHED.clear()
 
     def row():
         r = st.conn.execute("SELECT verdict, reason FROM plan_tick WHERE strategy='LiquidityHunt' ORDER BY rowid DESC LIMIT 1").fetchone()
@@ -242,12 +243,10 @@ def main():
                 "option_side": "call", "entry_premium": 0.48, "contracts": 1, "status": "open", "stop_premium": 0.0,
                 "target_premium": 0.0, "trail_activation": 0.0, "underlying_entry": 100.2, "underlying_stop": 100.0,
                 "underlying_target": 102.5, "orb_range_high": 101.0, "orb_range_low": 100.0, "entry_time": "2026-09-10T09:47:00"}
-        H.reset()
         d = xe._evaluate_orb(dict(base), 0.9, _frame([(102.1, 102.6, 102.0, 102.3), (102.3, 102.4, 102.2, 102.35)], "10:05"))
-        g = H.live("SweepCreditSpread")
-        check("H6 the target WICKED (high 102.6, close 102.3) -> off, and a grant to the sweep is live",
-              d.should_exit and "hunt_target_wicked" in str(d.exit_reason) and g is not None and g["level"] == 102.5
-              and g["side"] == "call", str(d.exit_reason)[:100])
+        check("H6 the target WICKED (high 102.6, close 102.3) -> off (r76: no grant - the sweep that took it is removed)",
+              d.should_exit and "hunt_target_wicked" in str(d.exit_reason) and "handoff" not in str(d.exit_reason),
+              str(d.exit_reason)[:100])
         d = xe._evaluate_orb(dict(base), 1.2, _frame([(102.3, 102.9, 102.2, 102.8), (102.8, 103.0, 102.7, 102.9)], "10:07"))
         check("H7 the target ACCEPTED (close beyond) -> no wick exit; the runaway's hold logic keeps it",
               not (d.should_exit and "hunt_target_wicked" in str(d.exit_reason)), str(d.exit_reason))
@@ -265,13 +264,10 @@ def main():
     check("H9 an open hunt is not a blocking position", not pm.has_blocking_position())
     pm._open_records = [{"strategy": "ORBStrategy", "status": "open"}]
     check("H9b an open ORB still blocks the credit side (unchanged)", pm.has_blocking_position())
-    # H10 the grant lifecycle
-    H.reset(); g = H.grant("LiquidityHunt", "SweepCreditSpread", 102.5, "call", ttl=2)
-    check("H10 a fresh grant is live", H.live("SweepCreditSpread") is g)
-    H.tick(); H.tick(); H.tick()
-    check("H10b ...expires after its TTL, recorded, no longer live", g["expired"] and H.live("SweepCreditSpread") is None)
-    H.reset(); g2 = H.grant("LiquidityHunt", "SweepCreditSpread", 102.5, "call", ttl=8); H.tick(); H.consume(g2)
-    check("H10c ...or is consumed on the sweep's fire, with the tick it fired on", g2["fired"] and g2.get("fired_tick") == 1)
+    # H10 r76: the handoff module is removed with the sweep, its only taker
+    import importlib.util as _ilu
+    check("H10 the handoff grant is gone (execution/handoff.py removed with the sweep: nothing live imports it)",
+          __import__("retired_names").retired("execution.handoff"))
 
     # ── H12 (r297, HUNT.11): one per break SURVIVES A RESTART - trades.db decides, the set only remembers ──
     from database.trade_logger import get_trade_logger as _gtl, make_record as _mr
@@ -284,7 +280,7 @@ def main():
                           option_symbol="O101", paper_trade=1, is_butterfly=0))
 
     def _fresh():                                            # a new process: nothing in memory
-        h = LH.LiquidityHunt(); h._store = ds; h.planner.symbol = "TST"; LH.FINISHED.clear(); H.reset()
+        h = LH.LiquidityHunt(); h._store = ds; h.planner.symbol = "TST"; LH.FINISHED.clear()
         return h
 
     def _tick(h, n):

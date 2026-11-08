@@ -1,5 +1,6 @@
 """
-analysis/structure_analyzer.py  v5.0
+analysis/structure_analyzer.py  v5.1
+v5.1  2026-11-08  OTV5 r76 (RETIRE.1) — sr_between (no caller anywhere) is removed. Nothing else changes. The operator, 2026-11-07: "Running dead code and logging dead code activity is unnecessary drag. Yes, I want all of those things fixed."
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v4.1  2026-10-03  OTV4TEST r221 (UTIL.1) — _find_fvgs calls utils.math_utils.find_fvgs (its own copy of the loop is gone; same gaps, same order).
 Swing detection and support/resistance mapping.
@@ -373,14 +374,6 @@ class StructureAnalyzer:
             nearest = abs(price - smap.nearest_support) / price
 
         smap.nearest_sr_distance_pct = nearest or 0.0
-
-    def sr_between(self, smap: StructureMap,
-                   price_a: float, price_b: float) -> List[SRLevel]:
-        """Return S/R levels between two prices (for partial exit logic)."""
-        lo = min(price_a, price_b)
-        hi = max(price_a, price_b)
-        return [l for l in smap.sr_levels if lo < l.price < hi]
-
 
 # Module-level singleton
 _structure_analyzer: Optional[StructureAnalyzer] = None

@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """
-tests/check_noncompete.py  v5.0
+tests/check_noncompete.py  v5.1
+v5.1  2026-11-08  OTV5 r76 (RETIRE.1) — N1b/N6 RE-POINTED (WA 38.4): the ORB, VOLT and sweep dispatches are removed, so N1b needs the three left
+      (Runaway, Breakout, TCS) and N6 pins the hunt asked once and the sweep-on-grant gone.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 EVERY ADMITTED STRATEGY FIRES ON ITS OWN. NOTHING CLAIMS A SLOT.
 
@@ -112,11 +114,12 @@ def main():
           lambda: ", ".join(getattr(no_slot_guard, "bad", []))
           or f"{len(dispatches)} dispatches, none gated")
 
-    # ⚠️ FOUR, NOT FIVE: the butterflies dispatch through `_attempt_butterfly`,
+    # ⚠️ THREE (r76: the ORB trade, VOLT and the sweep are removed): Runaway, Breakout and TCS. The butterflies
+    # dispatch through `_attempt_butterfly`,
     # which is a SEPARATE function and therefore not inside `attempt_new_entry`'s
     # own tree. N1b exists only so N1 cannot pass by finding nothing.
     guard("N1b there ARE dispatches to check — N1 cannot pass vacuously",
-          lambda: len(dispatches) >= 4, f"{len(dispatches)} _safe_strategy call(s)")
+          lambda: len(dispatches) >= 3, f"{len(dispatches)} _safe_strategy call(s)")
 
     # ── N2/N3 — the per-signal executor ────────────────────────────────────
     fire = next((n for n in ast.walk(fn)
@@ -162,9 +165,9 @@ def main():
             if nm in ("_attempt_hunt", "_attempt_sweep_on_grant", "attempt_new_entry"):
                 counts.setdefault(nm, []).append(n.lineno)
 
-    guard("N6 hunt and sweep-on-grant are dispatched ONCE — no double-ask",
+    guard("N6 the hunt is dispatched ONCE — no double-ask (r76: the sweep-on-grant is removed with the sweep)",
           lambda: len(counts.get("_attempt_hunt", [])) == 1
-          and len(counts.get("_attempt_sweep_on_grant", [])) == 1,
+          and not counts.get("_attempt_sweep_on_grant"),
           f"hunt={counts.get('_attempt_hunt')} grant={counts.get('_attempt_sweep_on_grant')}")
 
     def both_branches():

@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """
-tests/check_condor_mgmt.py  v5.0
+tests/check_condor_mgmt.py  v5.1
+v5.1  2026-11-08  OTV5 r76 (RETIRE.1) — C5/R5 RE-POINTED (WA 38.4): the sweep and its second-leg window are removed, so a lone vertical's row no
+      longer names a sweep complement (it HOLDs as a standalone on its 15% stop) and R5 pins the second-leg ask gone.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.2  2026-10-11  OTV4TEST r269 (OPS.22, mirror of otv4 r479) - the zone NAME is "America/New_York", the zone the legacy link
       US/Eastern pointed to: identical rules, no behaviour change. tzdata 2026c moved the US/* links into tzdata-legacy;
@@ -14,7 +16,7 @@ v1.0  2026-09-09  OTV4TEST r10 — THE CONDOR MANAGEMENT PLAN (PLAN_SPEC §35).
   C2  a close BEYOND the short is not "tested" (it is the tent's breach) -> None from classify
   C3  no wick to either short -> None (the proximity rule does not fire when a frame is given)
   C4  no frame -> the proximity fallback still works
-  C5  a lone call vertical's management row names the complement it waits on (a sweep below)
+  C5  a lone call vertical's management row HOLDs as a standalone on its 15% stop (r76: the sweep complement is removed)
   C6  IronCondorStrategy is not an entry: main.py's dispatch skips it with the reason
   C7  the final-form (tent) floor is 15% from the structure AS FORMED, not cumulative credit
 
@@ -62,26 +64,19 @@ def main():
         def __init__(s): s.conn = sqlite3.connect(":memory:"); s.conn.row_factory = sqlite3.Row
         def commit(s): s.conn.commit()
     st = St(); P.ensure_tables(st); P.bind_store(st)
-    import strategy.sweep_plan as sp
-    class _C:
-        def __init__(s, k, m): s.strike, s.mark = float(k), m
-    cand = sp.Candidate({"level_id": "x", "price": 713.5, "kind": "support", "provenance": "london"})
-    cand.short, cand.long, cand.credit, cand.width, cand.r, cand.richness = _C(713, 0.4), _C(712, 0.21), 0.19, 1.0, 0.23, 0.19
-    fake = types.SimpleNamespace(nearest_below=cand, nearest_above=None)
-    sp.LAST_PREP = fake
     from strategy.iron_condor_strategy import IronCondorStrategy
     IC = IronCondorStrategy()
     class _PM:
         def get_open_records(self):
             return [{"option_side": "call", "short_strike": 720.0, "long_strike": 722.0,
-                     "is_credit_vertical": 1, "status": "open", "trade_id": "c1", "strategy": "SweepCreditSpread"}]
+                     "is_credit_vertical": 1, "status": "open", "trade_id": "c1", "strategy": "TrendCreditSpread"}]
     P.begin_tick(1.0)
     out = IC.manage(_PM(), None, 716.0)
     P.close_tick(st, "TST")
     r = st.conn.execute("SELECT verdict, reason FROM plan_tick WHERE strategy='CondorManagement' ORDER BY rowid DESC LIMIT 1").fetchone()
-    check("C5 a lone call vertical's row names the complement: a sweep REJECTED below, with the structure",
-          out == "LONE" and r and r["verdict"] == "HOLD" and "sweep REJECTED below" in r["reason"]
-          and "713/712P" in r["reason"], str(dict(r) if r else None)[:160])
+    check("C5 a lone call vertical's row HOLDs as a standalone on its 15% stop (r76: no sweep complement to name)",
+          out == "LONE" and r and r["verdict"] == "HOLD" and "lone call vertical" in r["reason"]
+          and "standalone on its 15% stop" in r["reason"] and "sweep" not in r["reason"], str(dict(r) if r else None)[:160])
 
     msrc = open(os.path.join(_root, "main.py"), encoding="utf-8").read()
     check("C6 IronCondorStrategy is retired as an entry (dispatch names the reason)",
@@ -187,13 +182,10 @@ def main():
     finally:
         XE.datetime, XE.is_hard_close_time = _rdt, _rhc
     # R5 the complement must be at least as rich as leg one
-    import strategy.sweep_plan as spm
-    src = open(os.path.join(_root, "strategy", "sweep_plan.py"), encoding="utf-8").read()
-    check("R5 the sweep plan refuses a thinner complement by name (complement_richness)",
-          "complement_richness" in spm.SweepPlan.PLAN_CHECKS and "not rich enough to complete a condor" in src)
     msrc2 = open(os.path.join(_root, "main.py"), encoding="utf-8").read()
-    check("R5b main hands the complement leg one's richness; the tent call is gone",
-          "complement_min_richness=_leg1_rich" in msrc2 and "check_and_execute_tent(pos_mgr" not in msrc2)
+    check("R5 r76: the second-leg sweep is removed (main asks no SweepForLeg2); the tent call stays gone",
+          '"SweepForLeg2"' not in msrc2 and "complement_min_richness" not in msrc2
+          and "check_and_execute_tent(pos_mgr" not in msrc2)
 
     print()
     if FAILED:

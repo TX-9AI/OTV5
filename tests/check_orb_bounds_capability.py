@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """
-tests/check_orb_bounds_capability.py  v5.0
+tests/check_orb_bounds_capability.py  v5.1
+v5.1  2026-11-08  OTV5 r76 (RETIRE.1) — B3 RE-POINTED (WA 38.4): the ORB trade and its r235 confirmation latch are removed, so B3 pins that nothing in
+      entry_engine keys on is_orb any more; B1/B2/B4 (the capability check that writes the bounds) unchanged.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.0  2026-09-04  r240 — THE ORB BOUNDS ARE WRITTEN BY CAPABILITY, NOT BY NAME.
       Rebuilds r226, which was cut on 2026-09-03 and NEVER LANDED: no commit
@@ -88,9 +90,11 @@ def main():
     # confirmation to spend — so removing `is_orb` wholesale would have broken
     # the fix that stopped one retest firing three orders.
     latch = [n for n in ast.walk(tree)
-             if isinstance(n, ast.If) and "is_orb" in ast.unparse(n.test)
-             and "_mark_orb_confirmation_spent" in ast.unparse(n)]
-    check("B3 the r235 confirmation latch still keys on is_orb", bool(latch))
+             if isinstance(n, ast.If) and "is_orb" in ast.unparse(n.test)]
+    _named = {n.name for n in ast.walk(tree) if isinstance(n, ast.FunctionDef)} | \
+        {getattr(n.func, "attr", getattr(n.func, "id", "")) for n in ast.walk(tree) if isinstance(n, ast.Call)}
+    check("B3 r76: the r235 latch is removed with the ORB trade - nothing in entry_engine keys on is_orb",
+          not latch and "_mark_orb_confirmation_spent" not in _named)
 
     # ══ B4 — BOTH BOUNDS REQUIRED, NEVER ONE ══════════════════════════════
     # ⚠️ A single bound is not geometry. Writing one and leaving the other

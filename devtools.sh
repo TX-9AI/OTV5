@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # ==========================================================================
-# devtools.sh  v5.2  — OTV5 box menu
+# devtools.sh  v5.3  — OTV5 box menu
+# v5.3  2026-11-08  OTV5 r76 (RETIRE.1) — the standing set drops check_orb_plan (deleted with the ORB trade).
 # v5.2  2026-10-25  (MENU.1, BOX.13) — THE OPEN SCAN LABEL FITS 54 COLUMNS, AND THE MENU'S SCRATCH PURGE ARCHIVES, NEVER
 #       DELETES. MENU.1: "OPEN SCAN  today's 09:35 + 09:45 reports" rendered 56 columns against the 54-column phone limit;
 #       it now reads "today's 09:35/09:45 reports" (54). Gate tests/check_devtools_menu_width.py W1-W3 checks every label.
@@ -257,7 +258,7 @@ run_standing() {
   # the lander's standing set, run by hand between landings
   echo "── standing checks (the lander runs these on every land) ─────────────"
   local rc=0
-  for t in check_imports check_gates check_attr_fidelity check_plan_wiring check_orb_plan check_runaway_plan check_level_rejection check_land_tooling; do
+  for t in check_imports check_gates check_attr_fidelity check_plan_wiring check_runaway_plan check_level_rejection check_land_tooling; do
     [ -f "tests/$t.py" ] || continue
     if "$PY" "tests/$t.py" >/tmp/dt_$t.log 2>&1; then echo "  PASS  $t"; else echo "  FAIL  $t  (see /tmp/dt_$t.log)"; rc=1; fi
   done

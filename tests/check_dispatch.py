@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """
-tests/check_dispatch.py  v5.0
+tests/check_dispatch.py  v5.1
+v5.1  2026-11-08  OTV5 r76 (RETIRE.1) — RE-POINTED (WA 38.4): the sweep and the ORB trade are removed, so section 1/2 wire and order Runaway -> the GEX fly,
+      and the ORB-first check becomes 'no ORB dispatch'. Section 3 (names bound before use) unchanged.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v4.3  2026-09-24  OTV4TEST r128 — TWO STANDING REDS, BOTH THE CHECKER'S, NEITHER THE
       CODE'S. (1) "no dispatch-local name is used before it is assigned" flagged
@@ -69,7 +71,7 @@ ROOT = os.path.join(HERE, "..")
 sys.path.insert(0, ROOT)
 
 PROBLEMS = []
-EXPECTED_ORDER = ["RunawayContinuation", "SweepCreditSpread", "GEXPinButterfly"]
+EXPECTED_ORDER = ["RunawayContinuation", "GEXPinButterfly"]      # r76: the sweep is removed
 
 
 def check(label, cond, detail=""):
@@ -87,7 +89,6 @@ def main(argv):
 
     # ── 1. wired at all ────────────────────────────────────────────────────
     for cls, inst in (("RunawayContinuationStrategy", "_runaway_strategy"),
-                      ("SweepCreditSpreadStrategy", "_sweep_cs_strategy"),
                       ("GEXPinButterflyStrategy", "_gex_bfly_strategy")):
         check(f"{cls} imported", f"import {cls}" in src)
         check(f"{inst} instantiated", f"{inst} = {cls}()" in src)
@@ -96,12 +97,11 @@ def main(argv):
     # ── 2. order ───────────────────────────────────────────────────────────
     pos = [(src.index(f'_safe_strategy("{n}"'), n) for n in EXPECTED_ORDER
            if f'_safe_strategy("{n}"' in src]
-    check("dispatch order: runaway -> sweep -> butterfly",
+    check("dispatch order: runaway -> butterfly",
           [n for _, n in sorted(pos)] == EXPECTED_ORDER,
           f"found {[n for _, n in sorted(pos)]}")
-    orb = src.index('_safe_strategy("ORB"')
-    check("ORB dispatches BEFORE the runaway - the runaway reads ORB's own state",
-          orb < min(p for p, _ in pos))
+    check("r76: the ORB trade is removed - nothing dispatches under the ORB label",
+          '_safe_strategy("ORB"' not in src)
 
     # ── 3. every name used is bound earlier in the same function ───────────
     fn = None
@@ -176,7 +176,6 @@ def main(argv):
     # ── 4. the strategies actually RUN ─────────────────────────────────────
     try:
         from strategy.runaway_continuation import RunawayContinuationStrategy
-        from strategy.sweep_credit_spread import SweepCreditSpreadStrategy
         from strategy.gex_pin_butterfly import GEXPinButterflyStrategy
 
         class _ORB:
@@ -233,10 +232,6 @@ def main(argv):
               "resolved — r146 P0)", r is not None and r.is_valid,
               f"strike={getattr(r, 'strike', None)} prem={getattr(r, 'entry_premium', None)}")
 
-        s2 = SweepCreditSpreadStrategy().generate_signal(
-            liq_map=_LM(), price_now=600.0, now_et="13:30", atr_pct=0.10)
-        check("SweepCreditSpread.generate_signal RUNS (no sweep -> None)",
-              s2 is None)
 
         b = GEXPinButterflyStrategy().generate_signal(
             gex=None, price_now=600.0, now_et="13:30", atm_iv=0.35)

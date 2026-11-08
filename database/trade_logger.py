@@ -1,5 +1,6 @@
 """
-database/trade_logger.py  v5.4
+database/trade_logger.py  v5.5
+v5.5  2026-11-08  OTV5 r76 (RETIRE.1) — the spent-level log line no longer names the removed sweep (TrendCredit only); orb_entry_since (its one caller, the ORB trade's missed-row check in main, is removed) is removed. No row changes. The operator, 2026-11-07: "Running dead code and logging dead code activity is unnecessary drag. Yes, I want all of those things fixed."
 v5.4  2026-10-30  OTV5 r57 (TCS.LOG1) — EXTRA_ADDS: a subclass's own column adds, run with the migration adds and counted as
       this tree's shape (so they are never named "outside this tree's shape"). Empty here: the trades store is
       unchanged, column for column. execution/shadow_book.ShadowTradeLogger (a SEPARATE store, shadow_trades.db) adds
@@ -889,7 +890,7 @@ class TradeLogger:
             if "Runaway" in _strat:
                 logger.info("[spent] runaway %s closed — its break is finished "
                             "(the plan reads it from trades.db)", trade_id[:8])
-            elif ("Sweep" in _strat or "TrendCredit" in _strat):
+            elif "TrendCredit" in _strat:
                 from strategy.sweep_credit_spread import is_breach_exit
                 if is_breach_exit(exit_reason):
                     logger.info("[spent] %s %s closed (%s) — its level is SPENT for the day "
@@ -1120,34 +1121,6 @@ class TradeLogger:
                 (self._mode_flag,)
             ).fetchall()
         return [make_record(**dict(r)) for r in rows]
-
-    def orb_entry_since(self, since_ts: str) -> Optional[TradeRecord]:
-        """r103 — did an ORB trade actually OPEN at or after `since_ts` today?
-
-        🔴 THE QUESTION THE MISSED ROW COULD NOT ANSWER. Operator, 2026-08-24:
-        "figure out if it fired or if we genuinely missed it before closing out
-        the row." The tape reach-back sees a confirmed break+retest and calls it
-        MISSED — but the tape cannot tell a setup the PROCESS never saw from one
-        it saw, took, and recorded before it died. The trades table can: if a
-        row exists for this session at or after the confirming bar, the trigger
-        FIRED and calling it missed is a false negative in the one population
-        that is supposed to be countable.
-
-        Returns the record if found, else None. Fails toward None — an
-        unreadable DB reports nothing rather than inventing a fill.
-        """
-        try:
-            with self._db() as conn:
-                row = conn.execute(
-                    "SELECT * FROM trades WHERE strategy='ORBStrategy' "
-                    "AND COALESCE(paper_trade,1)=? AND entry_time >= ? "
-                    "ORDER BY entry_time ASC LIMIT 1",
-                    (self._mode_flag, since_ts)
-                ).fetchone()
-            return make_record(**dict(row)) if row else None
-        except Exception as exc:                               # noqa: BLE001
-            logger.debug("orb_entry_since lookup failed: %s", exc)
-            return None
 
     def get_open_trades_today(self) -> List[TradeRecord]:
         """Deprecated alias — retained for safety. Prefer get_open_trades_live().

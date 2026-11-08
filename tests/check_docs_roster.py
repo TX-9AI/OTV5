@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """
-tests/check_docs_roster.py  v5.0
+tests/check_docs_roster.py  v5.1
+v5.1  2026-11-08  OTV5 r76 (RETIRE.1) — the probe no longer reads the removed trades' config flags (ORCS_ENABLED,
+      ATP_BUTTERFLY_ENABLED, SWEEP_CS_ENABLED); their roster rows are gone with them. R1-R5 unchanged.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.1  2026-10-19  OTV4TEST r303 (PSTATE.1) — R3 reads every switch's default from strategy/plan_state.py (the one
       place that decides active / log / dormant), not from two source literals that no longer exist.
@@ -37,9 +39,7 @@ out = {
  "windows": {k: [list(v[0]), list(v[1])] for k, v in c.ENTRY_WINDOWS.items()},
  "eod": {k: list(v) for k, v in c.EOD_SCHEDULE.items()},
  "on": {
-  "OT_ORCS": bool(c.ORCS_ENABLED), "OT_GEX_BUTTERFLY": bool(c.GEX_BUTTERFLY_ENABLED),
-  "OT_ATP_BUTTERFLY": bool(c.ATP_BUTTERFLY_ENABLED), "OT_SWEEP_CS": bool(c.SWEEP_CS_ENABLED),
-  "OT_TCS_ACTIVE": bool(c.TREND_CREDIT_ACTIVE),
+  "OT_GEX_BUTTERFLY": bool(c.GEX_BUTTERFLY_ENABLED), "OT_TCS_ACTIVE": bool(c.TREND_CREDIT_ACTIVE),
  },
  "stops": [c.RUNAWAY_MAX_LOSS_PCT, c.MAX_LOSS_PCT, c.BUTTERFLY_STOP_LOSS_PCT],
 }

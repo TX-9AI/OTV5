@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_hunt_runway_sign.py  v5.0
+tests/check_hunt_runway_sign.py  v5.1
+v5.1  2026-11-08  OTV5 r76 (RETIRE.1) — the fixture no longer resets execution/handoff (removed with the sweep, r76). No check changed.
 v5.0  2026-10-26  OTV5 r33 (HUNT.14) — A HUNT WHOSE PRICE IS AT OR THROUGH ITS TARGET IS REFUSED, ON BOTH SIDES.
       GOOGL 2026-10-26 (33dc832f) entered short 0.20 through its target because the runway was abs(target - price).
       Real plan, real LiquidityHunt, a DerivedStore fixture for the levels (as check_liquidity_hunt).
@@ -58,7 +59,6 @@ def main():
     st = St(); P.ensure_tables(st); P.bind_store(st)
     from data.derived_store import DerivedStore
     import strategy.liquidity_hunt as LH
-    from execution import handoff as H
     LH._symbol_of = lambda: "TST"
 
     rw = getattr(LH, "_runway", None)
@@ -80,7 +80,7 @@ def main():
         for lv in levels:
             ds.upsert_level(lv + (now - 3600, 0, None, 0, None, None, 1))
         hunt = LH.LiquidityHunt(); hunt._store = ds; hunt.planner.symbol = "TST"
-        LH.FINISHED.clear(); H.reset()
+        LH.FINISHED.clear()
         P.begin_tick(time.time())
         sig = hunt.generate_signal(orb=orb, price_now=px, now_et=hhmm, atr_pct=0.14, chain=chain,
                                    df_1m=_frame([bar, bar], hhmm), atm_iv=0.25)

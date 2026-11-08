@@ -1,6 +1,7 @@
 #!/bin/bash
 # ==========================================================================
-# deploy/check_versions.sh  v5.0
+# deploy/check_versions.sh  v5.1
+# v5.1  2026-11-08  OTV5 r76 (RETIRE.1) — the strategy/orb_strategy.py check goes with the file (the ORB trade is removed).
 # v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 # v4.7 2026-09-23 OTV4TEST r126 - the A2.1/A2.5 pins and the A2.6 absence canary on
 #      analysis/liquidity_mapper.py are removed with it (deleted, LVL.15 step 5);
@@ -849,7 +850,6 @@ check "risk/setup_scorer.py"             "Optional\[SetupScore\]"       "Score r
 check "strategy/butterfly_strategy.py"   "gex_environment"              "GEX field name fix"
 check "strategy/butterfly_strategy.py"   "BUTTERFLY_WING_SPX"           "Fixed wing widths"
 check "strategy/butterfly_strategy.py"   "_fired_today"                 "One butterfly per session"
-check "strategy/orb_strategy.py"         "ORBState.OPEN_LONG"           "ORB strategy state rename"
 check "execution/exit_engine.py"         "POST_TARGET_TRAIL_LOCK_PCT"   "FVG trail past 100% TP"
 check "execution/exit_engine.py"         "_find_1m_fvgs"                "1m FVG detection"
 check "execution/position_manager.py"    "notify_position_closed"       "ORB re-arm hook on position close"

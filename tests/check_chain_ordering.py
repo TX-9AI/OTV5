@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""check_chain_ordering.py — v5.0
+"""check_chain_ordering.py — v5.1
+v5.1  2026-11-08  OTV5 r76 (RETIRE.1) — C9/C10 use Breakout as the second registered plan (the sweep is removed); what they pin is unchanged.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.4  2026-10-19  OTV4TEST r303 (PSTATE.1) — its subject SweepCreditSpread (C9/C10) is DORMANT by default and a dormant plan now writes
       nothing by ruling, so this run switches it ACTIVE (OT_SWEEP_CS=1); what it pins is unchanged.
@@ -137,8 +138,8 @@ def main():
     # dispatcher's reason.
     from strategy import plan as _plan
     from strategy.runaway_continuation import RunawayContinuationStrategy
-    from strategy.sweep_credit_spread import SweepCreditSpreadStrategy
-    RunawayContinuationStrategy(); SweepCreditSpreadStrategy()   # register
+    from strategy.breakout import Breakout
+    RunawayContinuationStrategy(); Breakout()   # register (r76: the sweep is removed; Breakout is the second plan)
     st3 = _Store()
     e3 = PlanEngine(store=st3, symbol="T3", ledger=None)
     e3.derive({"price": 201.4})                    # tick 1 opens
@@ -160,14 +161,14 @@ def main():
     check("C8 the INACTIVE row carries the dispatcher's reason",
           "ORB has not run away" in (rows.get("RunawayContinuation", ("", ""))[1] or ""))
     check("C9 a strategy with no stated reason still gets a row saying so",
-          "SweepCreditSpread" in rows and "no reason" in (rows["SweepCreditSpread"][1] or ""),
-          str(rows.get("SweepCreditSpread")))
+          "Breakout" in rows and "no reason" in (rows["Breakout"][1] or ""),
+          str(rows.get("Breakout")))
     # ⚠️ AND A STRATEGY THAT WAS ASKED BUT WROTE NOTHING IS FLAGGED — that
     # is the canary for an unwired `return None`.
-    _plan.asked("SweepCreditSpread", None)
+    _plan.asked("Breakout", None)
     e3.derive({"price": 201.6})
     r3 = st3.conn.execute(
-        "SELECT verdict, reason FROM plan_tick WHERE strategy='SweepCreditSpread' "
+        "SELECT verdict, reason FROM plan_tick WHERE strategy='Breakout' "
         "ORDER BY ts_epoch DESC LIMIT 1").fetchone()
     check("C10 asked-and-silent writes a NO PLAN row naming the unwired return",
           r3 is not None and r3[0] == "NO PLAN" and "wrote no plan row" in (r3[1] or ""),

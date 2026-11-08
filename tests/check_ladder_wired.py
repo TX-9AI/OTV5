@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """
-tests/check_ladder_wired.py  v5.0
+tests/check_ladder_wired.py  v5.1
+v5.1  2026-11-08  OTV5 r76 (RETIRE.1) — L10 RE-POINTED (WA 38.4): the second-leg sweep is removed, so the condor still authorizes a side and no
+      SweepForLeg2 is asked; the three direct-fire tags stay absent.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.3  2026-09-26  OTV4TEST r149 (EOD.1) — L7's hard-close rows and L8b/L8c RE-POINTED to the operator's
       end of day ("Resting limit orders at 1545, ladder exits at 1550 if they're not the assignment
@@ -175,8 +177,8 @@ src_m = open(os.path.join(ROOT, "main.py")).read()
 lm = next(n for n in ast.walk(ast.parse(src_m))
           if isinstance(n, ast.FunctionDef) and n.name == "main_loop")
 lsrc = ast.unparse(lm)
-check("L10 second leg: the condor AUTHORIZES a side and the sweep's own plan prepares it",
-      ".authorize(" in lsrc and "SweepForLeg2" in lsrc and "plan_second_leg(" not in lsrc)
+check("L10 second leg: the condor AUTHORIZES a side and nothing sells it (r76: the sweep that prepared it is removed)",
+      ".authorize(" in lsrc and "SweepForLeg2" not in lsrc and "plan_second_leg(" not in lsrc)
 for tag in ("DailyFork2nd", "SweepCS2nd", "TrendCS2nd"):
     check(f"L10 second leg NO LONGER fires {tag} directly", tag not in lsrc)
 

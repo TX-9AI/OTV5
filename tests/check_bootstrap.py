@@ -1,4 +1,7 @@
-"""tests/check_bootstrap.py — v5.5
+"""tests/check_bootstrap.py — v5.6
+v5.6  2026-11-08  OTV5 r76 (RETIRE.1) — G3/G3c/G5/G17 RE-POINTED (WA 38.4): setup_ec2.sh v5.4 no longer plans or writes OT_SCALE_ORB / OT_SCALE_VOLT
+      (the ORB and VOLT trades are removed) and bootstrap.example.sh v5.5 drops their lines, so the checks assert no scale_*
+      plan line, no OT_SCALE_* unit key and no OT_SCALE_ORB / OT_SCALE_VOLT export; every other key unchanged.
 v5.5  2026-10-31  OTV5 r68 (CFG.5) — G3c/G5/G17 RE-POINTED, NOT DROPPED (section 38.4): setup_ec2.sh v5.3 no longer primes
       OT_SCALE_BREAKOUT or OT_PIN_PROXIMITY_ACTIVE (config fixes both ON; the operator, 2026-10-31: "7. Pin gate, default
       "on" —remove from the menu", "9. Scaling, default on—take it out"), so G3 and G3c assert neither --plan line exists, G5
@@ -308,7 +311,7 @@ _R["base"] = _setup(["--plan"], {"OT_CLAUDE_AT_BOOT": "1", "CLAUDE_LOGIN_B64": "
 r, plan, suite, home_after, sudo_calls = _R["base"]
 _WANT = {"unattended": "true", "tty": "0", "paper": "True", "instrument": "QQQ",
          "risk_usd": "200", "orb_budget_usd": "200",
-         "scale_orb": "1", "scale_volt": "1",          # r68 (CFG.5): no scale_breakout / pin_gate line
+         # r68 (CFG.5): no scale_breakout / pin_gate line; r76 (RETIRE.1): no scale_orb / scale_volt line
          "daily_loss_limit": "200", "swap_gb": "2",
          "requirements": "requirements.lock", "git_repo": _origin,       # v1.12: origin.conf, as G2
          "git_ref": "main", "git_push": "0", "claude_at_boot": "1",
@@ -342,9 +345,9 @@ r1, plan1, _s1, _h1, _x1 = _setup(["--plan"], {"OT_RISK_USD": "500",
                                                "OT_SWAP_GB": "0", "OT_GIT_PUSH": "1",
                                                "OT_GIT_REF": "abc1234", "OT_DATA_CAPTURE": "managed",
                                                "OT_SCALE_ORB": "0"})
-guard("G3c the bootstrap's values win (risk 500 flows to TOP/loss; ORB scaling off; swap, push, ref); r68: no pin gate / Breakout scaling",
+guard("G3c the bootstrap's values win (risk 500 flows to TOP/loss; swap, push, ref); r68/r76: no pin gate, no scaling line",
       lambda: r1.returncode == 0 and "orb_risk_usd" not in plan1
-      and plan1.get("scale_orb") == "0" and "scale_breakout" not in plan1
+      and not any(k.startswith("scale_") for k in plan1)
       and plan1.get("orb_budget_usd") == "500" and plan1.get("daily_loss_limit") == "500"
       and "pin_gate" not in plan1 and plan1.get("swap_gb") == "0"
       and plan1.get("git_push") == "1" and plan1.get("git_ref") == "abc1234"
@@ -372,11 +375,10 @@ guard("G5 the bot unit no longer writes the merged OT_ORB_RISK_USD (r161)",
       lambda: "Environment=OT_ORB_RISK_USD" not in _unit)
 guard("G5 the bot unit carries the keys configure.sh grew",
       lambda: all("Environment=%s=${%s}" % (k, v) in _unit for k, v in (
-          ("OT_SCALE_ORB", "SCALE_ORB"),
-          ("OT_SCALE_VOLT", "SCALE_VOLT"), ("OT_ORB_BUDGET_USD", "ORB_BUDGET_USD"),
+          ("OT_ORB_BUDGET_USD", "ORB_BUDGET_USD"),
           ("OT_DAILY_LOSS_LIMIT", "DAILY_LOSS_LIMIT"))))
-guard("G5 r68 (CFG.5): the bot unit writes neither OT_SCALE_BREAKOUT nor OT_PIN_PROXIMITY_ACTIVE (config fixes both ON)",
-      lambda: "OT_SCALE_BREAKOUT" not in _unit and "OT_PIN_PROXIMITY_ACTIVE" not in _unit)
+guard("G5 r68/r76: the bot unit writes no OT_SCALE_* and no OT_PIN_PROXIMITY_ACTIVE (config reads none of them)",
+      lambda: "OT_SCALE_" not in _unit and "OT_PIN_PROXIMITY_ACTIVE" not in _unit)
 guard("G5 secrets are unset before the final login shell",
       lambda: (lambda u, e: 0 <= u < e)(
           _setup_txt.find("unset TT_CLIENT_SECRET TT_REFRESH_TOKEN TELEGRAM_TOKEN GITHUB_TOKEN CLAUDE_LOGIN_B64"),
@@ -850,8 +852,7 @@ guard("G17 each sizing line names its configure.sh item",
                   for v, n, lbl in (("OT_RISK_USD", "2", "Risk per trade / ramp MIN"),
                                     ("OT_ORB_BUDGET_USD", "7", r"Ramp TOP \(MAX\)"),
                                     ("OT_DAILY_LOSS_LIMIT", "6", "Daily catastrophic loss cap")))
-      and all(re.search(r"%s=.*no configure\.sh item since r228" % v, _b17)
-              for v in ("OT_SCALE_ORB", "OT_SCALE_VOLT")))
+      and not re.search(r"OT_SCALE_(ORB|VOLT)=", _b17))
 
 # ── G18 (r10) — the template's defaults are a fresh OTV5 box's ───────────────
 _ex18 = subprocess.run(["bash", "-c", 'eval "$(grep -E \'^export (OT_CLAUDE_AT_BOOT|OT_CLAUDE_SETTINGS|GITHUB_TOKEN|OT_GIT_PUSH)=\' "%s")"; '

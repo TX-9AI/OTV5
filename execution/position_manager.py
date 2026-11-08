@@ -1,5 +1,6 @@
 """
-execution/position_manager.py  v5.31
+execution/position_manager.py  v5.32
+v5.32  2026-11-08  OTV5 r76 (RETIRE.1) — the admission table loses the removed trades' rows (ORB, VOLT, SWEEP, ATPFLY, ORCS) and their name constants; the ORB-trade close hook (standing-offer remainder cancel + engine re-arm, keyed on "ORB" in the strategy) is removed; get_open_record (no caller) is removed. The live rows are unchanged. The operator, 2026-11-07: "Running dead code and logging dead code activity is unnecessary drag. Yes, I want all of those things fixed."
 v5.31 2026-11-04  OTV5 r74 (BLIND.1) — A BLIND BOT PRICES ITS OPEN POSITIONS FROM TASTYTRADE REST MARKS, ON PAPER TOO.
       main._blind_tick sets blind_rest_marks while run_analysis cannot see (no price / no 5m bars) and manages with
       chain=None. Live already took the REST path with no chain; paper took the last stored mark, which never moves,
@@ -410,21 +411,12 @@ _WARNED_LEG_COUNT: set = set()   # SWALLOW T1: warn once on an unreadable count
 
 # ══ ADMISSION ══════════════════════════════════════════════════════════════
 # ── the strategies this box runs, by their dispatch names ───────────────────
-ORB = "ORBStrategy"
 RUNAWAY = "RunawayContinuation"
 HUNT = "LiquidityHunt"
 BREAKOUT = "Breakout"
-SWEEP = "SweepCreditSpread"
 TCS = "TrendCreditSpread"
 GEXFLY = "GEXPinButterfly"
-ATPFLY = "ATPButterfly"
-ORCS = "OpeningRangeCreditSpread"     # r204
 PARK = "PARK"                         # r288 (PARK.1): the 11:00 first-hour continuation
-# r72 — VOLT (VOLume Trade), THE CONTROL ARM. Two gates and nothing else, in
-# the same window as the morning four, blocking nothing and blocked by nothing.
-# Its purpose is to make the OTHER strategies' gates measurable: if VOLT keeps
-# pace, the gates are decoration; if it does not, they are earning their keep.
-VOLT = "VOLT"
 
 
 def _delta_readable(record, ok: bool, why: str = "") -> None:
@@ -495,7 +487,6 @@ _DEFAULT_RULES = {
     # have two."* A second simultaneous copy of the same strategy is not a
     # second observation, it is the SAME observation charged twice: all 20
     # spawned Breakouts read one opening range, one break, one signal.
-    ORB:     AdmissionRule(config.ENTRY_WINDOWS[ORB], max_open_of_type=1),
     RUNAWAY: AdmissionRule(config.ENTRY_WINDOWS[RUNAWAY], max_open_of_type=1),
     HUNT:    AdmissionRule(config.ENTRY_WINDOWS[HUNT], max_open_of_type=1),
     # r51 (BRK.1) — the 5-minute opening-range break taken WITHOUT a retest.
@@ -529,27 +520,16 @@ _DEFAULT_RULES = {
     # hold nothing. The operator's own reasoning arrived here first: *"in order
     # to properly harvest a late move like that we would have to use Credit
     # spreads."*
-    # r72 — VOLT sits in the MORNING slot with the ORB, runaway, hunt and
-    # breakout. ⚠️ THE WINDOW MUST MATCH THEIRS OR IT IS NOT A CONTROL — a
-    # yardstick measured over a different period measures the period.
-    # blocks/blocked_by are EMPTY by construction (r51's ruling: under a
-    # cascade the losing arm's outcome is unobservable).
-    VOLT:    AdmissionRule(config.ENTRY_WINDOWS[VOLT], max_open_of_type=1),
-    SWEEP:   AdmissionRule(config.ENTRY_WINDOWS[SWEEP], max_open_of_type=2),  # 2: it forms a condor
     # ══ EXCEPTION 1 of 2 — VERTICAL SPREADS ════════════════════════════════
     # A condor IS two credit verticals, so the number is the STRUCTURE and not
-    # a risk limit. The pairs are sweep-sweep or TCS-sweep, never TCS-TCS, which
-    # is why the sweep may hold two of its own and the TCS may not.
-    TCS:     AdmissionRule(config.ENTRY_WINDOWS[TCS], max_open_of_type=1), # 1: TCS+TCS is in conflict; pairs only with a sweep
+    # a risk limit. TCS+TCS is in conflict, so the TCS holds one.
+    TCS:     AdmissionRule(config.ENTRY_WINDOWS[TCS], max_open_of_type=1),
     # the GEX fly's cutoff was raised from 14:00 to 15:00 by the operator
     # ══ EXCEPTION 2 of 2 — THE BUTTERFLIES, ONE PER SESSION ════════════════
     # r178: on 2026-08-28 at 15:00 a stack of FIVE BUTTERFLIES fired in NINETY
     # SECONDS on the same pin. `max_tries_per_session=1` is the admission half
     # of that guard; `mark_pin_played` is the other.
     GEXFLY:  AdmissionRule(config.ENTRY_WINDOWS[GEXFLY], max_open_of_type=1, max_tries_per_session=1, cap_exempt=True),
-    ATPFLY:  AdmissionRule(config.ENTRY_WINDOWS[ATPFLY], max_open_of_type=1, max_tries_per_session=1, cap_exempt=True),
-    # r204 — ORCS: one put spread and one call spread, so two of the type; it blocks nothing.
-    ORCS:    AdmissionRule(config.ENTRY_WINDOWS[ORCS], max_open_of_type=2),
     # r288 (PARK.1) — one per session, and its own budget: the cap neither refuses it nor counts its P&L
     # (config.CAP_EXCLUDED_STRATEGIES).
     PARK:    AdmissionRule(config.ENTRY_WINDOWS[PARK], max_open_of_type=1, max_tries_per_session=1, cap_exempt=True),
@@ -1054,9 +1034,6 @@ class PositionManager:
         if tid and any(r.get("trade_id") == tid for r in self._open_records):
             return
         self._open_records.append(record)
-
-    def get_open_record(self) -> Optional[TradeRecord]:
-        return self._open_records[0] if self._open_records else None
 
     def get_open_records(self) -> List[TradeRecord]:
         return list(self._open_records)
@@ -1587,39 +1564,6 @@ class PositionManager:
         )
 
         exit_eng.clear_trail(trade_id)
-
-        # ── Re-arm ORB engine if this was an ORB trade ─────────────────────────
-        # Allows the engine to watch for another breakout attempt this session
-        # rather than treating one trade as the end of the ORB opportunity.
-        if "ORB" in record.get("strategy", ""):
-            # 🔴 r195 — THE REMAINDER DIES WITH THE TRADE, AND IT MUST GO FIRST.
-            # A standing offer can be partly filled: 4 of 10 fill, the position
-            # opens, and this exit closes it. The other 6 are STILL WORKING at
-            # the broker. The supervisor's triggers (fully filled / past the
-            # 50% TP / structure stop / EOD) do not cover an exit on
-            # theta_bleed, the velocity stall, the trail or the 15:45 flatten
-            # — so those 6 would keep standing with no position behind them
-            # while the engine re-armed onto a new setup with different
-            # geometry. Operator: a re-arm cancels any previous offer, because
-            # a new impulsive candle has a different high and low and so a
-            # different offer composition.
-            # ⚠️ BEFORE the re-arm, not after: once the engine re-arms it has
-            # forgotten this setup, and nothing left knows which offer belonged
-            # to it.
-            try:
-                from execution import resting_orders as _ro
-                _ro.cancel_all_working(
-                    f"position closed: {decision.exit_reason}",
-                    paper=self.paper_trading)
-            except Exception as e:                              # noqa: BLE001
-                logger.error("Could not cancel the standing offer remainder "
-                             "(%s) — it may still fill and would then be an "
-                             "UNMANAGED position", e)
-            try:
-                from analysis.orb_engine import get_orb_engine
-                get_orb_engine().notify_position_closed()
-            except Exception as e:
-                logger.warning(f"Could not re-arm ORB engine: {e}")
 
         # EOD.3 (r42) — exit= is the BOOKED fill, the price pnl was computed from.
         # It printed current_premium (the mark): CVX 006f6eca 2026-10-27 logged

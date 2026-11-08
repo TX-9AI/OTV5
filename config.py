@@ -1,5 +1,6 @@
 """
-config.py  v5.13
+config.py  v5.14
+v5.14  2026-11-08  OTV5 r76 (RETIRE.1) — THE RETIRED TRADES' DIALS GO: ENTRY_WINDOWS loses ORBStrategy, VOLT, SweepCreditSpread, ATPButterfly and OpeningRangeCreditSpread; the VOLT_*, ORCS_*, ATP_*, SWEEP_CS_* (except SWEEP_CS_MAX_REJECTION_PCT, read by derived/levels), SCALE_ORB, SCALE_VOLT, CONTRACT_SCALE, HANDOFF_TTL_TICKS and VELOCITY_* keys and their env reads are removed. ORB_NO_ENTRY_AFTER_ET (the ENGINE's cutoff) now reads EOD_SCHEDULE["entries_stop"] directly - same value, 15:40. DELTA_PAR, BREAKOUT_DELTA_PAR and every live dial are unchanged. The operator, 2026-11-07: "Running dead code and logging dead code activity is unnecessary drag. Yes, I want all of those things fixed."
 v5.13  2026-11-03  OTV5 r73 (BFLY.17) — THE GEX PIN BUTTERFLY HOLDS TO THE CLOSE, HONOURS ITS VIX RULE, AND IS PICKIER AT THE
       DOOR. The operator, 2026-11-03: "For the GEX fly, I want no stop except hold to close, I want the VIX rule enforced &
       I want more discriminatory entries." HOLD_TO_CLOSE_STRATEGIES ("GEXPinButterfly",): no premium stop and no decay stop,
@@ -860,7 +861,6 @@ else:
     TCS_MODE = "log"
     if _tcs_raw not in ("", "log", "1"):
         TCS_ENV_REFUSED = _tcs_raw
-SWEEP_CS_ENABLED            = os.environ.get("OT_SWEEP_CS", "0") == "1"     # r204: RETIRED by the same ruling; =1 restores it
 # ── TC.6 ENTRY GATES (2026-08-14 HOTFIX — it rapid-fired the whole fleet) ─────
 # Observed 10:02 ET on 08-14: NVDA sold a $5-wide for $0.06, PLTR a $6-wide for
 # $0.08, and every box re-entered seconds after a nickel close.
@@ -1195,16 +1195,11 @@ HOLD_TO_CLOSE_STRATEGIES = ("GEXPinButterfly",)
 ENTRY_WINDOWS = {
     # r149: directional debits run ALL DAY to the entries stop (operator: "A").
     # Supersedes criteria.py's 2026-08-29 "Debit entries are finished at 1130".
-    "ORBStrategy":          ((9, 35),  EOD_SCHEDULE["entries_stop"]),
     "RunawayContinuation":  ((9, 35),  RUNAWAY_END),   # r187: 10:29 last entry (r68: fixed, no per-box key)
     "LiquidityHunt":        ((9, 35),  (10, 30)),   # r187
     "Breakout":             ((9, 35),  BREAKOUT_END),   # r187: 10:29 last entry (r68: fixed, no per-box key)
-    "VOLT":                 ((9, 35),  (10, 30)),   # r187 (VOLT is also OFF by default)
-    "SweepCreditSpread":    ((9, 35),  EOD_SCHEDULE["entries_stop"]),
     "TrendCreditSpread":    ((11, 31), EOD_SCHEDULE["entries_stop"]),
     "GEXPinButterfly":      ((13, 0),  (15, 0)),   # r273 (BFLY.10): was 12:00; the operator, 2026-10-12: "reduce the fly window to 1300"
-    "ATPButterfly":         ((13, 0),  (15, 0)),   # r273 (BFLY.10): was 12:00. r179: was 11:30 here while the plan itself stayed dormant until 12:00; the operator, 2026-09-30: "12:00 is fine"
-    "OpeningRangeCreditSpread": ((9, 45), (10, 30)),  # r204 (ORCS): 09:45 beat 09:36; positive to 10:30, gone from 11:00 (X6/X7)
     "PARK":                 ((11, 1),  (11, 3)),   # r288 (PARK.1): 11:01-11:02 after the 11:00 bar closes; r60 (PARK.4): at the mark, laddered live
 }
 
@@ -1447,9 +1442,7 @@ ORB_RISK_ENV_IGNORED = os.environ.get("OT_ORB_RISK_USD", "")
 # way; `sizes_on_geometry` (which also anchors the trail) is untouched.
 # ⚠️ ONLY THE LITERAL "1" IS ON, as OT_PIN_PROXIMITY_ACTIVE — so a typo reads
 # as OFF, the smaller position, never as the larger one.
-SCALE_ORB      = os.environ.get("OT_SCALE_ORB", "1") == "1"
 SCALE_BREAKOUT = True   # r68 (CFG.5): OT_SCALE_BREAKOUT no longer read - the operator, 2026-10-31: "9. Scaling, default on—take it out"
-SCALE_VOLT     = os.environ.get("OT_SCALE_VOLT", "1") == "1"
 
 # ── r93 — THE NOISE FLOOR: A STOP INSIDE ONE BAR IS NOT A STOP ────────────
 # 🔴 THE INVERSION THIS CLOSES, MEASURED LIVE 2026-09-22. The 1-R rule
@@ -1624,14 +1617,12 @@ BRK_R_FLOOR                 = 1.0
 BRK_RANGE_MIN_PCT           = 0.0023
 BRK_RANGE_MAX_PCT           = 0.0350
 BRK_RANGE_CLEAN_MAX         = 0.0
-# The GEX pin butterfly (strategy/gex_pin_butterfly.py). The ATP fly's own
-# floor is ATP_BFLY_PIN_CONC_MIN below; this is the pin fly's 0.25.
+# The GEX pin butterfly (strategy/gex_pin_butterfly.py): its pin-concentration floor 0.25.
 GEX_BFLY_PIN_CONC_MIN       = 0.25
 GEX_BFLY_EM_MIN_FRAC        = 0.30
 GEX_BFLY_EM_MAX_FRAC        = 1.00
 GEX_BFLY_SMOOTH_WINDOW      = 12       # ticks (~3 min)
 GEX_BFLY_PERSIST_TICKS      = 8        # ticks (~2 min)
-HANDOFF_TTL_TICKS           = 8        # execution/handoff.py
 # Runaway (strategy/runaway_continuation.py, strategy/runaway_plan.py)
 RUNAWAY_ATR_FLOOR_PCT       = 0.08
 RUNAWAY_ATR_VETO_PCT        = 0.05
@@ -1642,10 +1633,6 @@ RUNAWAY_STRENGTH_GRIND      = 0.40
 RUNAWAY_STRENGTH_RIP        = 0.70
 RUNAWAY_BAND_GRIND          = 0.5
 RUNAWAY_BAND_RIP            = 1.5
-# The sweep (strategy/sweep_credit_spread.py, strategy/sweep_plan.py)
-SWEEP_CS_MIN_REJECTION_PCT  = 0.0002
-SWEEP_CS_ATR_MAX_PCT        = 0.20
-SWEEP_CS_LEVELS_EACH_SIDE   = 3
 # LiquidityHunt's premium floor. It FOLLOWED Runaway's key through a getattr
 # chain nobody could see; it still follows it unless OT_HUNT_MAX_LOSS_PCT is set.
 HUNT_MAX_LOSS_PCT = float(os.environ.get("OT_HUNT_MAX_LOSS_PCT", str(RUNAWAY_MAX_LOSS_PCT)))
@@ -1690,85 +1677,7 @@ SIZE_ON_RISK_TO_STOP = os.environ.get("OT_SIZE_ON_RISK", "0") == "1"
 # never own more than the operator would accept losing outright.
 DEPLOY_CAP_MULT = float(os.environ.get("OT_DEPLOY_CAP_MULT", "2.0"))
 
-# ── OPENING RANGE CREDIT SPREAD - ORCS (r203 dials, r204 trade) — PRELIMINARY ──
-# The operator, 2026-10-03: "set preliminary dials, then build the plan that
-# searches the chain for our trigger components' location on the chain"; "we get
-# better than mark or we don't trade it"; then "I want to paper trade it Monday
-# ... Call this new one the opening range credit spread ORCS." Each value is
-# where the 10-03 studies (X5-X8, QQQ 0DTE, 28 priced sessions) were positive
-# in BOTH halves at mid fills. NOT PROVEN - those sessions were calm. ENTRY
-# PRICING IS THE HOUSE ENTRY LADDER'S (r206, his ruling), not a dial here. The
-# window is ENTRY_WINDOWS["OpeningRangeCreditSpread"] (09:45-10:30).
-ORCS_ENABLED         = os.environ.get("OT_ORCS", "0") == "1"   # r249: RETIRED (default OFF); =1 restores the trade; the plan still records
-ORCS_SHORT_DELTA_MAX = 0.20       # r207, his ruling: worst day sized to 1,050 and over 80% winning days (X10: 80.4% of 56)
-ORCS_MIN_IM_MULT     = 1.0        # r207: at least ONE implied move (ATM straddle) out; 1.25 would push delta 0.20 further than measured
-ORCS_WING_USD        = 3.0        # r207: the long leg 3 dollars further out - 3 contracts a side at 1,050, max-loss day about -744
-ORCS_MIN_CREDIT      = 0.10       # at the mark; below a dime one cent of slip is over 10%
-ORCS_MAX_GAP_PCT     = 0.90       # |overnight gap| %, the one informer that agreed on both samples
-
-# ── SCALE.1 (r234) — WHAT THIS BOX'S CONTRACTS COST AGAINST QQQ'S ─────────────
-# The ORCS dials above are QQQ dollars (r207 was priced on QQQ). Measured
-# 2026-10-04: an SPX 0DTE contract costs ~7.5x the matching QQQ one (platform
-# expected move 7.57 median, 6.2-9.1 across 14 sessions); spot (10.4x) would
-# overstate it. One number per box; QQQ is the unit. Re-measured on Saturdays.
-CONTRACT_SCALE_BY_INSTRUMENT = {"SPX": 7.5}
-
-
-def _contract_scale():
-    base = CONTRACT_SCALE_BY_INSTRUMENT.get(INSTRUMENT, 1.0)
-    raw = (os.environ.get("OT_CONTRACT_SCALE") or "").strip()
-    if not raw:
-        return base, ("%s default" % INSTRUMENT) if INSTRUMENT in CONTRACT_SCALE_BY_INSTRUMENT else "default"
-    try:
-        v = float(raw)
-    except ValueError:
-        v = 0.0
-    if v > 0 and v == v and v != float("inf"):
-        return v, "OT_CONTRACT_SCALE"
-    return base, "OT_CONTRACT_SCALE=%r IGNORED (not a positive number)" % raw
-
-
-CONTRACT_SCALE, CONTRACT_SCALE_SOURCE = _contract_scale()
-
-# ── SWEEP CREDIT SPREAD (v4.0) ─────────────────────────────────────────────
-# Operator's spec, 2026-08-20: *"The only 2 ways I want out of this trade is a
-# 15% loss (thesis invalidated) or a session hard close."*
-# TIGHTER than the fleet's 0.25, and strategy-scoped rather than a fleet change.
-# The thesis is that the swept pool HOLDS as a boundary; a 15% loss on the
-# spread means it did not, and there is nothing further to wait for.
-SWEEP_CS_MAX_LOSS_PCT = float(os.environ.get("OT_SWEEP_CS_MAX_LOSS_PCT", "0.15"))
-
-# ─── r97 (2026-08-24) — THE SWEEP'S PROTECTIVE WING ──────────────────────────
-# ⚠️ AN ENCODING NOBODY CHOSE, AND IT IS FLAGGED RATHER THAN BURIED (SPEC.1).
-# `docs/TRADES.md` specifies the sweep's SHORT strike precisely — the nearest
-# strike actually pierced — and says NOTHING about the long leg. The strategy
-# never built one, so no width was ever needed and none was ever argued for.
-# 5 is taken from the rest of the fleet, where every credit vertical uses it:
-# TCS_WING_WIDTH_SPX/QQQ = 5, CONDOR_WING_WIDTH_SPX/QQQ = 5. It is a CONVENTION
-# I inherited, not a measurement — no study sized the sweep's wing, and the
-# operator has not ruled on it.
-# ⚠️ IT SETS THE RISK, SO IT IS WORTH ARGUING WITH. Width minus credit is the
-# max loss per contract; the 15% stop fires long before that, but the wing is
-# what makes the risk DEFINED and what the sizer reads.
-SWEEP_CS_WING_WIDTH = float(os.environ.get("OT_SWEEP_CS_WING", "5"))
-
-# ⚠️ NO PROFIT TARGET, DELIBERATELY, AND THIS IS MEASURED. v3's condor
-# backtest: on 18 standalone legs a TP@25% turned -$242.77 into -$8.43, and on
-# 28 condor legs a TP was WORSE AT EVERY LEVEL. A credit vertical is EARNING
-# from decay - closing it early buys back the theta you were paid to hold.
-# The exits for this strategy are exactly two: the 15% stop, and 15:45.
-SWEEP_CS_TAKE_PROFIT_PCT = None
-
-# ⚠️ AND IT HOLDS TO 15:45, exempt from the 15:40 flatten ladder like every
-# credit vertical - `strategy/structure.py` classifies it TREND_PARTICIPATION so
-# that routing happens by DERIVATION from persisted columns, not a flag.
-# Debit positions keep the ladder because they decay; verticals do not.
 BUTTERFLY_STOP_LOSS_PCT = 0.40   # OTV4TEST r24, operator: "Widen it to 40%." (was 0.25)
-ATP_BUTTERFLY_ENABLED = os.environ.get("OT_ATP_BUTTERFLY", "0") == "1"   # OTV4TEST r26 (BFLY.6); r187 (ROSTER.1): OFF by default - the operator, 2026-10-02: "Turn off the ATP" (OT_ATP_BUTTERFLY=1 restores it)
-ATP_BFLY_AT_PIN_EM_FRAC = 0.30   # ⟨PRIOR⟩ r26: at the pin = spot within this x EM of it
-ATP_BFLY_SETTLED_BARS = 15       # ⟨PRIOR⟩ r26: closed 1m bars all within that band
-ATP_BFLY_VWAP_STRICT_EM_FRAC = 0.05   # r179 (BFLY.9) route B: NOT TRENDING and the pin within ±this x EM of VWAP, only when route A fails. The operator, 2026-09-30: "Allow a non-pinning ATP if it qualifies on STRICT VWAP & NOT TRENDING", "Route B for VWAP if A fails", and yes to NEUTRAL and to ±0.05 x EM.
-ATP_BFLY_PIN_CONC_MIN = 0.15     # r179 (BFLY.9), operator 2026-09-30: "Drop the ATP to .19", then "Actually .15 sounds better". The pin fly keeps 0.25. 0.15 is also the floor data/gex_data.py needs to call the regime PINNING.
 GEX_BFLY_VWAP_BAND_EM_FRAC = 0.10   # OTV4TEST r25 (BFLY.5): pin within ±this x EM of today's VWAP waives the conc floor
 # Max-loss stop applied to an ADOPTED position (one discovered open at the
 # broker on a LIVE restart with no DB plan). Defaults to the same threshold
@@ -1823,7 +1732,7 @@ FLATTEN_WINDOW_OPEN_ET      = EOD_SCHEDULE["resting_at"]    # r149: the first EO
 EOD_RESTING_AT_ET           = EOD_SCHEDULE["resting_at"]
 EOD_LADDER_AT_ET            = EOD_SCHEDULE["ladder_at"]
 EOD_CROSS_AT_ET             = EOD_SCHEDULE["cross_at"]
-ORB_NO_ENTRY_AFTER_ET       = ENTRY_WINDOWS["ORBStrategy"][1]  # ORB-SCOPED: ORB entries valid until 11:30 ET.
+ORB_NO_ENTRY_AFTER_ET       = EOD_SCHEDULE["entries_stop"]  # the opening-range ENGINE's own cutoff (orb_engine); RETIRE.1: the ORB trade's window row is gone, the value (15:40) is not
                                         #   Also the ARM condition for sweep reversal.
 # 🔴 r193 — 11:00 -> 11:30, operator 2026-08-30: "1130 is the cutoff for new
 # orb entries or a single attempt runaway that has not yet fired during the
@@ -2404,67 +2313,6 @@ CONDOR_RATCHET_STANDALONE_ONLY = os.environ.get(
 # on the record rather than discovered live.
 VERTICAL_HOLD_TO_ET         = EOD_SCHEDULE["resting_at"]   # r149: assignment-risk closes start at 15:45 (was 15:50)
 
-# ══ VOLT (VOLume Trade) — THE CONTROL ARM, OTV4TEST r72 ════════════════════
-# 🔑 EVERY ONE OF THESE IS A DECLARED PRIOR (WA §31) AND NONE IS PROVEN ON A
-# TRADE. They live HERE, once, because volt_plan.py and exit_engine.py both
-# read them and two constants in two modules meaning one thing is the drift
-# this codebase keeps finding.
-#
-# VOLT exists to be the NULL HYPOTHESIS MADE TRADEABLE: two gates, same window
-# as the morning four, blocking nothing. If it keeps pace with the gated
-# strategies the gates are decoration; if it does not, they are earning their
-# keep. ⚠️ A THIRD GATE DESTROYS THE MEASUREMENT — put it in a new strategy.
-#
-# THE TWO NUMBERS THAT COULD HAVE BEEN GUESSED WERE MEASURED INSTEAD, on 247
-# symbol-sessions of 15-second tape (13 names x 19 sessions, 08-24..09-18),
-# asking: from a signal bar does price reach +0.5 ATR before -1.0 ATR within 30
-# minutes? That geometry breaks even at 66.7%.
-#   DIRECTION: close vs the SESSION OPEN won at EVERY volume threshold
-#     (68.8% / 66.7% / 72.0% at 1.25x / 1.5x / 2.0x), beating bar-direction,
-#     close-vs-EMA20 and a two-close trend. It is also the simplest read
-#     available — one comparison, nothing to fit.
-#   VOLUME 1.25x: fires on ~9% of in-window bars (n=445), which is what makes
-#     the control measurable at all. 2.0x reads higher on n=50; 3.0x gave n=2.
-# ⚠️ HONEST LIMIT: the winning cell was chosen from 12, so +2.1pp over
-# breakeven is INSIDE that search's noise. The cross-threshold consistency is
-# the evidence, not the margin — and the study measured the UNDERLYING with an
-# ATR stop while VOLT trades an OPTION against a STRUCTURE stop.
-VOLT_VOL_MULT           = float(os.environ.get("OT_VOLT_VOL_MULT", "1.25"))
-# 🔴 r74 — THE ENTRY FRAME IS ONE MINUTE, NOT FIVE, AND IT IS A SPECIFICATION.
-# The operator, 2026-09-21, watching VOLT sit dead through the open: *"No,
-# that's unacceptable. It should be able to fire immediately. I want to move on
-# the first sense that volume is expanding and It needs to jump on."*
-# WHAT r72 SHIPPED WAS UNREACHABLE FOR A THIRD OF ITS OWN WINDOW. The volume
-# gate read COMPLETED 5-MINUTE bars and demanded eight of them, which is 40
-# minutes of session — so a window opening at 09:35 could not fire before
-# 10:15. MEASURED over 18 replayed sessions: earliest first entry 10:15, median
-# 10:35, latest 11:10. NOT ONCE in the first 40 minutes.
-# ⚠️ AND THE SHIPPED GATE WAS STRICTER THAN THE ONE THAT WAS MEASURED. The
-# study behind the 1.25x number used `mean(vols[max(0,i-6):i])` and required
-# only THREE prior bars — it tolerated a short baseline early in the session.
-# The plan then demanded eight. The number was justified by one rule and
-# enforced by another.
-# MEASURED AFTER THE CHANGE, same 19 QQQ sessions: 24.2 trades per session
-# against 2.0, first fire 09:37 against 10:15.
-# ⚠️ THE EXIT FRAME IS UNCHANGED AND STAYS FIVE MINUTES — the operator's
-# earlier ruling that a close beyond the entry is the dead thesis. Entry frame
-# and exit frame are independent, and conflating them is what produced the
-# unreachable window in the first place.
-VOLT_VOL_LOOKBACK_BARS  = int(os.environ.get("OT_VOLT_VOL_LOOKBACK_BARS", "5"))
-# the fewest completed 1m bars before the gate may be evaluated at all. THREE,
-# matching the study exactly rather than exceeding it.
-VOLT_MIN_BARS           = int(os.environ.get("OT_VOLT_MIN_BARS", "3"))
-# 🔑 THE STOP IS THE ENTRY — operator's ruling 2026-09-21: "Use a structural
-# stop. A close beyond where the trade opened is a dead thesis." There is no
-# lookback and no floor because there is no stop DISTANCE to degenerate. The two
-# designs it replaced both blew up on exactly that: a 3-bar structural extreme
-# scored WORST -120R and the signal bar's own extreme -749R, both because a
-# tight structure put the stop at the entry and R exploded. Measured over 19
-# sessions x 4 symbols with the real plan: the ruling gives worst -1.49R.
-# the trail arms on DISTANCE, not premium — the operator's spec, and r44's scar:
-# a premium-fraction floor could sit BELOW entry, so arming could guarantee a loss.
-VOLT_TRAIL_ARM_R        = float(os.environ.get("OT_VOLT_TRAIL_ARM_R", "0.50"))
-VOLT_TRAIL_LOCK_FRAC    = float(os.environ.get("OT_VOLT_TRAIL_LOCK_FRAC", "0.50"))
 # ══ r79 (EXT.1) — THE EXTRINSIC METER ══════════════════════════════════════
 # Operator, 2026-09-21, on a VOLT call at +468% with FOUR CENTS of extrinsic
 # left: *"We need an extrinsic/intrinsic metered exit."*
@@ -2488,7 +2336,6 @@ VOLT_TRAIL_LOCK_FRAC    = float(os.environ.get("OT_VOLT_TRAIL_LOCK_FRAC", "0.50"
 # which never moved. A second strategy is adopting par delta in the same
 # session, so it DERIVES rather than repeating the number.
 DELTA_PAR               = float(os.environ.get("OT_DELTA_PAR", "0.98"))
-VOLT_DELTA_PAR          = DELTA_PAR
 # 🔴 r82 — BREAKOUT TRADES PAR DELTA INSTEAD OF THE +100% TARGET, by the
 # operator's ruling: *"the breakout needs the delta stop not the 100% stop."*
 # Its target was never written for it — `management.py` documents that rule as
@@ -2497,36 +2344,6 @@ VOLT_DELTA_PAR          = DELTA_PAR
 # predicate breadth. MEASURED: its 8 target exits fired at delta 0.619-0.650,
 # capping every winner long before convexity was spent.
 BREAKOUT_DELTA_PAR      = DELTA_PAR
-# The FALLBACK when the feed hands us no delta — the SAME fact read off price
-# instead of off the greeks, so the rule cannot be silently disabled by a
-# missing field (§0.5: absent is not the same as false).
-VOLT_EXT_STOCKLIKE      = float(os.environ.get("OT_VOLT_EXT_STOCKLIKE", "0.02"))
-# The leash once stock-like, in ATR(5m) units. NOT a fitted number: today's
-# worst 5m close-pullback was 0.295 pts against an ATR of 0.571, so 1.0x ATR
-# is ~2x the deepest retrace the move actually made. ⚠️ AN UNFITTED PRIOR
-# (§31) — arm E of PREREG_TRAIL.md measures it; until then it is a PRIOR and
-# the header says so rather than letting it read as evidence.
-VOLT_STOCKLIKE_ATR_MULT = float(os.environ.get("OT_VOLT_STOCKLIKE_ATR_MULT", "1.0"))
-VOLT_WINDOW_OPEN_ET     = ENTRY_WINDOWS["VOLT"][0]
-VOLT_WINDOW_CLOSE_ET    = ENTRY_WINDOWS["VOLT"][1]
-# ⬛ SUPERSEDED 2026-09-24 (OTV4TEST r131) — the operator ruled VOLT onto the Breakout
-# sizing model (1-R = the signal candle's extreme in premium, ORB_RISK_USD at risk,
-# capped at ORB_BUDGET_USD, r93 noise floor). The control-arm argument below was
-# measured and lost: VOLT is a participant now, not a control. Kept as history.
-# ~~🔴 VOLT SIZES OFF RISK_PER_TRADE_USD, **NOT** ORB_BUDGET_USD, AND THE
-# DIFFERENCE IS THE WHOLE COMPARISON. Live (configure.sh): OT_RISK_USD=1050 and
-# OT_ORB_BUDGET_USD=10000. VOLT uses ONLY the budget rule — it deliberately does
-# not import the ORB's `min(geometry, budget/cost)` clamp, because that clamp is
-# an ORB prior and importing it would smuggle a third rule into a two-gate
-# control. So inheriting the $10,000 CEILING would have sized VOLT at ~73
-# contracts on a $1.36 premium against the handful the ORB's geometry actually
-# takes — and a control that trades 10-50x the size of the arm it measures
-# produces a P&L comparison that means nothing.
-# ⚠️ FOUND BY REPLAY, and only because the operator caught that the replay was
-# reading the $200 DEFAULT rather than the live environment (ENV.1's family: a
-# measurement taken outside the environment it describes).~~
-VOLT_BUDGET_USD         = float(os.environ.get("OT_VOLT_BUDGET_USD",
-                                               str(RISK_PER_TRADE_USD)))
 
 VERTICAL_HOLD_TO_CLOSE      = os.environ.get("OT_VERTICAL_HOLD_1545", "1") == "1"
 # Minutes per bar of the ATR feeding sigma. 5m frame by default; wrong here
@@ -2552,11 +2369,6 @@ CONDOR_POP_BAR_MIN          = float(os.environ.get("OT_CONDOR_POP_BAR_MIN", "5")
 # minutes against the 14:00 cutoff: 169 -> 149.
 CREDIT_ENTRY_START_ET       = ENTRY_WINDOWS["TrendCreditSpread"][0]  # every credit spread, one number
 CONDOR_ENTRY_START_ET       = CREDIT_ENTRY_START_ET   # was (11, 11)
-# ⚠️ THE FOURTH CREDIT PATH, AND IT WAS NOT IN THIS FILE AT ALL.
-# `sweep_credit_spread.py` read `getattr(config, "SWEEP_CS_EARLIEST_ET",
-# "11:11")` — the DEFAULT was the only source, so the sweep kept 11:11 while
-# the other three moved. check_sweep_spread's S8a caught it; I had not.
-SWEEP_CS_EARLIEST_ET        = f"{CREDIT_ENTRY_START_ET[0]}:{CREDIT_ENTRY_START_ET[1]:02d}"
 # 🔴 r81 (LATE.2) — 15:40 BY THE OPERATOR'S r71 RULING, WHICH NEVER REACHED
 # THIS NUMBER. r71 widened the ADMISSION TABLE to 15:40 and moved
 # VERTICAL_HOLD_TO_ET to 15:50, and the credit plans went on refusing at 14:00
@@ -2581,23 +2393,8 @@ CONDOR_ENTRY_CUTOFF_ET      = ENTRY_WINDOWS["TrendCreditSpread"][1]  # r81: was 
 # ⚠️ MANAGEMENT IS NOT GATED BY THIS. Same as `TCS_ENTRY_END_ET`: the roll and
 # `management.py` reference no window constant and run to the 15:45 flatten.
 CREDIT_ENTRY_END_ET         = CONDOR_ENTRY_CUTOFF_ET   # one END for every credit path
-SWEEP_CS_LATEST_ET          = f"{CREDIT_ENTRY_END_ET[0]}:{CREDIT_ENTRY_END_ET[1]:02d}"
-# 🔴 r81 — THE FIFTH CREDIT PATH, AND IT IS THE r317 DEFECT REINTRODUCED UNDER
-# A NEW NAME. r317 repaired `SWEEP_CS_LATEST_ET` above after the key-did-not-
-# exist defect bit twice; this fork then wrote `strategy/sweep_plan.py` reading
-# `SWEEP_CS_LATEST_ET_FORK`, WHICH HAS NEVER EXISTED IN THIS FILE, so its
-# `getattr(..., (14, 0))` default was the only source and the sweep sat at
-# 14:00 while r71 moved everything else. Derived, never repeated — a literal
-# here would be the same bug with a different number.
-# ⚠️ THE START SIDE WAS ON A SILENT DEFAULT TOO. `sweep_plan.py:97` reads
-# `SWEEP_CS_EARLIEST_ET_FORK` and that key has never existed either; its
-# (9, 35) default merely HAPPENS to match the admission table today, which is
-# r317's warning word for word — invisible until someone moves the number.
-SWEEP_CS_EARLIEST_ET_FORK   = ENTRY_WINDOWS["SweepCreditSpread"][0]   # r81: matches admission SWEEP start
-SWEEP_CS_LATEST_ET_FORK     = ENTRY_WINDOWS["SweepCreditSpread"][1]
 # 🔑 THE ONE CREDIT END. Every credit path resolves to this single constant and
-# none of them carries its own number: the sweep (both key spellings), the TCS,
-# and the condor that forms from two of their legs. r71's ruling moved the
+# none of them carries its own number: the TCS and the condor. r71's ruling moved the
 # admission window and FOUR separate literals stayed at 14:00; deriving them is
 # what makes the next ruling reach the code instead of half of it.
 TCS_ENTRY_END_ET            = CREDIT_ENTRY_END_ET
@@ -3152,54 +2949,3 @@ SWEEP_RECOVERY_FROM_POOL = os.environ.get("OT_SWEEP_RECOVERY_FROM_POOL", "1") ==
 SWEEP_LIVENESS_GATE   = os.environ.get("OT_SWEEP_LIVENESS_GATE", "1") == "1"
 SWEEP_STALE_HARD_BARS = int(os.environ.get("OT_SWEEP_STALE_HARD_BARS", "48"))
 
-# ── VEL.1 (2026-08-12) — VELOCITY STALL: "is this thing MOVING at all?" ──────
-# The third question, and until now nobody asked it. `orb_structure_stop` asks
-# "did the thesis break?"; `_theta_bleed` asks "is my GAIN about to evaporate?"
-# (gate 1 is a gain floor, so it never looks at a losing position). A LOSING
-# POSITION THAT HAS STOPPED MOVING answers NO to both and falls to the -40%
-# percentage floor, which is the ABSENCE of a mechanism rather than one.
-#
-# THE STATISTIC, and note it needs NO TARGET — which is why it generalises to
-# every long-premium strategy, not just ORB:
-#     breakeven velocity  bev = |theta| / (|delta| * 1440)     underlying pts/min
-#                               at which delta gains exactly offset decay.
-#     delivered velocity        cumulative underlying travel toward the trade's
-#                               direction, per minute since entry.
-#     ratio = delivered / bev.  1.0 is the FLAT LINE. Below it the position
-#                               bleeds even while the thesis is intact.
-#
-# MEASURED over 15 sessions / 145 ORB trades against the chain archive
-# (tests/velocity_feasibility.py), among trades STILL OPEN at each mark:
-#            mark   winners p10   losers p50   losers p90
-#             5m       -21.1         -37.3        91.3     <- NO SEPARATION
-#            10m         3.9          -6.7        20.5
-#            15m        18.0           0.3        26.7
-#            20m        29.8           0.9        18.5     <- barely overlap
-# The median surviving LOSER sits at ~1.0 — treading water exactly at breakeven
-# marginal difference.
-#
-# ⚠️ THE 5-MINUTE ROW IS WHY GRACE EXISTS: winners p10 of -21.1 means the bottom
-# decile of eventual WINNERS was moving AWAY at five minutes. Any evaluation
-# before 10 minutes kills those trades. GRACE is forced by data, not chosen.
-#
-# ⚠️ THE FLOOR IS DERIVED, NOT PICKED. Each value is the winners' p10 at that
-# mark, so a floor at STRICTNESS=1.0 admits 90% of historical winners BY
-# CONSTRUCTION. Re-run the study to refresh it; do not hand-tune it.
-VELOCITY_STALL_ENABLED  = os.environ.get("OT_VELOCITY_STALL", "1") == "1"
-# ⚠️ SHIPS OBSERVE-ONLY. The floors rest on n=22 at the 20-minute mark and were
-# derived from ORB alone. Log the breach, collect a session, THEN enforce.
-VELOCITY_STALL_ENFORCE  = os.environ.get("OT_VELOCITY_ENFORCE", "0") == "1"
-VELOCITY_GRACE_MIN      = float(os.environ.get("OT_VELOCITY_GRACE_MIN", "10"))
-VELOCITY_STRICTNESS     = float(os.environ.get("OT_VELOCITY_STRICTNESS", "1.0"))
-# consecutive breaches before cutting. ⚠️ NOT COSMETIC: the 2026-08-12 QQQ trade
-# crossed back ABOVE breakeven at minutes 41-61 before dying at 70. A single-tick
-# rule oscillates; confirmation is what makes the cumulative form usable.
-VELOCITY_CONFIRM_TICKS  = int(os.environ.get("OT_VELOCITY_CONFIRM", "3"))
-# minutes -> winners p10 ratio. Largest mark <= held wins; under the first mark
-# no check runs at all.
-VELOCITY_FLOOR_BY_MIN   = {10: 3.9, 15: 18.0, 20: 29.8}
-# ⚠️ Strategies whose floor has been MEASURED. Others are evaluated and LOGGED
-# but never cut, whatever ENFORCE says — the floors above are ORB-derived and
-# applying them blind to continuation or sweep would be an untested extrapolation
-# wearing a measured number.
-VELOCITY_MEASURED_STRATEGIES = ("ORBStrategy",)

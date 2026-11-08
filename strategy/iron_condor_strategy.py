@@ -1,5 +1,6 @@
 """
-strategy/iron_condor_strategy.py  v5.0
+strategy/iron_condor_strategy.py  v5.1
+v5.1  2026-11-08  OTV5 r76 (RETIRE.1) — ten uncalled helpers are removed (_select_beyond_rail, _reset_if_new_day, _find_contract_at_strike, _abandon_past_cutoff, reset_plan, _wing_width, _bars_left, _quote_ok, _pop, _liquidity_rank) with the imports only they used; the lone-leg HOLD line no longer reads the deleted sweep plan. Every called method is unchanged. The operator, 2026-11-07: "Running dead code and logging dead code activity is unnecessary drag. Yes, I want all of those things fixed."
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v4.17  2026-10-11  OTV4TEST r269 (OPS.22, mirror of otv4 r479) - the zone NAME is "America/New_York", the zone the legacy link
       US/Eastern pointed to: identical rules, no behaviour change. tzdata 2026c moved the US/* links into tzdata-legacy;
@@ -156,7 +157,6 @@ v4.0  2026-08-19  OTV4 split.
 
 import logging
 from dataclasses import dataclass, field
-from datetime import datetime
 from typing import Optional, List
 from zoneinfo import ZoneInfo
 
@@ -169,18 +169,16 @@ from analysis.volatility_engine import VolatilityState
 from data.options_chain import OptionContract, OptionsChain
 from data.macro_data import MacroSnapshot
 from config import (
-    CONDOR_WING_WIDTH_SPX, CONDOR_WING_WIDTH_QQQ,
     CONDOR_EXPECTED_MOVE_GUARDRAIL_MULT,
     CONDOR_EM_FLOOR_FRAC,
     CONDOR_PROXIMITY_STRIKES,
     CONDOR_TRIGGER_APPROACH,
     CONDOR_NICKEL_CLOSE, CONDOR_STOP_LOSS_PCT,
     CONDOR_ENTRY_START_ET, CONDOR_ENTRY_CUTOFF_ET,
-    HARD_CLOSE_ET,
     CONDOR_PITCHFORK_ANCHOR, CONDOR_REQUIRE_FORK,
     CONDOR_PF_FLAT_SLOPE, CONDOR_MIN_POP, CONDOR_POP_BAR_MIN,
     CONDOR_PF_TIMEFRAME, CONDOR_MAX_QUOTE_WIDTH,
-    STRIKE_INCREMENT, INSTRUMENT, VIX_BUTTERFLY_DISABLE
+    INSTRUMENT, VIX_BUTTERFLY_DISABLE
 )
 
 from strategy.plan import Plan, _n
@@ -295,13 +293,6 @@ class IronCondorStrategy(BaseOptionsStrategy):
     def name(self) -> str:
         return "IronCondorStrategy"
 
-    def _reset_if_new_day(self):
-        today = datetime.now(ET).strftime("%Y-%m-%d")
-        if self._last_reset_date != today:
-            self._ledger_expire("new_day")
-            self._plan = None
-            self._last_reset_date = today
-
     @property
     def has_active_plan(self) -> bool:
         """True when a fork-validated plan exists for this session."""
@@ -311,42 +302,14 @@ class IronCondorStrategy(BaseOptionsStrategy):
     def plan(self) -> Optional[CondorPlan]:
         return self._plan
 
-    def _wing_width(self) -> int:
-        return (CONDOR_WING_WIDTH_SPX if INSTRUMENT == "SPX"
-                else CONDOR_WING_WIDTH_QQQ) // STRIKE_INCREMENT
-
     def _expected_move_from_straddle(self, chain: OptionsChain,
                                       underlying: float) -> float:
         from analysis.volatility_measures import expected_move_platform    # r229 (EM.2): the platform's, by ruling
         return expected_move_platform(chain, underlying)[0] or 0.0
 
     @staticmethod
-    def _liquidity_rank(c):  return cv.liquidity_rank(c)
-    @staticmethod
-    def _pop(d, s, n):       return cv.pop(d, s, n)
-    @staticmethod
-    def _bars_left(now_et_dt, bar_minutes):
-        return cv.bars_left(now_et_dt, bar_minutes, HARD_CLOSE_ET)
-    @staticmethod
-    def _quote_ok(c, w):     return cv.quote_ok(c, w)
-    @staticmethod
     def _leg_order_from_slope(slope, flat_eps):
         return cv.leg_order_from_slope(slope, flat_eps)
-
-    def _select_beyond_rail(self, contracts, side, rail, min_distance_level,
-                            session_extreme, spot=0.0, sigma=0.0,
-                            bars_left=0.0, min_pop=0.0, max_width_pct=0.0):
-        return cv.select_beyond_rail(
-            contracts, side, rail, min_distance_level, session_extreme,
-            spot=spot, sigma=sigma, bars=bars_left, min_pop=min_pop,
-            max_width_pct=max_width_pct)
-
-    def _find_contract_at_strike(self, contracts, target_strike):
-        exact = [c for c in contracts if c.strike == target_strike and c.mark > 0]
-        if exact:
-            return exact[0]
-        liquid = [c for c in contracts if c.mark > 0]
-        return min(liquid, key=lambda c: abs(c.strike - target_strike)) if liquid else None
 
     # ── PLAN: fork validation + strike pre-selection ───────────────────────
 
@@ -412,19 +375,7 @@ class IronCondorStrategy(BaseOptionsStrategy):
         if len(legs) < 2:
             if len(legs) == 1:
                 _side = legs[0].get("option_side", "?")
-                _want, _why = self.authorize([_side])
-                _cand = ""
-                try:
-                    from strategy import sweep_plan as _sp
-                    _lp = getattr(_sp, "LAST_PREP", None)
-                    _c = (_lp.nearest_below if _want == "put" else _lp.nearest_above) if _lp else None
-                    if _c is not None:
-                        _cand = f" — {_c.line()}" + ("" if _c.sellable else " (no structure yet)")
-                except Exception:                               # noqa: BLE001
-                    _cand = ""
-                t.hold(f"lone {_side} vertical — managed as a standalone on its 15% stop; "
-                       f"waiting on: a sweep REJECTED {'below' if _want == 'put' else 'above'}"
-                       f"{_cand}")
+                t.hold(f"lone {_side} vertical — managed as a standalone on its 15% stop")
                 return "LONE"
             t.hold("no credit verticals open — nothing to manage")
             return None
@@ -562,18 +513,6 @@ class IronCondorStrategy(BaseOptionsStrategy):
             journal("condor_abandon", cause=cause, approach=a)
         except Exception as exc:
             logger.debug("condor_abandon journal failed (%s: %s)", type(exc).__name__, exc)
-
-    def _abandon_past_cutoff(self, plan, chain, current_price):
-        a = self._approach(plan, current_price)
-        logger.info("Condor: past cutoff, no fill | %s", self._approach_text(a))
-        self._journal_abandon(plan, a, "cutoff")
-        self._ledger_expire("past_cutoff")
-        self._plan = None
-
-    def reset_plan(self):
-        """Clear the session plan (end of session)."""
-        self._ledger_expire("session_end")
-        self._plan = None
 
     # ABC stub
     def generate_signal(self, *args, **kwargs) -> Optional[OptionsSignal]:

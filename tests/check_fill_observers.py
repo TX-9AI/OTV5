@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_fill_observers.py  v5.1
+tests/check_fill_observers.py  v5.2
+v5.2  2026-11-08  OTV5 r76 (RETIRE.1) — O1 drops the VOLT and ORB cases (both trades removed; EXCLUDED is the Hunt alone); the other five unchanged.
 v5.1  2026-10-31  OTV5 r68 (CFG.5) — O1's RESTING-ROW CASE LEAVES WITH THE RESTING STOP (deleted; the operator, 2026-10-31: "Resting
       stop was a study. It failed. Get this the fuck out of here"); the seven other O1 cases are unchanged, and O5 no longer
       sets config.RESTING_STOP_MODE (the name is gone). No other check changed.
@@ -106,11 +107,10 @@ def main():
 
     # ── O1 watched_stop ─────────────────────────────────────────────────────
     got = [F.watched_stop(_rec("a")), F.watched_stop(_rec("b", trail_stop=2.40)),
-           F.watched_stop(_rec("c", strategy="LiquidityHunt")), F.watched_stop(_rec("d", strategy="VOLT", trail_stop=752.9)),
-           F.watched_stop(_rec("e", strategy="ORBStrategy")), F.watched_stop(_rec("f", center_symbol="x")),
+           F.watched_stop(_rec("c", strategy="LiquidityHunt")), F.watched_stop(_rec("f", center_symbol="x")),
            F.watched_stop(_rec("g", short_symbol="y", spread_width=2.0))]
-    check("O1 watched_stop: 1.00 / trail 2.40; None for Hunt, VOLT, ORB, a fly, a spread",
-          got == [1.00, 2.40, None, None, None, None, None], f"{got}")
+    check("O1 watched_stop: 1.00 / trail 2.40; None for the Hunt, a fly, a spread (r76: VOLT / ORB removed)",
+          got == [1.00, 2.40, None, None, None], f"{got}")
 
     # ── O2 the model ────────────────────────────────────────────────────────
     T = 3.5 / (365 * 24)

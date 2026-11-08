@@ -1,5 +1,6 @@
 """
-analysis/opening_tape.py  v5.0
+analysis/opening_tape.py  v5.1
+v5.1  2026-11-08  OTV5 r76 (RETIRE.1) — print_of (added r74, no caller anywhere) is removed. Nothing else changes. The operator, 2026-11-07: "Running dead code and logging dead code activity is unnecessary drag. Yes, I want all of those things fixed."
 v5.0  2026-11-04  OTV5 r74 (ORP.3) — IS TODAY'S OPENING-RANGE TAPE COMPLETE? ONE ANSWER FOR THE RANGE AND THE FEED.
       2026-11-02 the AMZN feed was refused from 09:31 to 10:55 ET. It held the 09:30 1m and 5m bars as they stood when
       the socket dropped (H 244.43 L 243.02, 0.76M shares; the true 5m bar is H 246.39 L 242.28, 1.94M), and at
@@ -46,14 +47,3 @@ def problem(bars_1m: Dict[int, Tuple[float, float]],
     except Exception as exc:                                   # noqa: BLE001
         return "opening tape unreadable (%s)" % type(exc).__name__
 
-
-def print_of(bars_1m: Dict[int, Tuple[float, float]]) -> Optional[Tuple[float, float]]:
-    """(high, low) of the five 1m bars, or None unless all five are there."""
-    try:
-        if any(m not in bars_1m for m in OPEN_MINUTES):
-            return None
-        hi = max(float(bars_1m[m][0]) for m in OPEN_MINUTES)
-        lo = min(float(bars_1m[m][1]) for m in OPEN_MINUTES)
-        return (hi, lo) if hi > lo > 0 else None
-    except Exception:                                          # noqa: BLE001
-        return None

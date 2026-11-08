@@ -1,5 +1,6 @@
 """
-analysis/pitchfork.py  v5.0
+analysis/pitchfork.py  v5.1
+v5.1  2026-11-08  OTV5 r76 (RETIRE.1) — slope_label, build_all_variants and channel_width_at (no caller anywhere) are removed. Nothing else changes. The operator, 2026-11-07: "Running dead code and logging dead code activity is unnecessary drag. Yes, I want all of those things fixed."
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v4.2  2026-08-25  r65 EXORCISM: every mention of the retired classification
       system removed - identifiers, comments, docstrings, schema. The word
@@ -266,9 +267,6 @@ class Fork:
                 "median": self.median_at(idx),
                 "lower": self.lower_at(idx)}
 
-    def channel_width_at(self, idx: float) -> float:
-        return abs(self.upper_at(idx) - self.lower_at(idx))
-
     def is_born_by(self, idx: int) -> bool:
         """§4.4 guard. Any caller evaluating a fork before this is using
         information that did not exist."""
@@ -469,15 +467,6 @@ def _qualify(symbol, df, timeframe, atr, variant, k, now_idx,
                 filters_passed=tuple(passed))
 
 
-def build_all_variants(symbol: str, df: pd.DataFrame, timeframe: str,
-                       atr: float, **kw) -> Dict[str, Optional[Fork]]:
-    """All three variants on the same anchors, per §3.2 — the choice is settled
-    by measurement during shadow, not by the design document. Cost is three sets
-    of three linear functions."""
-    return {v: build_fork(symbol, df, timeframe, atr, variant=v, **kw)
-            for v in VARIANTS}
-
-
 # ═══════════════════════════════════════════════════════════════════════════
 #  §4.3.6 — CONTAINMENT ANCHOR (PF.2, 2026-08-11)
 # ═══════════════════════════════════════════════════════════════════════════
@@ -596,21 +585,6 @@ def slope_atr_ratio(fork) -> Optional[float]:
         return float(getattr(fork, "slope", 0.0) or 0.0) / atr
     except (TypeError, ValueError):
         return None
-
-
-def slope_label(fork) -> Optional[str]:
-    """BULLISH / BEARISH / FLAT — or None when there is NO FORK to describe.
-
-    ⚠️ THE None RETURN IS THE POINT. "No fork" is not a heading of zero.
-    """
-    r = slope_atr_ratio(fork)
-    if r is None:
-        return None
-    if r > SLOPE_FLAT_ATR:
-        return "BULLISH"
-    if r < -SLOPE_FLAT_ATR:
-        return "BEARISH"
-    return "FLAT"
 
 
 def _containment(df: pd.DataFrame, start: int, origin_idx: float,

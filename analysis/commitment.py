@@ -1,5 +1,6 @@
 """
-analysis/commitment.py  v5.0
+analysis/commitment.py  v5.1
+v5.1  2026-11-08  OTV5 r76 (RETIRE.1) — DIRECTIONAL drops the removed VOLT and ORB trades (Breakout, Runaway, Hunt). Same-day reads only, so no live trade is counted differently. The operator, 2026-11-07: "Running dead code and logging dead code activity is unnecessary drag. Yes, I want all of those things fixed."
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.0  2026-10-12  OTV4TEST r272 (COMMIT.1 / COMMIT.2 / COMMIT.3) — WE ENTER ON COMMITMENT AND EXIT ON ABANDONMENT.
       The operator, 2026-10-12 10:34 ET: "A good place to get out cannot be a good place to get in and vice versa."
@@ -47,7 +48,7 @@ from typing import Any, Dict, Optional
 logger = logging.getLogger(__name__)
 _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-DIRECTIONAL = ("Breakout", "RunawayContinuation", "LiquidityHunt", "VOLT", "ORBStrategy")
+DIRECTIONAL = ("Breakout", "RunawayContinuation", "LiquidityHunt")
 SMA_LEN = 50
 ROC_BARS = 5
 CLV_BARS = 8

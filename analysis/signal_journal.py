@@ -1,5 +1,6 @@
 """
-analysis/signal_journal.py  v5.0
+analysis/signal_journal.py  v5.1
+v5.1  2026-11-08  OTV5 r76 (RETIRE.1) — vol_ctx and macro_ctx (no caller anywhere) are removed. Nothing else changes. The operator, 2026-11-07: "Running dead code and logging dead code activity is unnecessary drag. Yes, I want all of those things fixed."
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v4.4  2026-09-25  OTV4TEST r144 — THE JOURNAL DIRECTORY IS OVERRIDABLE: OT_SIGNAL_JOURNAL_DIR.
       2026-09-25: the boot sweep's ORB checkers wrote 126 retest_check fixture events into the LIVE
@@ -228,33 +229,6 @@ def signal_ctx(signal) -> dict:
 # v4 sets, so every section it ever wrote here carried an empty vocabulary of
 # a retired concept. The call sites are gone with it; journal() takes dict
 # sections generically, so no schema change was needed to stop.
-def vol_ctx(vol_state) -> dict:
-    if vol_state is None:
-        return None
-    try:
-        return {
-            "atr":            _round(getattr(vol_state, "atr_current", 0.0), 4),
-            "bb_width":       _round(getattr(vol_state, "bb_width_current", 0.0), 6),
-            "vwap":           _round(getattr(vol_state, "vwap", 0.0), 4),
-            "price_vs_vwap":  getattr(vol_state, "price_vs_vwap", ""),
-        }
-    except Exception:
-        return None
-
-
-def macro_ctx(macro) -> dict:
-    if macro is None:
-        return None
-    try:
-        return {
-            "vix":        _round(getattr(macro, "vix", 0.0), 2),
-            "vix_band": getattr(macro, "vix_band", ""),
-            "is_fed_day": bool(getattr(macro, "is_fed_day", False)),
-        }
-    except Exception:
-        return None
-
-
 # ── v1.2 — RULESET STAMP (N.7) ────────────────────────────────────────────────
 # Every analysis that pools journal rows across dates is pooling DECISIONS FROM
 # DIFFERENT ENGINES, and until now nothing recorded which. 2026-08-07 alone

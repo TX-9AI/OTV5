@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """
-tests/check_note_label.py  v5.0
+tests/check_note_label.py  v5.1
+v5.1  2026-11-08  OTV5 r76 (RETIRE.1) — N1/N1b/N4/N4b RE-POINTED (WA 38.4): the ORB and SweepForLeg2 labels are removed with their trades, so the
+      maps are pinned to the condor's two splits and to carrying no removed label; N2, N3, N4c, N4d unchanged.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.1  2026-09-04  r246 — N4 extends to the gate reporter: it must
       resolve the same dispatch labels, keep its own spelling, and be a
@@ -39,10 +41,10 @@ def main():
     src = open(os.path.join(root, "main.py"), encoding="utf-8").read()
 
     # ══ N1 — the map still carries the two known splits ═══════════════════
-    check("N1 DISPATCH_ALIAS maps ORB -> ORBStrategy",
-          DISPATCH_ALIAS.get("ORB") == "ORBStrategy")
-    check("N1b and SweepForLeg2 -> SweepCreditSpread (r160)",
-          DISPATCH_ALIAS.get("SweepForLeg2") == "SweepCreditSpread")
+    check("N1 DISPATCH_ALIAS carries the condor's two splits (r76: ORB and SweepForLeg2 removed with their trades)",
+          DISPATCH_ALIAS.get("CondorPlan") == "IronCondorStrategy" and DISPATCH_ALIAS.get("CondorLeg") == "IronCondorStrategy")
+    check("N1b and no removed trade's label is left in it",
+          "ORB" not in DISPATCH_ALIAS and "SweepForLeg2" not in DISPATCH_ALIAS, str(DISPATCH_ALIAS))
 
     # ══ N2 — the notes writer CONSULTS it ═════════════════════════════════
     # ⚠️ AST on the call, not a grep for the name: the changelog above names
@@ -93,9 +95,8 @@ def main():
     # — r239's split in a THIRD place. r239 fixed the notes writer; the plan
     # board had it right since r147; this one was never told.
     from analysis.gate_report import DISPATCH_ALIAS as GA
-    check("N4 the reporter resolves ORB", GA.get("ORB") == "ORBStrategy")
-    check("N4b and SweepForLeg2 (r160's ruling)",
-          GA.get("SweepForLeg2") == "SweepCreditSpread")
+    check("N4 the reporter resolves the condor's labels", GA.get("CondorPlan") == "IronCondorStrategy")
+    check("N4b and carries no removed trade's label", "ORB" not in GA and "SweepForLeg2" not in GA, str(GA))
     # ⚠️ NOT A DUPLICATE — COMPOSED. `plan.DISPATCH_ALIAS` maps to the CLASS
     # NAME; this maps to the REPORTER'S OWN name, and `GexPinButterfly`
     # (lowercase x) is live at gex_pin_butterfly:271 while dispatch fires under

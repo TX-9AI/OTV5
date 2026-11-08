@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_expected_move_home.py  v5.0
+tests/check_expected_move_home.py  v5.1
+v5.1  2026-11-08  OTV5 r76 (RETIRE.1) — E5 drops the ORCS call site (strategy/orcs_plan.py removed with ORCS); the condor and readiness sites unchanged.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.1  2026-10-03  OTV4TEST r229 (EM.2) — E5 RE-POINTED: by the operator's ruling the condor, readiness and ORCS call sites
       now return expected_move_platform. E1 (the butterflies' number and its 15-minute floor) is unchanged - he ruled it stays.
@@ -179,17 +180,15 @@ def main():
                 check(f"{n_} (did not run)", False, f"{type(exc).__name__}: {exc}")
 
     try:
-        from strategy import orcs_plan as OP
         from strategy.iron_condor_strategy import IronCondorStrategy as IC
         from analysis import trade_readiness as TR
         ch, s = CH[3]
         ic = IC.__new__(IC)
         tr_fn = next(getattr(c, "_expected_move_now") for c in vars(TR).values()
                      if isinstance(c, type) and hasattr(c, "_expected_move_now"))
-        check("E5 the condor, readiness and ORCS call sites return the module's value",
+        check("E5 the condor and readiness call sites return the module's value (r76: ORCS removed)",
               ic._expected_move_from_straddle(ch, s) == (VM.expected_move_platform(ch, s)[0] or 0.0)
-              and tr_fn({"chain": ch}, s) == (VM.expected_move_platform(ch, s)[0] or 0.0) and tr_fn({}, s) == 0.0
-              and OP.implied_move is VM.expected_move_platform and OP.mark_of is VM.quote_mark)   # r229 (EM.2)
+              and tr_fn({"chain": ch}, s) == (VM.expected_move_platform(ch, s)[0] or 0.0) and tr_fn({}, s) == 0.0)
     except Exception as exc:                                  # noqa: BLE001
         check("E5 (did not run)", False, f"{type(exc).__name__}: {exc}")
 

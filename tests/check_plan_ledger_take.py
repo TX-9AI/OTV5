@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """
-tests/check_plan_ledger_take.py  v5.0
+tests/check_plan_ledger_take.py  v5.1
+v5.1  2026-11-08  OTV5 r76 (RETIRE.1) — L2 RE-POINTED (WA 38.4): the ORB trade leaves OWN_LEDGER, so L2's own-ledger plan is the condor; L4 (ORCS's
+      per-leg rows) goes with ORCS. L1, L3 and the rest unchanged.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.1  2026-10-19  OTV4TEST r303 (PSTATE.1) — L4's ORCS is DORMANT by default and a dormant plan opens no ledger row by ruling,
       so this run switches ORCS ACTIVE (OT_ORCS=1) to test the per-leg rows. check_plan_states D3 pins dormant.
@@ -18,7 +20,7 @@ v1.0  2026-10-03  OTV4TEST r211 (PLN.2) — EVERY TAKE OPENS ITS PLAN_LEDGER ROW
   L2  a plan flagged self_ledgers that does NOT open its own rows (the Runaway)
       gets its row; a strategy that DOES (the ORB, the condor) gets none here
   L3  a second take closes the first as never filled (unchanged behaviour)
-  L4  ORCS opens one row per leg and keeps the sibling's; a fill links to the
+  L4  (r76: removed with ORCS) ORCS opens one row per leg and keeps the sibling's; a fill links to the
       row opened last (the leg about to execute)
   L5  nothing is written anywhere when no store is bound
 
@@ -33,7 +35,6 @@ import types
 
 _root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, _root)
-os.environ["OT_ORCS"] = "1"   # r303: L4's subject is active (check_plan_states pins dormant)
 for _sp in _glob.glob(os.path.join(_root, "venv", "lib", "python*", "site-packages")):
     if _sp not in sys.path:                                  # r106 venv bootstrap
         sys.path.insert(1, _sp)
@@ -96,14 +97,14 @@ def main():
               len(r) == 1 and r[0][1] == "TRIGGERED" and r[0][2:4] == (747.0, 744.0) and r[0][4] is None, str(r))
 
         run = P.Plan("RunawayContinuation", ("r",), record_only=True, self_ledgers=True)
-        orb = P.Plan("ORBStrategy", ("r",), record_only=True, self_ledgers=True)
+        orb = P.Plan("IronCondorStrategy", ("r",), record_only=True, self_ledgers=True)
         P.begin_tick(1001.0)
         run.tick(750.2, "long").take(_sig("put"))
         orb.tick(750.2, "long").take(_sig("put"))
-        check("L2 the Runaway (flagged self_ledgers, opens none itself) gets its row; the ORB gets none here",
-              len(_rows(st, "RunawayContinuation")) == 1 and _rows(st, "ORBStrategy") == []
-              and "ORBStrategy" in getattr(P, "OWN_LEDGER", ()),
-              f"runaway {_rows(st, 'RunawayContinuation')}, orb {_rows(st, 'ORBStrategy')}")
+        check("L2 the Runaway (flagged self_ledgers, opens none itself) gets its row; an OWN_LEDGER plan (the condor) gets none here",
+              len(_rows(st, "RunawayContinuation")) == 1 and _rows(st, "IronCondorStrategy") == []
+              and "IronCondorStrategy" in getattr(P, "OWN_LEDGER", ()) and "ORBStrategy" not in getattr(P, "OWN_LEDGER", ()),
+              f"runaway {_rows(st, 'RunawayContinuation')}, condor {_rows(st, 'IronCondorStrategy')}")
 
         P.begin_tick(1002.0)
         t2 = pl.tick(750.4, "put"); t2.credit_spread(747.0, 744.0, 0.26); t2.take(_sig("put"))
@@ -114,23 +115,7 @@ def main():
         check("L1 (did not run)", False, f"{type(exc).__name__}: {exc}")
 
     try:
-        from strategy import orcs as S
-        from derived.plan_ledger import PlanLedger
-        P._DORMANT.pop("OpeningRangeCreditSpread", None)
-        sg = S.OpeningRangeCreditSpread()
-        P.begin_tick(1003.0)
-        sp, sc = _sig("put"), _sig("call")
-        sg.ledger_open(sp)
-        led = PlanLedger(st, sg.planner.symbol)
-        a = led.link_trade("OpeningRangeCreditSpread", "trade-put")
-        sg.ledger_open(sc)
-        b = led.link_trade("OpeningRangeCreditSpread", "trade-call")
-        r = _rows(st, "OpeningRangeCreditSpread")
-        check("L4 ORCS: a row per leg, the sibling kept; each fill links to the row opened for it",
-              len(r) == 2 and all(x[4] is None for x in r) and r[0][2:4] == (747.0, 744.0) and r[1][2:4] == (753.0, 756.0)
-              and "trade-put" in (r[0][5] or "") and "trade-call" in (r[1][5] or "") and a != b, f"{r} links {a},{b}")
-    except Exception as exc:                                  # noqa: BLE001
-        check("L4 (did not run)", False, f"{type(exc).__name__}: {exc}")
+        pass                                                   # r76: L4 (ORCS's per-leg rows) removed with ORCS
     finally:
         P.bind_store(None)
 

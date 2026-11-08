@@ -1,5 +1,7 @@
 # PLAN_SPEC.md — every strategy declares its intent BEFORE the trigger
 
+**`PLAN_SPEC.md` v5.1 · 2026-11-08 · OTV5 r76 (RETIRE.1) — §29 (the ORB trade), §31 (the sweep credit spread), §39 (the ATP butterfly) and §41 (ORCS) are REMOVED with their code; their headings stay so older references resolve. §37: the Hunt no longer grants a handoff (its only taker was the sweep); its exits are unchanged. The opening-range ENGINE that §29 described is untouched. The operator, 2026-11-07: "Running dead code and logging dead code activity is unnecessary drag. Yes, I want all of those things fixed."**
+
 **`PLAN_SPEC.md` v5.0 · 2026-10-25 · OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...**
 
 **v1.41 · 2026-10-24 · OTV4TEST r316 — BRK.15 / HUNT.13 / RENT.3: a Breakout side re-arms on every return to the range (the new-extreme re-fire rule dropped); no Hunt on a side after a losing Breakout on it that day; the 20 s re-entry gate records only (§43).**
@@ -1128,108 +1130,7 @@ v1.1 and `check_plan_prepares` v1.5 — each born red 2 at HEAD.
 
 ## 29. OTV4TEST r2 — THE ORB SPEC AND ITS PLAN CONTRACT (agreed with the operator 2026-09-08, part by part)
 
-Doctrine: **wicks are tests, closes are acceptance** — in every instance.
-
-### 29.1 The spec — what the trade IS
-
-| part | definition | owner |
-|---|---|---|
-| range | high/low of the 09:30 five-minute bar; width = high − low | feed (IL1) |
-| impulsive candle | a 1m bar that OPENS inside the range and CLOSES outside it | plan reads, freezes |
-| direction | the side it closed on | plan reads |
-| retest → FIRE | a later 1m bar whose wick touches or enters the range while its body (open AND close) stays outside | strategy confirms |
-| runaway → HAND OFF | a 1m close beyond the 50% level before any retest; ORB is finished on this break | plan reports |
-| re-entry → THESIS OVER | a 1m close back inside the range; wait for a fresh impulsive candle | plan reports |
-| window | attempts until 11:30 ET; uncapped | spec value |
-
-**Deleted from the code by ruling (this fork):**
-- the 12-bar "stale retest" re-arm (`ORB_MAX_RETEST_BARS`). While price is outside the range only three things can happen next — retest, runaway, close inside. A retest on bar 13 is a retest.
-- the ATR floor on the fire (`ORB_ATR_FLOOR_PCT`). A runaway-reachability study glued onto a setup whose own width already says what the tape is doing.
-
-### 29.2 Entry conditions — the bars, as values
-
-1. impulsive candle exists and is not invalidated (state ARMED_*)
-2. a retest bar has closed (state OPEN_*)
-3. this confirmation has not already produced an order (`order_placed_seq < confirmation_seq`)
-4. a contract exists at the target strike with a live quote
-
-Nothing else gates. No R hurdle, no geometry, no ATR, no confluence. ORB never asked permission and still does not.
-
-### 29.3 What the plan must provide — ready BEFORE the retest prints
-
-Frozen at the impulsive candle's close:
-- **stop level** = that candle's LOW (long) / HIGH (short). Body or wick, whichever is the extreme.
-- **100% target** = boundary ± width; **50% level** = boundary ± width/2 (the runaway hand-off line, not a take-profit)
-- **target strike** = 100% target rounded to the increment; **the contract** at it (nearest listed strike; tie → lower |delta|)
-- **provisional size** = floor(width / |boundary − stop|), min 1 — restated at the fill as floor(width / |fill − stop|); capped by `ORB_BUDGET_USD`
-- **floor premium** = 75% of the contract's current premium (re-priced each tick until the fire, fixed at the fill)
-
-**When.** Both candidates are complete on the first tick after the 09:30 bar
-closes (09:35:00–09:35:15 on a 15s loop) — everything but direction. The tick
-after the impulsive candle closes, the trade is fully specified: direction,
-stop, the one contract, provisional size, floor. That is at least one whole 1m
-bar before a retest can exist, so the strategy holds a ready-to-fire condition
-for the entire armed period. At the retest bar's close the strategy fires; the
-only thing computed at that instant is the size restated off the fill.
-
-**Deconfliction is the plan's.** A high break and a low break are both
-candidates until the impulsive candle prints; only one 1m bar can open inside
-the range and close outside on one side, so the candle resolves it and the
-strategy receives exactly one prepared trade or nothing. After a close back
-inside (re-entry) both sides re-open and narrow again on the next candle. The
-strategy keeps one say: whether a bar's wick touched the range with its body
-outside is the spec's event, checked against the plan's boundary. The plan
-says *what* to fire; the strategy says *now*.
-
-**Outside the window the plan observes and does not write** (operator,
-2026-09-08: *"observe only, don't write"*). Before 09:35 and after 11:30 it
-reads the engine every tick and writes one DORMANT row on the transition,
-then nothing until the state changes. main.py asks it every tick regardless;
-the per-tick NOT ASKED row that used to fill the afternoon is gone.
-
-Declared for the exit engine (the strategy's conditions; the plan states them on the row):
-- 15:45 hard close · 25% premium floor (unconditional, precedence over structure) · structure stop = 1m CLOSE through the stop level (a wick through it is a test) · theta bleed (held ≥ 20 min, gain in [10%, 20%), projected decay erases it) · below 100%: FVG trail arms +20%, % trail arms +50% ratcheting to 75% of current · past 100%: no exit, trail tightens to the nearest in-favor 1m FVG floored at 85%.
-- **Removed from the ORB path by ruling:** velocity stall. Theta bleed covers it.
-
-### 29.4 The plan row, per tick (the fork's ledger vocabulary)
-
-| row (as written) | when | carries |
-|---|---|---|
-| NO PLAN (starved) | no opening range, no chain, no break direction | the missing input by name |
-| HOLD | range set, no impulsive candle yet | both candidates priced; "Waiting on: impulsive candle" |
-| HOLD PREPARED (setup selected) | impulsive candle closed | everything in 29.3; "Waiting on: retest" |
-| DECLINE `contract` (none available) | no listed strike with a live quote at the target | the strikes searched |
-| DECLINE `order_already_placed` / `offer_working` | confirmation spent / a standing offer rests | the confirmation number |
-| DECLINE `consequence` | runaway or close inside | which consequence |
-| DORMANT `entry_window` | before 09:35 / after 11:30 | one row on the transition, then silence |
-| TAKE | every bar clears and the strategy fires | the trade line |
-
-### 29.5 The acceptance test for this rewire
-Same recorded tick → the plan-driven fire selects the contract, stop, size and floor the e955020 strategy selected. Then a live session: every fire reads back against its plan row.
-
-### 29.6 After a trade resolves — the plan decides what the strategy may fire next (operator, 2026-09-08)
-
-Precedence order, evaluated on the closed 1m bar (closes are acceptance):
-1. a close beyond the 50% has been accepted → the runaway owns the move; ORB is finished on this break
-2. past 11:30 ET → expired
-3. the last close is INSIDE the range → RE-ENTRY: the thesis is over, the impulsive candle is dead; the cycle restarts and waits for a fresh impulsive candle, which brings new geometry, a new stop, a new size
-4. otherwise (price still outside the range, 50% not accepted) → the ORIGINAL impulsive candle's thesis still stands: the plan re-issues the SAME stop, target strike and floor, re-sizes off the next fill, and the next qualifying retest fires again
-
-Mechanical consequence: the impulsive candle opened inside the range, so its stop extreme is inside the range; a structure stop is a close through it and therefore always a re-entry (case 3). Case 4 can only follow a premium exit — floor, theta bleed, trail.
-
-**No limit on qualifying setups per session** — two or three ORB trades, each with its own impulsive candle and lot size, are all valid. The only bound is the time slot.
-
-**As built (OTV4TEST r2):** `strategy/orb_plan.py` (the plan; owns the Plan row, the chain search, `select_contract` parity-pinned to `select_orb_strike`, `provisional_size` parity-pinned to `RiskManager._size_geometry`), `strategy/orb_strategy.py` v4.6 (fires on `prep.ready` with the plan's variables; ATR floor deleted), `analysis/orb_engine.py` v4.12 (stale re-arm deleted), `execution/exit_engine.py` v4.11 (velocity stall out of the ORB path; the runaway shares the evaluator and is untouched), `main.py` v4.40 (ORB asked every tick). Hypotheticals P1–P16 in `tests/check_orb_plan.py`, born red at 910ad0e on P12/P13/P0. Two values carried from the old selector and NOT ruled: the `mark > 0.05` quote floor and the lower-|delta| tie-break (`ORB.2` in the fork backlog).
-
-**§29 amendment (OTV4TEST r3):** the ORB exit list gains **REJECTED handoff** at position 2 — after the 15:45 hard close, before the 25% floor. A pool on the trade's side, beyond the entry, REJECTED on a close since entry (the fact from §30.1) exits the ORB: "handoff: pool X rejected on close — sweep owns it." The reversal is where the ORB historically gave its gains back. r193 stands: a pool *ahead* still never caps the target; a pool *rejected* after the trade is on is an event that already happened.
-
-**§29 amendment (OTV4TEST r131, the operator, 2026-09-24 — every clause his, after the 09:54-09:58 setup):**
-- **A close back into the range is a new opportunity, full stop.** A runaway (a close beyond the 50% before any retest) ends THAT break only; a 1m close back inside restarts the cycle exactly as §29.6 case 3 already says. The code had made a runaway terminal for the session (an inherited mainline rule, "runaway never re-arm") — a defect against this section, fixed.
-- **"Opens inside" means the PREVIOUS 1m close was inside** (*"It obviously opened inside because the previous candle closed inside"*), not the bar's first print.
-- **The break is a close AT or beyond the line** (*"the candle that started inside the range and closed at the very top of the range, but did not go past. It is the break"*). Inside = strictly between the range high and low; at-or-beyond = outside.
-- **The break bar is NEVER its own retest** (*"No, never. If this happens, we wait for a valid retest"*). The retest is a LATER bar whose wick touches or enters the range while its body (open AND close) stays STRICTLY outside; a bar that opens ON the line and moves away is not a retest (*"if the very next candle opens on the range and moves away that's not a retest. We still have to wait for one"*).
-- **The stop is the break candle's extreme, and it MUST sit INSIDE the opening range for the setup to be valid** (*"The stop should be inside the opening range to be a valid set up, and the sizing is based on the depth of that candles, extreme"*). An extreme exactly on the line counts as inside (the range includes its own high and low). A break bar whose extreme lies OUTSIDE the range (possible only via the previous-close origin — a bar that gaps entirely past the line) is NOT a valid impulsive candle: it does not arm, and the engine keeps waiting. Size = the depth from entry to that extreme (the r91 1-R).
-- **No tolerance at the boundary** (*"we have to keep it pegged to what the tape actually does"*). Measured the same day: the 09:57 bar closed 735.97 on the official last sale; a 1-share odd lot at 736.03 half a second later is what a non-consolidated chart plotted as the break.
+**REMOVED, OTV5 r76 (RETIRE.1), 2026-11-08** — the trade and its plan are deleted from the code; this section's contract is history (see git history before r76).
 
 ## 30. OTV4TEST r3 — THE RUNAWAY SPEC AND ITS PLAN CONTRACT (agreed with the operator 2026-09-08)
 
@@ -1283,32 +1184,7 @@ The momentum exit and the sweep entry are the same event seen from two sides. Th
 
 ## 31. OTV4TEST r5 — THE SWEEP CREDIT SPREAD SPEC AND ITS PLAN CONTRACT (agreed with the operator 2026-09-08/09)
 
-Thesis, his words: **the level holds to the close.** A previously held extreme is swept and rejected; sell a credit vertical against it, near the money, while it is rich. *"It is always a CREDIT."* *"It has to decide quickly … wait too long and it was for nothing."*
-
-### 31.1 Levels in play — from the store, never a private map
-- **3 named up, 3 named down** (as many as exist near ATH) — PDH/PDL, session extremes, the map's named pools — plus **the 1h pitchfork's tines**.
-- **Tines are moving levels** (time + slope). derived/levels v4.2 keys them on the tine (`fork1h/upper|median|lower`), reads the price at the bar from the fork the ForkEngine built, and accrues WICKED / REJECTED / ACCEPTED on the tine. **The tine rule:** a top tine can never be a floor, a bottom tine never a ceiling — upper is resistance only, lower support only, median by which side price is on.
-- **No level inside the 5-minute opening range.** Once the 09:30 bar prints, everything between `orb_low` and `orb_high` is retired `TRAVERSED` — price has been through it.
-- **Age does not matter.** A previously held extreme is enough.
-- **Spent** = the level's breach ACCEPTED (two closes beyond); a 15% stop-out on a wobble leaves it live.
-
-### 31.2 The bars, as values
-window **09:35–14:00** (opened from 13:00 to test the handoff sync; competes with ORB/runaway before 11:30 and TCS after, except as a condor's complement) · a **fresh `REJECTED`** on a level in play (within `REJECTION_FRESH_BARS` = 3 of its bar — a declared prior, recorded; a stale rejection is not a trigger, it is a note) · pierce depth inside the band (≥ 0.02%, ≤ 0.25% strict / 0.75% relaxed — a deep pierce is a weak level) · price on the profitable side · not spent · geometry · **ATR ≤ 0.20% (FEASIBLE) and the wing clears the R floor (ECONOMICAL)**.
-
-### 31.3 What the plan provides — both sides, every tick from 09:35
-For every level in play, the structure it *would* sell: **short strike = the first listed strike at/beyond THE LEVEL** (the held extreme — not the wick's extreme, which protected the trades least worth taking), wing via `search_wing` against `R_FLOOR` on bid/ask, credit, width, R, R-on-stop, stop premium, and **richness = credit ÷ width** recorded as a dial. The row: *"nearest above: PDH 712.40 — would sell 713/718C for 0.85 (R 1.10, 17% of width) — waiting on: REJECTED."* The fire is the fact printing — on a shallow pierce, the wicking bar's own close; on a deep one, the next. Nothing is computed at the fire. Size = the env default for verticals.
-
-### 31.4 Exits, in order (exit_engine v4.13)
-1. 15:45 hard close
-2. **15% of risk** — the false-start floor. *"2 minutes into a dead thesis could rack up some serious losses."*
-3. **breach accepted** — two closed 1m bars beyond the pool. The level is SPENT here and only here.
-4. **nickel close** — 0.05 per lot, literal.
-No trail, no other target: the vertical is earning from decay.
-
-### 31.5 The handoff and the condor
-The runaway (§30) and the ORB (§29) exit on the same `REJECTED` the sweep fires on; the loop runs exits before the entry attempt, so in paper the handoff is one tick. `required_side` and `_can_open_credit_spread` are untouched: the sweep may still form a condor's complementary side. The condor's own spec comes last.
-
-**As built (OTV4TEST r5):** `strategy/sweep_plan.py` v1.0, `strategy/sweep_credit_spread.py` v6.0, `derived/levels.py` v4.2, `derived/forks.py` v4.1, `derived/registry.py` v4.1, `data/derived_store.py` v4.3, `execution/exit_engine.py` v4.13, `database/trade_logger.py` v4.13, `main.py` v4.42. Hypotheticals: `check_plan_prepares` S1–S9, T4–T7; `check_level_rejection` T1–T3; `check_sweep_plan` E1–E5, X1.
+**REMOVED, OTV5 r76 (RETIRE.1), 2026-11-08** — the trade and its plan are deleted from the code; this section's contract is history (see git history before r76).
 
 ## 32. OTV4TEST r6 — THE GEX PIN BUTTERFLY SPEC AND ITS PLAN CONTRACT (agreed with the operator 2026-09-09)
 
@@ -1421,6 +1297,8 @@ As a condor's second leg the sweep must be **at least as rich (credit ÷ width) 
 
 ## 37. OTV4TEST r12 — THE LIQUIDITY HUNT AND THE HANDOFF GRANT (operator 2026-09-10)
 
+**r76 (RETIRE.1):** the HANDOFF GRANT below is removed - its only taker, the sweep credit spread, is removed. The Hunt's `hunt_target_wicked` exit is unchanged; its reason no longer says "handoff granted to the sweep".
+
 From the predecessor's own ledger: the ORB break-and-retest risks $71 to make $37; the momentum trade pays ~2:1 with the least give-back over ~300 trades. *"Under most circumstances price is going to go towards where the liquidity is."* So the hunt trades the break TOWARD the nearest liquidity level instead of waiting for a retest — and runs **beside** the ORB, never in its slot, so the two are compared on the same range, the same levels, the same fills.
 
 ### 37.1 The spec
@@ -1457,27 +1335,7 @@ Found on mainline's warehouse and verified here by reading: **(1) pools were wri
 
 ## 39. OTV4TEST r26 — THE ATP (AT-THE-PIN) BUTTERFLY SPEC AND ITS PLAN CONTRACT (operator 2026-09-13)
 
-*"That is a different trade. Code it and allow one butterfly or the other, whichever plan produces a viable trade 1st can take it. Call it something different, because traveling to the pin is a different thesis than building it on an already sideways tape."* He named it the ATP butterfly.
-
-### 39.1 The spec
-| part | definition |
-|---|---|
-| thesis | price already SITS on the pin on a settled tape; the fly pays as the wings die into the close. §32's trade buys for price to TRAVEL to the pin |
-| slot | 12:00–15:00, the same slot as §32's pin fly. ⚠️ r178 wrote "11:30–15:00 for the ATP fly" here from the admission table; the plan itself used the pin fly's slot and stayed DORMANT until 12:00 (measured 2026-09-30), so that was wrong in effect. r179 moves the table to 12:00 by ruling (*"12:00 is fine"*) — one answer in both places. The two flies do NOT compete for a slot: each has its own quota and both may fire (the operator, 2026-09-30: *"Both flys are not competing for a spot. They're both allowed to fire if conditions are met"*) |
-| regime | PINNING with a pin strike |
-| pin strength | **Two routes since r179 (BFLY.9).** **Route A:** PINNING and concentration ≥ **0.15** (`ATP_BFLY_PIN_CONC_MIN`; §32's pin fly keeps 0.25 through `pin_strength()`, which this fly no longer calls). **Route B, only when A fails:** a regime that is NOT TRENDING (PINNING or NEUTRAL; an unknown regime fails) and the pin within **±0.05 × EM** of today's VWAP (`ATP_BFLY_VWAP_STRICT_EM_FRAC`, half the r25 band; `anchors.vwap_now()`, which fails closed on a missing or stale VWAP). The route that admitted a fly is named in its plan row. Before r179 it was §32's rule: concentration ≥ 0.25, or the pin within ±0.10 × EM of VWAP (r25). The operator, 2026-09-30: *"The ATP fly should be accepting the plan for the EXACT reason GEX pin fly is declining (price too close to pin)"*, *"Drop the ATP to .19"*, then *"Actually .15 sounds better"*, and *"The purpose of the ATP (at the pin) is for when price has already negated our move to the pin play."* Then: *"I mean, if we can't get a qualified ATP on the .15 floor, allow it thru VWAP, but it needs to be strict if accepted on VWAP instead of EM"*; *"Allow a non-pinning ATP if it qualifies on STRICT VWAP & NOT TRENDING"*; yes to NEUTRAL and to ±0.05 × EM; *"Route B for VWAP if A fails."* ⚠️ Why route B needs a non-PINNING regime: `data/gex_data.py` calls the regime PINNING only at concentration ≥ 0.15, so whenever route A's floor fails the regime is no longer PINNING either |
-| at the pin | \|spot − pin\| ≤ `ATP_BFLY_AT_PIN_EM_FRAC` ⟨PRIOR 0.30⟩ × EM — the complement of §32's 0.30–1.00 reach, so on one tick at most one butterfly can be viable |
-| settled | the last `ATP_BFLY_SETTLED_BARS` ⟨PRIOR 15⟩ CLOSED 1m bars all closed inside that band — read from the candles, never counted in memory (DEC.1) |
-| structure | both sides priced; symmetric listed wings, apex exactly on the pin; spot must be INSIDE the tent (width > \|spot − pin\|); R ≥ R_FLOOR; the 40% stop clears the fly's own three-leg spread by STOP_VS_SPREAD_MIN; the pick is the MAX R |
-| exits | §32's, by construction: the 40% floor and the 15:45 flatten, no target (`strategy/management.py` `BUTTERFLIES`) |
-| one per session | ~~main.py's trades.db cap counts EITHER butterfly name before asking either — a butterfly of one kind ends the day for both.~~ **SUPERSEDED at r85 (2026-09-21) and corrected here at r178:** one of EACH type per session — each butterfly counts its own name in trades.db, and both may fire on one day (the operator, 2026-09-30: *"Only one of each TYPE per session, not one butterfly per session"*). No played-pin set and no tick counter |
-| daily loss cap | **EXEMPT (r178, CAP.2).** The operator, 2026-09-30: *"Allow both flies to fire even if we've hit the cap."* At the cap every other strategy is refused and both butterflies are still asked, inside their own window and quota (`AdmissionRule.cap_exempt`; the same holds for §32's pin butterfly). Their results still count in the day's realized net |
-| starved | no price, no GEX, open interest summing to zero (§32.2's park — it matters more here, since a gamma² "pin" sits at spot), no chain |
-
-### 39.2 Measured before building
-12:00–15:00 on this box: Wed 09-09 and Thu 09-10 — no qualifying minute (GEX read TRENDING). Fri 09-11 — 36 qualifying minutes, first 12:28 (pin 715, spot 716.01, EM 5.21, conc 0.26). On Friday's real 12:28 quotes the structure is the 713/715/717 PUT fly, debit 0.56, R 2.57, its stop 5.6× its spread; the 1-wide leaves spot outside the tent and the call fly fails its spread at 1.6×. Worst mid to the flatten 0.38 at 13:25 against a 0.336 stop — it survives by four cents — and worth 1.135 at 15:44. One day is a mechanism, not a rule; the priors are recorded on every row to be fitted.
-
-**As built (OTV4TEST r26):** `strategy/atp_butterfly_plan.py` v1.0 (the plan), `strategy/atp_butterfly.py` v1.0 (the strategy), `strategy/gex_pin_butterfly.py` v5.4 (`pin_strength` shared), `strategy/management.py` v2.4, `main.py` v4.49, `config.py` v4.22, `query.py` v4.12. Hypotheticals: `check_atp_butterfly` P1–P9, M1–M3, S1–S6.
+**REMOVED, OTV5 r76 (RETIRE.1), 2026-11-08** — the trade and its plan are deleted from the code; this section's contract is history (see git history before r76).
 
 ## 40. OTV4TEST r29 — THE LEVELS ARE BUILT FROM THE TAPE (operator 2026-09-14)
 
@@ -1506,129 +1364,7 @@ At 09:10 ET 619 of 624 ledger rows were live, back to 09-08: three `fork1h/*` ra
 
 ## 41. OTV4TEST r203/r204 — ORCS, THE OPENING RANGE CREDIT SPREAD: SPEC, TRIGGER COMPONENTS, PRELIMINARY DIALS (operator 2026-10-03)
 
-*"Build this spec, use it to draft the strategy's trigger components Incorporating derivative informers if it enhances the edge further. After the trigger components are selected, set preliminary dials, then build the plan that searches the chain for our trigger components' location on the chain."* And on fills: *"we get better than mark or we don't trade it."*
-
-**STATE (r204): a PAPER trade.** *"No, keep going. I want to paper trade it Monday. Retire the sweep & TCS. Call this new one the opening range credit spread ORCS."* r203 built it as a record-only plan under the name OpenPremiumSpread; r204 renamed it, gave it a strategy, an entry window and an admission rule (§41.7). Live mode is refused in code until he rules it live. The name is his; the trade does not read the opening range - the 10-03 study of the range's far side found the break direction was not the edge.
-
-### 41.1 The spec — what the trade IS
-| part | definition |
-|---|---|
-| the idea | far out-of-the-money 0DTE premium sold shortly after the open decays to nothing most days. No level, no break, no direction: the 10-03 studies found the trigger adds nothing (a spread behind a rejected level, or on the far side of the opening range, earned the same as its control) |
-| instrument | QQQ, the 0DTE chain only. Stocks failed the resting-order fill model inside 1% and have 11 priced days |
-| structure | one put credit spread and one call credit spread, each on its own; together they are an iron condor entered as two orders |
-| entry | the first tick at or after 09:45 ET on which a side's gates pass; nothing after 10:30 |
-| fill | a limit one cent BETTER than the mark, resting ten minutes; unfilled is no trade (his ruling) |
-| exit | held to the scheduled credit close. No premium stop and no stop at the short strike - both were measured and both made it worse |
-| size | max risk per spread = width minus credit; the operator's sizing dial applies when it becomes a trade |
-
-### 41.2 The trigger components — and where each is found on the chain
-| component | rule | measured (QQQ 0DTE, 28 sessions 08-24..10-02, mid fills, R by half) |
-|---|---|---|
-| the clock | 09:45 to 10:30 ET | 09:45 beat 09:36 (a -1,989 day at 09:36); every cell positive to 10:30; gone from 11:00 |
-| the short strike | the nearest OTM strike with delta at or under 0.15 | delta 0.15: 96% winners, R +0.036 / +0.029. Delta 0.20: R +0.050 / +0.009 with a -1,926 day - refused |
-| the implied-move floor | and at least 1.25 implied moves from spot (implied move = the ATM straddle's mark) | 1.25x: R +0.042 / +0.031; 0.75x: R +0.068 / +0.020 with a -1,839 day |
-| the long strike | the listed strike nearest 1% of spot further out | what every study priced |
-| the credit | at the mark, at least 0.10 | below a dime one cent of slip is over 10% of the credit |
-| 0DTE | the chain expires today | 1-4 DTE closed same day was the worst cell in every study |
-
-### 41.3 Informers — tested, and what survived
-Six were tested on the 28 priced sessions and four again on payout over all 56 QQQ sessions from 07-08 (X8). **One agreed on both samples: the overnight gap** - large-gap days paid out more. It is a gate (`ORCS_MAX_GAP_PCT`). Richness (implied over realized), opening-range width and put-versus-call each looked better on the priced sessions and did NOT agree on the 56-day sample; they are recorded on every row and gate nothing. The side of the opening drive and the share of the implied move already spent did not agree even on the priced sample. Six informers on 28 days: one passing by chance is expected, so the gap gate is preliminary like every dial here. Dealer gamma was not retested: the 09-2x study found it does not move trade-scale outcomes.
-
-### 41.4 The preliminary dials (`config.py`, `ORCS_*`)
-Window `ENTRY_WINDOWS["OpeningRangeCreditSpread"]` 09:45-10:30 · `ORCS_SHORT_DELTA_MAX` 0.15 · `ORCS_MIN_IM_MULT` 1.25 · `ORCS_WING_PCT` 0.01 · `ORCS_MIN_CREDIT` 0.10 · `ORCS_MAX_GAP_PCT` 0.90 · `ORCS_LIMIT_IMPROVE` 0.01 · `ORCS_REST_MIN` 10 · `OT_ORCS=0` parks the TRADE (the plan keeps recording). (r203 named these `OPS_*`.)
-
-### 41.5 What the plan writes, every tick of the window
-Per side: the located short and long strikes, the short's delta, its distance in percent and in implied moves, the width, the credit at the mark and at bid/ask. On the first ready tick the OFFER is frozen (strikes, limit, time) and then watched for ten minutes: `offer_mark` and `offer_natural` are the frozen spread's value now, `offer_filled_mark` records the mark reaching the limit, `offer_filled_natural` the bid/ask reaching it, `offer_expired` ten minutes passing unfilled. A restart inside the window re-reads the offer from these rows. The verdict is HOLD when a side is ready, TAKE on the tick an offer fills, DECLINE naming the gate otherwise, DORMANT outside the window. A new offer is frozen only while a full ten-minute rest still fits inside the window (the last at 10:20).
-
-### 41.6 What is NOT proven, and what answers it
-The 28 priced sessions paid out about a third of what the 28 before them did; against all 56, credit at the mark exceeds the payout only thinly (3.2% of width against 2.6% at 0.75% out). This is selling tail risk and the sample has no tail. The forward record answers three things the history could not: the credit on rough days, whether one cent better than the mark fills (with real bid and ask), and the outcome at the close. **Review after 20 recorded sessions; the frozen terms are this section.**
-
-**As built (OTV4TEST r203):** `strategy/open_premium_plan.py` v1.0, `config.py` v4.50, `main.py` v4.81 (`_ask_open_premium`, record-only, both loop branches). Gate `tests/check_open_premium_plan.py` O1-O8. Studies: `/var/tmp/levels_1003/RESULT.md` (X4-X8), terms pre-registered in `PREREG.md` beside it.
-
-### 41.7 The trade, as built (r204)
-| part | as built |
-|---|---|
-| entry | `strategy/orcs.py` signals one credit vertical per offer that FILLED on this tick - the frozen spread's mark reached the limit - priced AT THE LIMIT (one cent better than the mark at the freeze). An offer that does not fill in ten minutes is no trade |
-| one per side | a side with an open ORCS leg, or a session that has entered two, signals nothing (read from trades.db; fails closed) |
-| admission | 09:45-10:30, two of the type, blocks nothing, NOT exempt from the daily cap; asked inside the entry dispatch, so the entry gate and the session guard apply |
-| execution | `_execute_condor_leg`, booked as `OpeningRangeCreditSpread`, `stop_premium` 0. LIVE IS REFUSED before any order is built |
-| size | the vertical rule: risk-per-trade over (width minus credit). At the box's 1,050 and a 7-wide QQQ spread that is ONE contract a side |
-| exit | the scheduled end-of-day close and nothing else (`exit_engine._evaluate_condor_leg` returns HOLD first). No stop, no nickel close, no breach rule |
-| the condor machinery | an ORCS put and call open together are NOT a formed condor: the roll, the tent, the management row and the pairing helpers all skip ORCS legs. Defending it by rolling is unmeasured and is the operator's to ask for |
-
-**Retired with it (r204):** the SweepCreditSpread (§31) and the TrendCreditSpread (§34). `main._safe_strategy` does not ask them; the board shows `retired`. `OT_SWEEP_CS=1` / `OT_TCS_ACTIVE=1` restore each exactly as it was. Their record on this box: 11 sweep trades, 11 losses (-1,053); the TCS never fired.
-
-**As built (OTV4TEST r204):** `strategy/orcs_plan.py` v1.1, `strategy/orcs.py` v1.0, `config.py` v4.51, `main.py` v4.82, `execution/exit_engine.py` v4.30, `execution/position_manager.py` v5.12, `strategy/condor_roll.py` v4.9, `strategy/iron_condor_strategy.py` v4.13. Gate `tests/check_orcs.py` O1-O8, T1-T7.
-
-### 41.8 r206 — THE ENTRY LADDER GOVERNS THE ENTRY (operator 2026-10-03; supersedes the offer in §41.1, §41.4, §41.5, §41.7)
-*"No, we have a ladder for entries. THAT has to govern our entry. 'One cent better' is not even a valid increment on most contracts."*
-
-| part | as built |
-|---|---|
-| what the plan does | locates both spreads every tick 09:45-10:30 and marks a side READY at its MARK credit when its gates pass. It prices nothing else and freezes nothing |
-| what prices the order | the house credit entry, `_execute_condor_leg`: PAPER books `limit_ladder.paper_fill_credit(mark)`; LIVE (still refused for ORCS) would walk the entry ladder down from the best credit and stop at the mark, on the contract's valid increments |
-| re-signal | a ready side is signalled every tick until trades.db shows it entered - the ladder's own doctrine: an entry that does not fill is simply not taken and the strategy re-signals |
-| removed | `ORCS_LIMIT_IMPROVE`, `ORCS_REST_MIN`, every `*_offer_*` check, the restart read of the offer, the 10:20 last-offer cutoff (the window is the whole 09:45-10:30) |
-| on the row | `put_taken` / `call_taken` when a side is already entered; the verdict is TAKE on a tick with a ready side |
-
-**As built (OTV4TEST r206):** `strategy/orcs_plan.py` v1.2, `strategy/orcs.py` v1.1, `config.py` v4.52, `main.py` v4.83 (wording). Gate `tests/check_orcs.py` v1.2.
-
-### 41.9 r207 — THE SHAPE: DELTA 0.20, A 3-DOLLAR WING (operator 2026-10-03; supersedes the shape in §41.2 and §41.4)
-*"why the fuck would I risk $1000 for $25???"* - then *"I want the worst day adjusted for $1050, so use the delta and wing based on that"* and *"To achieve an over 80% win rate."*
-
-The 1%-of-spot wing was a constant of the study harness, never varied; with delta 0.15 it made the credit about 4% of the risk (one contract, about 28 collected on about 670). X9 priced 25 shapes (delta 0.15-0.50 x wings 1, 2, 3, 5 dollars and 1%); X10 sized each at 1,050 a side and replayed all 56 QQQ sessions from 07-08 with the worst day taken as the full loss.
-
-| | delta 0.15 / 1% (r203-r206) | **delta 0.20 / 3 dollars (r207)** |
-|---|---|---|
-| contracts a side at 1,050 | 1 | 3 |
-| collected a day, both sides | about 52 | about 156 |
-| max-loss day (one side full width) | about -652 | about -744 |
-| winning days to repay one max-loss day | 12.6 | 4.8 |
-| winning DAYS, 56 sessions | 86% | 80.4% |
-| winning trades, 28 priced sessions | 96% | 93% |
-| 56-day replay total | +205 | +1,250 |
-
-**The dials:** `ORCS_SHORT_DELTA_MAX` 0.20 · `ORCS_WING_USD` 3.0 (replaces `ORCS_WING_PCT`) · `ORCS_MIN_IM_MULT` 1.0 (1.25 would push a 0.20-delta strike further out than was measured) · the rest unchanged.
-
-**What the replay also said, and it is not good news:** NO shape of the 25 was positive in both halves of the 56 sessions. Every one LOST from 07-08 to 08-20 (this shape: -1,962) and won after (+3,212). The replay uses the calm weeks' average credit in the rough weeks, where credits were probably higher, so the first half is understated - by an amount nobody has measured. 80.4% is 45 winning days of 56: one more losing day and it is under his bar. Delta 0.15 with a 2-dollar wing is the safer alternative (86% of days, about 131 a day, max-loss day about -869, 56-day total +830).
-
-**As built (OTV4TEST r207):** `config.py` v4.53, `strategy/orcs_plan.py` v1.3, `tests/check_orcs.py` v1.3. Studies X9, X10 in `/var/tmp/levels_1003/` (terms in PREREG.md; my frozen choice rule for X10 selected NO shape - this one was chosen on his two stated criteria).
-
-### 41.10 r229 — THE IMPLIED MOVE IS THE PLATFORM'S EXPECTED MOVE (operator 2026-10-03; supersedes "the ATM straddle's mark" in §41.2 and §41.9)
-The operator, with a screenshot of the tastytrade chain (QQQ 749.53, "IVx: 12.1% (± 5.25)"): *"Which expected move? Use the one that's built into the tasty trade platform."* That number is **60% of the ATM straddle + 30% of the first out-of-the-money strangle + 10% of the second**, each leg at its mark (`analysis/volatility_measures.expected_move_platform`). All six legs must be quoted or there is no number, and with no number ORCS does not trade. The short strike's distance floor is still `ORCS_MIN_IM_MULT` (1.0) x this number; the delta cap is unchanged.
-**Measured before landing** (the feed's own quotes, 10-01 and 10-02, 09:45 / 10:00 / 10:29): the platform number was 0.87-0.91 of the straddle ORCS read before, so the floor sits 9-13% nearer spot. The straddle is still recorded on every row (`atm_straddle`).
-**The butterflies do NOT read it.** Their session formula ran 3.0-3.4x the platform's on the same two days (7.60 / 5.92 / 4.61 against 2.29 / 1.75 / 1.34 at 12:00 / 13:00 / 14:00 on 10-02): the same fractions on the platform's number would have refused every pin butterfly taken. Shown that, he ruled: *"Don't mess with the butterfly EV then"*. The condor and the log-only readiness engine read the platform number; the Hunt records it (`em_platform`).
-
-### 41.11 r230 — DEFENDED BY THE CONDOR LOGIC, VERBATIM (operator 2026-10-03; supersedes "held to the close, no stop" in §41.1, §41.7 and §41.9)
-The operator: *"On rolling/defending the ORCS, adopt the condor logic verbatim."* Nothing was written for ORCS: its four exemptions from the condor's code were removed, so an ORCS leg and a condor leg now get the same decision from the same lines (`exit_engine._evaluate_condor_leg`, `condor_roll`, `IronCondorStrategy.manage`, the booking in `main._execute_condor_leg`). What that logic is, as it runs:
-| state | what happens |
-|---|---|
-| both sides open | no premium stop on either leg (suppressed while the sibling is open). Neither short tested: hold |
-| a short is tested | the UNTESTED side is rolled toward price, but only if the roll makes the tested side risk-free: banked credit + the roll's net credit must reach the tested spread's width. Otherwise it holds; the management row says so |
-| after a roll | final form: no further roll; the floor (basis + 15%) is the exit |
-| one side only | a lone leg stops at credit + 15% of its risk (width - credit) |
-| either leg at a nickel | closed (0.05) |
-| the close | section 0 of TRADES: short-leg positions rest from 15:45, cross at 15:55 |
-**What this changes against §41.1, said plainly.** (1) A leg that decays to a nickel is closed, and from that moment the OTHER leg is lone and its stop is armed. On the r207 shape (a 3-dollar wing, about 0.25 credit) that stop is about 0.41 above the credit, roughly $125 a side at 3 contracts. (2) A risk-free roll needs cumulative credit of 3.00 on a pair that banks about 0.50, so on this shape the roll will rarely if ever clear; a tested pair with both sides open is held. (3) The 10-03 studies (X7-X10) measured hold-to-close with no stop; this is not that trade any more and those numbers do not describe it. The paper weeks to ~10-30 are the measurement.
-`_open_credit_legs` / `_open_credit_sides` still leave ORCS out: they decide which OTHER entry may pair with an open leg (the sweep and the TCS, both retired).
-
-
-### 41.12 r234 — THE WING AND THE CREDIT FLOOR SCALE WITH THE BOX'S CONTRACT PRICE (operator 2026-10-04; extends §41.9 to other instruments)
-*"SPX cap, ramp & wing search CANNOT be the same as QQQ. The math doesn't work. It needs to scale with the contract price differences."* - and, on the measured proposal, *"Perfect."*
-**Measured** (mainline chain_snapshots, 14 sessions 09-14..10-02, 09:45 / 10:00 / 10:29; `/var/tmp/spx_scale_1004`): SPX ÷ QQQ platform expected move median **7.57** (6.2-9.1 by day, rising 7.34 -> 7.78 through the morning), ATM straddle 7.30, the ~0.20-delta short 7.4-7.7. Spot (10.44) overstates it - SPX implied volatility is lower. SPX strikes are 5 apart near the money, QQQ's 1.
-| dial | QQQ (unit, unchanged) | SPX (x7.5) | where |
-|---|---|---|---|
-| ORCS wing target | 3.00 | 22.50 -> the listed strike nearest it, 20 (a 20/25 tie goes to the NARROWER wing, both sides) | `config.CONTRACT_SCALE` x `ORCS_WING_USD` |
-| ORCS minimum credit | 0.10 | 0.75 | x `ORCS_MIN_CREDIT` |
-| risk / ramp MIN, ramp TOP, daily cap | the box's own dollars | the box's own dollars, NOT scaled: ~~8,250 / 37,500 / 11,250 (x7.5)~~ **CORRECTED r235** - r234 recorded the x7.5 dollars as ruled; they were a proposal, and the operator, shown mainline SPX (OT_RISK_USD 2,100: ~$1,840 deployed a Runaway trade, ~$400 real loss at the 20% stop, avg win $1,017, 2.56:1, +$11,945 over 34 trades), ruled *"Maybe $2500/5000/3000?"* and *"I don't think we need to get crazy with our sizing to make money"* | configure.sh on that box |
-`CONTRACT_SCALE` is SPX 7.5, every other instrument 1.0; `OT_CONTRACT_SCALE` overrides (anything not a positive number is ignored and said). The Service mode line ends with it. Already scale-free and untouched: the butterflies (debit ratio, expected-move wings), the condor defence (percent of credit), and every trade that sizes off the risk dollars. **Not proven:** no ORCS shape has been priced on SPX history; the paper weeks are the measurement, as on QQQ. Re-measured every Saturday (BACKLOG SCALE.1, SAT-RUN).
-**As built (OTV4TEST r234):** `config.py` v4.57, `strategy/orcs_plan.py` v1.8, `main.py` v4.89. Gate `tests/check_contract_scale.py` S1-S6.
-
-
-### 41.13 r249 — RETIRED (operator 2026-10-04)
-The operator, 2026-10-04 20:12 ET: "Retire it on this repo." ORCS_ENABLED now defaults OFF; OT_ORCS=1 restores the trade (paper only, as before). The plan (strategy/orcs_plan) keeps locating and recording both sides every tick of its window, so the forward data does not stop. **Superseded r303 (2026-10-19):** with the trade off the plan is DORMANT and records nothing (the operator: "1. Yes" to including ORCS); OT_ORCS=log records it without trading (§42).
-**Why.** Measured that evening, read-only, on 50 SPX sessions (07-24..10-02), every study's terms hashed before results: (1) the r207 shape scaled x7.5 (0.20 delta, 20 wide, condor defence) made ~+$20/day net with 36% losing days - no shape in the delta x wing x EM-floor grid passed; holding beat the condor defence in almost every cell (/var/tmp/orcs_spx_1004). (2) his EM-extremes, tight-wing, untested-roll shape: none passed, losing days 28-68% (/var/tmp/orcs_em_1005). (3) his 2-SD open condor, one-strike wings, roll: -$52/day held, -$37 rolled (/var/tmp/orcs_2sd_1005). In every study a NATURAL fill turned nearly every cell negative: the edge sits inside the bid-ask spread. On QQQ (10-03, X9/X10) the r207 shape made ~+$22/day and lost in the first half of its history. His words, 19:59 ET: "Why the fuck is it spec'd to make less than pocket change on a $1000 at risk?"
-**As built (OTV4TEST r249):** `config.py` v4.58; `docs/TRADES.md` §0; gate `tests/check_orcs.py` v1.6 O8 re-pointed (the default is OFF, still read from config).
+**REMOVED, OTV5 r76 (RETIRE.1), 2026-11-08** — the trade and its plan are deleted from the code; this section's contract is history (see git history before r76).
 
 ## 42. OTV4TEST r303 — PLAN STATES: ACTIVE, LOG ONLY, DORMANT; HOUR- OR CONDITION-GATED (operator 2026-10-19)
 The operator, 2026-10-19 08:34 ET: "Going forward, I want all the trades that are turned off to stop writing to the plan

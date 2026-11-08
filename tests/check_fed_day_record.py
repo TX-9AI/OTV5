@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """
-tests/check_fed_day_record.py  v5.0
+tests/check_fed_day_record.py  v5.1
+v5.1  2026-11-08  OTV5 r76 (RETIRE.1) — F7 RE-POINTED (WA 38.4): the ORB trade is removed, so F7 pins FED_DAY_ORB_BOOST gone with it and reads the five live
+      strategies for a Fed-day block that assigns (none may: fed days change no behaviour).
 v5.0  2026-10-25  (MEAS.3) — THE FED-DAY FLAG IS RECORDED CORRECTLY, AND CHANGES NO TRADING.
       data/macro_data._check_fed_day had always returned False: the live calendar sends ISO dates
       ("2026-09-16T14:00:00-04:00") where the parser wanted "Jun 21, 2026", and it read `currency` where the
@@ -144,17 +146,19 @@ def main():
     # F7 — the ORB boost is gone, and the Fed-day block only records
     try:
         import config as C
-        import strategy.orb_strategy as O
-        gone = not hasattr(C, "FED_DAY_ORB_BOOST") and not hasattr(O, "FED_DAY_ORB_BOOST")
-        tree = ast.parse(open(O.__file__, encoding="utf-8").read())
+        import importlib.util as _ilu
+        gone = not hasattr(C, "FED_DAY_ORB_BOOST") and __import__("retired_names").retired("strategy.orb_strategy")
         writes = []
-        for n in ast.walk(tree):
-            if isinstance(n, ast.If) and "is_fed_day" in ast.unparse(n.test):
-                for b in n.body:
-                    for x in ast.walk(b):
-                        if isinstance(x, (ast.Assign, ast.AugAssign, ast.AnnAssign)):
-                            writes.append(ast.unparse(x))
-        check("F7 FED_DAY_ORB_BOOST is gone and ORB's Fed-day block assigns nothing",
+        for _f in ("strategy/runaway_continuation.py", "strategy/breakout.py", "strategy/liquidity_hunt.py",
+                   "strategy/park.py", "strategy/gex_pin_butterfly.py"):
+            tree = ast.parse(open(os.path.join(_root, _f), encoding="utf-8").read())
+            for n in ast.walk(tree):
+                if isinstance(n, ast.If) and "is_fed_day" in ast.unparse(n.test):
+                    for b in n.body:
+                        for x in ast.walk(b):
+                            if isinstance(x, (ast.Assign, ast.AugAssign, ast.AnnAssign)):
+                                writes.append(f"{_f}: {ast.unparse(x)}")
+        check("F7 FED_DAY_ORB_BOOST is gone (with the ORB trade, r76) and no live strategy's Fed-day block assigns anything",
               gone and not writes, f"boost_present={not gone} writes={writes!r}")
     except Exception as exc:                                  # noqa: BLE001
         check("F7 (did not run)", False, f"{type(exc).__name__}: {exc}")

@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """
-tests/check_park_late_shadow.py  v5.2
+tests/check_park_late_shadow.py  v5.3
+v5.3  2026-11-08  OTV5 r76 (RETIRE.1) — B1's _evaluate_route pin RE-POINTED (WA section 38.4): ad64d87edd0b44fa -> 1855505efa2e697f,
+      the ORBStrategy and VOLT arms removed with those trades (the diff is those two arms and nothing else); _evaluate_park,
+      _park_cf and _decay_read keep their 0e4d240 hashes and D1 is unchanged.
 v5.2  2026-10-31  OTV5 r68 (CFG.5) — OT_RESTING_STOP_STATE leaves the scratch env: the resting stop and its state file are deleted
       (the operator, 2026-10-31: "Resting stop was a study. It failed. Get this the fuck out of here"). No check changed.
 v5.1  2026-10-31  OTV5 r67 (PARC.4) — B1's _evaluate_route pin RE-POINTED (WA section 38.4): 83462494db328bc4 ->
@@ -170,7 +173,7 @@ check("C1 config: on / (14, 30) / 0.50 / 0.20 by default; OT_PARK_LATE_SHADOW=0 
 
 # ── B byte-for-byte ──────────────────────────────────────────────────────────────────────────────────
 PINNED = {"_evaluate_park": "11f87bb5bfe16b82", "_park_cf": "af8d04371db47fb8",
-          "_decay_read": "e2379a457c018f91", "_evaluate_route": "ad64d87edd0b44fa"}       # 0e4d240; route: r67 (PARC arm removed)
+          "_decay_read": "e2379a457c018f91", "_evaluate_route": "1855505efa2e697f"}       # 0e4d240; route: r67 (PARC arm removed), r76 (ORB / VOLT arms removed)
 got = {n: h16(getattr(XE.ExitEngine, n)) for n in PINNED}
 check("B1 PARK's exits, the decay read and the route are byte-for-byte 0e4d240's; PARK stays decay-exempt; PARK knobs",
       got == PINNED and tuple(config.DECAY_STOP_EXEMPT) == ("RunawayContinuation", "PARK")

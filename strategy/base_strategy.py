@@ -1,5 +1,6 @@
 """
-strategy/base_strategy.py  v5.0
+strategy/base_strategy.py  v5.1
+v5.1  2026-11-08  OTV5 r76 (RETIRE.1) — is_orb (the removed trade's identity) is removed; sizes_on_structure reads sizes_on_geometry alone (Breakout), as it already did for every live signal. The operator, 2026-11-07: "Running dead code and logging dead code activity is unnecessary drag. Yes, I want all of those things fixed."
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v4.6  2026-09-22  OTV4TEST r91 — THE OPERATOR'S 1-R, RESTORED. `stop_premium()`
       returns the IMPULSIVE CANDLE'S EXTREME converted through delta for the
@@ -195,10 +196,6 @@ class OptionsSignal:
     condor_trigger_source: str = ""
 
     @property
-    def is_orb(self) -> bool:
-        return self.strategy_name == "ORBStrategy"
-
-    @property
     def is_sweep(self) -> bool:
         return self.strategy_name == "SweepReversal"
 
@@ -268,15 +265,14 @@ class OptionsSignal:
         self.is_credit_vertical = bool(v)
 
     def sizes_on_structure(self) -> bool:
-        """True for the geometry-sized debits: ORB and Breakout.
+        """True for the geometry-sized debits (Breakout).
 
         ⚠️ THE SAME TEST `main.py` USES TO SUPPLY THE GEOMETRY INPUTS, and it
         is deliberately the same shape rather than a second list that later
         rots (§23). A strategy that opts into geometry sizing opts into the
         structural stop with it — the two are one decision, not two.
         """
-        return bool(getattr(self, "strategy_name", "") == "ORBStrategy"
-                    or getattr(self, "sizes_on_geometry", False))
+        return bool(getattr(self, "sizes_on_geometry", False))
 
     def structural_stop_premium(self) -> Optional[float]:
         """The impulsive candle's extreme, converted to PREMIUM. None if unusable.

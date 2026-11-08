@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """
-tests/check_structure_stop_ramp.py  v5.0
+tests/check_structure_stop_ramp.py  v5.1
+v5.1  2026-11-08  OTV5 r76 (RETIRE.1) — RE-POINTED (WA 38.4): the ORB trade, its default fixture, is removed, so the fixture is a structure-sized
+      Breakout; R9 pins STRUCTURE_TRAIL_STRATEGIES to Breakout alone; R10 uses the Hunt and Runaway (VOLT and the sweep are
+      removed). Every arithmetic expectation is unchanged.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.1 2026-09-22  OTV4TEST r93 — N1-N5 pin the noise floor: refusal inside, trade
       outside, the boundary itself, unmeasurable-disarms, degenerate-unchanged,
@@ -105,7 +108,8 @@ RM = get_risk_manager()
 WIDTH = 1.02            # the real 2026-09-21 opening range
 
 
-def _sig(dist, delta, prem, strategy="ORBStrategy", breakout=False):
+def _sig(dist, delta, prem, strategy="Breakout", breakout=True):   # r76: the ORB trade is removed; Breakout is the
+    # structure-sized debit (sizes_on_geometry), so the default fixture is a Breakout
     s = OptionsSignal(strategy_name=strategy, underlying_entry=733.0,
                       underlying_stop=733.0 - dist, entry_delta=delta,
                       entry_premium=prem)
@@ -281,10 +285,11 @@ check("R8e and 25% behind the peak is what it locks",
 # PERMISSIVELY. This pins the trail's list against the strategies that actually
 # declare structural sizing, so the next one cannot be added to one and not the
 # other.
-check("R9 every structure-sized strategy is in STRUCTURE_TRAIL_STRATEGIES",
+check("R9 every structure-sized strategy is in STRUCTURE_TRAIL_STRATEGIES (r76: Breakout alone)",
       _ob.sizes_on_structure() and _bk.sizes_on_structure()
-      and _is_structure_trail({"strategy": "ORBStrategy"})
-      and _is_structure_trail({"strategy": "Breakout"}),
+      and _is_structure_trail({"strategy": "Breakout"})
+      and not _is_structure_trail({"strategy": "ORBStrategy"})
+      and tuple(STRUCTURE_TRAIL_STRATEGIES) == ("Breakout",),
       f"set={STRUCTURE_TRAIL_STRATEGIES}")
 
 # ── R10 — BLAST RADIUS: EVERY OTHER STRATEGY IS UNTOUCHED ─────────────────
@@ -292,11 +297,11 @@ check("R9 every structure-sized strategy is in STRUCTURE_TRAIL_STRATEGIES",
 # trail-exited fleet trades finished NEGATIVE with the trail armed. That
 # protection must still cover everyone who is not structure-floored.
 check("R10 a non-structure strategy still uses the r44 gain floor",
-      not _is_structure_trail({"strategy": "VOLT"})
-      and not _is_structure_trail({"strategy": "SweepCreditSpread"}),
-      "VOLT / SweepCreditSpread must not be structure-trailed")
+      not _is_structure_trail({"strategy": "LiquidityHunt"})
+      and not _is_structure_trail({"strategy": "RunawayContinuation"}),
+      "the Hunt / Runaway must not be structure-trailed")
 
-_v = OptionsSignal(strategy_name="VOLT", underlying_entry=733.0,
+_v = OptionsSignal(strategy_name="LiquidityHunt", underlying_entry=733.0,
                    underlying_stop=732.5, entry_delta=0.40, entry_premium=1.00)
 check("R10b ...and its stop is still the flat percentage",
       abs(_v.stop_premium() - 1.00 * (1 - _v.stop_loss_pct)) < 1e-9,

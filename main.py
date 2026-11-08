@@ -1,5 +1,6 @@
 """
-main.py  v5.13
+main.py  v5.14
+v5.14  2026-11-08  OTV5 r76 (RETIRE.1) — THE RETIRED TRADES LEAVE THE TICK. Imports, singletons and dispatch of the ORB trade, VOLT, the sweep credit spread (and its handoff grant and second-leg window), the ATP butterfly and ORCS are removed, with _attempt_orcs, _attempt_sweep_on_grant, _sweep_stop_premium, the ORB trade's MISSED / CONFIRMED / EXPIRED plan-ledger rows and its retest-depth journal field, the ORB admission alias, their structure-map and scaling-switch rows, and the sizing_distance path only VOLT used. The start-up banner reads ramp_top= (OT_ORB_BUDGET_USD, unchanged) and scaling BRK= only; scaling ORB/VOLT, contract_scale and ORCS= are gone. The ORB ENGINE, its state file, reach-back and release are unchanged. The operator, 2026-11-07: "Running dead code and logging dead code activity is unnecessary drag. Yes, I want all of those things fixed."
 v5.13 2026-11-04  OTV5 r74 (BLIND.1 + ORP.3) — A BLIND BOT STAYS UP AND KEEPS MANAGING; A RANGE IS NEVER BUILT FROM A
       PARTIAL TAPE. BLIND.1: 2026-11-02 the AMZN and GOOGL bots exited 5 times ("Too many errors — shutting down",
       AMZN 10:12, 10:24, 10:49 ET; systemd restarted each in ~30 s) because run_analysis raised "No 5m data available"
@@ -1513,9 +1514,7 @@ from config import (
     POLL_INTERVAL_SECONDS, LOG_LEVEL, LOG_FILE, LOG_ROTATION_MB,
     PAPER_TRADING, RISK_PER_TRADE_USD, DAILY_LOSS_LIMIT_USD,
     ORB_BUDGET_USD, ORB_BUDGET_IS_DEFAULT,
-    SCALE_ORB, SCALE_BREAKOUT, SCALE_VOLT, ORB_RISK_ENV_IGNORED,   # r161
-    CONTRACT_SCALE, CONTRACT_SCALE_SOURCE,                          # r234
-    ORCS_ENABLED,                                                   # r235
+    SCALE_BREAKOUT, ORB_RISK_ENV_IGNORED,                           # r161
     RUNAWAY_CUTOFF_ET,                                              # r253 (RUNW.2)
     BREAKOUT_LATEST_ET,                                             # r265 (BRK.9)
     BRK_NOPROG_MODE,                                                # r265 (BRK.8)
@@ -1694,15 +1693,10 @@ if TYPE_CHECKING:                     # v4.9 — resolves the quoted annotation 
                                       # runtime, so this is lint-clean at zero
                                       # cost and lets the undefined-name gate
                                       # run at ZERO tolerance instead of one.
-from strategy.orb_strategy import ORBStrategy
-from strategy.volt_strategy import VoltStrategy
 from strategy.runaway_continuation import RunawayContinuationStrategy
 from strategy import observe as _observe      # r254 (OBS.1): the plan always looks
-from strategy.sweep_credit_spread import SweepCreditSpreadStrategy
 from strategy.gex_pin_butterfly import GEXPinButterflyStrategy
-from strategy.atp_butterfly import ATPButterflyStrategy
 from strategy.liquidity_hunt import LiquidityHunt                       # OTV4TEST r12
-from execution import handoff as _handoff                              # OTV4TEST r12
 from config import SWEEP_SETUP_FLOOR
 from utils import mem_trace          # MEM.2 — in-process tracemalloc, env-gated
 
@@ -1747,12 +1741,8 @@ def _disk_sender():
 
 
 # Strategy singletons
-_orb_strategy     = ORBStrategy()
-_volt_strategy    = VoltStrategy()   # r72 — the control arm
 _runaway_strategy = RunawayContinuationStrategy()
-_sweep_cs_strategy = SweepCreditSpreadStrategy()
 _gex_bfly_strategy = GEXPinButterflyStrategy()
-_atp_bfly_strategy = ATPButterflyStrategy()
 _liquidity_hunt = LiquidityHunt()                                      # OTV4TEST r12
 from strategy.park import Park as _Park                                 # r288 (PARK.1)
 _park_strategy = _Park()
@@ -1766,53 +1756,14 @@ _iron_condor_strategy = IronCondorStrategy()
 _trend_credit_strategy = TrendCreditSpread()
 
 
-# r204 (PREM.2) — ORCS, the opening range credit spread (PLAN_SPEC §41). The
-# strategy owns its plan; `_attempt_orcs` asks it inside the entry dispatch.
-_orcs_strategy = None
-try:
-    from strategy.orcs import OpeningRangeCreditSpread
-    _orcs_strategy = OpeningRangeCreditSpread()
-except Exception as _orcs_exc:                                 # noqa: BLE001
-    logger.warning("[orcs] strategy not built - it will not trade or record this session: %s", _orcs_exc)
-
-
 def _retired_reason(name: str) -> str:
-    """r204 — the sweep and the TCS are retired by ruling (2026-10-03: "Retire the sweep & TCS").
+    """r204 — the TCS is retired by ruling (2026-10-03: "Retire the sweep & TCS").
     '' when `name` may be asked. Read at call time so a checker can flip the switch."""
     import config as _c
-    from strategy import plan_state as _ps                      # r303: a LOG sweep / TCS is asked (recorded only)
-    if name in ("SweepCreditSpread", "SweepForLeg2") and not _c.SWEEP_CS_ENABLED and not _ps.is_log("SweepCreditSpread"):
-        return "retired by the operator's ruling 2026-10-03 (OT_SWEEP_CS=1 restores it)"
+    from strategy import plan_state as _ps                      # r303: a LOG TCS is asked (recorded only)
     if name == "TrendCreditSpread" and not _c.TREND_CREDIT_ACTIVE and not _ps.is_log("TrendCreditSpread"):
         return "retired by the operator's ruling 2026-10-03 (OT_TCS_ACTIVE=1 restores it; unset = log, r57)"
     return ""
-
-
-def _attempt_orcs(ctx: dict, state) -> None:
-    """r204/r206 — ask ORCS and hand each ready side to the house credit entry. Never raises."""
-    if _orcs_strategy is None:
-        return
-    try:
-        _px = float(ctx.get("price") or 0.0)
-        _hi, _lo = ctx.get("orb_high"), ctx.get("orb_low")
-        _inf = {"vix": getattr(ctx.get("macro"), "vix", None),
-                "or_width_pct": (100.0 * (float(_hi) - float(_lo)) / _px) if _hi and _lo and _px > 0 else None}
-        _sigs = _safe_strategy(_orcs_strategy.name, lambda: _orcs_strategy.generate_signals(
-            price_now=_px, now_et=now_et(), chain=ctx.get("chain"), gap=ctx.get("gap"),
-            informers=_inf) or None, ctx)
-        for _sig in (_sigs or []):
-            # r247 — THE LIVE REFUSAL COMES FIRST. ORCS is paper-only until the operator rules it
-            # live; the refusal sat in _execute_condor_leg, AFTER ledger_open, so a live box wrote a
-            # plan_ledger row for every ready side that no fill would ever close (SPX-TEST's audit).
-            # The refusal in _execute_condor_leg stays as the backstop.
-            if not getattr(state, "paper_trading", True):
-                logger.warning("[orcs] LIVE: no ledger row and no entry - ORCS is paper-only until "
-                               "the operator rules it live")
-                continue
-            _orcs_strategy.ledger_open(_sig)                    # r211: the row the fill links to
-            _execute_condor_leg(_sig, state, ctx)
-    except Exception as exc:                                   # noqa: BLE001
-        logger.warning("[orcs] tick failed - nothing traded or recorded this tick: %s", exc)
 
 
 class BotState:
@@ -1830,7 +1781,6 @@ class BotState:
         # r63 — the derived engines, built ONCE per process. [] when the
         # derived store will not open, which is a normal degraded state and
         # not an error: derivers are contributors, never gates.
-        self._orb_plan_id = None
         # r70 — any plan left LIVE by a dead process is recorded at boot.
         # ⚠️ LEG1_FILLED IS DELIBERATELY NOT WIPED — a leg is live at the
         # broker, so the intent must survive for the reconciler to act on.
@@ -2081,70 +2031,6 @@ def run_analysis(state: BotState, chain=None) -> dict:
             if _deep_1m is not None and not _deep_1m.empty:
                 # r61 (ORB.10): with no ORB owner the replay releases each OPEN_* on its bar, as below
                 _orb_eng.rebuild_from_tape(_deep_1m, release_open=_orb_release_due(state))
-                # ── r95 — A MISSED SETUP IS A ROW, NOT A LOG LINE ───────────
-                # Operator's ruling, 2026-08-24: an interrupted firing sequence
-                # is never re-entered — it is LOGGED AS MISSED. The log is not
-                # where that becomes countable: PLANS is, which is where the
-                # 08-24 QQQ loss was actually seen. One row per missed setup,
-                # opened and closed in the same breath because it was over
-                # before this process existed.
-                _miss = _orb_eng.take_missed_confirmation()
-                if _miss:
-                    # ── 🔴 r103 — FIRED OR GENUINELY MISSED? ADJUDICATE FIRST.
-                    # Operator, 2026-08-24: "figure out if it fired or if we
-                    # genuinely missed it before closing out the row." The tape
-                    # cannot distinguish a setup this process never saw from one
-                    # a PREVIOUS process saw, took and recorded before it died —
-                    # both look identical in the bars. The trades table can.
-                    # ⚠️ A FALSE MISS IS WORSE THAN NO COUNT. The missed
-                    # population exists to measure what the fleet is losing to
-                    # outages; a row for a trade that actually filled inflates
-                    # that loss and would send us hunting a defect that isn't
-                    # there — the same reasoning as the r82 counter that "got
-                    # worse the harder we tried to fix it".
-                    try:
-                        _fired = get_trade_logger().orb_entry_since(
-                            _miss.get("confirmed_bar") or "")
-                    except Exception:                          # noqa: BLE001
-                        _fired = None
-                    if _fired is not None:
-                        logger.info(
-                            "ORB reach-back: the tape's confirmation at %s was "
-                            "TAKEN, not missed — trade %s is on the book "
-                            "(entry %s). No MISSED row written.",
-                            _miss.get("confirmed_bar"),
-                            str(_fired.get("trade_id", ""))[:8],
-                            _fired.get("entry_time"))
-                        _miss = None
-                if _miss:
-                    # ⚠️ AND IT IS JOURNALLED LIKE A DECLINE. Operator: "missed
-                    # should log the way a declined is — with all the known
-                    # parameters captured with it." Same file, same shape, so
-                    # missed and declined are one query apart.
-                    if _sigj is not None:
-                        try:
-                            _sigj.journal("disposition", outcome="missed",
-                                          orb=_miss,
-                                          reason="TRIGGER_FIRED_WHILE_DOWN")
-                        except Exception:                      # noqa: BLE001
-                            pass
-                    try:
-                        from derived.registry import plan_ledger as _plg_m
-                        _ledm = _plg_m(INSTRUMENT)
-                        if _ledm is not None:
-                            _mid = _ledm.open_plan(
-                                "ORBStrategy", "CONFIRMED", ctx,
-                                direction=_miss.get("direction"),
-                                trigger_price=_miss.get("trigger_price"),
-                                underlying_at_decision=price)
-                            if _mid:
-                                _ledm.transition(
-                                    _mid, "MISSED",
-                                    "TRIGGER_FIRED_WHILE_DOWN"
-                                    f" bar={_miss.get('confirmed_bar')}"
-                                    f" age_s={_miss.get('age_s')}")
-                    except Exception as _mexc:                 # noqa: BLE001
-                        logger.debug("missed-plan record: %s", _mexc)
         except Exception as _exc:                              # noqa: BLE001
             # Never let the reach-back take the tick with it: without it the
             # engine simply behaves as it did before r95.
@@ -2152,7 +2038,7 @@ def run_analysis(state: BotState, chain=None) -> dict:
 
     orb = _orb_eng.update(df_5m, df_1m, price, None)
     # ── r61 (ORB.10) — A CONFIRMATION NOBODY CAN TRADE IS RELEASED ON ITS TICK ──
-    # ORBStrategy is retired; only an ORB close / offer release / same-side Runaway fire ever
+    # The ORB trade is gone (RETIRE.1); only an ORB close / offer release / same-side Runaway fire ever
     # released OPEN_*, so the engine held the first break's side to 15:40 and Runaway (which reads
     # its direction off the state) never saw the reversal. HERE, not after the ORB dispatch:
     # attempt_new_entry returns before the dispatch on blocked / capped / no-chain ticks, and every
@@ -2187,43 +2073,6 @@ def run_analysis(state: BotState, chain=None) -> dict:
     ctx["macro"] = macro
     ctx["orb"]   = orb
 
-    # ── r70 — ORB CONFIRMATION IS A PLAN, AND IT IS RECORDED ────────────────
-    # 🔴 ON 2026-08-21 CRM, GOOGL, UNH AND SPX ALL CONFIRMED BREAK+RETEST
-    # BETWEEN 10:20 AND 10:24 AND NONE OF THEM TRADED. The 10:39 deploy
-    # erased in-process confirmation state — v3's orb_state.json write-only
-    # lesson recurring — and ORB dies at 11:00, so there was no second chance.
-    # A confirmed break+retest IS a plan waiting on a trigger, so it belongs in
-    # the same ledger with the same lifecycle.
-    # ⚠️ RECORDED, NOT RESTORED. The row makes the loss COUNTABLE; resuming a
-    # stale confirmation blind after an outage is a different decision and
-    # needs re-qualification against the current tape.
-    try:
-        _st = str(getattr(orb, "state", "") or "")
-        if _st in ("ORBState.OPEN_LONG", "ORBState.OPEN_SHORT",
-                   "OPEN_LONG", "OPEN_SHORT"):
-            if getattr(state, "_orb_plan_id", None) is None:
-                from derived.registry import plan_ledger as _plg
-                _led = _plg(INSTRUMENT)
-                if _led is not None:
-                    state._orb_plan_id = _led.open_plan(
-                        "ORBStrategy", "CONFIRMED", ctx,
-                        direction=("LONG" if "LONG" in _st else "SHORT"),
-                        trigger_price=getattr(orb, "orb_high", None)
-                        if "LONG" in _st else getattr(orb, "orb_low", None),
-                        underlying_at_decision=ctx.get("price"))
-        elif getattr(state, "_orb_plan_id", None) is not None:
-            # The engine left the confirmed state without a fill: the setup
-            # expired or was invalidated. ⚠️ RECORDED WITH ITS REASON so
-            # "confirmed but never traded" becomes a countable population.
-            from derived.registry import plan_ledger as _plg
-            _led = _plg(INSTRUMENT)
-            if _led is not None:
-                _led.transition(state._orb_plan_id, "EXPIRED",
-                                str(getattr(orb, "invalidation_reason", "")
-                                    or "left_confirmed_state"))
-            state._orb_plan_id = None
-    except Exception as exc:                                   # noqa: BLE001
-        logger.debug("orb plan ledger: %s", exc)
     # PHASE B (r58): commit THIS tick's direction for the NEXT tick's gap
     try:
         state.prev_trend_direction = getattr(ctx.get("trend"), "overall_direction", "") or ""
@@ -2869,25 +2718,13 @@ def _capture_entry_snapshot(ctx: dict, record: dict, direction: str, tl=None) ->
 def _credit_window_end(signal) -> tuple:
     """When this credit structure's ENTRY window closes — the time gate a
     remainder honours (WORKING_AGREEMENT §37: hunting stops only at the
-    strategy's own time gate). TCS reads its config constant; the sweep reads
-    its module's LATEST_ET; anything else falls to 14:00 and says so."""
+    strategy's own time gate). TCS reads its plan's window; anything else
+    falls to 14:00."""
     name = getattr(signal, "strategy_name", "") or ""
     if getattr(signal, "is_trend_credit", False) or name == "TrendCreditSpread":
         # OTV4TEST r9 (HYG.5): the PLAN owns the window; main.py reads it there
         from strategy import tcs_plan as _tp
         return _tp.window_end()
-    if name == "SweepCreditSpread":
-        try:
-            from strategy import sweep_plan as _sp          # r9: the plan's window (a tuple)
-            return tuple(_sp.LATEST_ET)
-        except Exception:                                      # noqa: BLE001
-            pass
-        try:
-            from strategy import sweep_credit_spread as _scs
-            hh, mm = str(_scs.LATEST_ET).split(":")
-            return (int(hh), int(mm))
-        except Exception as exc:                                # noqa: BLE001
-            logger.warning("[remainder] sweep LATEST_ET unreadable (%s) — 14:00", exc)
     return (14, 0)
 
 
@@ -3068,32 +2905,6 @@ def _supervise_credit_remainders(ctx: dict, state: BotState) -> None:
         logger.warning("remainder supervision skipped this tick: %s", exc)
 
 
-def _sweep_stop_premium(credit, width, pct_fallback) -> float:
-    """The sweep's premium stop: the credit PLUS 15% OF THE RISK (PLAN_SPEC §31).
-
-    🔴 OTV4TEST r24 — THE ROW CARRIED THE RULE r155 DELETED. This stamp wrote
-    `fill_credit * (1 + 0.15)` — fifteen percent of the CREDIT — while the spec
-    says "15% of risk", the exit engine computes `entry + risk * 0.15`
-    (exit_engine:2200) and entry feasibility judges survivability with
-    `criteria.stop_distance`. The management plan reads THIS number and acts
-    first, so the inverted stop is the one that fired. PROVEN ON 2026-09-11:
-    the 12:04 718/719 call spread, credit 0.25, row stop 0.2875, stopped the
-    same minute; replayed on real quotes its worst cost-to-close was 0.33,
-    under the spec's 0.3625, and it expired worthless for the full credit.
-    ⚠️ ONE DEFINITION: `criteria.stop_distance` — r234's rule that a second
-    spelling of 0.15 is how the first rots.
-    ⚠️ FAILS CLOSED: if the risk is unmeasurable the tighter credit-anchored stop
-    is kept and SAID, never a permissive 0.0 (WORKING_AGREEMENT §22).
-    """
-    from strategy.criteria import stop_distance
-    d = stop_distance(width, credit)
-    if d is None:
-        logger.warning("sweep stop: risk unmeasurable (width=%r credit=%r) — "
-                       "keeping the credit-anchored stop", width, credit)
-        return float(credit or 0.0) * (1 + float(pct_fallback or 0.0))
-    return float(credit) + float(d)
-
-
 def _stamp_vix(signal, ctx) -> None:
     """r200 (AUD.8) — VIX AT ENTRY, FOR EVERY STRATEGY. Only ORBStrategy and VOLT set
     `signal.vix_at_signal` (both are off the roster since r187), so every Breakout,
@@ -3194,12 +3005,6 @@ def _execute_condor_leg(signal: "OptionsSignal", state: BotState,
 
     net_credit   = signal.net_credit
     spread_width = abs(short_contract.strike - long_contract.strike)
-    # r204 — ORCS: its own name, PAPER ONLY until a live ruling. r230: the condor leg's stop and exits.
-    _is_orcs = (getattr(signal, "strategy_name", "") == "OpeningRangeCreditSpread")
-    if _is_orcs and not state.paper_trading:
-        logger.warning("[orcs] LIVE entry REFUSED - ORCS is paper-only until the operator rules it live")
-        return
-
     # Size this vertical at HALF the grade budget — each side is independent,
     # so a B-grade $1000 trade becomes two ~$500 verticals.
     # r192 — through the one door; the vertical rule and its arithmetic are
@@ -3297,27 +3102,16 @@ def _execute_condor_leg(signal: "OptionsSignal", state: BotState,
     # One function serves two trades; the identity must come from the SIGNAL,
     # never from the function it happens to route through.
     _is_tcs = bool(getattr(signal, "is_trend_credit", False))
-    # r99 — the sweep now routes here too. Its identity rides its own
-    # strategy_name (structure.of routes "SweepCreditSpread" to the
-    # lone-vertical management its spec names: 15% floor or 15:45) and its
-    # stop is its OWN max_loss_pct (SWEEP_CS_MAX_LOSS_PCT 0.15), not the
-    # condor's 25%. Stamping "IronCondorStrategy" here is the 2026-08-14
-    # identity bug — 108 trades attributed to a strategy that never fired them.
-    _is_sweep = (getattr(signal, "strategy_name", "") == "SweepCreditSpread")
-    # r106 — ONE FLOOR, 15%, for every credit vertical. The sweep carries its
-    # own (identical) number; everything else takes the lone-vertical floor.
+    # r106 — ONE FLOOR, 15%, for every credit vertical: the lone-vertical floor.
     # The 25% that used to be written here is retired: the live arm evaluated
     # 15% while the ROW said 25%, so the record and the alert both stated a rule
     # the engine did not apply.
     from config import CONDOR_LONE_STOP_PCT as _LONE
-    _stop_pct = (float(getattr(signal, "max_loss_pct", 0.0) or 0.0)
-                 if _is_sweep else 0.0) or _LONE
+    _stop_pct = _LONE
     record = make_record(
         trade_id         = str(uuid.uuid4()),
         symbol           = INSTRUMENT,
         strategy         = ("TrendCreditSpread" if _is_tcs
-                            else "OpeningRangeCreditSpread" if _is_orcs
-                            else "SweepCreditSpread" if _is_sweep
                             else "IronCondorStrategy"),
         setup_type       = signal.setup_type,
         # ⚠️ r152 — the grade is gone; UNGRADED is a marker, not a verdict.
@@ -3346,9 +3140,7 @@ def _execute_condor_leg(signal: "OptionsSignal", state: BotState,
         # TO EXPIRY, UNMANAGED, and its only exits are a breach of the bound or
         # the 15:45 close. Writing a stop here is what made a $0.06 credit
         # closeable on one cent of widening.
-        stop_premium     = (0.0 if _is_tcs                 # r230: an ORCS leg takes the condor leg's stop
-                            else _sweep_stop_premium(fill_credit, spread_width, _stop_pct)
-                            if _is_sweep
+        stop_premium     = (0.0 if _is_tcs
                             else fill_credit * (1 + _stop_pct)),
         target_premium   = CONDOR_NICKEL_CLOSE,
         underlying_entry = getattr(signal, "underlying_entry", 0.0),
@@ -3615,7 +3407,6 @@ def _plan_skip_management(reason: str) -> None:
 # reached — which is the whole point: there is no per-tick refusal to journal
 # because there is no refusal. The plan did not run.
 _ADMITTED = None                    # frozenset[str] | None — set per tick
-_ADMISSION_ALIAS = {"ORB": "ORBStrategy"}   # dispatch label -> table key
 
 
 def _set_admission(names) -> None:
@@ -3631,7 +3422,7 @@ def _admission_allows(name: str) -> bool:
     """May `name` be ASKED this tick? Unknown names and an unset tick pass."""
     if _ADMITTED is None:
         return True
-    key = _ADMISSION_ALIAS.get(name, name)
+    key = name
     try:
         from execution import position_manager as _pmod
         if key not in _pmod.rules():
@@ -3685,7 +3476,7 @@ def _safe_strategy(name: str, fn, ctx=None):
     # r204 — RETIRED BY RULING: not asked, and the board says why (once).
     _ret = _retired_reason(name)
     if _ret:
-        _plan_skip("SweepCreditSpread" if name == "SweepForLeg2" else name, _ret, gate="retired")
+        _plan_skip(name, _ret, gate="retired")
         return None
     try:
         sig = fn()
@@ -4275,21 +4066,11 @@ def _afternoon_debit_blocked(strategy_or_signal, now) -> bool:
 # ⚠️ A NEW STRATEGY MISSING FROM HERE IS TREATED AS `long_debit` AND BLOCKED
 # after the cutoff - deliberately the restrictive default.
 _STRUCTURE_BY_NAME = {
-    "ORBStrategy":          "long_debit",
-    "ORB":                  "long_debit",
     "RunawayContinuation":  "long_debit",
-    "SweepCreditSpread":    "vertical",
-    "OpeningRangeCreditSpread": "vertical",     # r204 (ORCS)
     "GEXPinButterfly":      "butterfly",
-    "ATPButterfly":         "butterfly",
     "IronCondorStrategy":   "vertical",
-    # r51 — a long option, so the afternoon debit cutoff governs it like the ORB
+    # r51 — a long option, so the afternoon debit cutoff governs it
     "Breakout":             "long_debit",
-    # r72 — VOLT buys a single option. Its window closes at 11:30 so the
-    # afternoon cutoff cannot bite, but it is DECLARED rather than defaulted:
-    # this map's own warning is that a missing name is silently long_debit, and
-    # relying on the fallback to be right is how it stops being right.
-    "VOLT":                 "long_debit",
     # r288 (PARK.1) — a long single option bought at 11:01; declared, not defaulted.
     "PARK":                 "long_debit",
 }
@@ -4369,15 +4150,12 @@ def _orb_offer_working() -> bool:
 
 
 def _orb_release_due(state) -> bool:
-    """r61 (ORB.10) — True when no ORB trade can own an ORB confirmation: ORBStrategy is not active
-    (plan_state; retired since OTV4TEST r187), no ORB standing offer is working and no ORB position is
-    open. Then the engine is released from OPEN_* (orb_engine.release_unowned) instead of holding it to
-    15:40, which blinded RunawayContinuation to the opposite break. Fails CLOSED (False): an unreadable
-    offer store or book keeps today's behaviour."""
+    """r61 (ORB.10) — True when no ORB trade can own an ORB confirmation: no ORB standing offer is working
+    and no ORB position is open (the ORB trade itself is removed, RETIRE.1). Then the engine is released
+    from OPEN_* (orb_engine.release_unowned) instead of holding it to 15:40, which blinded
+    RunawayContinuation to the opposite break. Fails CLOSED (False): an unreadable offer store or book
+    keeps today's behaviour."""
     try:
-        from strategy import plan_state as _ps
-        if _ps.state("ORBStrategy") == _ps.ACTIVE:
-            return False
         if _orb_offer_working():
             return False
         _recs = get_position_manager(getattr(state, "paper_trading", True)).get_open_records()
@@ -4552,7 +4330,7 @@ def attempt_new_entry(ctx: dict, ms: MarketState, state: BotState):
         from execution.position_manager import rules as _adm_rules
         _pm_adm_rules = _adm_rules()
         _tries = {}
-        for _bn in ("GEXPinButterfly", "ATPButterfly"):
+        for _bn in ("GEXPinButterfly",):
             _tries[_bn] = 1 if _one_per_session_used(_bn) else 0
         # r42 — ONE PASS. `logging_state()` returns the binary AND the gate for
         # every strategy in the table, from a single walk. It replaced
@@ -4731,7 +4509,6 @@ def attempt_new_entry(ctx: dict, ms: MarketState, state: BotState):
             "state, not the copy",
             getattr(ctx.get("orb"), "state", "?"), getattr(orb, "state", "?"))
         ctx["orb"] = orb        # one view of one thing, for the rest of the tick
-    orb_confirmed = orb.state in (ORBState.OPEN_LONG, ORBState.OPEN_SHORT)
     # ── 🔴 v4.3 (2026-08-21) — THE DISPATCH HARD GATE IS DELETED ─────────────
     # It read:
     #         return
@@ -4774,14 +4551,13 @@ def attempt_new_entry(ctx: dict, ms: MarketState, state: BotState):
     # NameError on the first tick and invisible to `import main`. Caught by
     # `tests/check_dispatch.py`, which is the third time this exact class has
     # appeared: the `ctx` P0, `_rc_bar` in the sweep mapper, and now this.
-    _afd_orb = _afternoon_debit_blocked("ORBStrategy", _now_disp)
     _afd_run = _afternoon_debit_blocked("RunawayContinuation", _now_disp)
-    if _afd_orb or _afd_run:
+    if _afd_run:
         logger.info("[afd] pre-dispatch: long-debit blocked past %02d:%02d "
-                    "(orb=%s runaway=%s) - the afternoon belongs to the credit "
+                    "(runaway=%s) - the afternoon belongs to the credit "
                     "structures and the butterflies",
                     DEBIT_DIRECTIONAL_CUTOFF_ET[0],
-                    DEBIT_DIRECTIONAL_CUTOFF_ET[1], _afd_orb, _afd_run)
+                    DEBIT_DIRECTIONAL_CUTOFF_ET[1], _afd_run)
         # ── AUDIT F8 (2026-08-15) — THE REFUSAL JOURNAL MOVED WITH THE GATE ──
         # Moving AFD.1 to pre-dispatch made the POST-SELECTION journal at the
         # bottom of this function STRUCTURALLY UNREACHABLE for these three
@@ -4795,8 +4571,7 @@ def attempt_new_entry(ctx: dict, ms: MarketState, state: BotState):
         # record is retained below for anything that still reaches it.
         if _sigj is not None:
             try:
-                for _nm, _hit in (("ORBStrategy", _afd_orb),
-                                  ("RunawayContinuation", _afd_run)):
+                for _nm, _hit in (("RunawayContinuation", _afd_run),):
                     if _hit:
                         _sigj.journal("disposition",
                                       outcome="gate_block:afternoon_debit",
@@ -4806,66 +4581,13 @@ def attempt_new_entry(ctx: dict, ms: MarketState, state: BotState):
             except Exception:                                  # noqa: BLE001
                 pass
 
-    # Priority 1: ORB — only when the engine has a CONFIRMED break+retest.
-    # UNKNOWN and SWEEP_REVERSAL (ORB beats sweep — the engine no longer defers
-    # its OPEN under a sweep label; see orb_engine v3.2). The break+retest is the
-    # edge; the label is not consulted for go/no-go, only for scoring.
-    # test went at r57 and the tuple sat consumerless: a guard's corpse one
-    # level down. The v4.3 note below records the test's deletion.
-    # v6.19 (2026-08-19) — ORB IS BLOCKED UNDER RANGING (operator direction:
-    # that cell is the conclusive loss leader). Mirrored from
-    # options_trader_smc the same day so the two arms remain comparable.
-    # The refusal is JOURNALED, not silent: without the row, "ORB did not set
-    # up" and "ORB was forbidden to fire" are indistinguishable in the record,
-    # and only the second is a decision we can audit or reverse.
-    # OT_ORB_BLOCK_RANGING=0 restores the old behaviour exactly — RANGING is
-    # RANGING block could never fire, and the ok-set test only ever passed
-    # through the UNKNOWN arm of the bypass. A confirmed break+retest is
-    # self-validating — the engine has proven the setup from the tape — so the
-    # ORB dispatch is now gated on CONFIRMATION alone, which is what the
-    # bypass's own doctrine said it was doing all along.
-    # OTV4TEST r2 — ASKED EVERY TICK, INCLUDING OUTSIDE ITS WINDOW. The
-    # plan narrates every state (no range / both sides priced / armed and
-    # PREPARED / confirmed / spent / runaway / re-entry) and fires only on
-    # OPEN_* with an unspent confirmation. Outside 09:35–11:30 the plan is
-    # DORMANT — one row on the transition, then silent (operator: "observe
-    # only, don't write") — which is why the `_afd_orb` NOT ASKED row that
-    # used to be written EVERY TICK all afternoon is gone; the afternoon
-    # debit block itself is unchanged (`_afd_orb` still guards below).
-    # ⚠️ ONE STANDING OFFER PER SETUP (r195): the engine stays OPEN_* while
-    # an offer rests, so the resting offer is passed in and the plan
-    # refuses at a named gate instead of this file skipping.
-    orb_sig = _safe_strategy("ORB", lambda: _orb_strategy.generate_signal(
-        orb           = orb,
-        ms            = ms,
-        vol_state     = ctx["vol"],
-        # r20 — the ORB is passed NO level surface. Operator's ruling; the sweep's
-        # own call sites keep theirs, because the sweep genuinely trades levels.
-        chain         = chain,
-        macro         = macro,
-        current_price = ctx["price"],
-        now_hhmm      = _now_disp.strftime("%H:%M") if _now_disp else "",
-        offer_working = bool(orb_confirmed and _orb_offer_working()),
-    ), ctx)
-    if orb_sig and _afd_orb:
-        logger.warning("[afd] ORB produced a signal past the afternoon debit "
-                       "cutoff — refused here; the plan's window and this "
-                       "gate disagree")
-        orb_sig = None
-    _fire(orb_sig)                                  # r43 — fires on its own
-    # OTV4TEST r12 — THE LIQUIDITY HUNT runs beside the ORB, never in its slot
-    # (PLAN_SPEC §37): asked every tick, executed additive, so both can be long
-    # the same break. That is the paired comparison.
-    # r43 — the handoff-granted sweep moved here from main_loop's open branch.
-    # It is NOT the same as the sweep dispatch below: it requires a LIVE GRANT,
-    # constrains the side to the grant's, stamps the provenance and CONSUMES the
-    # grant. Deleting it with the other two would have lost a behaviour.
-    _attempt_sweep_on_grant(ctx, ms, state)
+    # OTV4TEST r12 — THE LIQUIDITY HUNT: asked every tick, executed additive
+    # (PLAN_SPEC §37).
     _attempt_hunt(ctx, ms, state, orb=orb, chain=chain,
                   now_hhmm=(_now_disp.strftime("%H:%M") if _now_disp else ""),
                   atr_pct=float(getattr(ctx.get("vol"), "atr_pct", 0.0) or 0.0))
-    # ── r51 (BRK.1) — BREAKOUT, BESIDE THE HUNT AND THE ORB ─────────────────
-    # All three are born from the same opening range and all three are admitted
+    # ── r51 (BRK.1) — BREAKOUT, BESIDE THE HUNT ─────────────────────────────
+    # Both are born from the same opening range and both are admitted
     # in the same window. Operator, 2026-09-18: *"I want the orb, hunt, breakout
     # & sweep all able to fire & non-competing… letting them all go at the same
     # time is gonna allow us to get the differentiation needed to rule on them
@@ -4882,49 +4604,6 @@ def attempt_new_entry(ctx: dict, ms: MarketState, state: BotState):
         flow_conn  = ctx.get("_flow_conn"),
         symbol     = INSTRUMENT,
     ), ctx))
-    # ── r72 — VOLT, THE CONTROL ARM, BESIDE ALL FOUR ──────────────────────
-    # Two gates: direction (close vs the session open) and rising volume. No
-    # ADX, no regime, no levels, no R floor. 🔑 ITS ONLY JOB IS TO MAKE THE
-    # OTHERS' GATES MEASURABLE — r51's head-to-head reasoning applied to the
-    # gates themselves rather than to four different theses. Operator,
-    # 2026-09-20: *"construct 1 more trade strategy & plan… as a control
-    # group… Nothing more complicated."*
-    # ⚠️ ADDITIVE, exactly like the Breakout above: `_fire()` executes it on
-    # its own and admission's per-type cap is the only limit, so VOLT taking a
-    # trade never costs the ORB one and the comparison stays clean.
-    _fire(_safe_strategy("VOLT", lambda: _volt_strategy.generate_signal(
-        chain      = chain,
-        price_now  = ctx["price"],
-        df_1m      = ctx.get("df_1m"),
-        now_et     = (_now_disp.strftime("%H:%M") if _now_disp else ""),
-        vol_state  = ctx.get("vol"),
-        macro      = ctx.get("macro"),
-        symbol     = INSTRUMENT,
-    ), ctx))
-        # 🔴 r195 — THE ENGINE NO LONGER RE-ARMS HERE, AND THAT WAS THE BUG.
-        # `mark_triggered()` fired the moment the SIGNAL existed, which
-        # re-armed the engine and `_rearm()` WIPES ORBData — direction,
-        # stop, target, confirmation — while the plan was still live. Under
-        # the ladder that was ~20s of exposure. With a standing offer it is
-        # the rest of the session, and a second attempt could confirm and
-        # place a SECOND offer at the same strike while the first still
-        # rested, giving two records for one broker position.
-        # The engine now stays OPEN_* until the TRADE resolves; the offer
-        # supervisor calls notify_position_closed() on a fill-and-close or
-        # a cancel trigger. Operator: "there is a SEQUENCE and 'waiting for
-        # the break' isn't what comes after 'enter long/short'."
-        # 🔴 r195 — THE ENGINE NO LONGER RE-ARMS HERE, AND THAT WAS THE BUG.
-        # `mark_triggered()` fired the moment the SIGNAL existed, which
-        # re-armed the engine and `_rearm()` WIPES ORBData — direction,
-        # stop, target, confirmation — while the plan was still live. Under
-        # the ladder that was ~20s of exposure. With a standing offer it is
-        # the rest of the session, and a second attempt could confirm and
-        # place a SECOND offer at the same strike while the first still
-        # rested, giving two records for one broker position.
-        # The engine now stays OPEN_* until the TRADE resolves; the offer
-        # supervisor calls notify_position_closed() on a fill-and-close or
-        # a cancel trigger. Operator: "there is a SEQUENCE and 'waiting for
-        # the break' isn't what comes after 'enter long/short'."
 
     # ── Post-runaway routing (v-runaway-fix 2026-07-24) ───────────────────────
     # A RUNAWAY ORB (broke the range and ran to 50% TP with no retest) is a
@@ -4996,77 +4675,6 @@ def attempt_new_entry(ctx: dict, ms: MarketState, state: BotState):
                 get_orb_engine().mark_triggered()
             except Exception:                                  # noqa: BLE001
                 pass
-
-    # ── Priority 3: SWEEP CREDIT SPREAD ─────────────────────────────────────
-    # Sells the boundary a swept named pool just became. It runs AFTER the
-    # runaway because a runaway proved directional force, and fading a level
-    # into that force is the low-quality reversal that bled in v3.
-    if True:                                        # r43 — no slot to claim
-        sc_sig = _safe_strategy("SweepCreditSpread",
-                                lambda: _sweep_cs_strategy.generate_signal(
-                                    price_now     = ctx["price"],
-                                    now_et        = _now_et_hhmm,
-                                    atr_pct       = _atr_pct,
-                                    chain         = chain,
-                                    orb_high      = ctx.get("orb_high"),
-                                    orb_low       = ctx.get("orb_low"),
-                                    df_1m         = ctx.get("df_1m"),
-                                ), ctx)
-        if sc_sig:
-            # r163 — the strategy classes its own trigger now: a tine TOUCH is
-            # `{tf}_fork`, a real sweep is `sweep_reversal`. Only fill a blank.
-            if not getattr(sc_sig, "condor_trigger_source", ""):
-                sc_sig.condor_trigger_source = "sweep_reversal"
-            # ── 🔴 r97 — VALIDATE BEFORE CLAIMING THE SLOT ───────────────────
-            # ⚠️ AN INVALID SIGNAL USED TO CONSUME THE DISPATCH ANYWAY. Setting
-            # `signal` here gates the butterfly and ALL FOUR credit-vertical
-            # triggers below (`if signal is None`), while validation lives ~240
-            # lines further down. So a signal that could never trade still shut
-            # out every strategy behind it: 231 ticks on SPX, 90 on GOOGL,
-            # 2026-08-24.
-            # This is AFD.1 recurring, and this file already wrote the lesson
-            # down: "a strategy-level veto still consumes the dispatch slot on
-            # its way to returning None" and "placing it after the signal was
-            # chosen was right for JOURNALLING and wrong for ARBITRATION."
-            # ⚠️ THE POST-SELECTION CHECK STAYS. It is the one that JOURNALS a
-            # fully-formed refusal, and it still catches anything reaching it by
-            # another path. This is defence in depth, not a replacement.
-            # ── 🔴 r99 — THE SWEEP IS A CREDIT VERTICAL AND TAKES THE CREDIT
-            # PATH. Setting `signal = sc_sig` sent it down the GENERIC dispatch:
-            # the debit scorer, `compute_size(premium=credit)` and
-            # `entry_eng.enter()`, whose only arms are single-leg and butterfly
-            # — `_place_single_leg` would have BUY_TO_OPENed `signal.contract`,
-            # the SHORT strike, as a long. r97 built the spread and this line
-            # would have bought its short leg. Same route as TC.6 below:
-            # pairing gate -> `_execute_condor_leg`, which sizes it as a credit
-            # vertical, stamps is_condor_leg for the pairing gate, and books
-            # the broker's net credit.
-            if not sc_sig.is_valid:
-                logger.warning(
-                    "SweepCreditSpread produced an INVALID signal - NOT "
-                    "claiming the dispatch slot, so the butterfly and the "
-                    "credit verticals still get this tick")
-            elif _can_open_credit_spread(sc_sig.option_side, sc_sig,
-                                         ctx["price"], ctx=ctx):
-                # 🔴 r49 — THE `return` HERE ENDED THE WHOLE TICK, AND r43 MISSED IT.
-                # r43 removed the identical early return from the TCS block and
-                # left this one, so a sweep fill still silenced every strategy
-                # sequenced below it — the cascade the operator's non-compete
-                # ruling removed, surviving in one branch. MEASURED LIVE
-                # 2026-09-18: the sweep filled at 12:34 and `IronCondorStrategy`
-                # sat on the dispatch-gap default *"no reason recorded"* for the
-                # next 204 minutes, because its `_plan_skip` is 140 lines below
-                # this line. The operator found it by reading the board:
-                # *"I want the messaging to look intentional and not like an
-                # error."* It was neither — it was unreachable.
-                # ⚠️ CREDIT LEGS DO NOT GO THROUGH `_fire`, so the tally is
-                # kept by hand, exactly as the TCS leg does.
-                _execute_condor_leg(sc_sig, state, ctx)
-                _fired.append("SweepCreditSpread")
-            else:
-                logger.info("SweepCreditSpread %s side blocked by the pairing "
-                            "gate - tick passes to the next strategy",
-                            sc_sig.option_side)
 
     # ── Priority 4: GEX PIN BUTTERFLY ───────────────────────────────────────
     # ⚠️ PARKED - `ENABLED` is False and generate_signal returns None on the
@@ -5241,8 +4849,6 @@ def attempt_new_entry(ctx: dict, ms: MarketState, state: BotState):
                 _execute_condor_leg(tcs_sig, state, ctx)
                 _fired.append("TrendCreditSpread")
 
-    # ── r204 — ORCS: the opening range credit spread (PLAN_SPEC §41) ─────────
-    _attempt_orcs(ctx, state)
 
 
     # ══ r43 — THE TAIL REPORTS; IT NO LONGER ARBITRATES ══════════════════════
@@ -5273,7 +4879,6 @@ def _attempt_hunt(ctx, ms, state, *, orb, chain, now_hhmm, atr_pct) -> None:
     and on a fire execute it ADDITIVE: it takes no slot and is not counted as
     blocking (position_manager v4.9)."""
     try:
-        _handoff.tick()
         _pm = get_position_manager(state.paper_trading)
         if any(str(r.get("strategy") or "") == "LiquidityHunt" for r in _pm.get_open_records()):
             _plan_skip("LiquidityHunt", "a hunt is already open on this box",
@@ -5309,29 +4914,6 @@ def _release_unfilled_hunt(sig, state) -> None:
                         getattr(sig, "hunt_entry", "?"), _d, float(_b))
     except Exception as exc:                                   # noqa: BLE001
         logger.warning("[hunt] break release check failed (%s) - the break stays spent", exc)
-
-
-def _attempt_sweep_on_grant(ctx, ms, state) -> None:
-    """OTV4TEST r12 — a live handoff grant naming the sweep lets it enter while
-    another position is open; every other bar the sweep has still applies."""
-    try:
-        g = _handoff.live("SweepCreditSpread")
-        if g is None:
-            return
-        _pm = get_position_manager(state.paper_trading)
-        if any(str(r.get("strategy") or "") == "SweepCreditSpread" for r in _pm.get_open_records()):
-            return
-        sig = _safe_strategy("SweepCreditSpread", lambda: _sweep_cs_strategy.generate_signal(
-            price_now=ctx["price"], now_et=now_et().strftime("%H:%M"),
-            atr_pct=float(getattr(ctx.get("vol"), "atr_pct", 0.0) or 0.0),
-            chain=ctx.get("chain"), orb_high=ctx.get("orb_high"), orb_low=ctx.get("orb_low"),
-            df_1m=ctx.get("df_1m"), required_side=g["side"]), ctx)
-        if sig is not None:
-            sig.handoff_grant = f"{g['from']}→{g['to']} at {g['level']:.2f}, tick {_handoff.age(g)} of {g['ttl']}"
-            _handoff.consume(g)
-            _execute_condor_leg(sig, state, ctx)
-    except Exception as exc:                                   # noqa: BLE001
-        logger.warning("[handoff] sweep on grant failed: %s", exc)
 
 
 def _attempt_park(ctx, ms, state, chain=None) -> None:
@@ -5389,15 +4971,9 @@ def _attempt_butterfly(ctx, ms, state, *, additive: bool) -> None:
     # 15:00 stack was FIVE BUTTERFLIES ON ONE PIN in ninety seconds; the
     # per-strategy cap plus `mark_pin_played` are its two halves, and neither
     # needs the other kind blocked to work.
-    _gex_used = _one_per_session_used("GEXPinButterfly")
-    _atp_used = _one_per_session_used("ATPButterfly")
-    if _gex_used:
+    if _one_per_session_used("GEXPinButterfly"):
         _plan_skip("GEXPinButterfly", "one per session on this box — already "
                    "traded today", gate="tries_per_session")
-    if _atp_used:
-        _plan_skip("ATPButterfly", "one per session on this box — already "
-                   "traded today", gate="tries_per_session")
-    if _gex_used and _atp_used:
         return
     """r161 — ask the butterfly's plan (dormant outside its slot) and, on a
     fire, execute it.
@@ -5420,19 +4996,16 @@ def _attempt_butterfly(ctx, ms, state, *, additive: bool) -> None:
         chain = ctx.get("chain")
         if chain is None:
             _plan_skip("GEXPinButterfly", "no options chain this tick", gate="no_chain")
-            _plan_skip("ATPButterfly", "no options chain this tick", gate="no_chain")
             return
         # r205 — ONE SOURCE. Computed once in run_analysis and stored on ctx.
         # Recomputing here would let the dispatch and the snapshot disagree
         # about the same tick, which is the bug nobody would ever find.
         _atm_iv = ctx.get("atm_iv")
-        bf_sig = None
-        if not _gex_used:
-            bf_sig = _safe_strategy("GEXPinButterfly",
-                                    lambda: _gex_bfly_strategy.generate_signal(
-                                        gex=ctx.get("gex"), price_now=ctx["price"],
-                                        now_et=now_et().strftime("%H:%M"),
-                                        atm_iv=_atm_iv, chain=chain), ctx)
+        bf_sig = _safe_strategy("GEXPinButterfly",
+                                lambda: _gex_bfly_strategy.generate_signal(
+                                    gex=ctx.get("gex"), price_now=ctx["price"],
+                                    now_et=now_et().strftime("%H:%M"),
+                                    atm_iv=_atm_iv, chain=chain), ctx)
         if bf_sig is not None:
             _execute_entry_signal(bf_sig, ctx, ms, state, None, additive=additive)
             # r178 — the fired pin is PLAYED for the session (one butterfly
@@ -5445,26 +5018,6 @@ def _attempt_butterfly(ctx, ms, state, *, additive: bool) -> None:
                                     or getattr(bf_sig, "strike", None))
             except Exception as _pp_err:                        # noqa: BLE001
                 logger.warning("pin-played mark failed: %s", _pp_err)
-            # ⚠️ r85 — THIS TICK, NOT THIS SESSION. Two butterflies must not
-            # open on the SAME tick (r178's five-in-ninety-seconds is the
-            # scar), but the ATP keeps its own session quota and may still
-            # fire on a later tick under its own scenario.
-            _plan_skip("ATPButterfly", "the pin butterfly fired this tick — one "
-                       "butterfly per tick; the ATP keeps its own session quota",
-                       gate="fired_this_tick")
-            return
-        # OTV4TEST r26 — asked only when the pin butterfly did not fire THIS
-        # TICK. r85: no longer "did not fire this session" — the two read
-        # different scenarios and both may fire on the same day.
-        atp_sig = None
-        if not _atp_used:
-            atp_sig = _safe_strategy("ATPButterfly",
-                                     lambda: _atp_bfly_strategy.generate_signal(
-                                         gex=ctx.get("gex"), price_now=ctx["price"],
-                                         now_et=now_et().strftime("%H:%M"),
-                                         atm_iv=_atm_iv, chain=chain, df_1m=ctx.get("df_1m")), ctx)
-        if atp_sig is not None:
-            _execute_entry_signal(atp_sig, ctx, ms, state, None, additive=additive)
     except Exception as exc:                                    # noqa: BLE001
         logger.warning("Butterfly attempt failed: %s", exc)
 
@@ -5624,121 +5177,41 @@ def _record_pin_counterfactual(signal, ctx, verdict, error: str = "") -> None:
             fh.write(_json.dumps(row, default=str) + "\n")
     except Exception as exc:                                    # noqa: BLE001
         logger.warning("[pin] pin-gate counterfactual row NOT written: %s", exc)
-_SCALING_SWITCH = {"ORBStrategy": "SCALE_ORB", "Breakout": "SCALE_BREAKOUT",
-                   "VOLT": "SCALE_VOLT"}
+_SCALING_SWITCH = {"Breakout": "SCALE_BREAKOUT"}
 
 
 def _scaling_on(signal) -> bool:
-    """True = size on the ramp; False = FLAT. The operator, 2026-09-27: *"ORB
-    Scaling OFF/ON, Breakout Scaling OFF/ON, VOLT Scaling OFF/ON"*. Read from
-    this module's bindings of the config switches so a test can flip one
-    without re-importing config."""
+    """True = size on the ramp; False = FLAT (r161, the per-trade scaling switch). Read from this module's
+    binding of the config switch so a test can flip it without re-importing config."""
     key = _SCALING_SWITCH.get(getattr(signal, "strategy_name", "") or "")
     return True if key is None else bool(globals()[key])
 
 
 def _geometry_inputs(signal):
     """(orb_width, orb_stop_distance) for `size_for` — (0.0, 0.0) means the
-    signal takes the budget rule. Extracted from `_execute_entry_signal`'s
-    sizing block in r131 with its behaviour for every existing signal
-    unchanged (pinned by tests/check_volt_sizing.py V4 against HEAD numbers).
-
-    🔴 r131 — VOLT ADOPTS THE BREAKOUT SIZING MODEL. The operator, 2026-09-24:
-    *"VOLT needs to adopt the breakout sizing model."* A signal may carry an
-    explicit `sizing_distance`; when it does, it is SIZED ON GEOMETRY and that
-    number — not |underlying_entry - underlying_stop| — is the distance the
-    sizer (and its r93 noise floor) sees.
-    ⚠️ WHY VOLT CANNOT USE entry - stop: its stop IS its entry by the
-    operator's 2026-09-21 ruling (*"A close beyond where the trade opened is a
-    dead thesis"*, strategy/volt_plan.py), so the distance is 0 by design and
-    `_size_geometry` would take its DEGENERATE -> 1 contract branch on every
-    fire. VOLT's declared R is the signal bar's range (`prep.risk_px`), the
-    same number its trail arms on, so that is what it supplies.
-    ⚠️ WHY VOLT DOES NOT SET `sizes_on_geometry`: that flag is also
-    `OptionsSignal.sizes_on_structure()`, which re-anchors the entry-time
-    trail activation to the entry premium (base_strategy.py) — an EXIT
-    change the ruling did not ask for. `sizing_distance` opts into the sizing
-    rule and nothing else. ORB and Breakout, which carry no sizing_distance,
-    reach exactly the arithmetic they reached before.
+    signal takes the budget rule. A signal that sizes on geometry
+    (`sizes_on_geometry`, Breakout) gets the opening range's width and the
+    distance from its entry to its stop.
     """
-    _sd = getattr(signal, "sizing_distance", None)
-    if not (getattr(signal, "strategy_name", "") == "ORBStrategy"
-            or getattr(signal, "sizes_on_geometry", False)
-            or _sd is not None):
+    if not getattr(signal, "sizes_on_geometry", False):
         return 0.0, 0.0
     # Geometry INPUTS only — the rule itself (floor, clamp, degenerate→1)
     # lives in the sizer, so there is exactly one place it can be wrong.
     _orb_w = abs(float(getattr(signal, "orb_range_high", 0) or 0)
                  - float(getattr(signal, "orb_range_low", 0) or 0))
     # 🔑 r207 — THE RISK IS ENTRY-TO-STOP, AND THAT IS NOT NEGOTIABLE.
-    # An intermediate cut of r207 sized on `orb_stop_distance_px`, the
-    # impulsive wick measured from the BOUNDARY, frozen at the break.
     # Operator, 2026-09-01: *"The true risk is based on where we entered
     # though, not the range boundary. That's arbitrary. The 2 factuals are
-    # the distance from entry to the stop."* He is right and the reasoning
-    # was mine: the stop is a PRICE LEVEL, so what is at stake is the gap
-    # between the fill and that level. The boundary is where the CANDLE
-    # started, and it stands in for the entry only while the two coincide.
-    # Freezing it bought determinism and paid for it in truth, which is
-    # backwards — r119 and r181 both already said actual risk.
-    # ⚠️ AND IT WAS SOLVING A PROBLEM THE LATCH HAD ALREADY REMOVED. The
-    # 2-then-24 on QQQ was an ILLEGITIMATE FIRE — a spent confirmation
-    # re-fired off a stale ORBData — not a mis-sized one. `order_placed`
-    # and the engine re-read below kill it; this arithmetic never had to
-    # change, and changing it was fixing the same defect twice in two
-    # places, which is how a repair becomes a second defect.
-    if _sd is not None:
-        # r131 — the signal's own declared R (VOLT: the signal bar's range).
-        # Its entry and stop coincide by design, so entry - stop is 0.
-        return _orb_w, float(_sd or 0.0)
+    # the distance from entry to the stop."*
     _orb_d = abs(float(getattr(signal, "underlying_entry", 0) or 0)
                  - float(getattr(signal, "underlying_stop", 0) or 0))
     return _orb_w, _orb_d
 
 
 def _sizing_stop_premium(signal) -> float:
-    """The stop premium `size_for` sizes against. SIZING ONLY — never written
-    back to the signal, so the row's `stop_premium` and every exit that reads
-    it are unchanged.
-
-    🔴 r131 OPTION 2 — THE OPERATOR, 2026-09-24: VOLT adopts Breakout's 1-R
-    CURVE, not a flat scale-up. Breakout's 1-R is its structure stop in
-    premium (`structural_stop_premium`, r91): entry - |delta| x distance. For
-    VOLT the distance is the signal candle's range (`sizing_distance`), so
-    rpc = |delta| x range x 100 — tight range, big size; wide range, small.
-    ⚠️ WHY NOT signal.stop_premium(): VOLT's is the flat MAX_LOSS_PCT floor
-    (its stop is its entry, so the structural conversion returns None), and
-    `premium - 0.25 x premium` makes the count independent of the range —
-    measured 3.6-4.4x the old budget size on every trade, whatever the range.
-    ⚠️ NO DELTA -> THE FLAT FLOOR, LOUDLY (§0.5). Inventing a delta would size
-    real money on a number nobody measured.
-    ⚠️ A move at or beyond the premium -> 0.01, the same rule as
-    structural_stop_premium: the honest 1-R is then the whole premium.
-    Signals without `sizing_distance` (ORB, Breakout, everything else) get
-    `_sig_num(signal, "stop_premium")` exactly as before r131.
-    """
-    _flat = _sig_num(signal, "stop_premium")
-    _sd = getattr(signal, "sizing_distance", None)
-    if _sd is None:
-        return _flat
-    try:
-        _dl = abs(float(getattr(signal, "sizing_delta", None) or 0.0))
-        _pm = float(getattr(signal, "entry_premium", 0.0) or 0.0)
-        _dist = float(_sd or 0.0)
-    except (TypeError, ValueError):
-        _dl = _pm = _dist = 0.0
-    if not (_dl > 0 and _pm > 0 and _dist > 0):
-        logger.warning("[size] %s: no usable delta/premium/distance for the 1-R "
-                       "curve (delta=%s premium=%s distance=%s) — sizing on the "
-                       "FLAT stop premium %.4f instead",
-                       getattr(signal, "strategy_name", "?"),
-                       getattr(signal, "sizing_delta", None),
-                       getattr(signal, "entry_premium", None), _sd, _flat)
-        return _flat
-    _move = _dl * _dist
-    if _move >= _pm:
-        return 0.01
-    return _pm - _move
+    """The stop premium `size_for` sizes against: the signal's own stop premium. SIZING ONLY — never
+    written back to the signal, so the row's `stop_premium` and every exit that reads it are unchanged."""
+    return _sig_num(signal, "stop_premium")
 
 
 def _banner_dials() -> str:
@@ -6198,12 +5671,6 @@ def _execute_entry_signal(signal, ctx, ms, state, _sigj=None, *, additive: bool 
         if _sigj is not None:
             try:
                 _orb_ctx = None
-                if signal.strategy_name == "ORBStrategy":
-                    _depth = float(getattr(ctx["orb"], "retest_depth_px", 0.0))
-                    _atr   = float(getattr(ctx["vol"], "atr_current", 0.0))
-                    _orb_ctx = {"retest_depth_px": round(_depth, 4),
-                                "retest_depth_atr": (round(_depth / _atr, 4)
-                                                     if _atr > 0 else None)}
                 # v5.9 — L1 EVIDENCE AT THE MOMENT OF THE FIRE.
                 # that DECIDED the entry — the sweep's spent_val, ambient,
                 # rejq_val, exh_val, trend_opp, touch_count, depth_val,
@@ -7008,35 +6475,6 @@ def main_loop(state: BotState):
                 if _auth_side:
                     _plan_skip("RunawayContinuation", _auth_why, gate="condor_auth")
                     _plan_skip("TrendCreditSpread", _auth_why, gate="condor_auth")
-                    _sl_chain = ctx.get("chain")
-                    # OTV4TEST r11 — "the second leg is rich or we don't take it":
-                    # the complement must be at least as rich (credit / width) as
-                    # the leg already on. No number invented — a comparison.
-                    _leg1_rich = 0.0
-                    try:
-                        for _r in pos_mgr.get_open_records():
-                            if _r.get("is_credit_vertical") or _r.get("is_condor_leg"):
-                                _w = float(_r.get("spread_width") or 0.0)
-                                _c = float(_r.get("credit_received") or _r.get("entry_premium") or 0.0)
-                                if _w > 0:
-                                    _leg1_rich = max(_leg1_rich, _c / _w)
-                    except Exception:                          # noqa: BLE001
-                        _leg1_rich = 0.0
-                    _sl2 = _safe_strategy("SweepForLeg2",
-                        lambda: _sweep_cs_strategy.generate_signal(
-                            price_now=ctx["price"],
-                            now_et=now_et().strftime("%H:%M"),
-                            atr_pct=float(getattr(ctx.get("vol"), "atr_pct", 0.0) or 0.0),
-                            chain=_sl_chain,
-                            orb_high=ctx.get("orb_high"),
-                            orb_low=ctx.get("orb_low"),
-                            df_1m=ctx.get("df_1m"),
-                            required_side=_auth_side,
-                            complement_min_richness=_leg1_rich), ctx)
-                    if (_sl2 is not None
-                            and _can_open_credit_spread(_sl2.option_side,
-                                                        _sl2, ctx["price"], ctx=ctx)):
-                        _execute_condor_leg(_sl2, state, ctx)
                 elif _auth_why:
                     _plan_skip_all(_auth_why, gate="condor_auth")
                 # ══ r43 — ADM.1 CLOSED: ENTRY RUNS WITH A POSITION OPEN ═══
@@ -7066,9 +6504,6 @@ def main_loop(state: BotState):
                 # is real rather than apparent. `_attempt_hunt` was being asked
                 # TWICE a tick once this gate came out — here and inside
                 # `attempt_new_entry` — which is the double-ask r40 named.
-                # `_attempt_sweep_on_grant` is NOT redundant (it needs a live
-                # handoff grant, constrains the side, and consumes the grant),
-                # so it MOVED into `attempt_new_entry` rather than being cut.
                 #
                 # ⚠️ MANAGEMENT ALREADY RAN ABOVE and is untouched. This branch
                 # still manages first; what changed is that it no longer
@@ -7734,17 +7169,11 @@ def main():
             # r201 — WHICH BUDGET, AND WHETHER ANYBODY CHOSE IT. An
             # unconfigured box trades 1-lot on an index name, which reads as a
             # defect rather than a config gap unless the banner says otherwise.
-            f" · orb_budget=${ORB_BUDGET_USD:.0f}"
+            # RETIRE.1: the sizing ramp's TOP (configure.sh item 7, OT_ORB_BUDGET_USD).
+            f" · ramp_top=${ORB_BUDGET_USD:.0f}"
             f"{' (DEFAULT — not set for this box)' if ORB_BUDGET_IS_DEFAULT else ''}"
-            # r161 — the ramp is MIN (risk per trade) to MAX (orb_budget), and
-            # each switch says whether that trade rides it or sizes flat.
-            f" · scaling ORB={'on' if SCALE_ORB else 'OFF'}"
-            f" BRK={'on' if SCALE_BREAKOUT else 'OFF'}"
-            f" VOLT={'on' if SCALE_VOLT else 'OFF'}"
-            # r234 — the contract-price scale ORCS's wing and credit floor ride.
-            f" · contract_scale={CONTRACT_SCALE:g} ({CONTRACT_SCALE_SOURCE})"
-            # r235 — whether ORCS is armed, so no one has to read the unit.
-            f" · ORCS={'on' if ORCS_ENABLED else 'OFF'}"
+            # r161 — the ramp is MIN (risk per trade) to MAX (ramp_top); Breakout rides it.
+            f" · scaling BRK={'on' if SCALE_BREAKOUT else 'OFF'}"
             # r253 (RUNW.2) — the pin gate and Runaway's end in force, READ here rather than
             # inferred from silence (SPX-TEST, 10-05: neither was printed anywhere).
             f"{_banner_dials()}"
@@ -7885,7 +7314,7 @@ def _interactive_startup() -> SessionConfig:
     print(f"  Risk/trade:    ${risk_usd:.0f}")
     print(f"  Mode:          {'PAPER' if paper else '⚠️  LIVE'}")
     print(f"  Loss cap:      ${DAILY_LOSS_LIMIT_USD:.0f} realized → no new entries until back under")
-    print(f"  ORB budget:    ${ORB_BUDGET_USD:.0f} per setup"
+    print(f"  Ramp top:      ${ORB_BUDGET_USD:.0f} per setup"
           f"{'  (DEFAULT — not set for this box)' if ORB_BUDGET_IS_DEFAULT else ''}")
     print(f"{'─'*50}")
 

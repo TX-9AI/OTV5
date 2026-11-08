@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """
-tests/check_spxw_settle_orcs_live.py  v5.0
+tests/check_spxw_settle_orcs_live.py  v5.1
+v5.1  2026-11-08  OTV5 r76 (RETIRE.1) — O1/O2 RE-POINTED (WA 38.4): ORCS is removed, so its live-refusal and paper rows become one check that main
+      carries no ORCS path; S1/S2 (the SPXW settlement) unchanged.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.1  2026-10-19  OTV4TEST r303 (PSTATE.1) — its subject OpeningRangeCreditSpread is DORMANT by default and a dormant plan now
       writes nothing by ruling, so this run switches it ACTIVE (OT_ORCS=1); what it pins is unchanged.
@@ -24,7 +26,6 @@ from types import SimpleNamespace
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
-os.environ["OT_ORCS"] = "1"   # r303: the subject writes (check_plan_states pins dormant)
 FAILED = []
 
 
@@ -57,38 +58,13 @@ def main():
         check("S2 SPX and QQQ read their own tape; a symbol with no bars stays None",
               own == (7700.5, 749.25, None), f"got {own!r}")
 
-        calls = []
-
-        class _Orcs:
-            name = "OpeningRangeCreditSpread"
-
-            def generate_signals(self, **kw):
-                return [SimpleNamespace(strategy_name="OpeningRangeCreditSpread", side="put")]
-
-            def ledger_open(self, sig):
-                calls.append("ledger_open")
-
-        saved = (M._orcs_strategy, M._execute_condor_leg)
-        try:
-            M._orcs_strategy = _Orcs()
-            M._execute_condor_leg = lambda sig, state, ctx: calls.append("entry")
-            ctx = {"price": 7700.0, "orb_high": 7710.0, "orb_low": 7690.0, "chain": None, "gap": None,
-                   "macro": None}
-            M._attempt_orcs(ctx, SimpleNamespace(paper_trading=False))
-            live = list(calls)
-            calls.clear()
-            M._attempt_orcs(ctx, SimpleNamespace(paper_trading=True))
-            paper = list(calls)
-        finally:
-            M._orcs_strategy, M._execute_condor_leg = saved
-        check("O1 LIVE: no plan_ledger row and no entry call for a ready ORCS side", live == [], f"calls={live}")
-        check("O2 PAPER: unchanged - ledger_open then the entry", paper == ["ledger_open", "entry"],
-              f"calls={paper}")
+        check("O1/O2 r76: ORCS is removed - main has no _attempt_orcs and no ORCS strategy to write a row",
+              not hasattr(M, "_attempt_orcs") and not hasattr(M, "_orcs_strategy"))
     except Exception as exc:  # noqa: BLE001
         check("X0 (did not run)", False, f"{type(exc).__name__}: {exc}")
     if FAILED:
         print(f"\nRED — {sorted(set(FAILED))}"); return 1
-    print("\nGREEN — SPXW settles on the index; a live box writes no ORCS row"); return 0
+    print("\nGREEN — SPXW settles on the index; ORCS is removed"); return 0
 
 
 if __name__ == "__main__":

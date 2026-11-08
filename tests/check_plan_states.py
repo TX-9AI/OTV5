@@ -1,6 +1,11 @@
 #!/usr/bin/env python3
 """
-tests/check_plan_states.py  v5.6
+tests/check_plan_states.py  v5.7
+v5.7  2026-11-08  OTV5 r76 (RETIRE.1) — RE-POINTED (WA section 38.4): the ORB trade, VOLT, ORCS, the ATP fly and the sweep
+      are REMOVED, so S1's ruled dormant roster is the condor entry alone; S3 drops their switch cases and names an
+      unknown value on OT_HUNT; D1/D2/D3/D8 use a switched-off Runaway (OT_RUNAWAY=off) as the dormant plan, D4 a LOG
+      Runaway, D6 a LOG plan's vertical at the credit door and the TCS retired reason. What each check pins is
+      unchanged. The operator, 2026-11-07: "Yes, I want all of those things fixed."
 v5.6  2026-10-31  OTV5 r68 (CFG.5) — OT_RESTING_STOP_STATE leaves the scratch env: the resting stop and its state file are deleted
       (the operator, 2026-10-31: "Resting stop was a study. It failed. Get this the fuck out of here"). No check changed.
 v5.5  2026-10-31  OTV5 r67 (PARC.4) — S1 / S3 RE-POINTED (WA section 38.4): PARC is removed, so the
@@ -32,7 +37,7 @@ v1.0  2026-10-19  OTV4TEST r303 (PSTATE.1). The operator, 2026-10-19 08:34 ET: "
       no credit position is open.
 
   S1  defaults, fresh interpreter, every switch unset: active = Runaway, Breakout, Hunt, PARK, GEX fly,
-      CondorManagement, CreditRoll; dormant = VOLT, ORB trade, ORCS, ATP fly, Sweep, TCS, the condor entry
+      CondorManagement, CreditRoll; log = TCS (r57); dormant = the condor entry (r76: the retired trades are removed)
   S2  every plan the bot registers (import main) has a state and a category (hour / condition)
   S3  the switch values: "1" / "active" = active, "log" = log, "true" on a default-off trade = dormant (and the
       value is named), OT_GEX_BUTTERFLY=0 dormant / =log log, OT_PARK=off dormant / =log log, OT_RUNAWAY=off /
@@ -78,8 +83,7 @@ for _k, _v in (("OT_TRADES_DB", "t.db"), ("OT_DERIVED_DB", "d.db"), ("OT_FEED_DB
                ("OT_WAREHOUSE_STATE", "ws"), ("OT_PLAN_STATES_FILE", "plan_states.json")):
     os.environ[_k] = os.path.join(_TD, _v)
 os.environ.setdefault("OT_INSTRUMENT", "QQQ")
-SWITCHES = ("OT_VOLT", "OT_ORB_TRADE", "OT_ATP_BUTTERFLY", "OT_ORCS", "OT_SWEEP_CS", "OT_TCS_ACTIVE",
-            "OT_GEX_BUTTERFLY", "OT_PARK", "OT_RUNAWAY", "OT_BREAKOUT", "OT_HUNT")
+SWITCHES = ("OT_TCS_ACTIVE", "OT_GEX_BUTTERFLY", "OT_PARK", "OT_RUNAWAY", "OT_BREAKOUT", "OT_HUNT")
 for _k in SWITCHES:
     os.environ.pop(_k, None)
 ET = ZoneInfo("America/New_York")
@@ -146,8 +150,7 @@ def main():
     ruled_active = ["Breakout", "CondorManagement", "CreditRoll", "GEXPinButterfly", "LiquidityHunt",
                     "PARK", "RunawayContinuation"]
     ruled_log = ["TrendCreditSpread"]                      # r57 (TCS.LOG1): a shadow trade (r67: PARC removed)
-    ruled_dormant = ["ATPButterfly", "IronCondorStrategy", "ORBStrategy", "OpeningRangeCreditSpread",
-                     "SweepCreditSpread", "VOLT"]
+    ruled_dormant = ["IronCondorStrategy"]
     st = fresh("import json\nfrom strategy import plan_state as S\n"
                "print(json.dumps({n: S.state(n) for n in S.TABLE}))")
     act = sorted(k for k, v in st.items() if v == "active")
@@ -166,68 +169,65 @@ def main():
 
     probe = ("import json\nfrom strategy import plan_state as S\n"
              "print(json.dumps([S.state(%r), S.refused()]))")
-    cases = [("VOLT", {"OT_VOLT": "1"}, "active"), ("VOLT", {"OT_VOLT": "active"}, "active"),
-             ("VOLT", {"OT_VOLT": "log"}, "log"), ("VOLT", {"OT_VOLT": "true"}, "dormant"),
-             ("ORBStrategy", {"OT_ORB_TRADE": "log"}, "log"),
+    cases = [("Breakout", {"OT_BREAKOUT": "1"}, "active"), ("Breakout", {"OT_BREAKOUT": "active"}, "active"),
+             ("Breakout", {"OT_BREAKOUT": "log"}, "log"), ("LiquidityHunt", {"OT_HUNT": "true"}, "active"),
+             ("LiquidityHunt", {"OT_HUNT": "off"}, "dormant"),
              ("GEXPinButterfly", {"OT_GEX_BUTTERFLY": "0"}, "dormant"),
              ("GEXPinButterfly", {"OT_GEX_BUTTERFLY": "log"}, "log"),
              ("PARK", {"OT_PARK": "off"}, "dormant"), ("PARK", {"OT_PARK": "log"}, "log"),
              ("RunawayContinuation", {"OT_RUNAWAY": "off"}, "dormant"),
              ("RunawayContinuation", {"OT_RUNAWAY": "log"}, "log"),
-             ("OpeningRangeCreditSpread", {"OT_ORCS": "1"}, "active"),
-             ("OpeningRangeCreditSpread", {"OT_ORCS": "log"}, "log"),
-             ("SweepCreditSpread", {"OT_SWEEP_CS": "log"}, "log"),
              ("TrendCreditSpread", {"OT_TCS_ACTIVE": "0"}, "dormant"),       # r57 (TCS.LOG1)
              ("TrendCreditSpread", {"OT_TCS_ACTIVE": "log"}, "log")]
     got = [(n, e, fresh(probe % n, e)) for n, e, _w in cases]
     miss = [(n, e, g) for (n, e, g), (_n, _e, w) in zip(got, cases) if not (isinstance(g, list) and g[0] == w)]
-    true_named = next((g for n, e, g in got if e == {"OT_VOLT": "true"}), None)
+    true_named = next((g for n, e, g in got if e == {"OT_HUNT": "true"}), None)
     check("S3 the switch values (legacy '1', active, log, off, the config flags) and an unknown value is named",
-          not miss and isinstance(true_named, list) and "OT_VOLT='true'" in json.dumps(true_named[1]),
+          not miss and isinstance(true_named, list) and "OT_HUNT='true'" in json.dumps(true_named[1]),
           f"wrong: {miss}; 'true' -> {true_named}")
 
-    # ── D1: a dormant VOLT through a whole board tick writes nothing ──
+    # ── D1: a dormant (switched-off) Runaway through a whole board tick writes nothing ──
     for k in SWITCHES:
         os.environ.pop(k, None)
+    DORM = "RunawayContinuation"
+    os.environ["OT_RUNAWAY"] = "off"
     P.begin_tick(time.time())
-    M._plan_skip("VOLT", "retired by test", gate="retired")
+    M._plan_skip(DORM, "switched off by test", gate="retired")
     P.close_tick(store, "QQQ")
-    n_tick = len(rows(dc, "SELECT 1 FROM plan_tick WHERE strategy='VOLT'"))
-    n_hb = len(rows(dc, "SELECT 1 FROM plan_heartbeat WHERE plan='VOLT'"))
+    n_tick = len(rows(dc, "SELECT 1 FROM plan_tick WHERE strategy=?", (DORM,)))
+    n_hb = len(rows(dc, "SELECT 1 FROM plan_heartbeat WHERE plan=?", (DORM,)))
     line = P.board_line()
     check("D1 a DORMANT plan writes no plan_tick / plan_heartbeat row and is not on the [plans] line",
-          n_tick == 0 and n_hb == 0 and "VOLT=" not in line and "Breakout=" in line,
-          f"plan_tick {n_tick}, heartbeat {n_hb}, line has VOLT={'VOLT=' in line}")
+          n_tick == 0 and n_hb == 0 and f"{DORM}=" not in line and "Breakout=" in line,
+          f"plan_tick {n_tick}, heartbeat {n_hb}, line has {DORM}={f'{DORM}=' in line}")
 
     # ── D2: a dormant plan is never asked ──
     called = []
     M._set_admission(None)
-    M._safe_strategy("VOLT", lambda: called.append(1))
+    M._safe_strategy(DORM, lambda: called.append(1))
     M._safe_strategy("Breakout", lambda: called.append(2))
     check("D2 main._safe_strategy never asks a DORMANT plan (an active one still is)",
           called == [2], f"called {called}")
 
     # ── D3: the ledger door ──
     led = PlanLedger(store, "QQQ")
-    pid = led.open_plan("ORBStrategy", "CONFIRMED", {"price": 700.0}, direction="LONG")
-    n_led = len(rows(dc, "SELECT 1 FROM plan_ledger WHERE strategy='ORBStrategy'"))
-    check("D3 PlanLedger.open_plan writes nothing for the DORMANT ORB trade", pid is None and n_led == 0,
+    pid = led.open_plan(DORM, "CONFIRMED", {"price": 700.0}, direction="LONG")
+    n_led = len(rows(dc, "SELECT 1 FROM plan_ledger WHERE strategy=?", (DORM,)))
+    check("D3 PlanLedger.open_plan writes nothing for a DORMANT plan", pid is None and n_led == 0,
           f"pid {pid}, rows {n_led}")
+    os.environ.pop("OT_RUNAWAY", None)
 
     # ── D4: LOG ──
-    os.environ["OT_VOLT"] = "log"
+    os.environ["OT_RUNAWAY"] = "log"
     P.begin_tick(time.time())
-    vplan = P.REGISTRY.get("VOLT")
-    r4 = None
-    if vplan is not None:
-        r4 = vplan.tick(700.0, "long").take(_Sig("VOLT"))
-    v_rows = rows(dc, "SELECT verdict FROM plan_tick WHERE strategy='VOLT'")
-    v_led = len(rows(dc, "SELECT 1 FROM plan_ledger WHERE strategy='VOLT'"))
-    refused = M._log_only(_Sig("VOLT"), {})
+    vplan = P.REGISTRY.get(DORM) or P.Plan(DORM, ("r",))
+    r4 = vplan.tick(700.0, "long").take(_Sig(DORM))
+    v_rows = rows(dc, "SELECT verdict FROM plan_tick WHERE strategy=? AND verdict IN ('TAKE','LOG-ONLY')", (DORM,))
+    v_led = len(rows(dc, "SELECT 1 FROM plan_ledger WHERE strategy=?", (DORM,)))
+    refused = M._log_only(_Sig(DORM), {})
     check("D4 LOG: take() writes LOG-ONLY, opens no plan_ledger row, and main._log_only refuses the signal",
-          vplan is not None and r4 is not None and [v for (v,) in v_rows] == ["LOG-ONLY"] and v_led == 0 and refused,
+          r4 is not None and [v for (v,) in v_rows] == ["LOG-ONLY"] and v_led == 0 and refused,
           f"rows {v_rows}, ledger {v_led}, _log_only {refused}")
-    os.environ.pop("OT_VOLT", None)
 
     # ── D5: ACTIVE unchanged ──
     P.begin_tick(time.time())
@@ -240,8 +240,7 @@ def main():
           [v for (v,) in b_rows] == ["TAKE"] and b_led == 1 and not M._log_only(_Sig("Breakout"), {}),
           f"rows {b_rows}, ledger {b_led}")
 
-    # ── D6: the credit door ──
-    os.environ["OT_SWEEP_CS"] = "log"
+    # ── D6: the credit door (a LOG plan's vertical; OT_RUNAWAY=log is still set from D4) ──
     seen = []
 
     class _Stop(Exception):
@@ -256,16 +255,18 @@ def main():
         st_ = M.BotState()
         st_.paper_trading = True
         try:
-            M._execute_condor_leg(_Sig("SweepCreditSpread", "put"), st_, {})
+            M._execute_condor_leg(_Sig(DORM, "put"), st_, {})
         except _Stop:
             pass
     finally:
         M.entries_open = orig
-    log_reason = M._retired_reason("SweepCreditSpread")
-    os.environ.pop("OT_SWEEP_CS", None)
-    dflt_reason = M._retired_reason("SweepCreditSpread")
-    check("D6 a LOG sweep's vertical stops at the top of _execute_condor_leg; a LOG sweep is asked, the default "
-          "still refused", not seen and log_reason == "" and dflt_reason != "",
+    os.environ.pop("OT_RUNAWAY", None)
+    log_reason = M._retired_reason("TrendCreditSpread")                 # unset = log (r57): asked
+    os.environ["OT_TCS_ACTIVE"] = "0"
+    dflt_reason = M._retired_reason("TrendCreditSpread")                # switched off: refused, and said
+    os.environ.pop("OT_TCS_ACTIVE", None)
+    check("D6 a LOG plan's vertical stops at the top of _execute_condor_leg; a LOG TCS is asked, a switched-off "
+          "one refused", not seen and log_reason == "" and dflt_reason != "",
           f"reached the order path {bool(seen)}, log reason {log_reason!r}, default {dflt_reason!r}")
 
     # ── D7: CondorManagement on the line only while it has legs ──
@@ -284,17 +285,19 @@ def main():
           f"off with 0: {off_line}, on with 2: {on_line}")
 
     # ── D8: the plans panel ──
+    os.environ["OT_RUNAWAY"] = "off"
     try:
         from strategy import plan_state as S
         S.write_states_file()
     except Exception:                                           # noqa: BLE001
         pass
+    os.environ.pop("OT_RUNAWAY", None)
     pdb = os.path.join(_TD, "panel.db")
     pc = sqlite3.connect(pdb)
     pc.execute("CREATE TABLE plan_heartbeat (symbol TEXT, plan TEXT, ts_epoch REAL, tick_id INTEGER, state TEXT,"
                " gate TEXT, verdict TEXT, watching TEXT, PRIMARY KEY (symbol, plan))")
     now = datetime.now(ET).replace(hour=10, minute=0, second=0, microsecond=0)
-    pc.execute("INSERT INTO plan_heartbeat VALUES ('QQQ','VOLT',?,1,'IDLE','enabled','DORMANT','old')",
+    pc.execute("INSERT INTO plan_heartbeat VALUES ('QQQ','RunawayContinuation',?,1,'IDLE','enabled','DORMANT','old')",
                (now.timestamp() - 3600,))
     pc.execute("INSERT INTO plan_heartbeat VALUES ('QQQ','Breakout',?,9,'EVALUATING','','DECLINE','fresh')",
                (now.timestamp() - 5,))
@@ -311,10 +314,10 @@ def main():
         out = buf.getvalue()
     except Exception as exc:                                    # noqa: BLE001
         out = f"RAISED {type(exc).__name__}: {exc}"
-    volt_lines = [ln for ln in out.splitlines() if " VOLT" in ln or ln.strip().startswith("VOLT")]
+    volt_lines = [ln for ln in out.splitlines() if "RunawayContinuation" in ln and "/manage" not in ln]
     check("D8 a DORMANT plan is hidden from the plans panel (never STALE, never NOT RUNNING) and the hidden count is said",
           not volt_lines and "switched-off plan(s) hidden" in out,
-          f"VOLT lines: {volt_lines[:4]}")
+          f"dormant plan lines: {volt_lines[:4]}")
 
     # ── D9: condition-gated silence ──
     mg = P.REGISTRY.get("Breakout/manage") or P.Plan("Breakout/manage", ("legs",), self_ledgers=True)

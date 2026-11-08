@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
-"""tests/check_one_window_table.py — v5.0
+"""tests/check_one_window_table.py — v5.1
+v5.1  2026-11-08  OTV5 r76 (RETIRE.1) — RE-POINTED (WA 38.4): the ORB, VOLT, ATP and sweep windows are removed, so their 18 pins, their W2 pairs and
+      W2b (the sweep's unread start) go with them; W4 overrides Breakout's row. Every live pin is unchanged.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 ONE ENTRY-WINDOW TABLE, AND NOTHING READS A WINDOW FROM ANYWHERE ELSE.
 
@@ -31,7 +33,7 @@ v1.0  2026-09-26 — OTV4TEST r148 (WIN.1). The operator, 2026-09-22: "Why are t
 
   W1  every admission-table window == config.ENTRY_WINDOWS (all nine strategies)
   W2  every plan's resolved window == its ENTRY_WINDOWS row
-  W2b sweep_credit_spread.EARLIEST_ET is DECLARED BUT UNREAD (the sweep plan governs);
+  W2b (r76: removed with the sweep) sweep_credit_spread.EARLIEST_ET is DECLARED BUT UNREAD (the sweep plan governs);
       it is exempt from W2 and this fails the moment any runtime file starts reading it
   W3  no strategy/execution file reads a window name through getattr(config, NAME, <literal>)
       - the shape that turned a missing name into a silent 14:00 (definition-shaped, WA 20)
@@ -69,15 +71,11 @@ def hhmm(t) -> str:
 
 
 PIN = {   # measured on the r148 build; identical to r147 except the TrendCreditSpread admission row
-    "admission.ATPButterfly.window": ((13, 0), (15, 0)),   # r273 (was 12:00, r179)
     "admission.Breakout.window": ((9, 35), (10, 30)),   # r187
     "admission.GEXPinButterfly.window": ((13, 0), (15, 0)),   # r273
     "admission.LiquidityHunt.window": ((9, 35), (10, 30)),   # r187
-    "admission.ORBStrategy.window": ((9, 35), (15, 40)),   # r149
     "admission.RunawayContinuation.window": ((9, 35), (10, 30)),   # r187
-    "admission.SweepCreditSpread.window": ((9, 35), (15, 40)),
     "admission.TrendCreditSpread.window": ((11, 31), (15, 40)),
-    "admission.VOLT.window": ((9, 35), (10, 30)),   # r187
     "config.BUTTERFLY_ENTRY_CUTOFF_ET": (14, 0),
     "config.BUTTERFLY_ENTRY_START_ET": (13, 0),   # r273
     "config.CONDOR_ENTRY_CUTOFF_ET": (15, 40),
@@ -91,35 +89,21 @@ PIN = {   # measured on the r148 build; identical to r147 except the TrendCredit
     "config.HARD_CLOSE_ET": (15, 55),   # r149
     "config.ORB_NO_ENTRY_AFTER_ET": (15, 40),   # r149
     "config.RUNAWAY_CUTOFF_ET": "10:30",   # r187
-    "config.SWEEP_CS_EARLIEST_ET": "11:31",
-    "config.SWEEP_CS_EARLIEST_ET_FORK": (9, 35),
-    "config.SWEEP_CS_LATEST_ET": "15:40",
-    "config.SWEEP_CS_LATEST_ET_FORK": (15, 40),
     "config.TCS_ENTRY_END_ET": (15, 40),
     "config.TCS_START_ET": (11, 31),
     "config.VERTICAL_HOLD_TO_ET": (15, 45),   # r149
-    "config.VOLT_WINDOW_CLOSE_ET": (10, 30),   # r187
-    "config.VOLT_WINDOW_OPEN_ET": (9, 35),
     "strategy.breakout.EARLIEST_ET": "09:35",
     "strategy.breakout.LATEST_ET": "10:30",   # r187
     "strategy.liquidity_hunt.WINDOW_OPEN_ET": (9, 35),
-    "strategy.orb_plan.WINDOW_OPEN_ET": (9, 35),
     "strategy.runaway_plan.WINDOW_OPEN_ET": (9, 35),
     "risk.session_guard._BUTTERFLY_CUTOFF": "14:00",
     "strategy.gex_pin_butterfly.EARLIEST_ET": "13:00",   # r273
     "strategy.gex_pin_butterfly.LATEST_ET": "15:00",
     "strategy.liquidity_hunt.CUTOFF_ET": (10, 30),   # r187
-    "strategy.orb_plan.CUTOFF_ET": (15, 40),   # r149
     "strategy.runaway_continuation.CUTOFF_ET": "10:30",   # r187
     "strategy.runaway_plan._cutoff_hm()": (10, 30),   # r187
-    "strategy.sweep_credit_spread.EARLIEST_ET": "11:31",
-    "strategy.sweep_credit_spread.LATEST_ET": "15:40",
-    "strategy.sweep_plan.EARLIEST_ET": (9, 35),
-    "strategy.sweep_plan.LATEST_ET": (15, 40),
     "strategy.tcs_plan.TCS_ENTRY_END_ET": (15, 40),
     "strategy.tcs_plan.TCS_START_ET": (11, 31),
-    "strategy.volt_plan.WINDOW_CLOSE_ET": (10, 30),   # r187
-    "strategy.volt_plan.WINDOW_OPEN_ET": (9, 35),
 }
 
 
@@ -166,7 +150,7 @@ def main() -> int:
         import config
         EW = config.ENTRY_WINDOWS
     except Exception as exc:                                      # noqa: BLE001
-        for t in ("W1", "W2", "W2b", "W4", "W5"):
+        for t in ("W1", "W2", "W4", "W5"):
             check(t, False, f"config.ENTRY_WINDOWS absent ({type(exc).__name__})")
         print(f"RED — {len(PROBLEMS)} failed"); return 1
     from execution.position_manager import rules
@@ -174,18 +158,13 @@ def main() -> int:
     bad = [n for n in EW if tuple(tuple(x) for x in R[n].window) != tuple(tuple(x) for x in EW[n])]
     check("W1 admission windows == config.ENTRY_WINDOWS", not bad and set(R) == set(EW), f"differ: {bad}, keys {sorted(set(R) ^ set(EW))}")
 
-    from strategy import orb_plan, runaway_continuation, liquidity_hunt, breakout, volt_plan, tcs_plan, sweep_plan, gex_pin_butterfly
+    from strategy import runaway_continuation, liquidity_hunt, breakout, tcs_plan, gex_pin_butterfly
     pairs = [
-        ("ORBStrategy end", orb_plan.CUTOFF_ET, EW["ORBStrategy"][1]),
         ("RunawayContinuation end", runaway_continuation.CUTOFF_ET, hhmm(EW["RunawayContinuation"][1])),
         ("LiquidityHunt end", liquidity_hunt.CUTOFF_ET, EW["LiquidityHunt"][1]),
         ("Breakout end", breakout.LATEST_ET, hhmm(EW["Breakout"][1])),
-        ("VOLT start", volt_plan.WINDOW_OPEN_ET, EW["VOLT"][0]),
-        ("VOLT end", volt_plan.WINDOW_CLOSE_ET, EW["VOLT"][1]),
         ("TrendCreditSpread start", tcs_plan.TCS_START_ET, EW["TrendCreditSpread"][0]),
         ("TrendCreditSpread end", tcs_plan.TCS_ENTRY_END_ET, EW["TrendCreditSpread"][1]),
-        ("SweepCreditSpread start", sweep_plan.EARLIEST_ET, EW["SweepCreditSpread"][0]),
-        ("SweepCreditSpread end", sweep_plan.LATEST_ET, EW["SweepCreditSpread"][1]),
         ("GEXPinButterfly start", gex_pin_butterfly.EARLIEST_ET, hhmm(EW["GEXPinButterfly"][0])),
         ("GEXPinButterfly end", gex_pin_butterfly.LATEST_ET, hhmm(EW["GEXPinButterfly"][1])),
     ]
@@ -193,31 +172,11 @@ def main() -> int:
     mism = [f"{n}: plan {norm(a)!r} vs table {norm(b)!r}" for n, a, b in pairs if norm(a) != norm(b)]
     check("W2 every plan's window == its ENTRY_WINDOWS row", not mism, "; ".join(mism))
 
-    readers = []
-    files = [os.path.join(ROOT, "main.py")] + [os.path.join(ROOT, d, f) for d in ("strategy", "execution", "derived", "analysis", "risk", "data")
-                                               for f in sorted(os.listdir(os.path.join(ROOT, d))) if f.endswith(".py") and f != "sweep_credit_spread.py"]
-    for path in files:
-        tree = ast.parse(open(path).read()); aliases = set()
-        for node in ast.walk(tree):          # every name the module is bound to, under any alias
-            if isinstance(node, ast.ImportFrom) and node.module == "strategy":
-                aliases |= {(n.asname or n.name) for n in node.names if n.name == "sweep_credit_spread"}
-            elif isinstance(node, ast.Import):
-                aliases |= {(n.asname or n.name) for n in node.names if n.name == "strategy.sweep_credit_spread"}
-            elif isinstance(node, ast.ImportFrom) and node.module == "strategy.sweep_credit_spread" and any(n.name == "EARLIEST_ET" for n in node.names):
-                readers.append(os.path.relpath(path, ROOT) + " (from-import)")
-        for node in ast.walk(tree):
-            if isinstance(node, ast.Attribute) and node.attr == "EARLIEST_ET":
-                base = node.value
-                dotted = base.id if isinstance(base, ast.Name) else (ast.unparse(base) if isinstance(base, ast.Attribute) else "")
-                if dotted in aliases or dotted == "strategy.sweep_credit_spread":
-                    readers.append(f"{os.path.relpath(path, ROOT)}:{node.lineno}")
-    check("W2b sweep_credit_spread.EARLIEST_ET stays unread (the sweep plan governs)", not readers, f"read by {readers}")
-
     saved = getattr(config, "ADMISSION_RULES", None)
     try:
-        config.ADMISSION_RULES = {"ORBStrategy": {"window": ((1, 0), (2, 0))}}
-        w = tuple(tuple(x) for x in rules()["ORBStrategy"].window)
-        check("W4 ADMISSION_RULES cannot override a window", w == tuple(tuple(x) for x in EW["ORBStrategy"]), f"got {w}")
+        config.ADMISSION_RULES = {"Breakout": {"window": ((1, 0), (2, 0))}}
+        w = tuple(tuple(x) for x in rules()["Breakout"].window)
+        check("W4 ADMISSION_RULES cannot override a window", w == tuple(tuple(x) for x in EW["Breakout"]), f"got {w}")
     finally:
         if saved is None:
             try: delattr(config, "ADMISSION_RULES")

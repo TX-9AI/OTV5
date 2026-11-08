@@ -1,5 +1,6 @@
 """
-strategy/plan_state.py  v5.3
+strategy/plan_state.py  v5.4
+v5.4  2026-11-08  OTV5 r76 (RETIRE.1) — the removed trades leave the table (ATPButterfly, VOLT, ORBStrategy, OpeningRangeCreditSpread, SweepCreditSpread), with their switches (OT_ATP_BUTTERFLY, OT_VOLT, OT_ORB_TRADE, OT_ORCS, OT_SWEEP_CS), their _FLAG entries and the ORB / SweepForLeg2 aliases. The live rows are unchanged. The operator, 2026-11-07: "Running dead code and logging dead code activity is unnecessary drag. Yes, I want all of those things fixed."
 v5.3  2026-10-31  OTV5 r67 (PARC.4) — PARC LEAVES THE TABLE (its row and its config.PARC_MODE
       branch): PARC is removed. The operator, 2026-10-31: "On PARC, no. It was an idea. It failed. It's done." and "Yes" to removing its code. Every other plan's
       state is unchanged. Gate tests/check_no_parc.py.
@@ -72,19 +73,13 @@ TABLE: Dict[str, Tuple[str, str, str]] = {
     "LiquidityHunt":            ("OT_HUNT",           ACTIVE,  HOUR),
     "PARK":                     ("OT_PARK",           ACTIVE,  HOUR),
     "GEXPinButterfly":          ("OT_GEX_BUTTERFLY",  ACTIVE,  HOUR),
-    "ATPButterfly":             ("OT_ATP_BUTTERFLY",  DORMANT, HOUR),
-    "VOLT":                     ("OT_VOLT",           DORMANT, HOUR),
-    "ORBStrategy":              ("OT_ORB_TRADE",      DORMANT, HOUR),
-    "OpeningRangeCreditSpread": ("OT_ORCS",           DORMANT, HOUR),
-    "SweepCreditSpread":        ("OT_SWEEP_CS",       DORMANT, HOUR),
     "TrendCreditSpread":        ("OT_TCS_ACTIVE",     LOG,     HOUR),     # OTV5 r57 (TCS.LOG1): unset = log (shadow)
     "IronCondorStrategy":       ("",                  DORMANT, CONDITION),   # no entry of its own (r249)
     "CondorManagement":         ("",                  ACTIVE,  CONDITION),
     "CreditRoll":               ("",                  ACTIVE,  CONDITION),
 }
 # dispatch labels -> the plan they write under (strategy/plan.DISPATCH_ALIAS, kept in step)
-ALIAS = {"ORB": "ORBStrategy", "SweepForLeg2": "SweepCreditSpread",
-         "CondorPlan": "IronCondorStrategy", "CondorLeg": "IronCondorStrategy"}
+ALIAS = {"CondorPlan": "IronCondorStrategy", "CondorLeg": "IronCondorStrategy"}
 
 _ON = ("1", "active", "trade", "on")
 _OFF = ("0", "off", "dormant")
@@ -101,16 +96,6 @@ def _raw(key: str) -> str:
         v = os.environ.get("OT_BREAKOUT", "")
     elif key == "OT_HUNT":
         v = os.environ.get("OT_HUNT", "")
-    elif key == "OT_VOLT":
-        v = os.environ.get("OT_VOLT", "0")
-    elif key == "OT_ORB_TRADE":
-        v = os.environ.get("OT_ORB_TRADE", "0")
-    elif key == "OT_ATP_BUTTERFLY":
-        v = os.environ.get("OT_ATP_BUTTERFLY", "0")
-    elif key == "OT_ORCS":
-        v = os.environ.get("OT_ORCS", "0")
-    elif key == "OT_SWEEP_CS":
-        v = os.environ.get("OT_SWEEP_CS", "0")
     elif key == "OT_TCS_ACTIVE":
         v = os.environ.get("OT_TCS_ACTIVE", "")       # r57 (TCS.LOG1): unset = log, "0" = dormant
     elif key == "OT_GEX_BUTTERFLY":
@@ -121,9 +106,7 @@ def _raw(key: str) -> str:
 
 
 # the config flag that decides ACTIVE for a config-read switch (a checker flips the attribute)
-_FLAG = {"OpeningRangeCreditSpread": "ORCS_ENABLED", "SweepCreditSpread": "SWEEP_CS_ENABLED",
-         "TrendCreditSpread": "TREND_CREDIT_ACTIVE", "ATPButterfly": "ATP_BUTTERFLY_ENABLED",
-         "GEXPinButterfly": "GEX_BUTTERFLY_ENABLED"}
+_FLAG = {"TrendCreditSpread": "TREND_CREDIT_ACTIVE", "GEXPinButterfly": "GEX_BUTTERFLY_ENABLED"}
 
 
 def base(name: str) -> str:

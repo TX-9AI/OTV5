@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 # ==========================================================================
-# configure.sh  v5.7
+# configure.sh  v5.8
+# v5.8  2026-11-08  OTV5 r76 (RETIRE.1) — item 7's explanation no longer names the removed ORB and VOLT trades
+#       ("The most premium one scaled trade may deploy."). The key (OT_ORB_BUDGET_USD), the item number and every
+#       other item are unchanged. The stored retired lines (OT_SCALE_ORB, OT_SCALE_VOLT, and any OT_VOLT*, OT_ORCS,
+#       OT_ATP_BUTTERFLY, OT_SWEEP_CS*, OT_ORB_TRADE, OT_CONTRACT_SCALE, OT_VELOCITY*) come off each unit once,
+#       after the land, by tools/strip_retired_env.sh - not here, as at r68.
 # v5.7  2026-10-31  OTV5 r68 (CFG.5) — SEVEN MORE ITEMS LEAVE THE MENU (PARC LEFT IN r67); WHAT IS LEFT IS 1 Instrument, 2 Risk/ramp MIN, 3 Paper /
 #       Live, 4 Telegram, 5 TastyTrade credentials, 6 Catastrophic cap, 7 Ramp TOP (MAX), 8 Data capture, 9 Done. The
 #       operator, 2026-10-31, on the 17-item menu: "7. Pin gate, default "on" —remove from the menu"; "9. Scaling, default
@@ -673,7 +678,7 @@ change_orb_budget() {
     risk=$(get_env "OT_RISK_USD")
     echo ""
     echo -e "  ${BOLD}Scaling ramp TOP (MAX)${RESET}  (OT_ORB_BUDGET_USD)"
-    echo -e "  The most premium one scaled trade (ORB/Breakout/VOLT) may deploy."
+    echo -e "  The most premium one scaled trade may deploy."
     echo ""
     echo -e "  Current: ${BOLD}$(fmt_declared "$current")${RESET}"
     echo ""

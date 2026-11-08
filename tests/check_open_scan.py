@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_open_scan.py  v5.1
+tests/check_open_scan.py  v5.2
+v5.2  2026-11-08  OTV5 r76 (RETIRE.1) — O4's blind level-reading plan is the Hunt (LEVEL_PLANS no longer carries the removed sweep); unchanged otherwise.
 v5.1  2026-10-26  OTV5 r38 (HYG.18) — scratch no longer names dir="/var/tmp": mkdtemp honours TMPDIR, which boot_sweep and land.sh point
       at a per-run dir they remove (HYG.14), so a sweep leaves nothing behind (237 dirs had piled up on SOFI). No check changed.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
@@ -86,9 +87,9 @@ def _derived(path, live_levels=3, fork1h_built=1, level_zero=False, empty_field=
     t = T930 + 600
     c.execute("INSERT INTO fork_series VALUES ('1h',?,?)", (t, fork1h_built))
     c.execute("INSERT INTO fork_series VALUES ('1d',?,0)", (t,))
-    c.execute("INSERT INTO plan_tick VALUES (?,?,?,?)", (t, "SweepCreditSpread", "HOLD", "in play"))
+    c.execute("INSERT INTO plan_tick VALUES (?,?,?,?)", (t, "LiquidityHunt", "HOLD", "in play"))
     for k, v in (("levels_above", 0 if level_zero else 5), ("levels_below", 3), ("nearest_above", 741.0)):
-        c.execute("INSERT INTO plan_check VALUES (?,?,?,?,?)", (t, "SweepCreditSpread", k, v, "n/a"))
+        c.execute("INSERT INTO plan_check VALUES (?,?,?,?,?)", (t, "LiquidityHunt", k, v, "n/a"))
     p = {"gex": 1.0, "vwap": 735.0, "levels": {"above": [1], "below": [1]}, "iv_slope": None}
     if empty_field:
         p[empty_field] = None
@@ -165,7 +166,7 @@ def main() -> int:
         before = {p: _sha(p) for p in (d2, log2)}
         rc2, txt = _run(["--phase", "live", "--derived", d2, "--log", log2, "--out", out, "--now", NOW])
         check("O4 a level-reading plan that sees 0 levels is RED (blind)",
-              "sees NOTHING for levels_above" in txt and "🔴 SweepCreditSpread" in txt, txt[:600])
+              "sees NOTHING for levels_above" in txt and "🔴 LiquidityHunt" in txt, txt[:600])
         check("O5 an unknown empty snapshot field is RED; a known one is WATCH",
               "🔴 snapshot field 'brand_new_input'" in txt and "🟡 snapshot field 'iv_slope'" in txt, txt[:900])
         new_blk = txt.split("NEW since the last run:", 1)[1].split("\n  🟢", 1)[0].split("\n  🔴 ", 1)[0] if "NEW since" in txt else ""

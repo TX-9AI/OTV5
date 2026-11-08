@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """
-tests/check_legacy_gone.py  v5.0
+tests/check_legacy_gone.py  v5.1
+v5.1  2026-11-08  OTV5 r76 (RETIRE.1) — G0's control import RE-POINTED: exit_engine no longer imports derived.level_rules (it went with the sweep's
+      breach exit), so the control is derived/level_book's import of it. G1-G3 unchanged.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 LVL.15 STEP 5 — THE OLD LEVEL CODE LEAVES, ONE MODULE AT A TIME, AND NOTHING
 STILL IMPORTS WHAT LEFT.
@@ -32,8 +34,8 @@ statically, lazily inside a function, or through importlib/__import__ with a
 literal name. That is asserted here. The absence itself is verified after the
 land, by hand, and recorded in the ledger.
 
-  G0 CONTROL — the scanner FINDS a live import (execution/exit_engine.py
-     imports derived.level_rules), so an empty result below means something
+  G0 CONTROL — the scanner FINDS a live import (derived/level_book.py
+     imports derived.level_rules; r76: exit_engine's only import left with the sweep's breach exit), so an empty result below means something
   G1 nothing in the tree imports any module in LEGACY
   G3 LevelEngine.board() and main.py import nothing from derived.level_map (r124)
   G2 main.py does not import analysis.liquidity_mapper (r123 — it ran every
@@ -121,8 +123,8 @@ def main():
         for m in imports_of(p):
             found.setdefault(m, set()).add(rel)
     ctl = found.get("derived.level_rules", set())
-    check("G0 control: the scanner finds exit_engine importing derived.level_rules",
-          "execution/exit_engine.py" in ctl, f"{len(ctl)} importer(s)")
+    check("G0 control: the scanner finds derived/level_book importing derived.level_rules",
+          "derived/level_book.py" in ctl, f"{len(ctl)} importer(s)")
     bad = []
     for mod in LEGACY:
         own = mod.replace(".", "/") + ".py"

@@ -1,4 +1,5 @@
-"""tests/check_session_pin.py — v5.0
+"""tests/check_session_pin.py — v5.1
+v5.1  2026-11-08  OTV5 r76 (RETIRE.1) — P3/P4 (the sweep wrapper) go with the sweep; P5 and P6 read the TCS wrapper alone. P1/P2 unchanged.
 v5.0  2026-10-25  OTV5 r9 (GATE.7) — new. Found by QQQ-TEST (MSG-QQQ-1025-04): the store-less sweep of r8 at 08:2x ET
       read four checkers red (check_levels_in_play, check_plan_prepares, check_tcs_fifty, check_tcs_plan), all
       green after 09:30 ET.
@@ -66,7 +67,6 @@ def _spy(strategy):
 from datetime import datetime                                  # noqa: E402
 from zoneinfo import ZoneInfo                                  # noqa: E402
 
-import strategy.sweep_credit_spread as scs                     # noqa: E402
 import strategy.trend_credit_spread as tcs                     # noqa: E402
 
 _now_et = datetime(2026, 9, 9, 13, 6, tzinfo=ZoneInfo("America/New_York"))
@@ -82,24 +82,12 @@ check("P2  TrendCreditSpread.generate_signal forwards session_open_epoch",
 T.generate_signal(ms=None, current_price=96.8, now_et=_now_et)
 _t_default = seen[-1].get("session_open_epoch")
 
-S = scs.SweepCreditSpreadStrategy()
-seen = _spy(S)
-S.prepare(price_now=96.6, now_et="10:32", session_open_epoch=PIN)
-check("P3  SweepCreditSpreadStrategy.prepare forwards session_open_epoch",
-      bool(seen) and seen[-1].get("session_open_epoch") == PIN, f"got={seen[-1].get('session_open_epoch') if seen else None}")
-S.generate_signal(price_now=96.6, now_et="10:32", session_open_epoch=PIN)
-check("P4  SweepCreditSpreadStrategy.generate_signal forwards session_open_epoch",
-      len(seen) == 2 and seen[-1].get("session_open_epoch") == PIN, f"got={seen[-1].get('session_open_epoch') if seen else None}")
-S.generate_signal(price_now=96.6, now_et="10:32")
-_s_default = seen[-1].get("session_open_epoch")
-
-check("P5  no pin: both forward 0.0 (the live path reads today's 09:30 ET)",
-      isinstance(_t_default, float) and _t_default == 0.0 and isinstance(_s_default, float) and _s_default == 0.0,
-      f"tcs={_t_default!r} sweep={_s_default!r}")
+check("P5  no pin: the TCS wrapper forwards 0.0 (the live path reads today's 09:30 ET); r76: the sweep (P3/P4) is removed",
+      isinstance(_t_default, float) and _t_default == 0.0, f"tcs={_t_default!r}")
 
 import ast                                                     # noqa: E402
 
-_WRAPPERS = ("TrendCreditSpread", "SweepCreditSpreadStrategy")
+_WRAPPERS = ("TrendCreditSpread",)                             # r76: the sweep wrapper is removed
 
 
 def _ctor_name(node):

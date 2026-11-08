@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """
-tests/check_cap_fly_exempt.py  v5.3
+tests/check_cap_fly_exempt.py  v5.4
+v5.4  2026-11-08  OTV5 r76 (RETIRE.1) — RE-POINTED (WA 38.4): the ATP fly is removed, so FLIES is the pin fly alone; F4 switches the pin fly's
+      exemption off (PARK keeps its own, Breakout cannot be granted one); F6/F10 ask and refuse the one fly; F11 another
+      strategy's trade leaves it asked. What each pins is unchanged.
 v5.3  2026-10-31  OTV5 r67 (PARC.4) — F1 / F6 RE-POINTED (WA section 38.4), F12b DROPPED WITH ITS
       SUBJECT: PARC is removed, so F1's exempt set is the two flies and PARK again and F6's funnel filter names PARK
       only. The operator, 2026-10-31: "On PARC, no. It was an idea. It failed. It's done." and "Yes" to removing its code.
@@ -81,7 +84,6 @@ for _base in (ROOT, os.path.expanduser("~/options-trader")):
     if _found:
         break
 sys.path.insert(0, ROOT)
-os.environ["OT_ATP_BUTTERFLY"] = "1"   # r303: F6's second fly is active (check_plan_states pins dormant)
 
 # Self-isolating: run by hand without the harness, no live store is touched.
 _SCR = tempfile.mkdtemp(prefix="check_cap_fly_exempt_")
@@ -115,8 +117,8 @@ def guard(label, fn, detail=lambda: ""):
 from execution import position_manager as PMOD                  # noqa: E402
 import config                                                   # noqa: E402
 
-GEX, ATP = PMOD.GEXFLY, PMOD.ATPFLY
-FLIES = (GEX, ATP)
+GEX = PMOD.GEXFLY
+FLIES = (GEX,)                  # r76: the ATP fly is removed; the pin fly is the one butterfly
 TABLE = PMOD.rules()
 IN_WINDOW = (13, 30)            # inside both butterfly windows (r273: was 12:30)
 
@@ -132,7 +134,7 @@ def _facts(name, now=IN_WINDOW, **kw):
 EXEMPT = FLIES + ("PARK",)  # r288: PARK, its own budget (r67: PARC removed)
 others = [n for n in TABLE if n not in EXEMPT]
 _f1 = {n: PMOD.decide(_facts(n)).gate for n in others}
-check("F1 cap broken: every strategy but the two butterflies and PARK is refused on catastrophic_cap",
+check("F1 cap broken: every strategy but the butterfly and PARK is refused on catastrophic_cap",
       bool(others) and all(g == "catastrophic_cap" for g in _f1.values()), str(_f1))
 # ── F12 (r288) — PARK is admitted at the cap inside its own window ───────────
 _f12 = PMOD.decide(_facts("PARK", now=(11, 1)))
@@ -141,7 +143,7 @@ check("F12 cap broken: PARK is admitted at 11:01 (cap-exempt, its own budget)",
 
 # ── F2 — both butterflies admitted ──────────────────────────────────────────
 _f2 = {n: (PMOD.decide(_facts(n)).admitted, PMOD.decide(_facts(n)).gate) for n in FLIES}
-check("F2 cap broken: both butterflies are admitted inside their window",
+check("F2 cap broken: the butterfly is admitted inside its window",
       all(a for a, _g in _f2.values()), str(_f2))
 
 # ── F3 — the exemption removes the cap and nothing else ─────────────────────
@@ -157,13 +159,12 @@ check("F3 cap broken: a butterfly is still refused by window, tries, max-open, o
           for v in _f3.values()), str(_f3))
 
 # ── F4 — an override can switch it off, never grant it ──────────────────────
-_orb_name = next(n for n in others if "ORB" in n.upper())
 _had = getattr(config, "ADMISSION_RULES", None)
 try:
-    config.ADMISSION_RULES = {ATP: {"cap_exempt": False}, _orb_name: {"cap_exempt": True}}
+    config.ADMISSION_RULES = {GEX: {"cap_exempt": False}, "Breakout": {"cap_exempt": True}}
     _t4 = PMOD.rules()
-    _f4 = (PMOD.decide(_facts(ATP), _t4).gate, PMOD.decide(_facts(GEX), _t4).admitted,
-           PMOD.decide(_facts(_orb_name, now=(10, 0)), _t4).gate)
+    _f4 = (PMOD.decide(_facts(GEX), _t4).gate, PMOD.decide(_facts("PARK", now=(11, 1)), _t4).admitted,
+           PMOD.decide(_facts("Breakout", now=(10, 0)), _t4).gate)
 finally:
     if _had is None:
         try:
@@ -172,7 +173,7 @@ finally:
             pass
     else:
         config.ADMISSION_RULES = _had
-check("F4 an override switches the ATP exemption OFF, leaves the pin fly's, and cannot grant ORB one",
+check("F4 an override switches the pin fly's exemption OFF, leaves PARK's, and cannot grant Breakout one",
       _f4 == ("catastrophic_cap", True, "catastrophic_cap"), str(_f4))
 
 # ── F5 — cap intact: the flag changes nothing ───────────────────────────────
@@ -270,7 +271,7 @@ def _fresh_book(*traded):
 
 _REAL = {k: getattr(M, k) for k in (
     "get_risk_manager", "get_session_guard", "get_entry_engine", "is_rth", "now_et",
-    "get_orb_engine", "get_position_manager", "_gex_bfly_strategy", "_atp_bfly_strategy",
+    "get_orb_engine", "get_position_manager", "_gex_bfly_strategy",
     "_execute_entry_signal", "_safe_strategy", "_execute_condor_leg")}
 
 
@@ -300,7 +301,6 @@ def _drive(hhmm, *, traded=(), fire=None, pm_raises=False):
     M.get_orb_engine = lambda: _OrbEngine()
     M.get_position_manager = _pm
     M._gex_bfly_strategy = _Spy("GEX", asked, fire=fire)
-    M._atp_bfly_strategy = _Spy("ATP", asked)
     M._execute_entry_signal = lambda sig, *a, **k: executed.append(
         getattr(sig, "strategy_name", "?"))
     M._execute_condor_leg = lambda sig, *a, **k: executed.append("condor_leg")
@@ -328,11 +328,11 @@ def _f6():
     _R["f6"] = _drive(IN_WINDOW)
     asked, funnel, executed, admitted = _R["f6"]
     # r288: PARK is ASKED in the capped branch every tick (refused by its window at 13:30, never admitted)
-    return (asked == ["GEX", "ATP"] and [f for f in funnel if f != "PARK"] == ["GEXPinButterfly", "ATPButterfly"]
+    return (asked == ["GEX"] and [f for f in funnel if f != "PARK"] == ["GEXPinButterfly"]
             and executed == [] and admitted == sorted(FLIES))
 
 
-guard("F6 REAL dispatch, capped, 13:30: the pin fly then the ATP fly are asked; nothing else is admitted or reaches the funnel",
+guard("F6 REAL dispatch, capped, 13:30: the pin fly is asked; nothing else is admitted or reaches the funnel",
       _f6, lambda: str(_R.get("f6")))
 
 
@@ -342,7 +342,7 @@ def _f7():
     return asked == ["GEX"] and executed == ["GEXPinButterfly"]
 
 
-guard("F7 REAL dispatch, capped: a butterfly that fires is executed (and the ATP waits a tick)",
+guard("F7 REAL dispatch, capped: a butterfly that fires is executed",
       _f7, lambda: str(_R.get("f7")))
 
 
@@ -365,20 +365,20 @@ guard("F9 REAL dispatch, capped, admission table unavailable: nothing is asked a
 
 
 def _f10():
-    _R["f10"] = _drive(IN_WINDOW, traded=("GEXPinButterfly", "ATPButterfly"))
+    _R["f10"] = _drive(IN_WINDOW, traded=("GEXPinButterfly",))
     return _R["f10"][0] == [] and _R["f10"][2] == []
 
 
-guard("F10 REAL dispatch, capped, both butterflies traded today: neither is asked",
+guard("F10 REAL dispatch, capped, the butterfly traded today: it is not asked",
       _f10, lambda: str(_R.get("f10")))
 
 
 def _f11():
-    _R["f11"] = _drive(IN_WINDOW, traded=("ATPButterfly",))
+    _R["f11"] = _drive(IN_WINDOW, traded=("PARK",))
     return _R["f11"][0] == ["GEX"]
 
 
-guard("F11 REAL dispatch, capped, only the ATP fly traded today: the pin fly is still asked (one of EACH type)",
+guard("F11 REAL dispatch, capped, another strategy (PARK) traded today: the pin fly is still asked (one of EACH type)",
       _f11, lambda: str(_R.get("f11")))
 
 shutil.rmtree(_SCR, ignore_errors=True)
@@ -386,5 +386,5 @@ print()
 if FAIL:
     print(f"RED — {len(FAIL)} failed: {sorted(set(FAIL))}")
     sys.exit(1)
-print("GREEN — at the cap only the two butterflies are asked, inside their window and quota")
+print("GREEN — at the cap only the butterfly is asked, inside its window and quota")
 sys.exit(0)

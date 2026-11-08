@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_plan_heartbeat.py  v5.0
+tests/check_plan_heartbeat.py  v5.1
+v5.1  2026-11-08  OTV5 r76 (RETIRE.1) — H7's second case is PARK (VOLT is removed); what H7 pins - a constructed strategy registers its plan at once - unchanged.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.3  2026-10-06  OTV4TEST r257 — H4's FROZEN HEARTBEATS ARE WRITTEN UNDER THE PANEL'S OWN INSTRUMENT.
       r252 (BOX.18) made query.show_decisions read plan_heartbeat WHERE symbol=query.INSTRUMENT; this
@@ -187,7 +188,7 @@ check("H6 CLASS: every _plan_skip call site passes a gate",
 # raising every tick; here a lazy CONSTRUCTION hides the plan from every
 # registry-based check.
 _cases = [("Breakout", "strategy.breakout", "Breakout"),
-          ("VOLT", "strategy.volt_strategy", "VoltStrategy")]
+          ("PARK", "strategy.park", "Park")]                     # r76: VOLT removed; PARK is the second case
 _lazy = []
 for want, mod, cls in _cases:
     P.REGISTRY.clear()

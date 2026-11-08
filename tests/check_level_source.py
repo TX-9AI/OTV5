@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_level_source.py  v5.0
+tests/check_level_source.py  v5.1
+v5.1  2026-11-08  OTV5 r76 (RETIRE.1) — LEVEL_PLANS drops strategy/sweep_plan.py (removed with the sweep); S1-S16 read the TCS plan and the Hunt as before.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.1  CD.2 (2026-10-24) - the fixture marks the level book SYNCED (store.mark_level_sync) after seeding the ledger:
       LevelEngine.board() now fails closed as not_synced until a book sync against a recent closed 1m bar has been
@@ -58,7 +59,7 @@ def src(rel):
 
 
 # the plans that trade levels. orb/runaway/butterflies read none by ruling (r20).
-LEVEL_PLANS = ("strategy/sweep_plan.py", "strategy/tcs_plan.py", "strategy/liquidity_hunt.py")
+LEVEL_PLANS = ("strategy/tcs_plan.py", "strategy/liquidity_hunt.py")     # r76: sweep_plan.py removed with the sweep
 
 
 def main():

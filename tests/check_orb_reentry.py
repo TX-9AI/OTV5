@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """
-tests/check_orb_reentry.py  v5.0
+tests/check_orb_reentry.py  v5.1
+v5.1  2026-11-08  OTV5 r76 (RETIRE.1) — R5/V4 RE-POINTED (WA 38.4): the ORB TRADE's plan (ORBPlan) is removed, so R5 pins it gone and the re-armed
+      ENGINE back in WAITING_FOR_BREAK, and V4 reads the refused candidate off the engine's own break_refusal. Every engine
+      check (R1-R4, S, V1-V3, L, R6) is unchanged.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.3  2026-10-02  OTV4TEST r187 (ROSTER.1) — RE-POINTED BY THE RULING, NOT LOOSENED:
       the strategy is OFF by default from r187; this checker tests its LOGIC,
@@ -58,7 +61,7 @@ break candle's range-side extreme ON the line counts as within the range.
   V   (b) stop = the candle's range-side extreme; ON the line is valid; wholly
       outside the range is refused by name and the engine keeps waiting
   L   last_close_inside and AWAITING_RANGE_REENTRY: the line is outside
-  R5  orb_plan no longer refuses with the RUNAWAY reason after the re-arm
+  R5  r76: the ORB trade's plan is removed; the re-armed ENGINE waits on a fresh impulsive candle
   R6  unchanged: a runaway still hands off; a retest still fires; a
       close-inside still re-arms; a restart replays to the same state
 
@@ -72,8 +75,6 @@ Run:  python3 tests/check_orb_reentry.py
 """
 
 from __future__ import annotations
-import os as _os_r187
-_os_r187.environ["OT_ORB_TRADE"] = "1"   # r187: test the strategy's logic switched on
 
 import os
 import sqlite3
@@ -386,60 +387,19 @@ def main() -> int:
           "inside is", at_line == S.AWAITING_RANGE_REENTRY
           and l2.d.state == S.WAITING_FOR_BREAK, f"{at_line} -> {l2.d.state}")
 
-    # ── R5 the plan reads the re-armed engine ───────────────────────────────
-    try:
-        from strategy import plan as P
-        from strategy.orb_plan import ORBPlan
-        from data.options_chain import OptionContract, OptionsChain
-    except Exception as exc:                                  # noqa: BLE001
-        check("R5 strategy.orb_plan imports", False, repr(exc))
-        return _done()
-
-    class _Store:
-        def __init__(self):
-            self.conn = sqlite3.connect(":memory:")
-            self.conn.row_factory = sqlite3.Row
-
-        def commit(self):
-            self.conn.commit()
-    st = _Store()
-    P.ensure_tables(st)
-    P.bind_store(st)
-    ch = OptionsChain(underlying="TEST", expiry="2026-09-24", spot_price=701.0)
-    for k_ in range(694, 710):
-        m = max(0.10, round(1.5 - 0.2 * abs(k_ - 701), 2))
-        ch.calls.append(OptionContract(symbol=f"C{k_}", strike=float(k_), mark=m,
-                                       bid=m - 0.02, ask=m + 0.02, delta=0.3,
-                                       option_type="C"))
-        ch.puts.append(OptionContract(symbol=f"P{k_}", strike=float(k_), mark=m,
-                                      bid=m - 0.02, ask=m + 0.02, delta=-0.3,
-                                      option_type="P"))
-
-    def prep(eng, now):
-        P.begin_tick()
-        ORBPlan().prepare(orb=eng.data, chain=ch, price_now=701.0, now_hhmm=now)
-        P.close_tick(st, "TEST")
-        r = st.conn.execute("SELECT verdict, reason FROM plan_tick ORDER BY ts_epoch "
-                            "DESC, rowid DESC LIMIT 1").fetchone()
-        return (r["verdict"], r["reason"] or "") if r else ("", "")
-
+    # ── R5 r76: the ORB TRADE's plan (ORBPlan) is removed; the ENGINE re-arms on its own ─────────────
+    import importlib.util as _ilu
     e5 = runaway_long()
-    v0, w0 = prep(e5.e, "09:39")
     e5.bar(9, 39, 703.4, 703.5, 701.6, 701.8)    # CLOSE INSIDE
-    v1, w1 = prep(e5.e, "09:40")
-    check("R6b while the runaway stands the plan DECLINEs `consequence` RUNAWAY "
-          "(the hand-off is still reported)",
-          v0 == "DECLINE" and "RUNAWAY" in w0, f"{v0}: {w0[:90]}")
-    check("R5 after the close inside the plan no longer refuses with the runaway "
-          "reason: it HOLDs, waiting on a fresh impulsive candle",
-          v1 == "HOLD" and "RUNAWAY" not in w1 and "impulsive candle" in w1
-          and "outside the range" not in w1, f"{v1}: {w1[:110]}")
+    check("R5 the ORB trade's plan is gone (r76) and the re-armed ENGINE waits on a fresh impulsive candle",
+          __import__("retired_names").retired("strategy.orb_strategy") and not hasattr(__import__("strategy.orb_plan", fromlist=["x"]), "ORBPlan")
+          and e5.d.state == S.WAITING_FOR_BREAK, f"{e5.st()}")
 
     vp = Drive([(9, 35, 701.7, 701.95, 701.5, 701.97)])
     vp.bar(9, 36, 702.04, 702.5, 702.02, 702.3)  # refused: low outside
-    vv, vw = prep(vp.e, "09:37")
-    check("V4 the plan's HOLD row names the refused candidate",
-          vv == "HOLD" and "REFUSED" in vw and "outside the range" in vw, f"{vv}: {vw[-120:]}")
+    check("V4 the engine names the refused candidate (break_refusal) and keeps waiting",
+          vp.d.state == S.WAITING_FOR_BREAK and "outside the range" in str(getattr(vp.d, "break_refusal", "") or ""),
+          f"{vp.st()}: {getattr(vp.d, 'break_refusal', None)!r}")
 
     # ── R6 the pre-existing paths ───────────────────────────────────────────
     f = Drive([(9, 35, 701.7, 701.9, 701.1, 701.4),

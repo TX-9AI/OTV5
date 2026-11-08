@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
-"""tests/check_buying_power.py  v5.0
+"""tests/check_buying_power.py  v5.1
+v5.1  2026-11-08  OTV5 r76 (RETIRE.1) — P5 RE-POINTED (WA 38.4): the ORB standing offer (_place_standing_offer) is removed with the ORB trade, so P5 pins
+      it gone; P2-P4 and P6 (single leg, fly, credit vertical, paper) unchanged.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 F5 — A LIVE ENTRY IS NOT POSTED IF THE ACCOUNT CANNOT PAY FOR IT.
 
@@ -18,9 +20,7 @@ derivative_buying_power (or raises); no network. Drives the REAL entry paths.
       placed; ample -> placed (control)
   P4  the REAL main._post_credit_vertical: needs (width - credit) x n x 100;
       short -> nothing placed; ample -> placed (control)
-  P5  the REAL _place_standing_offer: short -> nothing placed. (Refusal side
-      only: the placed side records the offer in the local store, which this
-      check must not write.)
+  P5  r76: the ORB standing offer is removed with the ORB trade - nothing left to guard
   P6  UNCHANGED: paper never reads balances
 
 Run:  python3 tests/check_buying_power.py   (needs the venv's tastytrade)
@@ -142,14 +142,8 @@ def main():
               f_short.placed == [] and len(f_ok.placed) >= 1,
               f"short placed={f_short.placed}; ample placed={f_ok.placed}")
 
-        LR.reset_all(); G.reset(); BP.reset()
-        a5 = _Acct(1.0); EE.get_account = lambda: a5
-        osig = types.SimpleNamespace(strategy="ORBStrategy", strategy_name="ORBStrategy",
-                                     entry_premium=2.00, contract=_c("QQQ   261005C00710000", 1.95, 2.05))
-        eng._place_standing_offer(osig, 3)
-        check("P5 standing ORB offer: $1 of buying power -> nothing placed",
-              a5.placed == [] and a5.balance_reads == 1,
-              f"placed={a5.placed} reads={a5.balance_reads}")
+        check("P5 the ORB standing offer is removed with the ORB trade (r76): no _place_standing_offer to guard",
+              not hasattr(EE.EntryEngine, "_place_standing_offer"))
 
         pa = _Acct(50_000.0); EE.get_account = lambda: pa
         engp = EE.EntryEngine.__new__(EE.EntryEngine); engp.paper_trading = True

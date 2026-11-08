@@ -1,5 +1,6 @@
 """
-analysis/orb_engine.py  v5.2
+analysis/orb_engine.py  v5.3
+v5.3  2026-11-08  OTV5 r76 (RETIRE.1) — is_confirmed (no caller anywhere) is removed. THE ENGINE IS UNCHANGED: every state, transition and reader Runaway, Breakout and Hunt use is byte-identical. The operator, 2026-11-07: "Running dead code and logging dead code activity is unnecessary drag. Yes, I want all of those things fixed."
 v5.2  2026-10-30  OTV5 r61 (ORB.10) — A CONFIRMATION NOBODY CAN TRADE IS RELEASED, SO THE ENGINE KEEPS WATCHING. ORBStrategy
       is retired (DORMANT since OTV4TEST r187) but this engine still runs for RunawayContinuation, which takes its
       direction from the state name. After the first break+retest the engine sat in OPEN_LONG / OPEN_SHORT
@@ -1961,10 +1962,6 @@ class ORBEngine:
     def order_already_placed(self) -> bool:
         """True when this confirmation has already produced an order."""
         return bool(self._data.order_placed)
-
-    @property
-    def is_confirmed(self) -> bool:
-        return self._data.state in (ORBState.OPEN_LONG, ORBState.OPEN_SHORT)
 
     @property
     def direction(self) -> str:

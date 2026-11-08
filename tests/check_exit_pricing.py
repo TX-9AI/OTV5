@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """
-tests/check_exit_pricing.py  v5.0
+tests/check_exit_pricing.py  v5.1
+v5.1  2026-11-08  OTV5 r76 (RETIRE.1) — P4 RE-POINTED (WA 38.4): its credit half drove the sweep's premium stop, removed with the sweep (no live credit leg
+      carries a management premium stop: TCS has none, the condor is not covered); the debit half is unchanged.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.2  2026-10-18  OTV4TEST r293 (DELTA.2) — P6b drives PositionManager._fetch_current_premium with a quoted contract whose
       delta is None, then 0.0: current_delta must be None and the r209 warning must fire once; 0.45 restores it. The
@@ -135,12 +137,6 @@ def main():
         try:
             MP = M.ManagementPlan()
             ctx = {"price": 101.0, "derived_engines": [], "orb_high": 101.0, "orb_low": 100.0}
-            P.begin_tick(1.0)
-            credit = {"trade_id": "cr1", "strategy": "SweepCreditSpread", "option_side": "call", "direction": "neutral",
-                      "entry_premium": 0.40, "current_premium": 0.60, "stop_premium": 0.49, "spread_width": 1.0,
-                      "credit_received": 0.40, "is_condor_leg": 1, "is_credit_vertical": 1, "short_strike": 102.0,
-                      "long_strike": 103.0, "underlying_stop": 0.0, "contracts": 1}
-            ic = MP.decide(credit, 0.60, df_1m=None, current_price=101.0, ctx=ctx, exit_engine=None)
             P.begin_tick(2.0)
             debit = {"trade_id": "rw1", "strategy": "RunawayContinuation", "option_side": "call", "direction": "long",
                      "entry_premium": 1.00, "current_premium": 0.70, "stop_premium": 0.80, "target_premium": 2.00,
@@ -148,10 +144,9 @@ def main():
             idb = MP.decide(debit, 0.70, df_1m=None, current_price=101.0, ctx=ctx, exit_engine=None)
         finally:
             P.bind_store(None)
-        check("P4 decide(): the credit leg's premium stop is priced `walk`, the long option's hard stop `floor`",
-              ic is not None and ic.action == "CLOSE" and ic.reason.startswith("premium_stop") and ic.pricing == "walk"
-              and idb is not None and idb.action == "CLOSE" and idb.reason.startswith("hard_stop") and idb.pricing == "floor",
-              f"credit {ic and (ic.action, ic.reason, getattr(ic, 'pricing', '?'))}; "
+        check("P4 decide(): the long option's hard stop is priced `floor` (r76: the only credit leg with a premium stop, the "
+              "sweep, is removed)",
+              idb is not None and idb.action == "CLOSE" and idb.reason.startswith("hard_stop") and idb.pricing == "floor",
               f"debit {idb and (idb.action, idb.reason, getattr(idb, 'pricing', '?'))}")
     except Exception as exc:                                  # noqa: BLE001
         check("P4 (did not run)", False, f"{type(exc).__name__}: {exc}")

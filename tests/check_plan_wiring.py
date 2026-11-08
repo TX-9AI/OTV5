@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_plan_wiring.py  v5.0  (2026-10-25)
+tests/check_plan_wiring.py  v5.1  (2026-10-25)
+v5.1  2026-11-08  OTV5 r76 (RETIRE.1) — W2 walks the live strategies: the ORB trade and the sweep are removed; the Hunt is added.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ... Previous title: tests/check_plan_wiring.py  v1.7  (2026-09-13)
 v1.7  2026-09-13  OTV4TEST r25 — W9/W9b PASS A 1m FRAME. r24 requires the last closed bar to
       hold the 50, and these two calls passed none, so both went HOLD before
@@ -70,9 +71,9 @@ class _Store:
 
 ENTRY_FNS = {"generate_signal", "decide", "check_leg_triggers",
              "_build_leg_signal", "_build_signal"}
-STRATEGIES = ["orb_strategy", "runaway_continuation", "trend_credit_spread",
-              "sweep_credit_spread", "gex_pin_butterfly",
-              "iron_condor_strategy"]          # r163: daily fork retired
+STRATEGIES = ["runaway_continuation", "trend_credit_spread",
+              "gex_pin_butterfly", "liquidity_hunt",
+              "iron_condor_strategy"]          # r163: daily fork retired; r76: the ORB trade and the sweep removed
 
 
 def _bare_returns(path):

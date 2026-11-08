@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
-# tools/land.sh — v5.2
+# tools/land.sh — v5.3
+# v5.3  2026-11-08  OTV5 r76 (RETIRE.1) — DEL RUNS BEFORE THE ENV DOC AND THE CHECKS. At v5.2 the DEL block ran after the CHECK
+#   loop, so a delivery that removes modules regenerated docs/ENV.md from files about to be deleted (committing a stale doc
+#   that check_env_doc E1 then fails on every box) and ran its CHECKs with the deleted files still importable. The block is
+#   moved, unchanged, to just before the env-doc regeneration; nothing else in the lander changes.
 # v5.2  2026-10-31  OTV5 r68 (CFG.5) — OT_RESTING_STOP_STATE leaves every CHECK's scratch env: the resting stop is deleted (the
 #   operator, 2026-10-31: "Resting stop was a study. It failed."), so no checker can write its state file. check_land_tooling T6.
 # v5.1  2026-10-25  (DEP.2 mirror, HYG.14) — POS/NEG GREP `-qF --`, AND EVERY CHECK GETS ITS OWN TMPDIR, REMOVED AFTER.
@@ -599,6 +603,34 @@ land_one() {
   # lists check_env_doc in CHECK then passes on exactly the drift the regeneration fixes (the maps stay after the
   # checks for their own reasons). FAILS CLOSED: a generator that exits non-zero or leaves the file empty refuses the
   # land by name; the stale document is never staged and carried on.
+  # ── DEL (v1.4; v5.3 moved BEFORE the env doc and the CHECKs) ──────────────
+  # v5.3 (r76) — a deleted file must not feed the regenerated ENV doc nor be importable while the CHECKs run:
+  # at v5.2 DEL ran after both, so ENV.md was rebuilt from files about to be removed and committed stale, and a
+  # live import of a removed module passed every CHECK.
+  # ── DEL (v1.4) — A DELIVERY CAN REMOVE A FILE ───────────────────────────
+  # 🔴 UNTIL NOW IT COULD NOT. A payload only ADDS or overwrites, so retiring a
+  # document meant the operator deleting it by hand afterwards — outside the
+  # gate, outside the commit, and outside the record. r269 needed to remove
+  # eight spent thread contracts and had nowhere to say so.
+  # ⚠️ ONE PATH PER DIRECTIVE, NEVER A GLOB. A pattern here would delete
+  # whatever happened to match at land time, which is the same class as the
+  # `ls | head -1` archive guess v1.1 removed and the BRE gate v1.3 removed.
+  # ⚠️ AND A MISSING TARGET IS A REFUSAL, NOT A NO-OP. If the file is already
+  # gone the spec is describing a repo that does not exist, and landing it
+  # would record a deletion that never happened.
+  local deleted=0
+  while IFS= read -r line; do
+    local target; target="$(_spec_val "$line" DEL)"
+    [ -z "$target" ] && continue
+    if [ ! -e "$repo/$target" ]; then
+      die "DEL $target — not present in $repo. The spec describes a repo this is not."
+      return 1
+    fi
+    git rm -q -- "$target" || { die "DEL $target failed"; return 1; }
+    deleted=$((deleted+1))
+  done < <(grep -E '^DEL[[:space:]]' "$spec" 2>/dev/null || true)
+  [ "$deleted" -gt 0 ] && echo "  removed $deleted file(s) named by DEL"
+
   if [ -f "$repo/tests/gen_env_doc.py" ]; then
     if ! ( cd "$repo" && python3 tests/gen_env_doc.py >/dev/null 2>&1 ) || [ ! -s "$repo/docs/ENV.md" ]; then
       die "ENV DOC regeneration failed (tests/gen_env_doc.py exited non-zero or wrote nothing) — refusing."; return 1
@@ -658,29 +690,6 @@ land_one() {
   # ── generated maps regenerate INSIDE the land command (§33) ─────────────
   # Detected, not assumed: dtp carries neither, and "not applicable" must
   # never look like "passed" (the CV.1 failure).
-  # ── DEL (v1.4) — A DELIVERY CAN REMOVE A FILE ───────────────────────────
-  # 🔴 UNTIL NOW IT COULD NOT. A payload only ADDS or overwrites, so retiring a
-  # document meant the operator deleting it by hand afterwards — outside the
-  # gate, outside the commit, and outside the record. r269 needed to remove
-  # eight spent thread contracts and had nowhere to say so.
-  # ⚠️ ONE PATH PER DIRECTIVE, NEVER A GLOB. A pattern here would delete
-  # whatever happened to match at land time, which is the same class as the
-  # `ls | head -1` archive guess v1.1 removed and the BRE gate v1.3 removed.
-  # ⚠️ AND A MISSING TARGET IS A REFUSAL, NOT A NO-OP. If the file is already
-  # gone the spec is describing a repo that does not exist, and landing it
-  # would record a deletion that never happened.
-  local deleted=0
-  while IFS= read -r line; do
-    local target; target="$(_spec_val "$line" DEL)"
-    [ -z "$target" ] && continue
-    if [ ! -e "$repo/$target" ]; then
-      die "DEL $target — not present in $repo. The spec describes a repo this is not."
-      return 1
-    fi
-    git rm -q -- "$target" || { die "DEL $target failed"; return 1; }
-    deleted=$((deleted+1))
-  done < <(grep -E '^DEL[[:space:]]' "$spec" 2>/dev/null || true)
-  [ "$deleted" -gt 0 ] && echo "  removed $deleted file(s) named by DEL"
 
   if [ -f "$repo/tests/gen_file_map.py" ]; then
     python3 tests/gen_file_map.py >/dev/null 2>&1 || { die "FILE MAP regeneration failed"; return 1; }

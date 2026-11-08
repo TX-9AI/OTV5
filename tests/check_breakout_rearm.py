@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_breakout_rearm.py  v5.2
+tests/check_breakout_rearm.py  v5.3
+v5.3  2026-11-08  OTV5 r76 (RETIRE.1) — the fixture no longer resets execution/handoff (removed with the sweep, r76). No check changed.
 v5.2  2026-10-31  OTV5 r68 (CFG.5) — OT_RESTING_STOP_STATE leaves the scratch env: the resting stop and its state file are deleted
       (the operator, 2026-10-31: "Resting stop was a study. It failed. Get this the fuck out of here"). No check changed.
 v5.1  2026-10-26  OTV5 r38 (HYG.18) — scratch no longer names dir="/var/tmp": mkdtemp honours TMPDIR, which boot_sweep and land.sh point
@@ -346,7 +347,6 @@ def _hunt(day):
         import config
         from strategy import plan as P
         import strategy.liquidity_hunt as LH
-        from execution import handoff as H
         from data.derived_store import DerivedStore
     except Exception as exc:                                    # noqa: BLE001
         check("U0 setup", False, f"{type(exc).__name__}: {exc}")
@@ -382,7 +382,7 @@ def _hunt(day):
         return (r["verdict"], r["reason"] or "") if r else ("", "")
 
     def fire(n):
-        h = LH.LiquidityHunt(); h._store = ds; h.planner.symbol = "TST"; LH.FINISHED.clear(); H.reset()
+        h = LH.LiquidityHunt(); h._store = ds; h.planner.symbol = "TST"; LH.FINISHED.clear()
         try:
             LH._HAB_SAID.clear()
         except AttributeError:

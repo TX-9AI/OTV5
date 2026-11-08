@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
-"""check_plan_signal.py — v5.0
+"""check_plan_signal.py — v5.1
+v5.1  2026-11-08  OTV5 r76 (RETIRE.1) — PS1-PS3 (the ORB TRADE's plan checks and its 'Waiting on' narration) go with the trade, replaced by one check
+      that it is gone; PS7 drops the removed sweep; PS4-PS6 and PS8 unchanged.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.6  2026-09-22  OTV4TEST r92 — PS8 pins the r84 gate-word mapping instead of the old
       panel's "hushed" line. One row per plan makes one line per plan
@@ -59,34 +61,11 @@ class _Store:
 
 
 def main():
-    # ── 🔴 PS1 — THE ORB SEQUENCE IS RECORDED, NOT JUST THE LABEL ────────
-    from strategy.orb_strategy import ORBStrategy
-    want = {"orb_high", "orb_low", "orb_width", "break_direction",
-            "break_close", "bars_since_break", "retest_depth_px",
-            "attempt_number", "stop_level", "target_50pct", "target_100pct"}
-    have = set(ORBStrategy.PLAN_CHECKS)
-    check("PS1 the ORB plan declares the whole sequence",
-          want <= have, f"missing: {sorted(want - have) or 'none'}")
-
-    # ⚠️ AND THE FIELDS MUST EXIST ON THE REAL ORBData — the whole point is
-    # that they were always there and never read. A typo here reintroduces the
-    # week's other defect (a name assumed rather than opened).
-    from analysis.orb_engine import ORBData
-    real = set(getattr(ORBData, "__annotations__", {}))
-    mapped = {"break_close": "break_candle_close"}
-    bad = [c for c in want
-           if mapped.get(c, c) not in real]
-    check("PS2 every declared ORB check maps to a real ORBData field",
-          not bad, f"not on ORBData: {sorted(bad) or 'none'}")
-
-    # ── PS3 — the refusal names what it is WAITING FOR ───────────────────
-    # OTV4TEST r2 — the narration lives in the PLAN (strategy/orb_plan.py):
-    # both sides priced while waiting on the impulsive candle, then PREPARED
-    # while waiting on the retest.
-    src = open(os.path.join(_root, "strategy", "orb_plan.py"),
-               encoding="utf-8").read()
-    check("PS3 the ORB plan row says what it is WAITING ON, not just the state",
-          "Waiting on: retest" in src and "Waiting on: impulsive candle" in src)
+    # ── PS1-PS3 r76: the ORB TRADE's plan (its sequence checks and narration) is removed with the trade ──
+    import importlib.util as _ilu
+    check("PS1-PS3 the ORB trade and its plan narration are removed (r76)",
+          __import__("retired_names").retired("strategy.orb_strategy")
+          and "Waiting on: retest" not in open(os.path.join(_root, "strategy", "orb_plan.py"), encoding="utf-8").read())
 
     # ── 🔴 PS4 — OUT-OF-WINDOW IS DORMANT, AND DEDUPLICATED ──────────────
     from strategy import plan as P
@@ -123,8 +102,7 @@ def main():
     # "09:40 ET is before..." and "09:41 ET is before..." are different strings.
     for rel in ("strategy/trend_credit_spread.py",
                 "strategy/iron_condor_strategy.py",
-                "strategy/gex_pin_butterfly.py",
-                "strategy/sweep_credit_spread.py"):      # r161: the sweep is dormant too
+                "strategy/gex_pin_butterfly.py"):        # r76: the sweep is removed
         s = open(os.path.join(_root, rel), encoding="utf-8").read()
         tree = ast.parse(s)
         bad_call = False

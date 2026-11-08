@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_fly_quote_log.py  v5.0
+tests/check_fly_quote_log.py  v5.1
+v5.1  2026-11-08  OTV5 r76 (RETIRE.1) — Q5 reads the pin fly alone: the ATP fly's plan is removed with it. Q1-Q4 unchanged.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.0  2026-10-03  OTV4TEST r225 (FLY.2) — THE BUTTERFLIES RECORD THEIR LEGS' QUOTES AT THE PICK; NOTHING IS GATED.
 
@@ -14,7 +15,7 @@ v1.0  2026-10-03  OTV4TEST r225 (FLY.2) — THE BUTTERFLIES RECORD THEIR LEGS' Q
       would NOT (a bought leg needs only an ask)
   Q3  the SOLD body with no bid: both rules would refuse
   Q4  a wing with no ask: both rules would refuse; unreadable quotes do not raise
-  Q5  both plans declare the three checks and record them with NO verdict
+  Q5  the pin fly's plan declares the three checks (r76: the ATP fly is removed) and record them with NO verdict
       (ok=None) right after the wings are picked (a source check, stated as one)
 
 Run:  python3 tests/check_fly_quote_log.py   (exit 0 green, 1 red)
@@ -55,7 +56,6 @@ def L(bid, ask):
 def main():
     try:
         from strategy import gex_pin_butterfly as G
-        from strategy import atp_butterfly_plan as A
         f = G.leg_quote_facts
         def t(d):
             return (d["wings_no_bid"], d["strict_would_refuse"], d["role_would_refuse"])
@@ -69,12 +69,11 @@ def main():
         check("Q4 a wing with no ask: both would refuse; an unreadable quote counts as none and raises nothing",
               bad["strict_would_refuse"] == 1.0 and bad["role_would_refuse"] == 1.0 and bad["wings_no_bid"] == 1.0, str(bad))
         ok5 = all(k in G.GEXPinButterflyStrategy.PLAN_CHECKS for k in KEYS)
-        ok5 = ok5 and all(k in A.ATPButterflyPlan.PLAN_CHECKS for k in KEYS)
-        for mod, call in ((G, "leg_quote_facts(lower, center, upper)"), (A, "_gpb.leg_quote_facts(lo, center, up)")):
+        for mod, call in ((G, "leg_quote_facts(lower, center, upper)"),):
             src = open(mod.__file__).read()
             i = src.rfind(call)                               # the call site, not the def
             ok5 = ok5 and i > 0 and 't.check(f"quote_{_qk}", _qv, None)' in src[i:i + 200]
-        check("Q5 both plans declare the three checks and record them with no verdict at the pick (source check)", ok5)
+        check("Q5 the fly's plan declares the three checks and records them with no verdict at the pick (source check; r76: the ATP plan removed)", ok5)
     except Exception as exc:                                  # noqa: BLE001
         for n in ("Q1", "Q2", "Q3", "Q4", "Q5"):
             if n not in FAILED:

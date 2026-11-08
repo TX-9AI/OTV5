@@ -1,6 +1,11 @@
 #!/usr/bin/env python3
 """
-tests/check_scaling_toggle.py  v5.2
+tests/check_scaling_toggle.py  v5.3
+v5.3  2026-11-08  OTV5 r76 (RETIRE.1) — RE-POINTED ONTO THE ONE SWITCH LEFT (section 38.4). The ORB trade and VOLT are REMOVED,
+      and with them SCALE_ORB / SCALE_VOLT; Breakout's switch (main.SCALE_BREAKOUT, fixed ON in config since r68) is the
+      only scaled trade in _SCALING_SWITCH. S1/S2/S6/S10 drive Breakout OFF where they drove ORB OFF; S3 pins that every
+      other trade has no switch; S4 Breakout's ramp 52, unchanged; S8 config carries no SCALE_ORB / SCALE_VOLT and junk
+      never moves Breakout; S7, S9 unchanged; S11 the map is exactly Breakout. The operator, 2026-11-07: "Yes, I want all of those things fixed."
 v5.2  2026-10-31  OTV5 r68 (CFG.5) — S8/S9 RE-POINTED, NOT DROPPED (section 38.4). The operator, 2026-10-31: "9. Scaling, default
       on—take it out". config v5.10 fixes SCALE_BREAKOUT = True (OT_SCALE_BREAKOUT is not read), so S8's '0' and junk cases read
       Breakout ON while ORB and VOLT keep the literal-'1' rule; S9 asserts configure.sh has no change_scaling, no scaling
@@ -33,21 +38,18 @@ or every switch is a menu item nothing reads (the r181 shape). S8 asks
 config.py - the CONSUMER - what each key means; S9 runs configure.sh's own
 function bodies against a temp unit and feeds what they write back to config.
 
-  S1  ORB OFF sizes FLAT: rule "flat", floor(RISK / cost), and the SAME count
-      at a tight stop and a wide one (the ramp would give 77 and 19)
-  S2  ORB OFF still REFUSES a stop inside the noise floor (section 36 FEASIBILITY)
-  S3  each switch moves ONLY its own trade: ORB OFF leaves Breakout and VOLT on
-      the ramp; Breakout OFF leaves ORB; VOLT OFF leaves Breakout
-  S4  all ON sizes exactly as check_volt_sizing V4 (ORB tight 77, Breakout 52)
-  S5  a trade with no switch (the hunt) is untouched: True, budget rule, 11
-  S6  OFF changes the COUNT and nothing on the signal: underlying_stop,
-      stop_premium(), trail activation and sizes_on_geometry are identical
+  S1  Breakout OFF sizes FLAT: rule "flat", floor(RISK / cost), the SAME count near and far
+  S2  Breakout OFF still REFUSES a stop inside the noise floor (section 36 FEASIBILITY)
+  S3  no other trade has a switch: with Breakout OFF they all still ride the ramp
+  S4  Breakout ON sizes on the ramp, 52 (unchanged)
+  S5  the hunt is untouched: True, budget rule, 11
+  S6  OFF changes the COUNT and nothing on the signal
   S7  HOP 0: the entry path passes scaled=_scaling_on(signal) to size_for
-  S8  config: ORB_RISK_USD IS RISK_PER_TRADE_USD whatever OT_ORB_RISK_USD says
-      (and the ignored value is kept for the startup warning); only "1" is ON
-  S9  configure.sh: no scaling item or change_scaling (r68), and item 2 removes a
-      leftover OT_ORB_RISK_USD line
+  S8  config: ORB_RISK_USD IS RISK_PER_TRADE_USD whatever OT_ORB_RISK_USD says; SCALE_BREAKOUT fixed ON;
+      no SCALE_ORB / SCALE_VOLT (r76)
+  S9  configure.sh: no scaling item or change_scaling (r68), and item 2 removes a leftover OT_ORB_RISK_USD line
   S10 OFF with one contract dearer than the MIN is REFUSED, never floored to 1
+  S11 main._SCALING_SWITCH is exactly Breakout
 
 BORN RED on 6e1fa68 (r160) - see the ledger row. Runs under the venv AND the
 system python3 the lander uses (the first r161 land was refused on the latter).
@@ -100,7 +102,7 @@ def check(name, ok, detail=""):
 
 
 print("=" * 68)
-print("SCALING SWITCHES: ORB / Breakout / VOLT, and the merged ramp MIN")
+print("SCALING: Breakout's switch, and the merged ramp MIN")
 print("=" * 68)
 
 import main                                                    # noqa: E402
@@ -114,9 +116,7 @@ check("S0 main._scaling_on exists", _HAS, "" if _HAS else "absent - no switch re
 
 
 def size(signal, noise_floor=0.0):
-    """The entry path's size_for call, argument for argument, INCLUDING the
-    switch. On a tree without the switch this reports the TypeError as a
-    result rather than crashing, so born-red names every missing property."""
+    """The entry path's size_for call, argument for argument, INCLUDING the switch."""
     w, d = main._geometry_inputs(signal)
     kw = dict(premium=signal.entry_premium,
               stop_premium=main._sizing_stop_premium(signal),
@@ -132,94 +132,65 @@ def size(signal, noise_floor=0.0):
         return _R()
 
 
-def setsw(orb=True, brk=True, volt=True):
-    main.SCALE_ORB, main.SCALE_BREAKOUT, main.SCALE_VOLT = orb, brk, volt
+def setsw(brk=True):
+    main.SCALE_BREAKOUT = brk
 
 
-def orb(stop, premium=1.20):
-    return OptionsSignal(strategy_name="ORBStrategy", orb_range_high=601.0,
-                         orb_range_low=600.0, underlying_entry=601.10,
-                         underlying_stop=stop, entry_delta=0.45,
-                         entry_premium=premium)
-
-
-def brk():
+def brk(stop=600.85, premium=0.95):
     s = OptionsSignal(strategy_name="Breakout", orb_range_high=601.0,
                       orb_range_low=600.0, underlying_entry=601.25,
-                      underlying_stop=600.85, entry_delta=0.50, entry_premium=0.95)
+                      underlying_stop=stop, entry_delta=0.50, entry_premium=premium)
     s.sizes_on_geometry = True
     return s
 
 
-def volt():
-    s = OptionsSignal(strategy_name="VOLT", orb_range_high=601.0,
-                      orb_range_low=600.0, underlying_entry=601.25,
-                      underlying_stop=601.25, entry_delta=0.45, entry_premium=1.20)
-    s.sizing_distance = 0.40
-    s.underlying_stop_is_thesis = True
-    return s
-
-
-def hunt():
-    return OptionsSignal(strategy_name="LiquidityHunt", orb_range_high=601.0,
+def other(name):
+    return OptionsSignal(strategy_name=name, orb_range_high=601.0,
                          orb_range_low=600.0, underlying_entry=601.25,
                          underlying_stop=600.85, entry_delta=0.50, entry_premium=0.95)
 
 
-FLAT_120 = int(RISK // 120.0)        # 1050 // (1.20 x 100) = 8
 FLAT_95 = int(RISK // 95.0)          # 1050 // (0.95 x 100) = 11
 
-# ── S1 — ORB OFF is FLAT, whatever the stop ─────────────────────────────────
-setsw(orb=False)
-t, w = size(orb(600.80)), size(orb(599.90))
-check("S1 ORB OFF, tight stop: rule 'flat', floor(MIN / cost) contracts",
-      t.allowed and t.rule == "flat" and t.contracts == FLAT_120,
-      f"rule={t.rule} n={t.contracts} want flat {FLAT_120} ({t.reject_reason})")
-check("S1 ORB OFF, wide stop: the SAME count (the ramp would give 77 vs 19)",
+# ── S1 — Breakout OFF is FLAT, whatever the stop ────────────────────────────
+setsw(False)
+t, w = size(brk(600.85)), size(brk(600.30))
+check("S1 Breakout OFF, near stop: rule 'flat', floor(MIN / cost) contracts",
+      t.allowed and t.rule == "flat" and t.contracts == FLAT_95,
+      f"rule={t.rule} n={t.contracts} want flat {FLAT_95} ({t.reject_reason})")
+check("S1 Breakout OFF, far stop: the SAME count",
       w.allowed and w.rule == "flat" and w.contracts == t.contracts,
-      f"tight={t.contracts} wide={w.contracts} rule={w.rule}")
+      f"near={t.contracts} far={w.contracts} rule={w.rule}")
 
 # ── S2 — the noise floor still refuses ──────────────────────────────────────
-f = size(orb(601.00), noise_floor=0.21)
-check("S2 ORB OFF, stop 0.10 inside a 0.21 floor: REFUSED on the floor",
+f = size(brk(601.15), noise_floor=0.21)
+check("S2 Breakout OFF, stop 0.10 inside a 0.21 floor: REFUSED on the floor",
       not f.allowed and "noise_floor" in (f.reject_reason or ""),
       f"allowed={f.allowed} reason={f.reject_reason!r}")
-
-# ── S3 — each switch moves only its own trade ───────────────────────────────
-setsw(orb=False)
-b, v = size(brk()), size(volt())
-check("S3 ORB OFF leaves Breakout on the ramp (52)",
-      b.rule == "orb_geometry" and b.contracts == 52, f"rule={b.rule} n={b.contracts}")
-check("S3 ORB OFF leaves VOLT on the ramp",
-      v.rule == "orb_geometry" and v.allowed, f"rule={v.rule} n={v.contracts}")
-setsw(brk=False)
-o, b = size(orb(600.80)), size(brk())
-check("S3 Breakout OFF: Breakout flat, ORB still on the ramp (77)",
-      b.rule == "flat" and b.contracts == FLAT_95
-      and o.rule == "orb_geometry" and o.contracts == 77,
-      f"brk={b.rule}/{b.contracts} orb={o.rule}/{o.contracts}")
-setsw(volt=False)
-v, b = size(volt()), size(brk())
-check("S3 VOLT OFF: VOLT flat, Breakout still on the ramp",
-      v.rule == "flat" and v.contracts == FLAT_120
-      and b.rule == "orb_geometry" and b.contracts == 52,
-      f"volt={v.rule}/{v.contracts} brk={b.rule}/{b.contracts}")
-
-# ── S4 — all ON is the ramp, unchanged ──────────────────────────────────────
 setsw()
-o, b = size(orb(600.80)), size(brk())
-check("S4 all ON: ORB tight 77 and Breakout 52 (check_volt_sizing V4)",
-      o.rule == b.rule == "orb_geometry" and o.contracts == 77 and b.contracts == 52,
-      f"orb={o.rule}/{o.contracts} brk={b.rule}/{b.contracts}")
+
+# ── S3 — no other trade has a switch ────────────────────────────────────────
+setsw(False)
+others = {n: main._scaling_on(other(n)) for n in ("RunawayContinuation", "LiquidityHunt", "PARK",
+                                                    "GEXPinButterfly", "TrendCreditSpread")}
+check("S3 with Breakout OFF every other trade still rides the ramp (_scaling_on True: no switch of its own)",
+      all(others.values()), str(others))
+setsw()
+
+# ── S4 — ON is the ramp, unchanged ──────────────────────────────────────────
+b = size(brk())
+check("S4 Breakout ON: the ramp, 52 (check_volt_sizing V4's number, unchanged)",
+      b.rule == "orb_geometry" and b.contracts == 52, f"rule={b.rule} n={b.contracts}")
 
 # ── S5 — a trade with no switch is untouched ────────────────────────────────
-setsw(False, False, False)
-h = size(hunt())
+setsw(False)
+h = size(other("LiquidityHunt"))
 check("S5 the hunt has no switch: _scaling_on True, budget rule, 11",
-      (not _HAS or main._scaling_on(hunt()) is True)
+      (not _HAS or main._scaling_on(other("LiquidityHunt")) is True)
       and h.rule == "budget" and h.contracts == FLAT_95,
       f"rule={h.rule} n={h.contracts}")
 setsw()
+
 
 # ── S6 — OFF changes the count and nothing on the signal ────────────────────
 def _face(s):
@@ -228,15 +199,14 @@ def _face(s):
             bool(getattr(s, "sizes_on_geometry", False)))
 
 
-for label, mk in (("ORB", lambda: orb(600.80)), ("Breakout", brk), ("VOLT", volt)):
-    s_on = mk()
-    setsw()
-    size(s_on)
-    s_off = mk()
-    setsw(False, False, False)
-    size(s_off)
-    check(f"S6 {label}: stop, stop premium, trail and geometry flag identical ON vs OFF",
-          _face(s_on) == _face(s_off), f"on={_face(s_on)} off={_face(s_off)}")
+s_on = brk()
+setsw()
+size(s_on)
+s_off = brk()
+setsw(False)
+size(s_off)
+check("S6 Breakout: stop, stop premium, trail and geometry flag identical ON vs OFF",
+      _face(s_on) == _face(s_off), f"on={_face(s_on)} off={_face(s_off)}")
 setsw()
 
 # ── S7 — HOP 0: the entry path passes the switch ────────────────────────────
@@ -266,18 +236,11 @@ got = _cfg({"OT_RISK_USD": "1050", "OT_ORB_RISK_USD": "1001"},
            "config.ORB_RISK_USD, getattr(config, 'ORB_RISK_ENV_IGNORED', None)")
 check("S8 OT_ORB_RISK_USD=1001 is NOT obeyed: ORB_RISK_USD is the 1050 MIN, 1001 kept to warn",
       got == "1050.0 1001", got)
-got = _cfg({}, "config.SCALE_ORB, config.SCALE_BREAKOUT, config.SCALE_VOLT")
-check("S8 unset switches are ON (a fresh box sizes as today)", got == "True True True", got)
-got = _cfg({"OT_SCALE_ORB": "0", "OT_SCALE_BREAKOUT": "0", "OT_SCALE_VOLT": "0"},
-           "config.SCALE_ORB, config.SCALE_BREAKOUT, config.SCALE_VOLT")
-check("S8 '0' is OFF on the ORB and VOLT switches; Breakout stays ON (r68: OT_SCALE_BREAKOUT is not read)",
-      got == "False True False", got)
-# EVERY switch gets the junk value: a first cut tried it on Breakout alone,
-# and a `!= "0"` mutant of SCALE_ORB (a typo read as ON) survived (M8).
-got = _cfg({"OT_SCALE_ORB": "yes", "OT_SCALE_BREAKOUT": "on", "OT_SCALE_VOLT": "true"},
-           "config.SCALE_ORB, config.SCALE_BREAKOUT, config.SCALE_VOLT")
-check("S8 only the literal '1' is ON: 'yes'/'true' are OFF on ORB/VOLT, the smaller size; Breakout is fixed ON",
-      got == "False True False", got)
+got = _cfg({}, "config.SCALE_BREAKOUT, hasattr(config, 'SCALE_ORB'), hasattr(config, 'SCALE_VOLT')")
+check("S8 Breakout is ON; config carries no SCALE_ORB or SCALE_VOLT (r76: both trades removed)",
+      got == "True False False", got)
+got = _cfg({"OT_SCALE_ORB": "0", "OT_SCALE_BREAKOUT": "0", "OT_SCALE_VOLT": "0"}, "config.SCALE_BREAKOUT")
+check("S8 a stored '0' on any scaling key moves nothing (r68: OT_SCALE_BREAKOUT is not read)", got == "True", got)
 
 # ── S9 — configure.sh writes what config reads ─────────────────────────────
 _src = open(os.path.join(ROOT, "configure.sh")).read()
@@ -337,15 +300,19 @@ check("S9 item 2 sets the MIN and REMOVES the leftover OT_ORB_RISK_USD",
       f"after: {vals} rc={p.returncode} {p.stderr.strip()[-120:]}")
 
 # ── S10 — OFF refuses a contract dearer than the MIN ────────────────────────
-setsw(orb=False)
-x = size(orb(600.80, premium=12.00))          # $1,200 a contract > $1,050
-check("S10 ORB OFF, one contract $1,200 > the $1,050 MIN: REFUSED, not floored to 1",
+setsw(False)
+x = size(brk(premium=12.00))          # $1,200 a contract > $1,050
+check("S10 Breakout OFF, one contract $1,200 > the $1,050 MIN: REFUSED, not floored to 1",
       not x.allowed and x.contracts == 0, f"allowed={x.allowed} n={x.contracts} {x.reject_reason}")
 setsw()
+
+# ── S11 — the map is exactly Breakout ───────────────────────────────────────
+check("S11 main._SCALING_SWITCH is exactly {Breakout: SCALE_BREAKOUT}",
+      getattr(main, "_SCALING_SWITCH", None) == {"Breakout": "SCALE_BREAKOUT"}, str(getattr(main, "_SCALING_SWITCH", None)))
 
 print()
 if FAIL:
     print(f"RED — {len(FAIL)} failed: {sorted(set(FAIL))}")
     sys.exit(1)
-print("GREEN — every switch moves only its own trade's size")
+print("GREEN — Breakout's switch moves only its own size; nothing else has one")
 sys.exit(0)

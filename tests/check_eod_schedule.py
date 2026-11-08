@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
-"""tests/check_eod_schedule.py — v5.0
+"""tests/check_eod_schedule.py — v5.1
+v5.1  2026-11-08  OTV5 r76 (RETIRE.1) — E1/E3 RE-POINTED (WA 38.4): the ORB, VOLT and sweep windows are removed, so E1 reads the four live
+      windows; E3's long singles are a Runaway and a Hunt (the classifier is structural, the names were incidental).
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 THE OPERATOR'S END OF DAY, DRIVEN THROUGH THE REAL CODE UNDER A FROZEN CLOCK.
 
@@ -103,7 +105,7 @@ VERT = {"trade_id": "VERT0001", "strategy": "TrendCreditSpread", "short_symbol":
 FLY = {"trade_id": "FLY00001", "strategy": "GEXPinButterfly", "is_butterfly": 1, "lower_symbol": "QQQ   260928C00740000",
        "center_symbol": "QQQ   260928C00742000", "upper_symbol": "QQQ   260928C00744000", "entry_premium": 0.40,
        "contracts": 1, "symbol": "QQQ"}
-ORB = {"trade_id": "ORB00001", "strategy": "ORBStrategy", "option_symbol": "QQQ   260928C00730000",
+ORB = {"trade_id": "RUN00001", "strategy": "RunawayContinuation", "option_symbol": "QQQ   260928C00730000",
        "entry_premium": 1.0, "contracts": 1, "symbol": "QQQ", "underlying_entry": 744.0}
 SHORT = {"trade_id": "ADPT0001", "strategy": "ADOPTED", "option_symbol": "QQQ   260928P00740000",
          "is_short_position": 1, "entry_premium": 0.30, "contracts": 1, "symbol": "QQQ"}
@@ -121,13 +123,13 @@ def main() -> int:
     # E1
     try:
         EW, ES = config.ENTRY_WINDOWS, getattr(config, "EOD_SCHEDULE", {})
-        six = ("ORBStrategy", "RunawayContinuation", "LiquidityHunt", "Breakout", "VOLT", "SweepCreditSpread", "TrendCreditSpread")
+        six = ("RunawayContinuation", "LiquidityHunt", "Breakout", "TrendCreditSpread")   # r76: the retired trades' rows are gone
         env = dict(os.environ, OT_DEBIT_CUTOFF_ET="11:30")
         r = subprocess.run([sys.executable, "-c", "import config; print(tuple(config.DEBIT_DIRECTIONAL_CUTOFF_ET))"],
                            cwd=ROOT, env=env, capture_output=True, text=True)
-        check("E1 schedule 15:40/15:45/15:50/15:55, ORB/credit windows end 15:40, the four directional debits 10:30 (r187), afternoon cutoff 15:40 and not env-movable",
+        check("E1 schedule 15:40/15:45/15:50/15:55, the credit window ends 15:40, the three directional debits 10:30 (r187), afternoon cutoff 15:40 and not env-movable",
               ES == {"entries_stop": (15, 40), "resting_at": (15, 45), "ladder_at": (15, 50), "cross_at": (15, 55)}
-              and all(tuple(EW[n][1]) == ((10, 30) if n in ("RunawayContinuation", "LiquidityHunt", "Breakout", "VOLT")
+              and all(tuple(EW[n][1]) == ((10, 30) if n in ("RunawayContinuation", "LiquidityHunt", "Breakout")
                                           else (15, 40)) for n in six)
               and tuple(config.DEBIT_DIRECTIONAL_CUTOFF_ET) == (15, 40) and r.stdout.strip() == "(15, 40)",
               f"ES={ES} ends={[EW[n][1] for n in six]} cutoff={config.DEBIT_DIRECTIONAL_CUTOFF_ET} env-run={r.stdout.strip() or r.stderr[-120:]}")
@@ -160,7 +162,7 @@ def main() -> int:
         trend_leg = dict(VERT)
         tent = {"strategy": "TrendCreditSpread", "setup_type": "tent_hedge", "short_symbol": "a", "long_symbol": "b", "lower_symbol": "c"}
         risk = [S.has_assignment_risk(x) for x in (VERT, trend_leg, FLY, SHORT, tent)]
-        none = [S.has_assignment_risk(x) for x in (ORB, {"strategy": "VOLT", "option_symbol": "x"},
+        none = [S.has_assignment_risk(x) for x in (ORB, {"strategy": "LiquidityHunt", "option_symbol": "x"},
                                                     {"strategy": "Breakout", "option_symbol": "x"})]
         _struct = [S.has_assignment_risk(r) for r in ({"strategy": "SomethingNew", "short_symbol": "x", "long_symbol": "y"},
                                                       {"strategy": "SomethingNew", "center_symbol": "x"},
@@ -274,7 +276,7 @@ def main() -> int:
             T.now_et = _real_t
         check("E8 flatten 15:46: vertical closing (resting label, spot stamped), debit HELD, nothing failed; 15:56: unfilled FAILED",
               c46 == [("VERT0001", "hard_close_resting_15:45_ET", 745.0)] and f46 == []
-              and sorted(t for t, _r, _s in c56) == ["ORB00001", "VERT0001"] and sorted(f56) == ["ORB00001", "VERT0001"],
+              and sorted(t for t, _r, _s in c56) == ["RUN00001", "VERT0001"] and sorted(f56) == ["RUN00001", "VERT0001"],
               f"c46={c46} f46={f46} c56={c56} f56={f56}")
     except Exception as exc:                                  # noqa: BLE001
         check("E8 (did not run)", False, f"raised {type(exc).__name__}: {exc}")

@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
-"""check_attr_fidelity.py — v5.0
+"""check_attr_fidelity.py — v5.1
+v5.1  2026-11-08  OTV5 r76 (RETIRE.1) — A4 drops HANDOFF_TTL_TICKS and the three SWEEP_CS_* dials (removed with the handoff and the
+      sweep): 25 pinned dials, each unchanged.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.2  2026-10-03 — OTV4TEST r193 (CFG.1). A3/A4: THE SAME FAILURE, ON config ITSELF. The 10-03 audit
       found 29 names read as getattr(config, "NAME", literal) that config never defined - every
@@ -202,12 +204,10 @@ def main():
                 "BRK_DEPTH_DEPLETION_MIN": 0.0, "BRK_ROOM_MIN_R": 1.0, "BRK_R_FLOOR": 1.0,
                 "BRK_RANGE_MIN_PCT": 0.0023, "BRK_RANGE_MAX_PCT": 0.0350, "BRK_RANGE_CLEAN_MAX": 0.0,
                 "GEX_BFLY_PIN_CONC_MIN": 0.25, "GEX_BFLY_EM_MIN_FRAC": 0.30, "GEX_BFLY_EM_MAX_FRAC": 1.00,
-                "GEX_BFLY_SMOOTH_WINDOW": 12, "GEX_BFLY_PERSIST_TICKS": 8, "HANDOFF_TTL_TICKS": 8,
+                "GEX_BFLY_SMOOTH_WINDOW": 12, "GEX_BFLY_PERSIST_TICKS": 8,
                 "RUNAWAY_ATR_FLOOR_PCT": 0.08, "RUNAWAY_ATR_VETO_PCT": 0.05, "RUNAWAY_ATR_DEEP_PCT": 0.20,
                 "RUNAWAY_DELTA_NEAR": 0.25, "RUNAWAY_DELTA_DEEP": 0.40, "RUNAWAY_STRENGTH_GRIND": 0.40,
-                "RUNAWAY_STRENGTH_RIP": 0.70, "RUNAWAY_BAND_GRIND": 0.5, "RUNAWAY_BAND_RIP": 1.5,
-                "SWEEP_CS_MIN_REJECTION_PCT": 0.0002, "SWEEP_CS_ATR_MAX_PCT": 0.20,
-                "SWEEP_CS_LEVELS_EACH_SIDE": 3}
+                "RUNAWAY_STRENGTH_RIP": 0.70, "RUNAWAY_BAND_GRIND": 0.5, "RUNAWAY_BAND_RIP": 1.5}
         off = {k: getattr(_cfg, k, "<absent>") for k, v in PINS.items() if getattr(_cfg, k, "<absent>") != v}
         hunt = getattr(_cfg, "HUNT_MAX_LOSS_PCT", "<absent>")
         adm = getattr(_cfg, "ADMISSION_RULES", "<absent>")
@@ -215,7 +215,7 @@ def main():
             off["HUNT_MAX_LOSS_PCT"] = hunt
         if adm is not None:
             off["ADMISSION_RULES"] = adm
-        check("A4 the 29 dials config now defines hold the values their modules were using",
+        check("A4 the 25 dials config now defines hold the values their modules were using",
               not off, str(off) if off else "27 literals + HUNT follows RUNAWAY_MAX_LOSS_PCT + ADMISSION_RULES None")
 
     print()

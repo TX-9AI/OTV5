@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_stop_spread_report.py  v5.1
+tests/check_stop_spread_report.py  v5.2
+v5.2  2026-11-08  OTV5 r76 (RETIRE.1) — S1 and S3's sweep half go with the sweep plan; S2, S3's TCS half and R1-R6 (the report) unchanged.
 v5.1  2026-10-26  OTV5 r38 (HYG.18) — scratch no longer names dir="/var/tmp": mkdtemp honours TMPDIR, which boot_sweep and land.sh point
       at a per-run dir they remove (HYG.14), so a sweep leaves nothing behind (237 dirs had piled up on SOFI). No check changed.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
@@ -14,7 +15,7 @@ v1.0  2026-09-24  OTV4TEST r129. Operator: "Do we have a stop vs spread report? 
       `sv_ratio`, and tests/stop_spread_report.py does not exist.
 
 WHAT IS PINNED, AND WHY EACH PART EXISTS
-  S1  SweepPlan._structure on a sellable stub chain sets sv_ratio to exactly
+  S1  (r76: removed with the sweep) SweepPlan._structure on a sellable stub chain sets sv_ratio to exactly
       search_wing's stop_dist / the short's bid-ask — the two numbers
       criteria.stop_survivable compares — and >= STOP_VS_SPREAD_MIN.
   S2  TCSPlan._structure: a sellable chain records the chosen wing's ratio; the
@@ -74,35 +75,14 @@ def _fn(tree, name, cls):
 
 def main() -> int:
     print("=" * 68)
-    print("STOP VS SPREAD: recorded by sweep + TCS, counted right by the report")
+    print("STOP VS SPREAD: recorded by TCS, counted right by the report")
     print("=" * 68)
     from types import SimpleNamespace as NS
     from strategy.criteria import STOP_VS_SPREAD_MIN as MN
     import strategy.credit_vertical as cv
-    from strategy import sweep_plan as SP
     from strategy import tcs_plan as TP
 
-    # ── S1 the sweep ─────────────────────────────────────────────────────
-    def sweep_chain(ask):
-        return NS(calls=[], puts=[
-            NS(strike=198.0, bid=2.40, ask=ask, mark=round((2.40 + ask) / 2, 3)),
-            NS(strike=197.0, bid=0.40, ask=0.42, mark=0.41),
-            NS(strike=196.0, bid=0.10, ask=0.12, mark=0.11),
-            NS(strike=195.0, bid=0.03, ask=0.05, mark=0.04),
-            NS(strike=193.0, bid=0.01, ask=0.02, mark=0.015)])
-    lvl = {"level_id": "s1", "price": 198.0, "kind": "support", "provenance": "PDL"}
-    if "sv_ratio" not in getattr(SP.Candidate, "__slots__", ()):
-        check("S1 SweepPlan.Candidate carries sv_ratio", False, "no sv_ratio slot")
-    else:
-        ch = sweep_chain(2.44)
-        c = SP.SweepPlan()._structure(SP.Candidate(lvl), ch)
-        short = ch.puts[0]
-        w = cv.search_wing(ch.puts, short, "put", SP.R_FLOOR, r_floor_stop=SP.R_FLOOR_STOP)
-        want = round(float(w.stop_dist) / (short.ask - short.bid), 4) if w.stop_dist else None
-        check("S1 the sweep records sv_ratio = search_wing stop_dist / short bid-ask",
-              c.sellable and want is not None and c.sv_ratio == want and c.sv_ratio >= MN,
-              f"sellable={c.sellable} sv_ratio={c.sv_ratio} want={want} min={MN}")
-
+    # ── S1 r76: the sweep (and its SweepPlan ratio) is removed; TCS is the one recorder left ──
     # ── S2 TCS ───────────────────────────────────────────────────────────
     def tcs_chain(ask):
         return NS(calls=[], puts=[
@@ -135,10 +115,7 @@ def main() -> int:
                     and n.args and isinstance(n.args[0], ast.Constant) and n.args[0].value == "stop_vs_spread"):
                 out.append(ast.unparse(n))
         return out
-    sp_calls = calls_in(_fn(ast.parse(open(SP.__file__).read()), "prepare", "SweepPlan"))
     tp_calls = calls_in(_fn(ast.parse(open(TP.__file__).read()), "prepare", "TCSPlan"))
-    check("S3 SweepPlan.prepare records stop_vs_spread with the chosen ratio, True",
-          any("chosen.sv_ratio" in c and c.rstrip(")").endswith("True") for c in sp_calls), f"{sp_calls}")
     check("S3 TCSPlan.prepare records the ratio True on a pass and False before a refusal",
           any("cand.sv_ratio" in c and c.rstrip(")").endswith("True") for c in tp_calls)
           and any("cand.sv_ratio" in c and c.rstrip(")").endswith("False") for c in tp_calls), f"{tp_calls}")
