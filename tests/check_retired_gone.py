@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """
-tests/check_retired_gone.py  v5.0
+tests/check_retired_gone.py  v5.1
+v5.1  2026-11-08  OTV5 r78 (RETIRE.2) - G8e-G8h: the strip tool on units as setup_ec2.sh / configure.sh write them
+      (Environment="KEY=v", 'KEY=v', several assignments a line, an unparsable line). v5.0 of the tool matched none
+      of the quoted lines and reported 0 on 14/14 boxes that each still held two retired keys.
 v5.0  2026-11-08  OTV5 r76 (RETIRE.1) — THE RETIRED TRADES ARE GONE, THE LIVE ONES ARE WIRED, THE ENGINE STAYS.
       The operator, 2026-11-07: "The orb engine is a trading state distinctly different from the orb 'trade' which
       was retired. Running dead code and logging dead code activity is unnecessary drag. Yes, I want all of those
@@ -14,7 +17,8 @@ v5.0  2026-11-08  OTV5 r76 (RETIRE.1) — THE RETIRED TRADES ARE GONE, THE LIVE 
   G6  the opening-range ENGINE is intact: its module imports and keeps the API Runaway, Breakout and the Hunt use
   G7  the start banner: ramp_top= and scaling BRK=, no scaling ORB / VOLT, no ORCS=, no contract_scale=
   G8  tools/strip_retired_env.sh on a scratch unit: removes exactly the retired lines, keeps every other line,
-      prints no value, is idempotent, and --check changes nothing
+      prints no value, is idempotent, and --check changes nothing; G8e-G8h the quoted, single-quoted, mixed and
+      unparsable forms (RETIRE.2)
   G9  the kept helpers still answer: orb_plan.select_contract (Breakout) and sweep_credit_spread.strike_beyond_sweep
       / is_breach_exit (TCS shadow, trade_logger)
 
@@ -183,6 +187,37 @@ check("G8b the run removes exactly the 11 retired lines and keeps every other li
 check("G8c no value is ever printed (key names and counts only)", "SECRETVALUE" not in out and "=1050" not in out)
 check("G8d a second run finds nothing and changes nothing", run2.returncode == 0 and "0 retired line(s)" in run2.stdout,
       run2.stdout.strip())
+
+# ── G8e-G8h: the units as setup_ec2.sh / configure.sh write them (RETIRE.2: v5.0 matched none of these) ─────
+unit2 = os.path.join(_SCR, "optionsbot_q.service")
+KEEP2 = ["[Service]", 'Environment="TT_USERNAME=SECRETVALUE3"', 'Environment="OT_ORB_BUDGET_USD=10000"',
+         "Environment='OT_RISK_USD=1050'", 'Environment="OT_VOLTAGE=9"']
+DROP2 = ['Environment="OT_SCALE_ORB=1"', 'Environment="OT_SCALE_VOLT=1"', "Environment='OT_VOLT_BUDGET_USD=SECRETVALUE4'",
+         'Environment="OT_VELOCITY_ENFORCE=0" "OT_SWEEP_CS=0"']
+MIXED = 'Environment="OT_TCS_ACTIVE=log" "OT_SCALE_ORB=1" OT_SCALE_BREAKOUT=1'
+MIXED_SQ = "Environment='OT_NOTE=a b' OT_SCALE_VOLT=1"          # a single-quoted value holding a space
+open(unit2, "w").write("\n".join(KEEP2[:2] + DROP2[:2] + [MIXED] + KEEP2[2:] + DROP2[2:] + [MIXED_SQ]
+                                 + ["ExecStart=/bin/true"]) + "\n")
+chk2 = subprocess.run(["bash", tool, "--check", unit2], capture_output=True, text=True, env=env)
+run3 = subprocess.run(["bash", tool, unit2], capture_output=True, text=True, env=env)
+body2 = [l for l in open(unit2).read().split("\n") if l]
+run4 = subprocess.run(["bash", tool, unit2], capture_output=True, text=True, env=env)
+out2 = chk2.stdout + run3.stdout + run4.stdout + chk2.stderr + run3.stderr + run4.stderr
+check('G8e the quoted form (Environment="KEY=v" and \'KEY=v\') is found: --check counts 7 assignments',
+      "7 retired line(s) would go" in chk2.stdout, chk2.stdout.strip())
+check("G8f a line of only retired assignments goes; a mixed line keeps its live assignments verbatim",
+      run3.returncode == 0 and body2 == KEEP2[:2] + ['Environment="OT_TCS_ACTIVE=log" OT_SCALE_BREAKOUT=1']
+      + KEEP2[2:] + ["Environment='OT_NOTE=a b'", "ExecStart=/bin/true"], f"{len(body2)} lines kept")
+check("G8g quoted units: no value printed, and a second run is clean",
+      "SECRETVALUE" not in out2 and "=1050" not in out2 and run4.returncode == 0 and "0 retired line(s)" in run4.stdout,
+      run4.stdout.strip())
+unit3 = os.path.join(_SCR, "optionsbot_bad.service")
+BAD = 'Environment="OT_SCALE_ORB=1'
+open(unit3, "w").write("[Service]\n" + BAD + "\nEnvironment=OT_VOLT=0\n")
+run5 = subprocess.run(["bash", tool, unit3], capture_output=True, text=True, env=env)
+b3 = open(unit3).read().split("\n")
+check("G8h an unparsable line is left exactly as it was and the run exits 1 (the parsable retired line still goes)",
+      run5.returncode == 1 and BAD in b3 and "Environment=OT_VOLT=0" not in b3, run5.stdout.strip())
 
 # ── G9 ───────────────────────────────────────────────────────────────────────────────────────────────
 from strategy import orb_plan as OP                             # noqa: E402
