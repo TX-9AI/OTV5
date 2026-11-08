@@ -1,5 +1,6 @@
 """
-execution/exit_engine.py  v5.15
+execution/exit_engine.py  v5.16
+v5.16  2026-11-08  OTV5 r88 (RETIRE.3) — the TC.6 branch (the 15%-of-credit stop and the breach backstop, answering only a TrendCreditSpread row) and its TCS_STOP_PCT_OF_CREDIT / is_trend_participation imports go with the TCS. The operator, 2026-11-08: "Delete" (the TCS shadow, which never fired: its own gates declined every candidate 11-02..11-06).
 v5.15  2026-11-08  OTV5 r76 (RETIRE.1) — THE REMOVED TRADES' EXITS GO: the ORBStrategy and VOLT routes, _evaluate_volt, _sweep_breach_accepted (sweep verticals only), the velocity stall (it measured only the ORB trade and never cut anything else - _velocity_stall, its call, VELOCITY_* import), the Hunt's handoff GRANT to the sweep (its hunt_target_wicked exit is unchanged; the reason text loses "; handoff granted to the sweep"), and three uncalled helpers (_get_bos_tracker, _held_minutes, _underlying_from_5m). STRUCTURE_TRAIL_STRATEGIES is ("Breakout",). Runaway, Hunt, Breakout, PARK and the GEX fly route and decide exactly as before. The operator, 2026-11-07: "Running dead code and logging dead code activity is unnecessary drag. Yes, I want all of those things fixed."
 v5.14 2026-11-03  OTV5 r73 (BFLY.17) — THE GEX PIN BUTTERFLY HOLDS TO THE CLOSE. The operator, 2026-11-03: "For the GEX fly, I
       want no stop except hold to close". _evaluate_butterfly skips its HARD STOP for a strategy in
@@ -966,8 +967,8 @@ from execution.limit_ladder import limit_at_mark, hard_close_order_mode
 # v4.21 (AUDIT F1): the binding v4.20 forgot. `is_trend_participation` was
 # called in _evaluate_condor_leg and never imported — NameError on every condor
 # leg evaluation. `is_credit_vertical` routes the dispatch (F2).
-from config import TCS_STOP_PCT_OF_CREDIT                    # r238
-from strategy.structure import (is_trend_participation, is_credit_vertical,
+# RETIRE.3 (r88): is_trend_participation went with the TCS (its one reader, the TC.6 branch, is deleted).
+from strategy.structure import (is_credit_vertical,
                                 is_tent, has_assignment_risk)
 from utils.time_utils import eod_close_due                      # r149 (EOD.1)
 from config import EOD_RESTING_AT_ET, EOD_LADDER_AT_ET          # r149 (EOD.1)
@@ -2783,95 +2784,8 @@ class ExitEngine:
         # r230 — ORCS legs are condor legs here, VERBATIM (the operator, 2026-10-03; PLAN_SPEC §41.11).
         # r204's early return for them is gone.
 
-        # ── TC.6 TREND CREDIT SPREAD — BREACH OR NICKEL, NOTHING ELSE ────
-        # Operator's spec: "Exit should be breached (loss) or nickel close
-        # (profit)." NO premium stop and NO ratchet, and that is not a
-        # simplification — THE MEASURED EV WAS HELD TO EXPIRY, UNMANAGED
-        # (+$0.52/spread, 90% terminal OK, 79% recovered on the ORB-anchored
-        # runaway arm). A stop bolted on afterwards is a DIFFERENT TRADE with a
-        # different expectancy, and paper results from it would not transfer.
-        # BREACH is structural, not a premium percentage: a CLOSED BAR beyond
-        # the broken ORB boundary. That is the same event `orb_structure_stop`
-        # already calls thesis death, and the level the short strike was
-        # anchored to — so structure and invalidation agree instead of arguing.
-        # CLOSED bars only: an intraday wick through the boundary is a touch,
-        # and the operator's own rule is that only a close decides acceptance.
-        if is_trend_participation(record):
-            # 🔴 r238 — THE 15%-OF-CREDIT STOP, AND IT RUNS FIRST. Operator,
-            # 2026-09-04: *"stop out at 15% of credit collected... the 15% is
-            # doing the heavy lifting, flatten is last resort, nickel closes on
-            # a nice move in our favor."* Before this the branch checked the
-            # boundary breach and RETURNED, so a trend credit had no premium
-            # stop at all — it rode to breach, nickel or the flatten.
-            # ⚠️ 15% OF CREDIT IS NOT THE LONE STOP'S 15% OF RISK, and the
-            # difference is 4x. It is chosen, not inherited: on a $2.50 credit
-            # this is $0.375 against a $2.45 win to the nickel, a realized
-            # 6.5:1. `stop_survivable` at entry (2x the short quote) is what
-            # stops it being the r155-inverted stop that fires on noise — the
-            # entry gate is load-bearing for this exit.
-            try:
-                _entry_cr = float(record.get("entry_premium") or 0.0)
-            except (TypeError, ValueError):
-                _entry_cr = 0.0
-            # OTV4TEST r9 — the 15%-of-credit stop applies to a LONE vertical only
-            # (operator 2026-09-09); a hedged leg's sibling suppresses it.
-            _tcs_hedged = self._condor_sibling_open(record, default=False)
-            if _entry_cr > 0 and current_premium is not None and not _tcs_hedged:
-                _stop_at = _entry_cr * (1.0 + TCS_STOP_PCT_OF_CREDIT)
-                if float(current_premium) >= _stop_at:
-                    decision.should_exit = True
-                    decision.exit_reason = (
-                        f"tcs_stop_{TCS_STOP_PCT_OF_CREDIT:.0%}_of_credit: "
-                        f"{float(current_premium):.2f} >= {_stop_at:.2f} "
-                        f"(credit {_entry_cr:.2f})")
-                    return decision
-            # ⚠️ THE BREACH SURVIVES AS A BACKSTOP and is expected to be INERT:
-            # a close through the level moves a near-money spread far more than
-            # 15%, so the stop above fires first. Kept because "expected inert"
-            # and "proven inert" are different, and it costs nothing.
-            _b = float(record.get("underlying_stop") or 0.0)
-            _side = record.get("option_side", "")
-            _last = None
-            try:
-                if df_1m is not None and not df_1m.empty:
-                    _last = float(df_1m["close"].iloc[-1])
-            except Exception:                                  # noqa: BLE001
-                _last = None
-            if _b > 0 and _last is not None:
-                # put spread sits BELOW the boundary -> a close below breaches;
-                # call spread sits ABOVE -> a close above breaches.
-                _breached = (_last < _b) if _side == "put" else (_last > _b)
-                if _breached:
-                    decision.should_exit = True
-                    decision.exit_reason = (
-                        f"tcs_breach: close {_last:.2f} beyond boundary {_b:.2f}")
-                    return decision
-            elif _b > 0:
-                # No tape: report it. A breach rule that cannot see price is
-                # inert, and an inert stop must never look like a passing check.
-                logger.warning("[tcs] no 1m tape — the breach rule is INERT "
-                               "this tick (boundary %.2f)", _b)
-            # ⚠️ NO NICKEL CLOSE. Operator, 2026-08-14: "There should be no
-            # closing it short of a BREACH of that level or the SESSION HARD
-            # CLOSE cutoff." This revises the earlier breach-or-nickel spec.
-            # A nickel close is a PROFIT exit, and taking it caps a position
-            # whose measured EV was HELD TO EXPIRY, UNMANAGED. The 15:45 close
-            # above is the only other way out.
-            # ⚠️ TERMINAL RETURN — THE WHOLE POINT OF THE BRANCH.
-            # Without this the branch FALLS THROUGH to the ratchet and the 25%
-            # condor stop below. Observed live 2026-08-14: a $0.06 credit sets
-            # stop_premium at $0.07 (credit x 1.25), so ONE CENT of widening
-            # closed the trade — every TC.6 leg on the fleet stopped out within
-            # seconds. The measured EV was HELD TO EXPIRY, UNMANAGED; a premium
-            # stop is a different trade.
-            # The v1.0 test asserted the branch contained two `return decision`
-            # statements. It did. It never exercised the path where NEITHER
-            # breach NOR nickel fires — which is the path that was broken.
-            return decision
-            # No other exit applies: the 15:45 close is handled ABOVE, and
-            # the ratchet / 25% stop / TP below are deliberately unreachable
-            # for a trend credit spread.
-
+        # RETIRE.3 (r88) — the TC.6 breach-or-15%-of-credit branch is deleted with the TCS (the operator,
+        # 2026-11-08: "Delete"); it answered only a TrendCreditSpread row.
 
         # ── 🔴 v4.1 (2026-08-21) — CONDOR-LEG ADVERSE EXIT DELETED (3/3) ─────
         # Same shape as the butterfly exit above: a membership test against

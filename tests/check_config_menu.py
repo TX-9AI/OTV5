@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_config_menu.py  v5.0
+tests/check_config_menu.py  v5.1
+v5.1  2026-11-08  OTV5 r88 (RETIRE.3) — the probe stops reading config.TCS_MODE (removed with the TCS); every check unchanged.
 v5.0  2026-10-31  OTV5 r68 (CFG.5) — new. THE OPERATOR'S MENU HOLDS WHAT HE SETS, AND NOTHING A STUDY ADDED. The operator,
       2026-10-31, on configure.sh's 17 items: "7. Pin gate, default "on" —remove from the menu"; "9. Scaling, default
       on—take it out"; "10&11–defaults are fine, take them out"; "12, same thing. Trade it—I don't want this toggled";
@@ -17,7 +18,7 @@ v5.0  2026-10-31  OTV5 r68 (CFG.5) — new. THE OPERATOR'S MENU HOLDS WHAT HE SE
   M3  the summary (show_config) prints no line for a removed setting
   M4  with NONE of the keys in the environment, config reads the operator's values: pin gate ON, Breakout scaling
       ON, Runaway's and Breakout's entry ends 10:30 (ENTRY_WINDOWS and the *_ET names), Breakout no-progress
-      "trade"; TCS keeps its code default "log" (the r57 shadow: only its menu item left)
+      "trade" (r88: the TCS and its TCS_MODE are removed)
   M5  NOT TOGGLED: with every one of those keys set to the OPPOSITE (0, 0, 11:30, 15:40, log) config reads the
       same values as M4 - the keys are not read
   M6  the resting stop is gone: no execution/resting_stop.py, no RESTING_STOP_* in config, and no module under the
@@ -76,8 +77,7 @@ def _probe(env):
     code = ("import config,json;W=config.ENTRY_WINDOWS;print(json.dumps({'pin':config.PIN_PROXIMITY_ACTIVE,"
             "'scale_brk':config.SCALE_BREAKOUT,'run_end':list(W['RunawayContinuation'][1]),"
             "'brk_end':list(W['Breakout'][1]),'run_et':str(config.RUNAWAY_CUTOFF_ET),"
-            "'brk_et':str(config.BREAKOUT_LATEST_ET),'noprog':config.BRK_NOPROG_MODE,"
-            "'tcs':getattr(config,'TCS_MODE',None)}))")
+            "'brk_et':str(config.BREAKOUT_LATEST_ET),'noprog':config.BRK_NOPROG_MODE}))")   # r88: TCS_MODE removed
     p = subprocess.run([sys.executable, "-c", code], cwd=ROOT, env=e, capture_output=True, text=True, timeout=180)
     if p.returncode != 0 or not p.stdout.strip():
         return {"error": p.stderr[-300:]}
@@ -133,8 +133,8 @@ def main():
     # M4 / M5 behaviour with no env, and with the opposite env
     none = _probe({})
     opp = _probe(OPPOSITE)
-    want_none = dict(WANT, tcs="log")
-    check("M4 no env: pin gate ON, Breakout scaling ON, both ends 10:30, no-progress trade, TCS log",
+    want_none = dict(WANT)                                       # r88: TCS_MODE is gone with the TCS
+    check("M4 no env: pin gate ON, Breakout scaling ON, both ends 10:30, no-progress trade (r88: no TCS mode left)",
           none == want_none, f"got {none}")
     check("M5 the opposite env (0, 0, 11:30, 15:40, log) changes nothing: the keys are not read",
           {k: opp.get(k) for k in WANT} == WANT, f"got {opp}")

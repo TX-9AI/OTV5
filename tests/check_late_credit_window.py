@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""tests/check_late_credit_window.py — v5.1
+"""tests/check_late_credit_window.py — v5.2
+v5.2  2026-11-08  OTV5 r88 (RETIRE.3) — W1 re-derived: no credit entry is left in admission (the TCS removed), so W1 pins the one credit end (config.CREDIT_ENTRY_END_ET 15:40) strictly before the vertical hold; W2/W3 unchanged.
 v5.1  2026-11-08  OTV5 r76 (RETIRE.1) — W1 and the DEBIT / CREDIT sets drop the removed trades (sweep, ATP fly, ORB); W2-W7 unchanged.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.1  2026-09-26 — OTV4TEST r149 (EOD.1) — W4 and W7 RE-POINTED to the operator's end of day
@@ -96,7 +97,7 @@ VHOLD = tuple(config.VERTICAL_HOLD_TO_ET)
 # butterflies carry net_debit (0.26, 0.47) and credit_received 0.0.
 DEBIT = {"GEXPinButterfly", "RunawayContinuation",
          "LiquidityHunt", "Breakout"}                       # r76: the ATP fly and the ORB trade removed
-CREDIT = {"TrendCreditSpread"}                              # r76: the sweep removed
+CREDIT = set()                                              # r76: the sweep removed; r88: the TCS - no credit entry left
 
 
 def _close(name):
@@ -104,9 +105,11 @@ def _close(name):
     return tuple(r.window[1]) if r else None
 
 
-guard("W1 TCS closes at 15:40 (r76: the sweep is removed)",
-      lambda: _close("TrendCreditSpread") == (15, 40) and _close("SweepCreditSpread") is None,
-      lambda: "sweep=%s tcs=%s" % (_close("SweepCreditSpread"), _close("TrendCreditSpread")))
+guard("W1 the one credit end is 15:40 and strictly before the vertical hold; no credit entry is in admission (r88: the TCS removed)",
+      lambda: tuple(config.CREDIT_ENTRY_END_ET) == (15, 40) and tuple(config.CREDIT_ENTRY_END_ET) < VHOLD
+      and _close("SweepCreditSpread") is None and _close("TrendCreditSpread") is None,
+      lambda: "credit end=%s vhold=%s sweep=%s tcs=%s" % (tuple(config.CREDIT_ENTRY_END_ET), VHOLD,
+                                                          _close("SweepCreditSpread"), _close("TrendCreditSpread")))
 
 
 def _w2():

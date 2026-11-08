@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_push_allowlist.py  v5.0
+tests/check_push_allowlist.py  v5.1
+v5.1  2026-11-08  OTV5 r88 (RETIRE.3) — the shadow-trades store and its /shadow_trades/ stream leave A2/A3 (removed with the TCS shadow); every other stream unchanged.
 v5.0  2026-11-03  OTV5 r72 (PARK.5) — new. A BOX UPLOADS ITS OWN SYMBOL AND NOTHING ELSE. The operator, 2026-11-03: "Make
       sure the boxes not trading qqq are hard blocked from uploading any other symbol." warehouse/s3_push v5.8's
       allow-list (sym_family, allowed_symbol), asked by every stage, exercised END TO END through s3_push.main() with a
@@ -98,12 +99,7 @@ def build_box(SP, own, foreign):
         c.execute("INSERT INTO circuit_breaker_events VALUES (?,?,?,?)", (i + 1, s, t10.isoformat(), "x"))
     c.commit()
     c.close()
-    c = sqlite3.connect(SP.SHADOW_TRADES_DB)
-    c.execute("CREATE TABLE trades (trade_id TEXT, symbol TEXT, entry_time TEXT)")
-    for i, s in enumerate((own, foreign)):
-        c.execute("INSERT INTO trades VALUES (?,?,?)", (f"s{i}", s, t10.isoformat()))
-    c.commit()
-    c.close()
+    # r88 (RETIRE.3): no shadow-trades store any more (the TCS shadow and s3_push's shadow_trades stage are removed)
     os.makedirs(os.path.dirname(SP.FEED_DB), exist_ok=True)
     c = sqlite3.connect(SP.FEED_DB)
     c.execute("CREATE TABLE candles (symbol TEXT, interval TEXT, ts_epoch_ms INTEGER, open REAL, high REAL, low REAL, "
@@ -203,7 +199,7 @@ def main():
     vk = [k for k in fake.store if "/sym=VIX/" in k]
     check("A2 equity box: no QQQ (or VIX) object or row uploaded from any stream", not bk and not br and not vk,
           f"keys={bk[:4]} rows={br[:4]} vix={vk[:3]}")
-    want = ("/trades/", "/shadow_trades/", "/circuit_breaker/", "/ohlc/", "/candles/", "/quote_series/", "/prints/",
+    want = ("/trades/", "/circuit_breaker/", "/ohlc/", "/candles/", "/quote_series/", "/prints/",
             "/indicator_series/", "/derived_plan_check/", "/liquidity_ledger/", "/chain_snapshots/", "/shadow/",
             "/signal_journal/")
     missing = [w for w in want if not any(w in k and "/sym=AMZN/" in k for k in fake.store)]

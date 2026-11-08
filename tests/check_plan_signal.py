@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""check_plan_signal.py — v5.1
+"""check_plan_signal.py — v5.2
+v5.2  2026-11-08  OTV5 r88 (RETIRE.3) — PS7 drops the TCS (strategy/trend_credit_spread.py deleted); every other check unchanged.
 v5.1  2026-11-08  OTV5 r76 (RETIRE.1) — PS1-PS3 (the ORB TRADE's plan checks and its 'Waiting on' narration) go with the trade, replaced by one check
       that it is gone; PS7 drops the removed sweep; PS4-PS6 and PS8 unchanged.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
@@ -100,8 +101,7 @@ def main():
 
     # ── PS7 — the reason must be TIME-INVARIANT or dedupe does nothing ───
     # "09:40 ET is before..." and "09:41 ET is before..." are different strings.
-    for rel in ("strategy/trend_credit_spread.py",
-                "strategy/iron_condor_strategy.py",
+    for rel in ("strategy/iron_condor_strategy.py",          # r88: the TCS removed
                 "strategy/gex_pin_butterfly.py"):        # r76: the sweep is removed
         s = open(os.path.join(_root, rel), encoding="utf-8").read()
         tree = ast.parse(s)

@@ -1,5 +1,6 @@
 """
-config.py  v5.14
+config.py  v5.15
+v5.15  2026-11-08  OTV5 r88 (RETIRE.3) — THE TCS KEYS GO: ENTRY_WINDOWS loses TrendCreditSpread; TREND_CREDIT_ACTIVE, TCS_MODE, TCS_ENV_REFUSED and every TCS_* dial are deleted. CREDIT_ENTRY_START_ET = (11, 31) and CONDOR_ENTRY_CUTOFF_ET = EOD_SCHEDULE['entries_stop'] are now written directly (they read the TCS row; the values are identical). The operator, 2026-11-08: "Delete" (the TCS shadow, which never fired: its own gates declined every candidate 11-02..11-06).
 v5.14  2026-11-08  OTV5 r76 (RETIRE.1) — THE RETIRED TRADES' DIALS GO: ENTRY_WINDOWS loses ORBStrategy, VOLT, SweepCreditSpread, ATPButterfly and OpeningRangeCreditSpread; the VOLT_*, ORCS_*, ATP_*, SWEEP_CS_* (except SWEEP_CS_MAX_REJECTION_PCT, read by derived/levels), SCALE_ORB, SCALE_VOLT, CONTRACT_SCALE, HANDOFF_TTL_TICKS and VELOCITY_* keys and their env reads are removed. ORB_NO_ENTRY_AFTER_ET (the ENGINE's cutoff) now reads EOD_SCHEDULE["entries_stop"] directly - same value, 15:40. DELTA_PAR, BREAKOUT_DELTA_PAR and every live dial are unchanged. The operator, 2026-11-07: "Running dead code and logging dead code activity is unnecessary drag. Yes, I want all of those things fixed."
 v5.13  2026-11-03  OTV5 r73 (BFLY.17) — THE GEX PIN BUTTERFLY HOLDS TO THE CLOSE, HONOURS ITS VIX RULE, AND IS PICKIER AT THE
       DOOR. The operator, 2026-11-03: "For the GEX fly, I want no stop except hold to close, I want the VIX rule enforced &
@@ -806,61 +807,8 @@ INSTRUMENT          = (os.environ.get("OT_INSTRUMENT") or "").strip() or INSTRUM
 # edge — the better the rung, the larger the fake gain. PAPER NEVER BOOKS A FILL
 # FROM THESE PRICES - it books the mark. (The unwired fill model that was meant
 # to gate such fills was deleted in r216.)
-# ── TC.6 KILL SWITCH (2026-08-13) ────────────────────────────────────────────
-# TC.6 is the ONLY brand-new FIRING strategy shipped today and was the only one
-# with no env-level off switch — stopping it would have needed a code change and
-# a re-bake, on a strategy that has never executed a live order. Every other
-# change today has one. This closes that gap.
-# ── TC.6 OWNS ITS OWN CONSTANTS (TCS.1, 2026-08-14) ──────────────────────────
-# ⚠️ TREND PARTICIPATION BORROWED SIX `CONDOR_*` KNOBS, so changing one for the
-# CONDOR silently retuned a DIFFERENT TRADE and nothing said so. These are the
-# same numbers under names that mean what they govern.
-# **VALUES ARE IDENTICAL TO THE CONDOR DEFAULTS THEY REPLACE** — this is a
-# de-coupling, not a re-tune, and `tests/test_tcs_decoupling.py` asserts the
-# equality so a future divergence is a DECISION rather than a drift.
-TCS_MIN_POP                 = float(os.environ.get("OT_TCS_MIN_POP", "0.70"))
-# r175 — SELECTION, a stated baseline prior (not a fit): how many bars of the
-# session's MEASURED drift the POP model may credit. 24 x 5m = two hours of
-# the trend it can already see; beyond that is extrapolation. Operator ruling
-# 2026-08-28: TCS must fire on trend days and stay out on chop; the drift is
-# signed, so a reversal reads WORSE than driftless.
-TCS_DRIFT_HORIZON_BARS      = float(os.environ.get("OT_TCS_DRIFT_HORIZON_BARS", "24"))
-TCS_MAX_QUOTE_WIDTH         = float(os.environ.get("OT_TCS_MAX_QUOTE_WIDTH", "0.25"))
-TCS_POP_BAR_MIN             = float(os.environ.get("OT_TCS_POP_BAR_MIN", "5"))
-TCS_NICKEL_REF              = float(os.environ.get("OT_TCS_NICKEL_REF", "0.05"))
-TCS_WING_WIDTH_SPX          = float(os.environ.get("OT_TCS_WING_SPX", "5"))
-TCS_WING_WIDTH_QQQ          = float(os.environ.get("OT_TCS_WING_QQQ", "5"))
-
-# ⚠️ AUDIT F2 (2026-08-20): DEFAULT WAS "1" — a LIVE sixth strategy. TCS's own
-# GATES block says "NOT SPECCED, DELIBERATELY, AND NOT DISPATCHED... 21 trades,
-# 28.6% direction accuracy", TRADES.md specs five strategies without it, and
-# check_dispatch does not cover it — yet main.py dispatched it on every
-# afternoon tick with direction from the trend vote (measured 34.2% on puts,
-# the quantity v4 exists to retire). Five guards missed it because each read a
-# different document. Default now matches the stated design: OFF. Turning it
-# on requires the env var AND a v4 spec in TRADES.md — the flag is not the gap;
-# the missing spec is.
-# 🔴 DEFAULT IS ON. Operator has authorised TC.6 three separate times; the
-# default of "0" was a SILENT ENCODING nobody chose — the strategy returned
-# None on its FIRST line, before any logging, so it was invisible in the log
-# and looked like "evaluated and declined" rather than "switched off".
-# ⚠️ SPEC.1 CLASS. An operator decision must not live in an env-var default
-# that no surface reports. If TC.6 is ever to be disabled again it is an
-# explicit OT_TCS_ACTIVE=0, not an absence.
-TREND_CREDIT_ACTIVE         = os.environ.get("OT_TCS_ACTIVE", "") == "1"    # r204: RETIRED by ruling 2026-10-03 ("Retire the sweep & TCS"); =1 restores it
-# OTV5 r57 (TCS.LOG1) — unset = LOG: the plan runs and a fire books a SHADOW trade (execution/shadow_book.py), never
-# an order. "0"/"off"/"dormant" = off (not asked); "1" = trade (TREND_CREDIT_ACTIVE). An unknown value keeps the
-# default (log) and is named. The label configure.sh shows; strategy/plan_state.py makes the same reading.
-TCS_ENV_REFUSED = ""
-_tcs_raw = os.environ.get("OT_TCS_ACTIVE", "").strip().lower()
-if _tcs_raw in ("1", "trade", "active", "on") and TREND_CREDIT_ACTIVE:
-    TCS_MODE = "trade"
-elif _tcs_raw in ("0", "off", "dormant"):
-    TCS_MODE = "off"
-else:
-    TCS_MODE = "log"
-    if _tcs_raw not in ("", "log", "1"):
-        TCS_ENV_REFUSED = _tcs_raw
+# RETIRE.3 (r88) — the TC.6 kill switch, its own constants (TCS_MIN_POP ... TCS_WING_WIDTH_*), TREND_CREDIT_ACTIVE,
+# TCS_MODE and TCS_ENV_REFUSED are deleted with the TCS (the operator, 2026-11-08: "Delete"); nothing reads OT_TCS_*.
 # ── TC.6 ENTRY GATES (2026-08-14 HOTFIX — it rapid-fired the whole fleet) ─────
 # Observed 10:02 ET on 08-14: NVDA sold a $5-wide for $0.06, PLTR a $6-wide for
 # $0.08, and every box re-entered seconds after a nickel close.
@@ -1198,7 +1146,6 @@ ENTRY_WINDOWS = {
     "RunawayContinuation":  ((9, 35),  RUNAWAY_END),   # r187: 10:29 last entry (r68: fixed, no per-box key)
     "LiquidityHunt":        ((9, 35),  (10, 30)),   # r187
     "Breakout":             ((9, 35),  BREAKOUT_END),   # r187: 10:29 last entry (r68: fixed, no per-box key)
-    "TrendCreditSpread":    ((11, 31), EOD_SCHEDULE["entries_stop"]),
     "GEXPinButterfly":      ((13, 0),  (15, 0)),   # r273 (BFLY.10): was 12:00; the operator, 2026-10-12: "reduce the fly window to 1300"
     "PARK":                 ((11, 1),  (11, 3)),   # r288 (PARK.1): 11:01-11:02 after the 11:00 bar closes; r60 (PARK.4): at the mark, laddered live
 }
@@ -1208,66 +1155,8 @@ def _hhmm(t) -> str:
     return f"{t[0]}:{t[1]:02d}"
 
 
-TCS_START_ET                = ENTRY_WINDOWS["TrendCreditSpread"][0]    # afternoon only; 11:31 clears AFD.1
-# ⚠️ r141 — kept as a literal because CREDIT_ENTRY_START_ET is defined further
-# down this file; the two MUST stay equal and check_entry_windows pins it.
-# Credit must clear BOTH floors. Width-relative keeps risk/reward sane;
-# nickel-relative guarantees the trade has room to exist at all.
-# 0.10 is a STATED PRIOR inside the measured band: credit_edge ran 8-19% of
-# width at sellable offsets, and TC.7's ORB-anchored 0.00% cell was ~17%.
-TCS_MIN_CREDIT_PCT_WIDTH    = float(os.environ.get("OT_TCS_MIN_CREDIT_PCT", "0.10"))
-# ── THE JOINT EV TEST (2026-08-14) ───────────────────────────────────────────
-# Operator: "The trade should at least enter on some expectation of profit, not
-# all willy nilly like this."
-# A flat credit floor and a flat POP floor are INDEPENDENT tests, and independent
-# is the bug: POP >= 0.70 selects FAR strikes, far strikes pay little, and the
-# two floors never talk to each other. The correct condition is a single
-# inequality:
-#       EV = credit * POP - L * width * (1 - POP) > 0
-#   =>  credit / width  >  L * (1 - POP) / POP
-# so a LOW-POP strike must pay RICHLY and a HIGH-POP strike may be thin. That is
-# the shape a credit spread actually has.
-# `L` is loss-given-breach as a fraction of width. **NOT 1.0**: a breach rarely
-# runs the full width by the bell — TC.7's ORB-anchored cell measured E[loss]
-# 0.35 on a $5 wide (7% of width) at 90% terminal-OK, and credit_edge put real
-# credits at 8-19% of width. At L=1.0 a POP-0.70 strike would need 30% of width,
-# which essentially never occurs, and the gate would silence TC.6 entirely —
-# over-correcting into silence is its own failure.
-# L=0.5 is a STATED PRIOR: it requires 21% of width at POP 0.70, 5.6% at POP
-# 0.90, 2.6% at POP 0.95. Conservative against the measured 7%, and it produces
-# the right ORDERING regardless of the exact value.
-TCS_LOSS_GIVEN_BREACH       = float(os.environ.get("OT_TCS_LGB", "0.5"))
-TCS_MIN_CREDIT_NICKEL_MULT  = float(os.environ.get("OT_TCS_NICKEL_MULT", "4.0"))
-
-# ── r238 — THE TWO NUMBERS THE NEW TCS TURNS ON ───────────────────────────────
-# 🔴 1:1 ON THE EXPIRY BASIS, NOT THE STOP BASIS, and the distinction is
-# arithmetic rather than taste. With the stop at 15% OF CREDIT,
-# `credit / stop` is 1/0.15 = 6.67 for EVERY credit and EVERY wing — R on the
-# stop basis is a CONSTANT, so "set the protective wing to achieve 1:1" would
-# have nothing to solve for. Only `credit / (width - credit)` is a function of
-# the wing, and 1.0 there means CREDIT >= 50% OF WIDTH.
-# ⚠️ IT IS DELIBERATELY SEPARATE FROM `criteria.R_FLOOR_STOP`, which the SWEEP
-# uses on the stop basis (r234). One constant with two bases is the rot §35
-# names; each names its own.
-TCS_R_FLOOR_EXPIRY  = float(os.environ.get("OT_TCS_R_FLOOR_EXPIRY", "1.00"))
-
-# 🔴 15% OF CREDIT, which is NOT what exit_engine's lone stop does (15% of
-# RISK) and not an oversight. Operator, 2026-09-04: *"stop out at 15% of credit
-# collected"*, choosing the most aggressive option *"because it's available,
-# not expected."* On a $2.50 credit that is a $0.375 stop against a $2.45 win
-# to the nickel — a realized 6.5:1, breakeven near a 13% hit rate.
-# ⚠️ THE FLOOR THAT KEEPS IT HONEST is `stop_survivable`: the stop must clear
-# 2x the short leg's quote or it fires on a quote update rather than on the
-# trade being wrong. That is why the 1:1 rule and this one PULL THE SAME WAY —
-# a thin far-OTM sale fails both, a rich near-money sale clears both.
-TCS_STOP_PCT_OF_CREDIT = float(os.environ.get("OT_TCS_STOP_PCT_CREDIT", "0.15"))
-# ⚠️ RETIRED 2026-08-14, NOT DELETED. TC.6 no longer reads this. It was an
-# emergency brake during the rapid-fire incident and was the wrong instrument
-# for the right worry — the loop came from a $0.06 credit sitting one cent from
-# a nickel close and one cent from a mis-set stop, all fixed at the source. The
-# constant survives so a future re-add needs no config change; nothing consults
-# it today.
-TCS_COOLDOWN_MIN            = float(os.environ.get("OT_TCS_COOLDOWN_MIN", "0"))
+# RETIRE.3 (r88): TCS_START_ET, its credit floors (TCS_MIN_CREDIT_PCT_WIDTH, the joint EV test's TCS_LOSS_GIVEN_BREACH,
+# TCS_MIN_CREDIT_NICKEL_MULT), TCS_R_FLOOR_EXPIRY, TCS_STOP_PCT_OF_CREDIT and TCS_COOLDOWN_MIN went with the TCS.
 
 ENTRY_LIMIT_LADDER          = [0.50, 0.25, 0.00]
 ENTRY_LADDER_STEP_SEC       = float(os.environ.get("OT_ENTRY_LADDER_STEP_SEC", "15"))
@@ -1838,63 +1727,7 @@ DEBIT_BLOCK_ACTIVE          = os.environ.get("OT_DEBIT_BLOCK_ACTIVE", "1") == "1
 # operator-set window (ORB 11:00, butterfly cutoff, TCS below, the
 # 15:40/15:45 flatten ladder) bounds the day; a redundant global veto is the
 # guard-outlives-decision shape this repo keeps finding.
-# 🔴 r237 — SET OUT OF REACH ON PURPOSE. OPERATOR, 2026-09-04: *"I don't
-# know how TCS has cleared the bar to fire. It looks like I do need it
-# disabled."* (00, 00) makes `(now.hour, now.minute) >= TCS_ENTRY_END_ET` true
-# at every tick of every session, so TCS goes DORMANT at its FIRST gate —
-# before a chain is read, before a strike is chosen, before anything is priced.
-#
-# 🔑 WHY THIS CONSTANT AND NOT A QUALITY BAR. Raising `R_FLOOR_STOP` or
-# `TCS_MIN_POP` would also stop it, and would LIE about why: the plan board
-# would read `wing_r_best FAIL` forever and the next reader would spend a
-# session working out why UNH never clears R. A closed window is the truth —
-# the strategy is parked, not out-priced. And this constant is TCS-ONLY;
-# `TCS_START_ET` is pinned equal to `CREDIT_ENTRY_START_ET` by
-# `check_entry_windows`, so touching THAT would have moved the sweep too.
-#
-# ⚠️ BELT AND BRACES WITH `OT_TCS_ACTIVE=0`, which is already in a systemd
-# drop-in on all 15 boxes (verified 2026-09-04 11:47, 15/15). The env flag
-# dies with the drop-in file; this survives in the repo.
-#
-# ⚠️ WHY IT FIRED AT ALL, so the rewrite does not re-derive it: r234 moved R
-# to the stop basis and TCS cleared it HONESTLY. UNH sold 398/402 for $0.84 —
-# credit/width 21.0% against a 13.04% bar, r_stop 1.77. My "TCS still fails"
-# note was measured on SPX and QQQ at 0.04-0.09 and I let it stand for the
-# fleet; UNH is a different chain and sails through. The gate was right; the
-# trade behind it should not have been taking the offer.
-#
-# ⚠️ AND IT CHURNED: 11:40, 11:42 and 11:42 on identical strikes, closing at
-# -$2.00, -$2.00, -$0.00. TCS has NO re-entry latch of any kind — no
-# `order_placed`, no confirmation sequence — the same shape r235 fixed for the
-# ORB, which TCS never had. And `exit=breach@397.07` is the ORB LOW, the very
-# bound it anchors its short strike to, so price sitting ON the boundary makes
-# it enter and exit on alternating ticks. TCS.7 in BACKLOG holds the rewrite.
-#
-# The original note, still true and now acted on:
-# 🔴 r238 — SPEC'D AT LAST. Same number it always held, DIFFERENT STATUS:
-# (14, 0) was inherited verbatim from a deleted global cutoff and config called
-# it PROVISIONAL and INERT, "operator specs TC.6's real v4 window before any
-# activation". Operator, 2026-09-04: *"No new positions after 1400, but condor
-# management is allowed until the flatten."* Chosen, not inherited.
-# ⚠️ MANAGEMENT IS NOT GATED BY THIS AND NEVER WAS — `condor_roll` and
-# `management.py` reference no window constant at all; they gate on having legs
-# and run to the 15:45 flatten. Verified, not assumed.
-# ⚠️ AND THE STRATEGY IS STILL HELD BY `OT_TCS_ACTIVE=0` in the systemd
-# drop-in on all 15 boxes. Restoring the window does NOT unpark it; clearing
-# that flag is a separate, deliberate act.
-# 🔴 r81 — DERIVED FROM THE ONE CREDIT END (was a literal (14, 0)). The TCS is
-# a CREDIT vertical and r71's ruling covers it; tcs_plan.py:285 was stamping
-# "past TCS_ENTRY_END_ET 14:00 — observing only" while admission said 15:40.
-# ⚠️ DEFINED BELOW, BESIDE `CREDIT_ENTRY_END_ET`, because it is DERIVED from it
-# and that constant does not exist yet at this point in the file. Left here as
-# a pointer rather than as a second literal — repeating the number is the
-# defect r81 exists to remove. See "THE ONE CREDIT END" further down.
-_TCS_ENTRY_END_ET_NOTE      = "derived below from CREDIT_ENTRY_END_ET (r81)"  # was
-                                        #   end, inherited verbatim from the
-                                        #   deleted global cutoff so behaviour
-                                        #   is unchanged while TCS is OFF.
-                                        #   Operator specs TC.6's real v4
-                                        #   window before any activation.
+# RETIRE.3 (r88): the TCS window notes (r237 park, r238 spec, r81 _TCS_ENTRY_END_ET_NOTE) went with the TCS.
 BUTTERFLY_ENTRY_CUTOFF_ET   = (14, 0)   # gates NOTHING since r209 (its session_guard branch could never run and is deleted); ENTRY_WINDOWS bounds the flies
 # 🔴 NOON, AND IT IS NOW ACTUALLY IN FORCE (r142). Operator, 2026-08-26:
 # *"Butterfly is debit & any sooner than noon to reach a pin is unlikely to
@@ -2367,7 +2200,7 @@ CONDOR_POP_BAR_MIN          = float(os.environ.get("OT_CONDOR_POP_BAR_MIN", "5")
 # otv3 and was an ADX-ramp argument for waiting LONGER after the opening gap,
 # so 11:31 is consistent with its intent. It costs the condor window 20
 # minutes against the 14:00 cutoff: 169 -> 149.
-CREDIT_ENTRY_START_ET       = ENTRY_WINDOWS["TrendCreditSpread"][0]  # every credit spread, one number
+CREDIT_ENTRY_START_ET       = (11, 31)   # every credit spread, one number (RETIRE.3 r88: was the TCS row's start, the same value)
 CONDOR_ENTRY_START_ET       = CREDIT_ENTRY_START_ET   # was (11, 11)
 # 🔴 r81 (LATE.2) — 15:40 BY THE OPERATOR'S r71 RULING, WHICH NEVER REACHED
 # THIS NUMBER. r71 widened the ADMISSION TABLE to 15:40 and moved
@@ -2379,7 +2212,7 @@ CONDOR_ENTRY_START_ET       = CREDIT_ENTRY_START_ET   # was (11, 11)
 # (15,40) at the same instant. The r317 block BELOW PREDICTED THIS EXACT
 # FAILURE and it still happened, which is why r81 derives every credit END
 # from this one constant rather than repeating the number.
-CONDOR_ENTRY_CUTOFF_ET      = ENTRY_WINDOWS["TrendCreditSpread"][1]  # r81: was (14,0); r71's ruling
+CONDOR_ENTRY_CUTOFF_ET      = EOD_SCHEDULE["entries_stop"]  # r81: was (14,0); r71's ruling (RETIRE.3 r88: was the TCS row's end, the same value)
 # 🔴 r317 — THE END SIDE, WHICH THE TWO EARLIER FIXES BOTH MISSED.
 # `sweep_credit_spread.LATEST_ET` read `getattr(config, "SWEEP_CS_LATEST_ET",
 # "14:00")` and THE KEY DID NOT EXIST, so the default was the only source —
@@ -2394,10 +2227,9 @@ CONDOR_ENTRY_CUTOFF_ET      = ENTRY_WINDOWS["TrendCreditSpread"][1]  # r81: was 
 # `management.py` reference no window constant and run to the 15:45 flatten.
 CREDIT_ENTRY_END_ET         = CONDOR_ENTRY_CUTOFF_ET   # one END for every credit path
 # 🔑 THE ONE CREDIT END. Every credit path resolves to this single constant and
-# none of them carries its own number: the TCS and the condor. r71's ruling moved the
-# admission window and FOUR separate literals stayed at 14:00; deriving them is
-# what makes the next ruling reach the code instead of half of it.
-TCS_ENTRY_END_ET            = CREDIT_ENTRY_END_ET
+# none of them carries its own number. r71's ruling moved the admission window and FOUR
+# separate literals stayed at 14:00; deriving them is what makes the next ruling reach
+# the code instead of half of it. (RETIRE.3 r88: TCS_ENTRY_END_ET went with the TCS.)
 
 # ─── EXIT MANAGEMENT ──────────────────────────────────────────────────────────
 

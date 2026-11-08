@@ -1,6 +1,12 @@
 #!/usr/bin/env python3
 """
-tests/check_retired_gone.py  v5.1
+tests/check_retired_gone.py  v5.2
+v5.2  2026-11-08  OTV5 r88 (RETIRE.3) - THE TCS SHADOW IS GONE TOO. The operator, 2026-11-08: "Delete". G1/G2 add the three
+      TCS shadow modules and their names; G3 moves TrendCreditSpread to the removed trades; G4 adds the TCS_* / TREND_CREDIT
+      keys; G5 is the five live setups and G5b the TCS singletons and shadow passes; G9b pins strike_beyond_sweep gone. New
+      G10 (no runtime reader is left: readiness, management, exits, warehouse, plan state, main; G10b the credit window is
+      value-identical) and G11 (the strip tool takes the TCS keys off a unit; G11b it never overwrites .bak-retire1). The
+      G8 fixtures' kept key is OT_PARK=log where it was OT_TCS_ACTIVE=log, which r88 retires.
 v5.1  2026-11-08  OTV5 r78 (RETIRE.2) - G8e-G8h: the strip tool on units as setup_ec2.sh / configure.sh write them
       (Environment="KEY=v", 'KEY=v', several assignments a line, an unparsable line). v5.0 of the tool matched none
       of the quoted lines and reported 0 on 14/14 boxes that each still held two retired keys.
@@ -13,14 +19,17 @@ v5.0  2026-11-08  OTV5 r76 (RETIRE.1) — THE RETIRED TRADES ARE GONE, THE LIVE 
   G2  no live file (outside tests/ and docs/) imports them, names their classes or calls the removed functions
   G3  plan_state, ENTRY_WINDOWS and the admission table hold the live trades and no removed one
   G4  config carries none of the removed keys; SWEEP_CS_MAX_REJECTION_PCT (derived/levels) and the ramp TOP stay
-  G5  main still builds and dispatches the five live setups and the TCS shadow, and the removed singletons are gone
+  G5  main still builds and dispatches the five live setups (r88: no TCS shadow), and the removed singletons are gone
   G6  the opening-range ENGINE is intact: its module imports and keeps the API Runaway, Breakout and the Hunt use
   G7  the start banner: ramp_top= and scaling BRK=, no scaling ORB / VOLT, no ORCS=, no contract_scale=
   G8  tools/strip_retired_env.sh on a scratch unit: removes exactly the retired lines, keeps every other line,
       prints no value, is idempotent, and --check changes nothing; G8e-G8h the quoted, single-quoted, mixed and
       unparsable forms (RETIRE.2)
-  G9  the kept helpers still answer: orb_plan.select_contract (Breakout) and sweep_credit_spread.strike_beyond_sweep
-      / is_breach_exit (TCS shadow, trade_logger)
+  G9  the kept helpers still answer: orb_plan.select_contract (Breakout) and sweep_credit_spread.is_breach_exit
+      (trade_logger); strike_beyond_sweep went with the TCS (r88)
+  G10 (r88) no runtime reader of the TCS shadow is left; G10b the credit window is value-identical without its row
+  G11 (r88) the strip tool takes OT_TCS_* / OT_TR_TCS_* / OT_TR_W_TCS_* / OT_SHADOW_TRADES_DB off a unit; G11b it
+      never overwrites an existing .bak-retire1
 
 Run:  python3 tests/check_retired_gone.py      (exit 0 = all pass)
 """
@@ -50,9 +59,12 @@ def check(label, cond, detail=""):
 
 REMOVED_MODULES = ("strategy/orb_strategy.py", "strategy/volt_strategy.py", "strategy/volt_plan.py",
                    "strategy/atp_butterfly.py", "strategy/atp_butterfly_plan.py", "strategy/orcs.py",
-                   "strategy/orcs_plan.py", "strategy/sweep_plan.py", "execution/handoff.py")
-REMOVED_TRADES = ("ORBStrategy", "VOLT", "ATPButterfly", "OpeningRangeCreditSpread", "SweepCreditSpread")
-LIVE_TRADES = ("RunawayContinuation", "Breakout", "LiquidityHunt", "PARK", "GEXPinButterfly", "TrendCreditSpread")
+                   "strategy/orcs_plan.py", "strategy/sweep_plan.py", "execution/handoff.py",
+                   # r88 (RETIRE.3): the TCS shadow
+                   "strategy/trend_credit_spread.py", "strategy/tcs_plan.py", "execution/shadow_book.py")
+REMOVED_TRADES = ("ORBStrategy", "VOLT", "ATPButterfly", "OpeningRangeCreditSpread", "SweepCreditSpread",
+                  "TrendCreditSpread")                                                     # r88
+LIVE_TRADES = ("RunawayContinuation", "Breakout", "LiquidityHunt", "PARK", "GEXPinButterfly")
 
 # ── G1 ───────────────────────────────────────────────────────────────────────────────────────────────
 sys.path.insert(0, os.path.join(ROOT, "tests"))
@@ -61,13 +73,18 @@ from retired_names import importers                            # noqa: E402
 # still on disk while this runs. What matters on a box is that nothing live imports them.
 _live_imp = {m: importers(m[:-3].replace("/", ".")) for m in REMOVED_MODULES}
 _live_imp = {k: v for k, v in _live_imp.items() if v}
-check("G1 nothing live imports any of the nine removed modules", not _live_imp, str(_live_imp))
+check("G1 nothing live imports any of the twelve removed modules (r88: + the three TCS shadow modules)", not _live_imp,
+      str(_live_imp))
 
 # ── G2 ───────────────────────────────────────────────────────────────────────────────────────────────
 PAT = re.compile(
     r"(strategy\.(orb_strategy|volt_strategy|volt_plan|atp_butterfly|atp_butterfly_plan|orcs|orcs_plan|sweep_plan)\b"
     r"|from strategy import (orb_strategy|volt_strategy|volt_plan|atp_butterfly|orcs|orcs_plan|sweep_plan)\b"
     r"|execution import handoff\b|execution\.handoff\b"
+    r"|strategy\.(trend_credit_spread|tcs_plan)\b|from strategy import (trend_credit_spread|tcs_plan)\b"      # r88
+    r"|execution import shadow_book\b|execution\.shadow_book\b|\b(TrendCreditSpread|TCSPlan|ShadowBook)\("
+    r"|\b(_shadow_manage|_shadow_eod|_shadow_resume|_retired_reason|_trend_credit_strategy|strike_beyond_sweep"
+    r"|is_trend_participation|TREND_CREDIT_ACTIVE|TCS_MODE|SHADOW_TRADES_DB)\b"
     r"|\b(ORBStrategy|VoltStrategy|SweepCreditSpreadStrategy|ATPButterflyStrategy|OpeningRangeCreditSpread)\("
     r"|\b(_attempt_orcs|_attempt_sweep_on_grant|_sweep_stop_premium|_evaluate_volt|_sweep_breach_accepted"
     r"|_velocity_stall|_place_standing_offer|_mark_orb_confirmation_spent|_is_standing_offer)\b"
@@ -117,7 +134,8 @@ check("G3b a removed name is never ACTIVE through a stale alias (ALIAS holds no 
 
 # ── G4 ───────────────────────────────────────────────────────────────────────────────────────────────
 bad = sorted(n for n in dir(config) if re.match(
-    r"^(VOLT_|ORCS_|ATP_|VELOCITY_|SCALE_ORB$|SCALE_VOLT$|CONTRACT_SCALE|HANDOFF_TTL_TICKS$|SWEEP_CS_)", n)
+    r"^(VOLT_|ORCS_|ATP_|VELOCITY_|SCALE_ORB$|SCALE_VOLT$|CONTRACT_SCALE|HANDOFF_TTL_TICKS$|SWEEP_CS_"
+    r"|TCS_|_TCS_|_tcs_|TREND_CREDIT_ACTIVE$)", n)                                       # r88: the TCS keys
     and n != "SWEEP_CS_MAX_REJECTION_PCT")
 check("G4 config carries no removed key (SWEEP_CS_MAX_REJECTION_PCT stays for derived/levels)",
       not bad and hasattr(config, "SWEEP_CS_MAX_REJECTION_PCT"), str(bad))
@@ -132,18 +150,20 @@ logging.disable(logging.CRITICAL)
 import main as M                                                # noqa: E402
 src = open(os.path.join(ROOT, "main.py"), encoding="utf-8").read()
 want = {"_runaway_strategy": "RunawayContinuationStrategy", "_liquidity_hunt": "LiquidityHunt",
-        "_breakout": "Breakout", "_park_strategy": "Park", "_gex_bfly_strategy": "GEXPinButterflyStrategy",
-        "_trend_credit_strategy": "TrendCreditSpread"}
+        "_breakout": "Breakout", "_park_strategy": "Park", "_gex_bfly_strategy": "GEXPinButterflyStrategy"}
 wired = {k: type(getattr(M, k, None)).__name__ for k in want}
 calls = all(c in src for c in ('_safe_strategy("RunawayContinuation"', '_safe_strategy("Breakout"',
                                 '_safe_strategy("LiquidityHunt"', '_safe_strategy("PARK"',
                                 '_safe_strategy("GEXPinButterfly"', '_attempt_hunt(', '_attempt_park(',
                                 '_attempt_butterfly('))
-check("G5 main builds the five live setups and the TCS shadow and dispatches each",
+check("G5 main builds the five live setups and dispatches each (r88: the TCS shadow removed)",
       wired == want and calls, f"{wired} calls={calls}")
 check("G5b the removed singletons are gone from main",
       not any(hasattr(M, n) for n in ("_orb_strategy", "_volt_strategy", "_sweep_cs_strategy",
-                                      "_atp_bfly_strategy", "_orcs_strategy", "_handoff")))
+                                      "_atp_bfly_strategy", "_orcs_strategy", "_handoff",
+                                      # r88 (RETIRE.3)
+                                      "_trend_credit_strategy", "_retired_reason", "_shadow_manage",
+                                      "_shadow_eod", "_shadow_resume")))
 
 # ── G6 ───────────────────────────────────────────────────────────────────────────────────────────────
 from analysis import orb_engine as OE                           # noqa: E402
@@ -166,7 +186,7 @@ tool = os.path.join(ROOT, "tools", "strip_retired_env.sh")
 unit = os.path.join(_SCR, "optionsbot.service")
 KEEP = ["[Unit]", "Description=x", "[Service]", "Environment=TT_USERNAME=SECRETVALUE1",
         "Environment=OT_ORB_BUDGET_USD=10000", "Environment=OT_RISK_USD=1050", "Environment=OT_VOLTAGE=9",
-        "Environment=OT_SCALE_BREAKOUT=1", "Environment=OT_TCS_ACTIVE=log", "Environment=OT_ORCS_NOTE_X=keep"]
+        "Environment=OT_SCALE_BREAKOUT=1", "Environment=OT_PARK=log", "Environment=OT_ORCS_NOTE_X=keep"]   # r88: OT_TCS_ACTIVE is retired now
 DROP = ["Environment=OT_SCALE_ORB=1", "Environment=OT_SCALE_VOLT=1", "Environment=OT_VOLT=0",
         "Environment=OT_VOLT_BUDGET_USD=SECRETVALUE2", "Environment=OT_ORB_TRADE=0", "Environment=OT_ATP_BUTTERFLY=0",
         "Environment=OT_ORCS=0", "Environment=OT_SWEEP_CS=0", "Environment=OT_SWEEP_CS_WING=5",
@@ -194,7 +214,7 @@ KEEP2 = ["[Service]", 'Environment="TT_USERNAME=SECRETVALUE3"', 'Environment="OT
          "Environment='OT_RISK_USD=1050'", 'Environment="OT_VOLTAGE=9"']
 DROP2 = ['Environment="OT_SCALE_ORB=1"', 'Environment="OT_SCALE_VOLT=1"', "Environment='OT_VOLT_BUDGET_USD=SECRETVALUE4'",
          'Environment="OT_VELOCITY_ENFORCE=0" "OT_SWEEP_CS=0"']
-MIXED = 'Environment="OT_TCS_ACTIVE=log" "OT_SCALE_ORB=1" OT_SCALE_BREAKOUT=1'
+MIXED = 'Environment="OT_PARK=log" "OT_SCALE_ORB=1" OT_SCALE_BREAKOUT=1'            # r88: OT_TCS_ACTIVE is retired now
 MIXED_SQ = "Environment='OT_NOTE=a b' OT_SCALE_VOLT=1"          # a single-quoted value holding a space
 open(unit2, "w").write("\n".join(KEEP2[:2] + DROP2[:2] + [MIXED] + KEEP2[2:] + DROP2[2:] + [MIXED_SQ]
                                  + ["ExecStart=/bin/true"]) + "\n")
@@ -206,7 +226,7 @@ out2 = chk2.stdout + run3.stdout + run4.stdout + chk2.stderr + run3.stderr + run
 check('G8e the quoted form (Environment="KEY=v" and \'KEY=v\') is found: --check counts 7 assignments',
       "7 retired line(s) would go" in chk2.stdout, chk2.stdout.strip())
 check("G8f a line of only retired assignments goes; a mixed line keeps its live assignments verbatim",
-      run3.returncode == 0 and body2 == KEEP2[:2] + ['Environment="OT_TCS_ACTIVE=log" OT_SCALE_BREAKOUT=1']
+      run3.returncode == 0 and body2 == KEEP2[:2] + ['Environment="OT_PARK=log" OT_SCALE_BREAKOUT=1']
       + KEEP2[2:] + ["Environment='OT_NOTE=a b'", "ExecStart=/bin/true"], f"{len(body2)} lines kept")
 check("G8g quoted units: no value printed, and a second run is clean",
       "SECRETVALUE" not in out2 and "=1050" not in out2 and run4.returncode == 0 and "0 retired line(s)" in run4.stdout,
@@ -228,9 +248,50 @@ ch = types.SimpleNamespace(calls=[C(709, 1.2, 0.45), C(710, 0.9, 0.40), C(711, 0
 sel = OP.select_contract(ch, "long", 710.2)
 check("G9 Breakout's selector still takes the nearest listed live strike (710 for a 710.2 reach)",
       sel is not None and sel.strike == 710, f"{getattr(sel, 'strike', None)}")
-check("G9b the kept sweep helpers answer (is_breach_exit; strike_beyond_sweep returns a strike)",
+check("G9b the kept sweep helper answers (is_breach_exit); strike_beyond_sweep went with the TCS (r88)",
       SCS.is_breach_exit("tcs_breach: x") and not SCS.is_breach_exit("nickel_close")
-      and SCS.strike_beyond_sweep(99.4, 100.0, False, contracts=None, increment=1.0) is not None)
+      and not hasattr(SCS, "strike_beyond_sweep"))
+
+# ── G10 (r88, RETIRE.3): the TCS shadow is gone from every runtime reader ─────────────────────────────
+from analysis import trade_readiness as TR                      # noqa: E402
+from strategy import management as MG                           # noqa: E402
+from warehouse import s3_push as SP                             # noqa: E402
+_xe = open(os.path.join(ROOT, "execution", "exit_engine.py"), encoding="utf-8").read()
+_xe_code = "\n".join(l for l in _xe.split("\n") if not l.strip().startswith("#"))
+_sp = open(os.path.join(ROOT, "warehouse", "s3_push.py"), encoding="utf-8").read()
+_ps = open(os.path.join(ROOT, "strategy", "plan_state.py"), encoding="utf-8").read()
+_gone10 = {
+    "readiness track": "trend_credit_spread" in TR.TradeReadinessEngine.STRATEGIES,
+    "management COVERED": "TrendCreditSpread" in MG.COVERED,
+    "exit engine tcs_stop / tcs_breach": ('f"tcs_stop_' in _xe_code or 'f"tcs_breach' in _xe_code),
+    "s3_push shadow_trades stage": ('("shadow_trades"' in _sp or hasattr(SP, "SHADOW_TRADES_DB")),
+    "plan_state OT_TCS_ACTIVE": 'os.environ.get("OT_TCS_ACTIVE"' in _ps,
+    "main._credit_window_end reads the TCS plan": "tcs_plan" in src[src.index("def _credit_window_end"):
+                                                               src.index("def _post_credit_vertical")],
+}
+check("G10 no runtime reader of the TCS shadow is left (readiness, management, exits, warehouse, plan state, main)",
+      not any(_gone10.values()), str([k for k, v in _gone10.items() if v]))
+_cv = config
+check("G10b the credit window is value-identical without the TCS row (CREDIT_ENTRY_START_ET 11:31; the end = entries stop)",
+      tuple(_cv.CREDIT_ENTRY_START_ET) == (11, 31) and tuple(_cv.CONDOR_ENTRY_CUTOFF_ET)
+      == tuple(_cv.EOD_SCHEDULE["entries_stop"]) == tuple(_cv.CREDIT_ENTRY_END_ET),
+      f"{_cv.CREDIT_ENTRY_START_ET} -> {_cv.CREDIT_ENTRY_END_ET}")
+
+# ── G11 (r88): the strip tool takes the TCS keys off a unit and never overwrites an earlier backup ─────
+unit4 = os.path.join(_SCR, "optionsbot_tcs.service")
+KEEP4 = ["[Service]", 'Environment="OT_PARK=log"', 'Environment="OT_RISK_USD=1050"']
+DROP4 = ['Environment="OT_TCS_ACTIVE=log"', 'Environment="OT_TCS_MIN_POP=0.7"', 'Environment="OT_TR_TCS_MOM_ACC=1"',
+         'Environment="OT_TR_W_TCS_ROOM=0.2"', 'Environment="OT_SHADOW_TRADES_DB=/x/shadow_trades.db"']
+open(unit4, "w").write("\n".join(KEEP4[:2] + DROP4 + KEEP4[2:] + ["ExecStart=/bin/true"]) + "\n")
+open(unit4 + ".bak-retire1", "w").write("THE FIRST BACKUP\n")
+run6 = subprocess.run(["bash", tool, unit4], capture_output=True, text=True, env=env)
+b4 = [l for l in open(unit4).read().split("\n") if l]
+check("G11 the TCS keys (OT_TCS_*, OT_TR_TCS_*, OT_TR_W_TCS_*, OT_SHADOW_TRADES_DB) are stripped; the rest kept",
+      run6.returncode == 0 and b4 == KEEP4 + ["ExecStart=/bin/true"] and "removed 5 retired line(s)" in run6.stdout,
+      run6.stdout.strip())
+check("G11b an existing .bak-retire1 is kept as it was; the new backup is .bak-retire2",
+      open(unit4 + ".bak-retire1").read() == "THE FIRST BACKUP\n" and os.path.exists(unit4 + ".bak-retire2")
+      and "OT_TCS_ACTIVE" in open(unit4 + ".bak-retire2").read(), run6.stdout.strip())
 
 print()
 if FAIL:

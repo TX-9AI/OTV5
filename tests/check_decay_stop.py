@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_decay_stop.py  v5.2
+tests/check_decay_stop.py  v5.3
+v5.3  2026-11-08  OTV5 r88 (RETIRE.3) — H1 (a shadow TCS through execution/shadow_book) goes with the TCS shadow; every other check unchanged.
 v5.2  2026-11-03  OTV5 r73 (BFLY.17) — THE GEX PIN FLY HOLDS TO THE CLOSE. The operator, 2026-11-03: "For the GEX fly, I want
       no stop except hold to close". B1's butterfly mechanics now ride the ATP butterfly (the decay stop still applies to it);
       B2 new: the same marks on a GEXPinButterfly close nothing and keep no reading (config.HOLD_TO_CLOSE_STRATEGIES).
@@ -47,8 +48,6 @@ v5.0  2026-10-30  OTV5 r58 (DECAY.1) — THE PEAK-DECAY PROFIT STOP. A TRADING C
   M1  management.decide on a Breakout: CLOSE condition "decay" on the 30% tick, plan check rows decay_peak_p /
       decay_p / decay_armed / decay_frac / decay_fired on every tick, decay_fired 1 only on the closing tick
   M2  management._one (a record the plan does not cover): the decay_* rows from the running engine's reading
-  H1  a SHADOW TCS (r57 TCS.LOG1: execution/shadow_book, its own ExitEngine and ManagementPlan through position_manager's
-      _manage_one): the same 30% fade closes it on the shadow store with the decay reason
 
 Born red on 7c5aad6 at C1, A2, F1, F2, K1, B1, R2, E1, P1, S1, M1, M2 and H1 (A1, A3, R1, O1 and E2 pass there: no decay exit exists).
 Run:  python3 tests/check_decay_stop.py
@@ -413,39 +412,8 @@ m2ok = (all(r is not None and all(n in r["checks"] for n in names) for r in m2ro
 check("M2 _one() on a formed condor leg (not covered): decay_* rows from the running engine's reading",
       m2ok, f"{[r and {n: r['checks'].get(n) for n in names} for r in m2rows]}")
 
-# ── H shadow TCS ─────────────────────────────────────────────────────────────────────────────────────
-try:
-    from execution import shadow_book as SB
-    from database.trade_logger import make_record
+# r88 (RETIRE.3): H1 (a shadow TCS) goes with the TCS shadow.
 
-    class _PC:
-        def __init__(self, k, m):
-            self.strike, self.mark, self.bid, self.ask, self.iv, self.delta, self.theta = k, m, m - 0.01, m + 0.01, 0.2, -0.3, -0.01
-
-    class _PCh:
-        def __init__(self, sm, lm):
-            self.puts, self.calls, self.spot_price = [_PC(715.0, sm), _PC(710.0, lm)], [], 720.0
-    _shdb = os.path.join(_s, "shadow_h1.db")
-    _bk = SB.ShadowBook(_shdb)
-    _hr = make_record(trade_id="h1", symbol="QQQ", strategy="TrendCreditSpread", setup_type="x", direction="neutral",
-                      option_side="put", contracts=2, entry_premium=1.0, stop_premium=0.0, target_premium=0.0,
-                      short_strike=715.0, long_strike=710.0, is_condor_leg=1, is_credit_vertical=1,
-                      underlying_stop=0.0, expiry="2026-10-30", entry_time="2026-10-30T14:00:00+00:00",
-                      short_symbol="QQQ   261030P00715000", long_symbol="QQQ   261030P00710000")
-    _booked = _bk.open_entry(_hr, box_paper=True)
-    _open = []
-    for _sm in (1.30, 1.20, 1.25, 1.258, 1.26):                  # value 0.90, 0.80 (peak p 0.20), 0.85, 0.858, 0.86
-        _bk.manage({"chain": _PCh(_sm, 0.40)})
-        _open.append(_bk.has_open())
-    import sqlite3
-    _row = sqlite3.connect(_shdb).execute("SELECT status, exit_reason, exit_premium FROM trades").fetchone()
-    _h1 = (_booked and _open == [True, True, True, True, False] and _row[0] == "closed"
-           and str(_row[1]).startswith("decay: open profit +$28.00 (p 0.140) fell 30% from peak +$40.00 (p 0.200)")
-           and abs(float(_row[2]) - 0.86) < 1e-9)
-    _h1d = f"open {_open} row {_row}"
-except Exception as exc:                                       # noqa: BLE001
-    _h1, _h1d = False, f"{type(exc).__name__}: {exc}"
-check("H1 a shadow TCS (its own engine, through _manage_one): the 30% fade closes it with the decay reason", _h1, _h1d)
 
 print("RESULT:", "FAIL " + ",".join(FAILED) if FAILED else "PASS")
 sys.exit(1 if FAILED else 0)

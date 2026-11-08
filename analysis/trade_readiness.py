@@ -1,5 +1,6 @@
 """
-analysis/trade_readiness.py  v5.0
+analysis/trade_readiness.py  v5.1
+v5.1  2026-11-08  OTV5 r88 (RETIRE.3) — the trend_credit_spread readiness track, its OT_TR_TCS_* / OT_TR_W_TCS_* knobs and its smoke test go with the TCS. The operator, 2026-11-08: "Delete" (the TCS shadow, which never fired: its own gates declined every candidate 11-02..11-06).
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v4.6  2026-10-03  OTV4TEST r229 (EM.2) — _expected_move_now returns the tastytrade platform's expected move (volatility_measures.expected_move_platform), 0.0 when unreadable; the operator's ruling 2026-10-03. Log-only engine; its `em` unit is ~10-25% smaller from this revision on - do not pool across it.
 v4.5  2026-10-03  OTV4TEST r223 (EM.1) — _expected_move_now delegates to analysis.volatility_measures.straddle_nearest (moved verbatim).
@@ -332,43 +333,8 @@ TR_SWEEP_MOM_DEC    = _envf("SWEEP_MOM_DEC", 1.0)
 TR_SWEEP_MOM_FLAT   = _envf("SWEEP_MOM_FLAT", 0.5)
 TR_SWEEP_MOM_ACC    = _envf("SWEEP_MOM_ACC", 0.0)
 
-# Trend credit spread (PCS in a bull, CCS in a bear). Readiness for a SHORT-
-# premium trend-participation trade: sell a spread BEYOND the impulse candle
-# that ripped, so no pullback and no chasing are required. The impulse ramp is
-# the operator's aware/established/screaming scale (2026-07-28): a 1-min candle
-# whose range in ROLLING-SD units clears these bounds is a committed-flow
-# footprint whose origin becomes a durable floor (PCS) / ceiling (CCS).
-#   1.75 SD = AWARE  (impulse begins to count — ramp floor)
-#   2.00 SD = ESTABLISHED (real committed move; corroborator contributing)
-#   2.50 SD = SCREAMING (unmistakable thrust; impulse corroborator maxed)
-# The ramp bounds ARE aware->screaming: LO=1.75 (contribution starts),
-# HI=2.50 (maxes). ESTABLISHED (2.0) is where impulse+the other corroborators
-# typically clear STAGE/ARM. All PRIOR — calibrate the SD bounds and the
-# per-symbol frequency from the readiness journal, never one day.
-TR_TCS_IMPULSE_SD_LO = _envf("TCS_IMPULSE_SD_LO", 1.75)
-TR_TCS_IMPULSE_SD_HI = _envf("TCS_IMPULSE_SD_HI", 2.50)
-TR_TCS_SD_LOOKBACK   = _envf("TCS_SD_LOOKBACK", 20.0)   # 1m bars for rolling SD of range
-# Structural room: distance from spot DOWN to the impulse-candle floor (PCS) /
-# UP to the ceiling (CCS), in ATR. More room beneath the short strike = safer.
-TR_TCS_ROOM_ATR_LO   = _envf("TCS_ROOM_ATR_LO", 0.25)
-TR_TCS_ROOM_ATR_HI   = _envf("TCS_ROOM_ATR_HI", 1.50)
-# Extension DAMPER (soft-necessary): a credit spread wants trend, but a
-# PARABOLIC over-extension invites the snapback that breaches the short strike.
-# Past HI ATR from the midline the score is damped toward 0 (exhaustion risk).
-TR_TCS_EXT_ATR_LO    = _envf("TCS_EXT_ATR_LO", 2.50)
-TR_TCS_EXT_ATR_HI    = _envf("TCS_EXT_ATR_HI", 4.50)
-# Momentum read: a trend credit spread wants the trend LIVE (accelerating/flat),
-# NOT decelerating — deceleration is where the trend tires and reverses through
-# the strike. (Opposite of sweep, which wants deceleration.)
-TR_TCS_MOM_ACC       = _envf("TCS_MOM_ACC", 1.0)
-TR_TCS_MOM_FLAT      = _envf("TCS_MOM_FLAT", 0.6)
-TR_TCS_MOM_DEC       = _envf("TCS_MOM_DEC", 0.0)   # hard-ish: tiring trend earns nothing
-# Corroborator weights (sum ~1.0). Impulse is the headline; conviction and room
-# corroborate; momentum gates via its own low value when decelerating.
-W_TCS_IMPULSE = _envf("W_TCS_IMPULSE", 0.40)
-W_TCS_CONV    = _envf("W_TCS_CONV", 0.25)
-W_TCS_ROOM    = _envf("W_TCS_ROOM", 0.20)
-W_TCS_MOM     = _envf("W_TCS_MOM", 0.15)
+# RETIRE.3 (r88) — the trend credit spread readiness track and its OT_TR_TCS_* / W_TCS_* knobs are deleted with
+# the TCS (the operator, 2026-11-08: "Delete").
 
 # Extension-from-arm (v1.4, operator 2026-07-28). A short-premium vertical
 # (trend credit spread OR condor side) fires only once price has consumed
@@ -498,8 +464,7 @@ class TradeReadinessEngine:
     and on a throttled heartbeat while a strategy is >= STAGING.
     """
 
-    STRATEGIES = ("continuation", "sweep", "condor_call", "condor_put", "butterfly",
-                  "trend_credit_spread")
+    STRATEGIES = ("continuation", "sweep", "condor_call", "condor_put", "butterfly")
 
     def __init__(self, emit=None, clock=time.time, contract_ctx=None):
         self._emit = emit          # callable(event:str, **sections) or None
@@ -869,89 +834,6 @@ class TradeReadinessEngine:
         except Exception:
             return 0.0, None
 
-    def _trend_credit_spread(self, ctx, ms) -> Tuple[float, dict]:
-        """
-        Trend credit spread readiness (PCS in TRENDING_BULL, CCS in
-        TRENDING_BEAR). Short-premium trend participation: sell a spread BEYOND
-        the impulse candle so no pullback / no chase is needed. Graded, log-only.
-
-        hard veto  : trending label in the correct direction
-        corrobs    : impulse magnitude (SD ramp), conviction, structural room to
-                     the impulse floor, momentum-live
-        damper     : parabolic over-extension (exhaustion -> snapback risk)
-        """
-        label = ""   # PHASE B (r58): retired field — the vote below decides
-        conv  = float(getattr(ms, "conviction", 0.0) or 0.0)
-        vol   = ctx.get("vol"); trend = ctx.get("trend")
-        px    = float(ctx.get("price") or 0.0)
-        df_1m = ctx.get("df_1m")
-
-        # PHASE B (r58): direction from the trend vote (descriptive feed —
-        # readiness gates nothing); the label arms were dead.
-        _v = str(getattr(ctx.get("trend"), "overall_direction", "") or "").upper()
-        if _v == "BULLISH":
-            direction, veto = "long", 1.0
-        elif _v == "BEARISH":
-            direction, veto = "short", 1.0
-        else:
-            direction, veto = "", 0.0
-
-        atr = float(getattr(vol, "atr_current", 0.0) or 0.0) if vol else 0.0
-        mid = float(getattr(vol, "bb_middle", 0.0) or 0.0) if vol else 0.0
-
-        # impulse magnitude + floor
-        sd_ratio, floor_px = self._impulse_sd(
-            df_1m, direction, int(TR_TCS_SD_LOOKBACK)) if direction else (0.0, None)
-        impulse_val = ramp(sd_ratio, TR_TCS_IMPULSE_SD_LO, TR_TCS_IMPULSE_SD_HI)
-
-        # structural room: spot -> floor in ATR (more = safer short strike)
-        if floor_px is not None and atr > 0 and px > 0:
-            room_atr = (px - floor_px) / atr if direction == "long" else (floor_px - px) / atr
-            room_val = ramp(room_atr, TR_TCS_ROOM_ATR_LO, TR_TCS_ROOM_ATR_HI)
-        else:
-            room_atr, room_val = None, 0.0
-
-        # extension damper: parabolic over-extension from midline -> snapback risk
-        if mid > 0 and atr > 0 and px > 0:
-            ext_atr = abs(px - mid) / atr
-            ext_damp = 1.0 - ramp(ext_atr, TR_TCS_EXT_ATR_LO, TR_TCS_EXT_ATR_HI)
-        else:
-            ext_atr, ext_damp = None, 1.0
-
-        conv_val = ramp(conv, TR_CONV_LO, TR_CONV_HI)
-        mom = getattr(trend, "primary_momentum", "") if trend else ""
-        mom_val = {"ACCELERATING": TR_TCS_MOM_ACC, "FLAT": TR_TCS_MOM_FLAT,
-                   "DECELERATING": TR_TCS_MOM_DEC, "": 0.0}.get(mom, 0.0)
-
-        # v1.4: extension-from-arm, shared with the condor sides. A trend credit
-        # spread also only fires once the move has consumed >= 80% of the EM that
-        # existed when this track armed — same "premium is rich here" line.
-        tr_state = self.tracks.get("trend_credit_spread")
-        ext_side = "up" if direction == "long" else "down"
-        armext_frac, armext_val, armext_fires = (
-            self._extension_from_arm(tr_state, px, ext_side)
-            if (tr_state is not None and direction) else (0.0, 0.0, False))
-        r = _combine(
-            hard_vetoes=[veto],
-            soft_necessary=[ext_damp],
-            corroborators=[(W_VERT_EXT,    armext_val),
-                           (W_TCS_IMPULSE, impulse_val),
-                           (W_TCS_CONV,    conv_val),
-                           (W_TCS_ROOM,    room_val),
-                           (W_TCS_MOM,     mom_val)])
-        return r, {"label": label, "dir": direction, "sd_ratio": round(sd_ratio, 3),
-                   "impulse_val": round(impulse_val, 3),
-                   "floor_px": (None if floor_px is None else round(floor_px, 2)),
-                   "room_atr": (None if room_atr is None else round(room_atr, 3)),
-                   "room_val": round(room_val, 3), "conv": round(conv, 3),
-                   "conv_val": round(conv_val, 3),
-                   "ext_atr": (None if ext_atr is None else round(ext_atr, 3)),
-                   "ext_damp": round(ext_damp, 3), "mom": mom, "mom_val": mom_val,
-                   "armext_frac": round(armext_frac, 3),
-                   "armext_val": round(armext_val, 3), "armext_fires": armext_fires,
-                   "origin_px": round(getattr(tr_state, "origin_price", 0.0), 2) if tr_state else 0.0,
-                   "origin_em": round(getattr(tr_state, "origin_em", 0.0), 3) if tr_state else 0.0}
-
     # ── the temporal core: slope + state machine ─────────────────────────────
 
     def _advance(self, key: str, r: float, factors: dict, now: float,
@@ -1076,7 +958,6 @@ class TradeReadinessEngine:
                 "condor_call":  self._condor_side(ctx, ms, "call"),
                 "condor_put":   self._condor_side(ctx, ms, "put"),
                 "butterfly":    self._butterfly(ctx, ms),
-                "trend_credit_spread": self._trend_credit_spread(ctx, ms),
             }
         except Exception as e:                    # noqa: BLE001
             log.debug(f"readiness assess skipped: {e}")
@@ -1216,79 +1097,3 @@ if __name__ == "__main__":                        # pragma: no cover
     print(f"journal rows: {len(rows)} (transitions+beats), machines seen: {sorted(set(trans))}")
     print("smoke test OK — readiness rises with confluence, arms with slope, de-arms on collapse")
 
-    # ── Trend credit spread: impulse SD ramp drives readiness ────────────────
-    print("\n--- trend_credit_spread: aware(1.75) -> established(2.0) -> screaming(2.5) ---")
-    import pandas as _pd
-
-    def _mkdf(target_sd_ratio, base=100.0, n=25):
-        # Build prior bars whose range pstdev == 1.0 exactly (alternating
-        # +/-0.5 around mean 1.0 -> pstdev 0.5... so use +/-1.0 around 1.0),
-        # then set the impulse candle's range = target_sd_ratio so
-        # ratio = last_range / pstdev(prior) == target_sd_ratio exactly.
-        rows_ = []
-        for i in range(n - 1):
-            rr = 2.0 if i % 2 == 0 else 0.0001   # ranges {2.0, ~0}: mean 1.0, pstdev ~1.0
-            rows_.append({"open": base, "high": base + rr / 2, "low": base - rr / 2,
-                          "close": base})
-        lr = target_sd_ratio            # since pstdev(prior) == 1.0, range == ratio
-        o = base - lr / 2; c = base + lr / 2   # bullish impulse: opens low, closes high
-        rows_.append({"open": o, "high": c, "low": o, "close": c})
-        return _pd.DataFrame(rows_)
-
-    eng2 = TradeReadinessEngine(emit=lambda ev, **s: None, clock=lambda: eng2._t)
-    eng2._t = 5000.0
-    vol2 = NS(bb_middle=99.5, bb_upper=103.0, bb_lower=96.0,
-              atr_current=1.0, bb_width_pct=0.5, bb_state="NORMAL")
-    trend2 = NS(primary_momentum="ACCELERATING")
-
-    def tcs_r(target_sd, conv=0.65):
-        eng2._t += 15.0
-        df = _mkdf(target_sd)
-        ctx = {"vol": vol2, "trend": trend2, "liq_map": None,
-               "price": 100.5, "df_1m": df}
-        ms = NS(conviction=conv)   # PHASE B (r58)
-        r, f = eng2._trend_credit_spread(ctx, ms)
-        return r, f
-
-    # hold prior-range SD ~= 1.0, vary the impulse candle's range to hit SD tiers
-    r_aware, f_aware = tcs_r(1.75)      # exactly 1.75 SD
-    r_estab, f_estab = tcs_r(2.00)      # exactly 2.0 SD
-    r_scream, f_scream = tcs_r(2.80)    # 2.8 SD (screaming)
-    r_none, f_none = tcs_r(0.90)        # below aware (0.9 SD)
-    for name, r, f in [("below(0.9SD)", r_none, f_none), ("aware(1.75)", r_aware, f_aware),
-                       ("established(2.0)", r_estab, f_estab), ("screaming(2.8)", r_scream, f_scream)]:
-        print(f"  {name:16} sd={f['sd_ratio']:.2f} impulse_val={f['impulse_val']:.2f} "
-              f"floor={f['floor_px']} room={f['room_val']:.2f} R={r:.3f}")
-    # ramp semantics: impulse_val is 0 AT the aware floor (1.75) and rises above
-    # it, maxing at screaming (2.50). So 'aware' is where contribution BEGINS.
-    assert f_none["impulse_val"] == 0.0, "below 1.75 SD must contribute no impulse"
-    assert f_aware["impulse_val"] == 0.0, "AT 1.75 SD the ramp is at its floor (0)"
-    r_above_aware, f_above = tcs_r(1.90)     # just above the aware floor
-    assert f_above["impulse_val"] > 0.0, "just above 1.75 SD must start contributing"
-    assert f_scream["impulse_val"] >= f_estab["impulse_val"] >= f_above["impulse_val"], \
-        "impulse must rise above-aware -> established -> screaming"
-    assert abs(f_scream["impulse_val"] - 1.0) < 1e-6, "2.5+ SD must max the impulse (screaming)"
-    assert r_scream > r_aware, "screaming impulse must produce higher readiness than aware"
-    assert f_scream["floor_px"] is not None, "impulse must anchor a strike floor"
-
-    # veto: non-trending label -> zero readiness regardless of impulse
-    eng2._t += 15.0
-    df = _mkdf(2.80)
-    r_v, f_v = eng2._trend_credit_spread(
-        {"vol": vol2, "trend": trend2, "liq_map": None, "price": 100.5, "df_1m": df},
-        NS(conviction=0.0))
-    assert r_v == 0.0, "a NEUTRAL trend vote must veto the trend credit spread to 0"
-    print(f"  veto(neutral)    R={r_v:.3f}  (correctly stood down)")
-
-    # extension damper: parabolic price crushes an otherwise-screaming setup
-    eng2._t += 15.0
-    df = _mkdf(2.80)
-    r_ext, f_ext = eng2._trend_credit_spread(
-        {"vol": vol2, "trend": trend2, "liq_map": None,
-         "price": 99.5 + 5.0 * 1.0, "df_1m": df},   # 5 ATR above midline = parabolic
-        NS(conviction=0.7))   # PHASE B (r58)
-    print(f"  parabolic(5ATR)  ext_damp={f_ext['ext_damp']:.2f} R={r_ext:.3f} "
-          f"(damped vs screaming R={r_scream:.3f})")
-    assert r_ext < r_scream, "parabolic over-extension must damp readiness (snapback risk)"
-    print("trend_credit_spread smoke test OK — impulse ramp drives readiness, "
-          "trend veto stands down, extension damps exhaustion")

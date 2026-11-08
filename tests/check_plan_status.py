@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_plan_status.py  v5.0
+tests/check_plan_status.py  v5.1
+v5.1  2026-11-08  OTV5 r88 (RETIRE.3) — the subject plan is Breakout where it was the removed TCS (its OT_TCS_ACTIVE=1 switch goes); the status rules pinned are unchanged.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.4  2026-10-19  OTV4TEST r303 (PSTATE.1) — its subject TrendCreditSpread is DORMANT by default and a dormant plan now writes
       nothing by ruling, so this run switches it ACTIVE (OT_TCS_ACTIVE=1); the status rules it pins are unchanged.
@@ -53,7 +54,6 @@ import tempfile
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
-os.environ["OT_TCS_ACTIVE"] = "1"   # r303: the subject writes (check_plan_states pins dormant)
 os.environ.setdefault("OT_TRADES_DB", os.path.join(tempfile.mkdtemp(), "t.db"))
 os.environ.setdefault("OT_DERIVED_DB", os.path.join(tempfile.mkdtemp(), "d.db"))
 FAILED, RAN = [], []
@@ -104,7 +104,7 @@ def main():
     P.ensure_tables(st)
     P.bind_store(st)
 
-    N = "TrendCreditSpread"
+    N = "Breakout"
 
     def fresh():
         P.REGISTRY.clear()
@@ -117,21 +117,21 @@ def main():
         for _d in ("_STATUS", "_SEEN", "_SEEN_DAY", "_SKIPPED", "_SKIP_GATE", "_ASKED", "_LAST_SAID"):
             getattr(P, _d, {}).clear()
         st.conn.execute("DELETE FROM plan_tick")
-        P.Plan("TrendCreditSpread", ("age",))
+        P.Plan("Breakout", ("age",))
 
     def tick(n, reason=None, wrote=False):
         P.begin_tick(float(n))
         if wrote:
             # a WORKING plan speaks for itself
-            P.write_row(st, "TST", float(n), "TrendCreditSpread", "ARMED", "working")
-            P.REGISTRY["TrendCreditSpread"]._last = (P.tick_now()[0], "ARMED", "working")
+            P.write_row(st, "TST", float(n), "Breakout", "ARMED", "working")
+            P.REGISTRY["Breakout"]._last = (P.tick_now()[0], "ARMED", "working")
         elif reason:
-            P.skipped("TrendCreditSpread", reason)
+            P.skipped("Breakout", reason)
         P.close_tick(st, "TST")
 
     def rows():
         return [(r["verdict"], r["reason"]) for r in st.conn.execute(
-            "SELECT verdict, reason FROM plan_tick WHERE strategy='TrendCreditSpread'"
+            "SELECT verdict, reason FROM plan_tick WHERE strategy='Breakout'"
             " ORDER BY ts_epoch")]
 
     # ── S1/S2/S3 — the ruling itself ───────────────────────────────────────
@@ -154,7 +154,7 @@ def main():
     guard("S4 a WORKING plan still writes EVERY tick — five ticks, five rows",
           lambda: len(rw) == 5, f"{len(rw)} row(s)")
     guard("S4b and the board reports it as working",
-          lambda: P.plan_status("TrendCreditSpread") == "working")
+          lambda: P.plan_status("Breakout") == "working")
 
     # ── S5 — the transition back re-announces ──────────────────────────────
     fresh()
@@ -278,7 +278,7 @@ def main():
 
     # ── S7 — the status is exposed, not merely internal ────────────────────
     guard("S7 plan_status() answers working/inactive/unknown",
-          lambda: P.plan_status("TrendCreditSpread") == "inactive"
+          lambda: P.plan_status("Breakout") == "inactive"
           and P.plan_status("NeverHeardOfIt") == "unknown")
 
     # ── S8 — main.py names the gate so no table strategy hits the default ──

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_trade_switches.py  v5.3
+tests/check_trade_switches.py  v5.4
+v5.4  2026-11-08  OTV5 r88 (RETIRE.3) — S9 pins the GEX fly's window and that the TCS row is removed (r88).
 v5.3  2026-11-08  OTV5 r84 (VENV.1) — a bare run (control's /usr/bin/python3 3.14, no pandas) stops with one
       ModuleNotFoundError line naming the venv to use, not a traceback: utils.venv_guard.require_venv before the first
       third-party import. Under the venv nothing changes.
@@ -138,10 +139,9 @@ def main():
           all(v == want for v in ends.values()) and acts["runaway"] == want and acts["hunt"] == want
           and acts["breakout"] == "10:30", f"{ends} {acts}")
     # S9 — unchanged rows
-    keep = {k: tuple(map(tuple, C.ENTRY_WINDOWS[k])) for k in ("GEXPinButterfly", "TrendCreditSpread")}
-    eod = tuple(C.EOD_SCHEDULE["entries_stop"])
-    check("S9 UNCHANGED: the GEX fly (13:00-15:00, r273) and TCS keep their windows",
-          keep["GEXPinButterfly"] == ((13, 0), (15, 0)) and keep["TrendCreditSpread"] == ((11, 31), eod), str(keep))
+    keep = {k: tuple(map(tuple, C.ENTRY_WINDOWS[k])) for k in ("GEXPinButterfly",)}
+    check("S9 UNCHANGED: the GEX fly keeps its window (13:00-15:00, r273); the TCS row is removed (r88)",
+          keep["GEXPinButterfly"] == ((13, 0), (15, 0)) and "TrendCreditSpread" not in C.ENTRY_WINDOWS, str(keep))
 
     import subprocess
     sps = _glob.glob(os.path.join(_root, "venv", "lib", "python*", "site-packages"))   # r106 bootstrap, as above

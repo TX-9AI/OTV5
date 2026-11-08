@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
-"""check_entry_windows.py — v5.2
+"""check_entry_windows.py — v5.3
+v5.3  2026-11-08  OTV5 r88 (RETIRE.3) — the TCS is removed: W1 and W8 pin the one credit start and end on the condor and
+      that TCS_START_ET / TCS_ENTRY_END_ET are gone; W7 drops TCSPlan.
 v5.2  2026-11-08  OTV5 r76 (RETIRE.1) — RE-POINTED (WA 38.4): the sweep is removed, so W1 pins the one credit start on condor + TCS (and no sweep
       start key), W4c the one fly, W8 the one credit end on condor + TCS, W7 drops SweepPlan; W5, W9pre, W9 and W9b (the sweep
       plan's own window) go with the sweep plan.
@@ -106,10 +108,10 @@ def main():
 
     start = C.CREDIT_ENTRY_START_ET
 
-    check("W1 condor and TCS use the ONE credit start (r76: the sweep and its own 09:35 start are removed)",
-          C.CONDOR_ENTRY_START_ET == start and C.TCS_START_ET == start
+    check("W1 the condor uses the ONE credit start (r76: the sweep and its own 09:35 start are removed; r88: the TCS)",
+          C.CONDOR_ENTRY_START_ET == start and not hasattr(C, "TCS_START_ET")
           and not hasattr(C, "SWEEP_CS_EARLIEST_ET_FORK"),
-          f"credit={start} condor={C.CONDOR_ENTRY_START_ET} tcs={C.TCS_START_ET}")
+          f"credit={start} condor={C.CONDOR_ENTRY_START_ET}")
 
     # 🔴 THE DAYLIGHT RULE. The debit cutoff is `>= (11, 30)` — debit is blocked
     # AT 11:30 — so the credit must start STRICTLY LATER than 11:30, or both
@@ -192,7 +194,7 @@ def main():
     # (WORKING_AGREEMENT §0.5), least of all in the check whose whole subject is
     # a constant that was missing.
     _missing = [n for n in ("CREDIT_ENTRY_END_ET",
-                            "CONDOR_ENTRY_CUTOFF_ET", "TCS_ENTRY_END_ET")
+                            "CONDOR_ENTRY_CUTOFF_ET")
                 if not hasattr(C, n)]
     if _missing:
         check("W8 there is ONE credit end and every credit path uses it",
@@ -203,9 +205,8 @@ def main():
     else:
         _end = tuple(C.CREDIT_ENTRY_END_ET)
         check("W8 there is ONE credit end and every credit path uses it",
-              tuple(C.CONDOR_ENTRY_CUTOFF_ET) == _end
-              and tuple(C.TCS_ENTRY_END_ET) == _end,
-              f"end={_end} condor={C.CONDOR_ENTRY_CUTOFF_ET} tcs={C.TCS_ENTRY_END_ET}")
+              tuple(C.CONDOR_ENTRY_CUTOFF_ET) == _end,
+              f"end={_end} condor={C.CONDOR_ENTRY_CUTOFF_ET}")
         check("W8b the credit window is bounded the right way round",
               tuple(start) < _end, f"{start} -> {_end}")
 
@@ -221,11 +222,10 @@ def main():
     # reading the strategy CLASS found nothing. Read the classes that DECLARE
     # it; the butterfly and the condor still declare on the strategy class.
     from strategy.runaway_plan import RunawayPlan
-    from strategy.tcs_plan import TCSPlan
     from strategy.gex_pin_butterfly import GEXPinButterflyStrategy
     from strategy.iron_condor_strategy import IronCondorStrategy
     _missing = [c.__name__ for c in (
-        RunawayPlan, TCSPlan,
+        RunawayPlan,
         GEXPinButterflyStrategy, IronCondorStrategy)
         if "entry_window" not in getattr(c, "PLAN_CHECKS", ())]
     check("W7 every entry strategy's plan declares an entry_window check",

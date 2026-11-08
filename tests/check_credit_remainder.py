@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""tests/check_credit_remainder.py  v5.1
+"""tests/check_credit_remainder.py  v5.2
+v5.2  2026-11-08  OTV5 r88 (RETIRE.3) — C7 drives a generic credit vertical where it drove a TCS (removed): the intent key cv:SYN:CreditVertical:put, and C7d re-derived - the remainder carries config.CONDOR_LONE_STOP_PCT and main._credit_window_end(); C2-C6 unchanged.
 v5.1  2026-10-30  OTV5 r57 (TCS.LOG1) — C7's subject is a TRADED TCS (a live partial), and a TCS is LOG (a shadow trade, never
       ordered) by default since r57, so this run switches it ACTIVE (OT_TCS_ACTIVE=1), as r303 did for the plan checkers;
       what it pins is unchanged.
@@ -37,7 +38,6 @@ import tempfile
 _root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, _root)
 os.environ.setdefault("OT_PAPER_TRADING", "1")
-os.environ["OT_TCS_ACTIVE"] = "1"     # r57 (TCS.LOG1): C7 drives a TRADED TCS (check_tcs_shadow pins the log default)
 os.environ["OT_INSTRUMENT"] = "SYN"   # r146: FORCED - an ambient OT_INSTRUMENT must not replace the fixture symbol
 
 _fails = []
@@ -130,7 +130,7 @@ def main():
         return seen["fill"]
 
     lr.reset_all()
-    key = "cv:SYN:TrendCreditSpread:put"
+    key = "cv:SYN:CreditVertical:put"                        # r88: was the removed TCS's intent key
     seen["fill"] = _Fill(False)
     fill, limit, why = main._post_credit_vertical(short, long_, 4, key, "A",
                                                   placer=placer, confirmer=confirmer)
@@ -165,8 +165,8 @@ def main():
     # ── C3: accretion into the record + the DB row ───────────────────────
     db = os.path.join(tempfile.mkdtemp(), "t.db")
     tl = TradeLogger(db)
-    rec = make_record(trade_id="T-1", symbol="SYN", strategy="TrendCreditSpread",
-                      setup_type="TCS", option_side="put", contracts=2,
+    rec = make_record(trade_id="T-1", symbol="SYN", strategy="IronCondorStrategy",   # r88: was the removed TCS
+                      setup_type="credit_put", option_side="put", contracts=2,
                       entry_premium=0.80, spread_width=5.0, max_loss=(5.0-0.80)*2*100,
                       total_cost=(5.0-0.80)*2*100, stop_premium=0.0,
                       is_condor_leg=1, status="open", paper_trade=0,
@@ -274,8 +274,8 @@ def main():
     main._post_credit_vertical = fake_post
     try:
         sig = OptionsSignal()
-        sig.strategy_name = "TrendCreditSpread"; sig.setup_type = "TCS 50-accept"
-        sig.option_side = "put"; sig.is_trend_credit = True
+        sig.strategy_name = "CreditVertical"; sig.setup_type = "credit_put"   # r88: was a TCS signal
+        sig.option_side = "put"
         sig.short_put_contract = short; sig.long_put_contract = long_
         sig.net_credit = 0.75
         state = main.BotState(); state.paper_trading = False
@@ -292,7 +292,7 @@ def main():
           and rems[0].remaining == 3 and rems[0].requested == 4,
           f"recs={len(recs)} rems={[(r.requested, r.remaining) for r in rems]}")
     check("C7b the walk is keyed on the INTENT, not the strike pair",
-          posted.get("key") == "cv:SYN:TrendCreditSpread:put"
+          posted.get("key") == "cv:SYN:CreditVertical:put"
           and posted.get("structure") == f"{short.symbol}|{long_.symbol}",
           f"key={posted.get('key')} structure={posted.get('structure')}")
     check("C7c the remainder holds the SAME record object the position manager manages",
@@ -306,10 +306,13 @@ def main():
     # at the top of main(), and importing config over it made every later
     # `_C(...)` call an UnboundLocalError. Python hoists the local binding to
     # the whole function, so the collision broke lines ABOVE this one.
+    # r88 (RETIRE.3): C7d RE-DERIVED. It pinned the TCS remainder (no premium stop, the TCS plan's window end);
+    # with the TCS removed every credit vertical's remainder carries the lone-vertical floor and main's one credit
+    # window end, _credit_window_end() - both read from the code, never typed.
     import config as _cfg
-    _end = tuple(_cfg.TCS_ENTRY_END_ET)
-    check("C7d TCS remainder carries no premium stop and the TCS window end",
-          rems and rems[0].stop_pct == 0.0 and tuple(rems[0].window_end_et) == _end,
+    _end = tuple(main._credit_window_end(sig))
+    check("C7d a credit remainder carries the lone-vertical floor and the credit window end (r88: the TCS case removed)",
+          rems and abs(rems[0].stop_pct - _cfg.CONDOR_LONE_STOP_PCT) < 1e-12 and tuple(rems[0].window_end_et) == _end,
           f"stop_pct={rems[0].stop_pct if rems else None} "
           f"end={rems[0].window_end_et if rems else None} want={_end}")
     check("C7e the row in trades.db is the filled size, not the requested size",

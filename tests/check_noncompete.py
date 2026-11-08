@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_noncompete.py  v5.1
+tests/check_noncompete.py  v5.2
+v5.2  2026-11-08  OTV5 r88 (RETIRE.3) — N1b needs the two dispatches left in attempt_new_entry's own tree (Runaway, Breakout): the TCS dispatch is removed.
 v5.1  2026-11-08  OTV5 r76 (RETIRE.1) — N1b/N6 RE-POINTED (WA 38.4): the ORB, VOLT and sweep dispatches are removed, so N1b needs the three left
       (Runaway, Breakout, TCS) and N6 pins the hunt asked once and the sweep-on-grant gone.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
@@ -114,12 +115,12 @@ def main():
           lambda: ", ".join(getattr(no_slot_guard, "bad", []))
           or f"{len(dispatches)} dispatches, none gated")
 
-    # ⚠️ THREE (r76: the ORB trade, VOLT and the sweep are removed): Runaway, Breakout and TCS. The butterflies
+    # ⚠️ TWO (r76: the ORB trade, VOLT and the sweep are removed; r88: the TCS): Runaway and Breakout. The butterflies
     # dispatch through `_attempt_butterfly`,
     # which is a SEPARATE function and therefore not inside `attempt_new_entry`'s
     # own tree. N1b exists only so N1 cannot pass by finding nothing.
     guard("N1b there ARE dispatches to check — N1 cannot pass vacuously",
-          lambda: len(dispatches) >= 3, f"{len(dispatches)} _safe_strategy call(s)")
+          lambda: len(dispatches) >= 2, f"{len(dispatches)} _safe_strategy call(s)")
 
     # ── N2/N3 — the per-signal executor ────────────────────────────────────
     fire = next((n for n in ast.walk(fn)

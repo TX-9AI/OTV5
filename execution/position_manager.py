@@ -1,5 +1,6 @@
 """
-execution/position_manager.py  v5.32
+execution/position_manager.py  v5.33
+v5.33  2026-11-08  OTV5 r88 (RETIRE.3) — the TCS admission row and name, the SHADOW flag and the r57 shadow seams (_exit_engine / _management and the four SHADOW branches) go with the TCS shadow; every real path is unchanged. The operator, 2026-11-08: "Delete" (the TCS shadow, which never fired: its own gates declined every candidate 11-02..11-06).
 v5.32  2026-11-08  OTV5 r76 (RETIRE.1) — the admission table loses the removed trades' rows (ORB, VOLT, SWEEP, ATPFLY, ORCS) and their name constants; the ORB-trade close hook (standing-offer remainder cancel + engine re-arm, keyed on "ORB" in the strategy) is removed; get_open_record (no caller) is removed. The live rows are unchanged. The operator, 2026-11-07: "Running dead code and logging dead code activity is unnecessary drag. Yes, I want all of those things fixed."
 v5.31 2026-11-04  OTV5 r74 (BLIND.1) — A BLIND BOT PRICES ITS OPEN POSITIONS FROM TASTYTRADE REST MARKS, ON PAPER TOO.
       main._blind_tick sets blind_rest_marks while run_analysis cannot see (no price / no 5m bars) and manages with
@@ -414,7 +415,6 @@ _WARNED_LEG_COUNT: set = set()   # SWALLOW T1: warn once on an unreadable count
 RUNAWAY = "RunawayContinuation"
 HUNT = "LiquidityHunt"
 BREAKOUT = "Breakout"
-TCS = "TrendCreditSpread"
 GEXFLY = "GEXPinButterfly"
 PARK = "PARK"                         # r288 (PARK.1): the 11:00 first-hour continuation
 
@@ -520,10 +520,7 @@ _DEFAULT_RULES = {
     # hold nothing. The operator's own reasoning arrived here first: *"in order
     # to properly harvest a late move like that we would have to use Credit
     # spreads."*
-    # ══ EXCEPTION 1 of 2 — VERTICAL SPREADS ════════════════════════════════
-    # A condor IS two credit verticals, so the number is the STRUCTURE and not
-    # a risk limit. TCS+TCS is in conflict, so the TCS holds one.
-    TCS:     AdmissionRule(config.ENTRY_WINDOWS[TCS], max_open_of_type=1),
+    # RETIRE.3 (r88): the TCS row (EXCEPTION 1, vertical spreads) is deleted with the TCS.
     # the GEX fly's cutoff was raised from 14:00 to 15:00 by the operator
     # ══ EXCEPTION 2 of 2 — THE BUTTERFLIES, ONE PER SESSION ════════════════
     # r178: on 2026-08-28 at 15:00 a stack of FIVE BUTTERFLIES fired in NINETY
@@ -675,22 +672,11 @@ class PositionManager:
     Fetches live option premium, evaluates exits, and closes when triggered.
     """
 
-    SHADOW = False      # r57 (TCS.LOG1): True only on execution/shadow_book.ShadowPositionManager
-
     def __init__(self, paper_trading: bool = PAPER_TRADING):
         self.paper_trading = paper_trading
         self._open_records: List[TradeRecord] = []
         self._trade_logger = get_trade_logger()
         self.blind_rest_marks = False      # r74 (BLIND.1): set by main._blind_tick while the bot cannot see
-
-    def _exit_engine(self):
-        """r57 (TCS.LOG1) — the exit engine this manager decides and closes with (the shadow book has its own)."""
-        return get_exit_engine(self.paper_trading)
-
-    def _management(self):
-        """r57 (TCS.LOG1) — the management plan this manager asks first (the shadow book's writes its own rows)."""
-        from strategy.management import get_management_plan
-        return get_management_plan()
 
     def open_condor_leg_count(self) -> int:
         """Open condor legs among the records this manager holds (A2.2).
@@ -1087,8 +1073,6 @@ class PositionManager:
         _fo.observe_map(record, current_premium, getattr(chain, "spot_price", None))
 
         exit_eng = get_exit_engine(self.paper_trading)
-        if getattr(self, "SHADOW", False) is True:                                      # r57 (TCS.LOG1): the shadow book's own engine
-            exit_eng = self._exit_engine()
         # ── r167 — THE MANAGEMENT PLAN DECIDES FIRST for the records it covers
         # (runaway, butterfly, a lone sweep/TCS vertical). It asserts the
         # declared spec conditions itself (15% floor / hard stop, the breach
@@ -1099,8 +1083,6 @@ class PositionManager:
         decision = None
         try:
             from strategy.management import get_management_plan
-            if getattr(self, "SHADOW", False) is True:                                  # r57 (TCS.LOG1): the shadow rows' plan
-                get_management_plan = self._management               # noqa: F811
             _intent = get_management_plan().decide(
                 record, current_premium, df_1m=df_1m, open_records=self._open_records,
                 current_price=record.get("current_price"),
@@ -1469,8 +1451,6 @@ class PositionManager:
         trade_id = record["trade_id"]
 
         exit_eng = get_exit_engine(self.paper_trading)
-        if getattr(self, "SHADOW", False) is True:                                      # r57 (TCS.LOG1): the shadow book's own engine
-            exit_eng = self._exit_engine()
         fill     = exit_eng.place_exit_order(record, decision.exit_reason,
                                              mark_price=current_premium)
 
@@ -1537,15 +1517,6 @@ class PositionManager:
                 _WARNED_ONCE.add("exit_quote_raised")
                 logger.warning("exit quote capture raised (%s: %s) - warned once",
                                type(_xe).__name__, _xe)
-
-        if getattr(self, "SHADOW", False) is True:
-            # r57 (TCS.LOG1) — A SHADOW CLOSE TOUCHES NOTHING OF THE REAL BOOK: no risk_manager win/loss (the daily
-            # loss cap), no Telegram exit alert, no resting stop, no ORB re-arm. One distinct line, and done.
-            exit_eng.clear_trail(trade_id)
-            _mk = f" mark=${float(current_premium):.2f}" if current_premium is not None else ""
-            logger.info(f"[shadow] Position closed: {trade_id[:15]} exit=${fill_price:.2f}{_mk} "
-                        f"pnl=${pnl_usd:+.2f} reason={decision.exit_reason} (shadow - never ordered)")
-            return True
 
         risk_mgr = get_risk_manager()
         if pnl_usd >= 0:

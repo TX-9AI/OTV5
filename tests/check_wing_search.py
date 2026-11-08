@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""check_wing_search.py  v5.1
+"""check_wing_search.py  v5.2
+v5.2  2026-11-08  OTV5 r88 (RETIRE.3) — the TCS row of W9-W11 goes with the TCS (strategy/tcs_plan.py deleted); every other check unchanged.
 v5.1  2026-11-08  OTV5 r76 (RETIRE.1) — RE-POINTED (WA 38.4): the sweep plan is removed, so W2b, W3 and W7 (its selection) and its W9-W11 row go with it;
       W1, W2 (search_wing), W4-W6, W8, the TCS W9-W11 row and W16-W19 (the condor) unchanged.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
@@ -203,9 +204,6 @@ def _fixed_offset_lookups(node):
 
 def main():
     from strategy.criteria import R_FLOOR
-    _tp_tree = _tree("strategy/tcs_plan.py")
-    _tp_code = _code(_tree("strategy/tcs_plan.py"))
-    _tp_struct = _method(_tp_tree, "TCSPlan", "_structure")
     src = open(os.path.join(_root, "strategy", "sweep_credit_spread.py"),
                encoding="utf-8").read()
     code = "\n".join(l for l in src.split("\n")
@@ -302,60 +300,8 @@ def main():
     # TCS wants the WIDEST wing still clearing 1:1. The invariant that
     # survives is that the wing is SOLVED for against a declared floor rather
     # than taken from a fixed width.
-    _tcs_exec, _tcs_why = False, ""
-    try:
-        from strategy import tcs_plan as _tpm
-
-        class _T:
-            def __init__(self, k, b, a):
-                self.strike, self.bid, self.ask = float(k), b, a
-                self.mark, self.delta, self.symbol = (b + a) / 2.0, -0.3, f"P{k}"
-
-        def _run(wings):
-            class _Ch:
-                puts, calls = [_T(100.0, 3.00, 3.01)] + wings, []
-            c = _tpm.Candidate(dict(level_id="W9", price=100.0, kind="resistance",
-                                    provenance="W9"))
-            return _tpm.TCSPlan._structure(_tpm.TCSPlan.__new__(_tpm.TCSPlan), c, _Ch())
-        # R at expiry on bid/ask: 99 -> 1.50, 98 -> 1.00, 97 -> 0.76. The
-        # widest clearing 1:1 is 98; 97 is wider but below the floor.
-        _ok = _run([_T(99.0, 2.35, 2.40), _T(98.0, 1.95, 2.00), _T(97.0, 1.65, 1.70)])
-        # nothing clears 1:1 (best 0.67): refused, and named
-        _no = _run([_T(99.0, 2.35, 2.60), _T(98.0, 1.95, 2.20), _T(97.0, 1.65, 1.90)])
-        _tcs_exec = (_ok.long is not None and float(_ok.long.strike) == 98.0
-                     and _ok.r >= _tpm.TCS_R_FLOOR_EXPIRY
-                     and _no.long is None and _no.why_key == "wing_r_best")
-        _tcs_why = (f"took {_ok.long and _ok.long.strike} R {_ok.r}; "
-                    f"no-clear chain -> {_no.long}, {_no.why_key}")
-    except Exception as exc:                                    # noqa: BLE001
-        _tcs_why = f"{type(exc).__name__}: {exc}"
-    _tcs_floor_decl = any(isinstance(n, ast.Assign) and any(
-        isinstance(t, ast.Name) and t.id == "TCS_R_FLOOR_EXPIRY" for t in n.targets)
-        for n in _tp_tree.body)
-
-    _plans = (
-        ("tcs_plan.py", _tp_tree, _tp_code, _tp_struct, "TCS_R_FLOOR_EXPIRY",
-         _tcs_floor_decl and _tp_struct is not None
-         and bool(_compares_to(_tp_struct, "TCS_R_FLOOR_EXPIRY")) and _tcs_exec,
-         _tcs_why),
-    )
-    for name, tree, code, struct, floor, solved, why in _plans:
-        check(f"W9 {name} solves for a wing against a declared floor", solved, why)
-        # W10 — the declared floor is READ BY THE SELECTION ITSELF (the
-        # `_structure` that solves the wing; a record-only check elsewhere in
-        # the file does not count), and the muted hurdle is consulted nowhere
-        # in the file (docstrings and comments stripped).
-        _reads = struct is not None and floor in _idents(struct)
-        _muted = sorted(_idents(ast.parse(code)) & set(_MUTED))
-        check(f"W10 {name} reads R_FLOOR, never the muted hurdle",
-              _reads and not _muted,
-              f"_structure reads {floor}: {_reads}; muted: {_muted or 'none'}")
-        # ⚠️ THE FIXED WIDTH MUST NOT DRIVE THE EXECUTED SPREAD. What must
-        # never come back is a long strike being LOOKED UP at a fixed offset
-        # and traded. The only lookup allowed is the SHORT, at its level strike.
-        _bad = _fixed_offset_lookups(tree)
-        check(f"W11 {name} does not look up a wing at a fixed offset",
-              not _bad, "; ".join(_bad))
+    # RETIRE.3 (r88): the TCS row of W9-W11 (TCSPlan._structure) goes with the TCS; no credit plan remains to solve
+    # a wing, so W9-W11 have no subject. W1, W2, W4-W6, W8 and W16-W19 are unchanged.
 
     # ── 🔴 W16 — THE CONDOR CONSTRUCTS NOTHING ───────────────────────────
     # Operator, 2026-08-27: *"Condor leg one is not a trade. It's a

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_levels_in_play.py  v5.1
+tests/check_levels_in_play.py  v5.2
+v5.2  2026-11-08  OTV5 r88 (RETIRE.3) — C1-C5's consumer list drops strategy/tcs_plan.py (deleted with the TCS); the Hunt is the remaining consumer.
 v5.1  2026-11-08  OTV5 r76 (RETIRE.1) — RE-POINTED (WA 38.4): the sweep plan, whose levels_in_play the P and E sections drove, is removed with the
       sweep, so P0-P? and E go with it; C1-C5 (every remaining consumer - the TCS plan and the Hunt - ranks through the one
       shared rails_after_held, declares and records the rails, never lets a rail outrank a held extreme) are kept.
@@ -92,8 +93,7 @@ import ast as _a2                                                # noqa: E402
 # asserted what a CONSUMER did next. So the conjunction was rebuilt at read
 # time, three times, in three different plans, while every check stayed green.
 # §23: fix every reader, not just the writer. This block reads every reader.
-_PLANS = {
-    "strategy/tcs_plan.py":       "TCSPlan",
+_PLANS = {                                  # r88 (RETIRE.3): strategy/tcs_plan.py deleted with the TCS
     "strategy/liquidity_hunt.py": "LiquidityHunt",
 }
 

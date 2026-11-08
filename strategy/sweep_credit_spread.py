@@ -1,5 +1,6 @@
 """
-strategy/sweep_credit_spread.py  v5.7
+strategy/sweep_credit_spread.py  v5.8
+v5.8  2026-11-08  OTV5 r88 (RETIRE.3) — strike_beyond_sweep() is deleted: its last reader was strategy/tcs_plan.py. _symbol_of (the Hunt) and is_breach_exit with SPENT_EXIT_PREFIXES (trade_logger) stay. The operator, 2026-11-08: "Delete" (the TCS shadow, which never fired: its own gates declined every candidate 11-02..11-06).
 v5.7  2026-11-08  OTV5 r76 (RETIRE.1) — THE RETIRED SWEEP TRADE IS REMOVED; FOUR HELPERS STAY. SweepCreditSpreadStrategy,
       its gates, window, level ranking, spent-level keys and pierce logic leave with strategy/sweep_plan.py. Kept,
       byte for byte, because live code reads them: strike_beyond_sweep and _symbol_of (strategy/tcs_plan.py, the TCS
@@ -366,9 +367,6 @@ GATE CATEGORIES — required by WA §36. Only SELECTION is ever relaxed.
     matter how clean the setup looks.
 """
 import logging
-from typing import Optional
-
-from utils.math_utils import safe_float
 
 logger = logging.getLogger(__name__)
 
@@ -377,133 +375,7 @@ logger = logging.getLogger(__name__)
 GATES = {}
 
 
-def strike_beyond_sweep(sweep_price: float, pool_price: float, ceiling: bool,
-                        contracts=None, increment: float = 0.0) -> Optional[float]:
-    """🔴 r107 — THE FIRST STRIKE BEYOND THE SWEEP EXTREME. Operator's ruling,
-    2026-08-24: "It swept. That's legitimately a sweep. Sell the 7635."
-
-    ⚠️ WHY THE OLD RULE DECLINED A GOOD TRADE. `pierced_strike` returned the
-    nearest strike price actually TRADED THROUGH, and None when the pierce
-    cleared none — reasonable prose that collided with the selection spec on
-    every wide-strike symbol. SPX 2026-08-24: NY Low 7639.01, price traded to
-    7638.17 and closed back inside — a valid sweep of a named pool by 0.84 pts.
-    The strikes below are 7635 and 7630; price never reached either, so no
-    strike was pierced and a fully-qualified setup was declined. 608 fires died
-    that way on one box in one session.
-    ⚠️ AND THE TWO RULES PULL OPPOSITE WAYS. §2 PREFERS a shallow pierce —
-    ceiling 0.25%, and "a deep pierce means a WEAK level, not a strong
-    rejection" (1.28% median adverse vs 0.46%). A strike rule that requires a
-    DEEP pierce therefore refuses exactly the sweeps the selection rule likes,
-    and it refuses them only on 5-wide symbols: seven of the fifteen boxes. A
-    selection effect invisible as "no setups".
-    ⚠️ THE OPERATOR'S RULE KEEPS THE INTENT AND DROPS THE PRECONDITION. The
-    short strike is the first strike BEYOND the sweep extreme — the pierced one
-    when the sweep cleared it, the next one out when it did not. Either way it
-    sits FURTHER from spot than anything price reached, so the position is
-    threatened only by price going somewhere it has not been. Never a strike
-    INSIDE the pierce: that is a level that already failed, and selling it is
-    the "worst version of this" §2 warns about.
-
-    ⚠️ STRIKES COME FROM THE LIVE CHAIN, NOT FROM A CONSTANT. `STRIKE_INCREMENT`
-    is one number per symbol from a hardcoded map; SPX 0DTE is 5-wide near the
-    money and 25-wide in the tails, so no single number is right everywhere —
-    and FRC.2's own notes call that class of list "unverified — a broker/OCC
-    fact, not derivable here". The chain is the fact. `increment` remains as the
-    fallback for a caller with no chain.
-
-    Returns None only when there is genuinely no strike beyond the sweep — an
-    extreme past the end of the chain, which is a missing chain, not a trade.
-    """
-    sweep_price = safe_float(sweep_price)
-    pool_price = safe_float(pool_price)
-    if not sweep_price or not pool_price:
-        return None
-
-    ks = []
-    for c in (contracts or []):
-        try:
-            k = float(getattr(c, "strike", 0.0) or 0.0)
-            if k > 0:
-                ks.append(k)
-        except (TypeError, ValueError):
-            continue
-    # THE RULE, ONE LINE: among strikes AT OR BEYOND THE POOL, take the one
-    # NEAREST THE SWEEP EXTREME.
-    # ⚠️ IT UNIFIES BOTH CASES AND CHANGES ONLY THE ONE THE OPERATOR RULED ON.
-    # Deep pierce, pool 7639.01, extreme 7633: strikes beyond the pool are
-    # 7635, 7630, ...; nearest to 7633 is 7635 — the strike price traded
-    # THROUGH, which is the original rule, unchanged. Shallow pierce, extreme
-    # 7638.17: nearest is still 7635, which is now the first strike BEYOND
-    # rather than a decline. One expression, both readings.
-    # ⚠️ "AT OR BEYOND THE POOL" IS THE GUARD THAT MATTERS. Without it the
-    # nearest strike to a shallow extreme could be 7640 — INSIDE the pool, on
-    # the spot side of a boundary price never broke. Selling that is selling a
-    # level the sweep did not establish.
-    def _pick(strikes):
-        if ceiling:
-            # \U0001f534 r233 - AT OR BEYOND THE **WICK EXTREME**, NOT MERELY THE POOL.
-            # Operator, 2026-09-03: *"the strike cannot sit at any level that is
-            # part of the testing range. I do not want to get stopped out by
-            # another retest. It has to be just beyond that, if only a little
-            # bit."*
-            # \u26a0\ufe0f THIS CLOSES A HOLE r107 DID NOT SEE, and its own docstring
-            # states BOTH sides of it three paragraphs apart: "it sits FURTHER
-            # from spot than anything price reached" (the intent) and "nearest
-            # is 7635 - the strike price traded THROUGH" (the deep-pierce case).
-            # PROVEN AT bd6f25e on the header's own two examples: pool 7639.01,
-            # shallow wick 7638.17 -> 7635, beyond the wick, correct; DEEP wick
-            # 7633.00 -> 7635, which sits BETWEEN the wick and the pool. Price
-            # traded clean through 7635 on its way to 7633, so a second test of
-            # the same size takes the position out. The intent was right; the
-            # candidate bound was the pool when it needed to be the extreme.
-            # \u26a0\ufe0f THE POOL BOUND IS KEPT AND IS NOW IMPLIED - a wick is beyond
-            # its pool by definition, so this can only ever narrow the set. It
-            # stays because it DOCUMENTS the invariant, and check_strike_beyond
-            # P3 pins that it never binds; a guard proven inert is different
-            # from one deleted on the assumption that it is.
-            cand = [k for k in strikes
-                    if k >= pool_price - 1e-9 and k >= sweep_price - 1e-9]
-        else:
-            cand = [k for k in strikes
-                    if k <= pool_price + 1e-9 and k <= sweep_price + 1e-9]
-        if not cand:
-            return None
-        # "just beyond, if only a little bit" - the NEAREST of what is beyond,
-        # never the nearest in absolute terms, which is what let an inside
-        # strike win on a deep pierce.
-        best = min(cand) if ceiling else max(cand)
-        # ⚠️ A TRUNCATED CHAIN MUST NOT BECOME A WILD STRIKE. "Nearest" always
-        # returns something; if the extreme lies past the end of the chain the
-        # nearest strike can be hundreds of points away, and selling it would be
-        # a trade nobody described. Bound it to a few grid steps of the extreme
-        # and decline beyond that — a chain that does not reach the tape is a
-        # DATA problem and says so.
-        gaps = [b - a for a, b in zip(cand, cand[1:])] if len(cand) > 1 else []
-        step = min(gaps) if gaps else (safe_float(increment) or 0.0)
-        if step and abs(best - sweep_price) > 3.0 * step:
-            logger.warning(
-                "[sweep_cs] nearest strike %.2f is %.2f from the sweep extreme "
-                "%.2f (grid ~%.2f) — the chain does not reach the tape; "
-                "declining rather than selling a strike nobody chose",
-                best, abs(best - sweep_price), sweep_price, step)
-            return None
-        return round(best, 4)
-
-    if ks:
-        return _pick(sorted(set(ks)))
-
-    # No chain — fall back to the grid. Same rule, one assumed increment.
-    increment = safe_float(increment)
-    if not increment or increment <= 0:
-        return None
-    import math as _m
-    if ceiling:
-        grid = [_m.floor(sweep_price / increment) * increment,
-                _m.ceil(sweep_price / increment) * increment]
-    else:
-        grid = [_m.floor(sweep_price / increment) * increment,
-                _m.ceil(sweep_price / increment) * increment]
-    return _pick(sorted(set(grid)))
+# RETIRE.3 (r88): strike_beyond_sweep() is deleted - its last reader was strategy/tcs_plan.py (the TCS shadow).
 
 
 # Every label a breach/acceptance close is written under. exit_engine's own, and

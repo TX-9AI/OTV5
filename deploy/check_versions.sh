@@ -1,6 +1,8 @@
 #!/bin/bash
 # ==========================================================================
-# deploy/check_versions.sh  v5.1
+# deploy/check_versions.sh  v5.2
+# v5.2  2026-11-08  OTV5 r88 (RETIRE.3) — the two TC.6 canaries (exit_engine's is_trend_participation binding, main.py's
+#       `_is_tcs` condor-leg identity) go with the TCS (the operator, 2026-11-08: "Delete").
 # v5.1  2026-11-08  OTV5 r76 (RETIRE.1) — the strategy/orb_strategy.py check goes with the file (the ORB trade is removed).
 # v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 # v4.7 2026-09-23 OTV4TEST r126 - the A2.1/A2.5 pins and the A2.6 absence canary on
@@ -478,10 +480,8 @@ check "analysis/trend_engine.py"         'tf == "5m"'                   "ADX fro
 
 # ── v3.5-v3.8 remediation fingerprints (stale-sync canaries) ──────────────
 check "execution/exit_engine.py"         "_confirm_and_book_live_exit"  "v3.5 fill-confirmed live exits"
-check "execution/exit_engine.py"         "from strategy.structure import is_trend_participation" "v4.21 F1 — the binding v4.20 forgot; without it NameError on every condor tick"
 check "execution/exit_engine.py"         "or is_credit_vertical(record):" "v4.21 F2 — dispatch routes credit verticals by STRUCTURE, not one strategy string"
 check "execution/exit_engine.py"         "0.0 < _persisted < base_stop"  "v4.21 F4 — ratchet restart seed, bounded so stale/foreign values are never adopted"
-check "main.py"                          "is_condor_leg    = 0 if _is_tcs else 1," "v6.9 F6 — TC.6 rows no longer claim condor-leg identity"
 check "execution/position_manager.py"    "if _is_credit_vertical(record):" "v3.2 F6 pairing — spread pricing by structure (must land WITH main v6.9)"
 check "execution/order_confirm.py"       "confirm_order_fill"           "v3.7 entry fill-confirmation module"
 check "main.py"                          "confirm_order_fill"           "v3.7 condor legs book on confirmed fill"

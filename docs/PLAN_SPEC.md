@@ -1,5 +1,7 @@
 # PLAN_SPEC.md — every strategy declares its intent BEFORE the trigger
 
+**`PLAN_SPEC.md` v5.3 · 2026-11-08 · OTV5 r88 (RETIRE.3) — §34 (the trend credit spread, and its r57 log-only shadow) is REMOVED from the code; the section keeps its heading and points to the history. The operator, 2026-11-08: "Delete".**
+
 **`PLAN_SPEC.md` v5.2 · 2026-11-08 · OTV5 r81 (DOC.36) — §32.3: the GEX pin butterfly has NO stop since OTV5 r73 (BFLY.17); its one exit is the 15:45 flatten, and its door adds VIX ≥ 20 no-fire, an open inside yesterday's range and the 15.5%-of-width debit floor. The Saturday brief 2026-11-07 section 4 item 3.**
 
 **`PLAN_SPEC.md` v5.1 · 2026-11-08 · OTV5 r76 (RETIRE.1) — §29 (the ORB trade), §31 (the sweep credit spread), §39 (the ATP butterfly) and §41 (ORCS) are REMOVED with their code; their headings stay so older references resolve. §37: the Hunt no longer grants a handoff (its only taker was the sweep); its exits are unchanged. The opening-range ENGINE that §29 described is untouched. The operator, 2026-11-07: "Running dead code and logging dead code activity is unnecessary drag. Yes, I want all of those things fixed."**
@@ -1227,31 +1229,7 @@ Three-leg stop-vs-spread ratio (`stop_vs_spread`, already a floor via `STOP_VS_S
 
 ## 34. OTV4TEST r9 — THE TREND CREDIT SPREAD SPEC AND ITS PLAN CONTRACT (agreed with the operator 2026-09-09)
 
-Purpose, his words: *"catch large moves in the afternoon on some macro catalyst good or bad, and let theta do the work on our behalf since debits on 0DTE late in the day are deteriorating rapidly."* r238's trigger — the ORB's morning `fifty_accepted` latch — measured the wrong session half; it is gone.
-
-### 34.1 The spec
-| part | definition |
-|---|---|
-| trigger | a live **session extreme** — ANY session, from the one level board (r33) — **ACCEPTED** after 11:30 — two closed 1m bars beyond it, the level store's own event — **and price outside the expected move** |
-| "outside" | read against the EM assessment that stood **before** the move: every tick the plan computes spot ± EM (ATM IV, remaining session); on the first 1m close beyond a live extreme it **freezes the previous tick's band** as that move's reference; acceptance with price outside the frozen band fires. A close back inside before acceptance clears it. *"The move exceeded its previous tick's EM assessment."* |
-| direction / anchor | the move's. A high accepted → the **put** spread behind it, short at the first strike at/below **the accepted level**; a low → the call spread above it. Near the money, rich, and the exit has a name |
-| structure | **the widest wing that clears 1:1 on the expiry basis** (r238's rule, kept: the most credit the R floor allows — best-R would pick the thinnest) |
-| bars | POP ≥ 0.70 (the theta-not-direction bar; it was a config constant nothing read) · credit ≥ 10% of width · nickel-multiple floor · the 15% stop survivable against the short's spread · freshness of the ACCEPTED event (`ACCEPT_FRESH_BARS` = 3, a prior) |
-| recorded, not barred | ADX (retired as a bar — measured flat; the EM breach is the size read) · richness = credit ÷ width · the protective leg's own bid/ask as a fraction of the wing |
-| window | 11:31–14:00; outside it the plan observes and does not write |
-| condor | **leg one only, never the second**; the complement must be a sweep (`authorize()`, untouched) |
-
-> 🔴 **CORRECTED 2026-09-17 (OTV4TEST r33) — THE PARENTHETICAL IN THAT ROW WAS AN IMPLEMENTATION NOTE AND IT GOVERNED THE TRADE FOR TWENTY-FOUR REVISIONS.** The row read *"(today's high / low, the store's `ny` levels)"*, and `tcs_plan.py` implemented the second half literally: `provenance == "ny"`. Measured on the box 2026-09-17, that was **3 of 11 held levels** — six London and two Asia extremes, built from the same tape by the same rule, discarded — and **no fork at all**, which r15 had wired to the hunt and the sweep and never to this plan. The operator, reading it: *"I don't give a rat's shit if it's a New York level or a London level or an Asia level or an overnight session. Three up and three down, starting with the most recent and going backwards in time."* That was already the r5 ruling (§31: *"LEVELS IN PLAY come from the derived store, never a private map: 3 named up, 3 named down, plus the 1h pitchfork's tines"*). ⚠️ **THE LESSON IS THE SHAPE, NOT THE FILTER:** an implementation detail written inside an agreed definition row is indistinguishable from the ruling, and it outlived four revisions that each touched levels. The plan had never fired, so nothing realised was lost.
->
-> 🔴 **SUPERSEDED — CLARIFIED 2026-09-14 (OTV4TEST r29) — THE TRIGGER ROW ABOVE SAYS "today's high / low" AND THE CODE HAS NEVER READ THAT.** The store's `ny` levels are the high and low of **closed** prior RTH sessions: every `ny` row on this box was created at or after 16:00 ET. That is the mapper's LIQ.6 rule — *a level is a fixed price stops rest at; today's high/low is still being made, every new high "breaches" it, so it is not a level until the session closes.* So what the TCS has actually traded is **an established prior-session NY extreme accepted through after 11:30, outside the EM**. The row is left as agreed; whether the TCS should trade that, or something about today's forming extreme, is **TCS.3** and is the operator's ruling.
-
-### 34.2 Exits, in order
-1. 15:45 hard close · 2. **15% of credit — a LONE vertical only** (a hedged leg's sibling suppresses it) · 3. **the level lost** — a 1m close back through the accepted extreme (`tcs_breach`) · **no nickel close** — the 2026-08-14 ruling ("no closing it short of a breach or the hard close") was measured, EV held to expiry, and stands; today's untangle listed a nickel in passing without revisiting it. Flagged, not changed.
-
-### 34.3 If it never fires, or fires too loosely
-The EM gate is the first suspect either way (operator). Every fire carries the frozen band and the distance outside it (`em_ref_band`, `em_outside_by`); every miss carries how far inside it stayed (`outside_by` < 0 on the DECLINE row).
-
-**As built (OTV4TEST r9):** `strategy/tcs_plan.py` v1.0, `strategy/trend_credit_spread.py` v5.0, `data/derived_store.py` v4.4 (`latest_event`), `execution/exit_engine.py` v4.14, `main.py` v4.43 (HYG.5: the windows read from the plans). Hypotheticals: `check_tcs_plan` T1–T8, X1–X3; `check_tcs_narrates`; `check_tcs_fifty` retired into it.
+**REMOVED, OTV5 r88 (RETIRE.3), 2026-11-08** — the trade, its plan and its log-only shadow (r57) are deleted from the code (the operator, 2026-11-08: "Delete"); this section's contract is history (see git history before r88).
 
 ## 35. OTV4TEST r10 — THE CONDOR MANAGEMENT PLAN (agreed with the operator 2026-09-09)
 

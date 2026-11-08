@@ -1,5 +1,6 @@
 """
-strategy/management.py  v5.6
+strategy/management.py  v5.7
+v5.7  2026-11-08  OTV5 r88 (RETIRE.3) — the TrendCreditSpread EXIT_CONDITIONS row and COVERED entry, and its four special cases (no premium stop, 'breach', the credit classification), go with the TCS. The operator, 2026-11-08: "Delete" (the TCS shadow, which never fired: its own gates declined every candidate 11-02..11-06).
 v5.6  2026-11-08  OTV5 r76 (RETIRE.1) — EXIT_CONDITIONS, BUTTERFLIES and COVERED drop the removed ORB, sweep and ATP trades. The live strategies' conditions are unchanged. The operator, 2026-11-07: "Running dead code and logging dead code activity is unnecessary drag. Yes, I want all of those things fixed."
 v5.5  2026-11-03  OTV5 r73 (BFLY.17) — THE GEX PIN BUTTERFLY DECLARES ONE EXIT: THE 15:45 FLATTEN. The operator, 2026-11-03:
       "For the GEX fly, I want no stop except hold to close". decide() skips the declared premium stop for a strategy in
@@ -201,10 +202,6 @@ EXIT_CONDITIONS: Dict[str, Dict[str, str]] = {
         "hard_stop":      "premium <= stop_premium (the 20% floor set at entry)",
         "trail":          "premium <= trail_stop, once the trail has armed at +50%",
         "target":         "premium >= target_premium, then the tightening off the peak",
-    },
-    "TrendCreditSpread": {
-        "breach":         "a touch through the ORB bound (underlying_stop; the forming 1m bar) — no premium stop",
-        "nickel":         "spread value <= the nickel",
     },
     "IronCondorStrategy": {
         "ladder":         "CondorManagement decides: ROLL / TENT / CLOSE (TRADES.md)",
@@ -482,7 +479,7 @@ def _record_exhaust_checks(t, ev) -> None:
         logger.debug("[manage] exhaustion check rows not written: %s", exc)
 
 COVERED = ("RunawayContinuation", "GEXPinButterfly",
-           "TrendCreditSpread", "Breakout")
+           "Breakout")
 NICKEL = 0.05
 
 
@@ -650,7 +647,7 @@ class ManagementPlan:
             prem = _f(current_premium)
             entry = _f(record.get("entry_premium")) or 0.0
             credit = bool(record.get("is_credit_vertical")) or strategy in (
-                "SweepCreditSpread", "TrendCreditSpread")
+                "SweepCreditSpread",)
             pnl = 0.0
             if prem is not None and entry > 0:
                 pnl = (entry - prem) / entry if credit else (prem - entry) / entry
@@ -673,7 +670,7 @@ class ManagementPlan:
             # ── 1. THE DECLARED SPEC CONDITIONS — never outranked ──────────
             intent = None
             _hold = strategy in tuple(getattr(_cfg, "HOLD_TO_CLOSE_STRATEGIES", ()) or ())     # r73 (BFLY.17)
-            if prem is not None and stop_p and strategy != "TrendCreditSpread" and not _hold:
+            if prem is not None and stop_p and not _hold:
                 hit = (prem >= stop_p) if credit else (prem <= stop_p)
                 if hit:
                     name = "premium_stop" if credit else ("stop" if strategy in BUTTERFLIES else "hard_stop")
@@ -728,8 +725,7 @@ class ManagementPlan:
                         record, prem, stop_p, entry):
                     breached = False          # the trail is nearer; it governs
                 if breached:
-                    name = ("structure_stop" if not credit else
-                            ("breach" if strategy == "TrendCreditSpread" else "acceptance"))
+                    name = ("structure_stop" if not credit else "acceptance")
                     # r209: a TOUCH - `last_close` is the FORMING 1m bar's last price
                     intent = Intent("CLOSE", f"{name}: touch {last_close:.2f} through "
                                              f"{ustop:.2f} pnl={pnl:.1%}", name, pnl_pct=pnl)
@@ -906,7 +902,7 @@ class ManagementPlan:
     def _next_tick_line(record, credit, stop_p, ustop, trail, target) -> str:
         outs = []
         _hold = str(record.get("strategy", "")) in tuple(getattr(_cfg, "HOLD_TO_CLOSE_STRATEGIES", ()) or ())  # r73
-        if stop_p and str(record.get("strategy", "")) != "TrendCreditSpread" and not _hold:
+        if stop_p and not _hold:
             outs.append(f"premium {'>=' if credit else '<='} {stop_p:.2f} -> out (floor)")
         if ustop:
             side = str(record.get("option_side", "") or "")
@@ -979,7 +975,7 @@ class ManagementPlan:
         mae = _f(rec.get("mae_premium"))
         ticks = int(rec.get("excursion_ticks") or 0)
         credit = bool(rec.get("is_credit_vertical")) or strategy in (
-            "SweepCreditSpread", "TrendCreditSpread", "IronCondorStrategy")
+            "SweepCreditSpread", "IronCondorStrategy")
         pnl = None
         if prem is not None and entry > 0:
             pnl = (entry - prem) / entry if credit else (prem - entry) / entry

@@ -1,5 +1,6 @@
 """
-warehouse/s3_push.py  v5.8
+warehouse/s3_push.py  v5.9
+v5.9  2026-11-08  OTV5 r88 (RETIRE.3) — the shadow_trades stage, SHADOW_TRADES_DB and its ledger go with the TCS shadow (raw/shadow_trades never had an object). The operator, 2026-11-08: "Delete" (the TCS shadow, which never fired: its own gates declined every candidate 11-02..11-06).
 v5.8  2026-11-03  OTV5 r72 (PARK.5) — AN ALLOW-LIST: A BOX UPLOADS ITS OWN SYMBOL AND NOTHING ELSE. The operator, 2026-11-03:
       "Make sure the boxes not trading qqq are hard blocked from uploading any other symbol." Every stage that ships
       symbol-labelled data now asks allowed_symbol(sym, me) per row or per file: trades, shadow trades, the circuit-
@@ -758,10 +759,7 @@ def discover(root: str = SRC_ROOT, suffix: str = ".jsonl.gz"):
 TRADES_DB = os.environ.get(
     "OT_TRADES_DB", os.path.join(_HOME, "options-trader", "trades.db"))
 TRADES_LEDGER = os.path.join(STATE_DIR, "trades_ledger.json")
-# r57 (TCS.LOG1) — the shadow store, beside trades.db unless named (execution/shadow_book.shadow_db_path reads the same).
-SHADOW_TRADES_DB = os.environ.get("OT_SHADOW_TRADES_DB") or os.path.join(
-    os.path.dirname(os.path.abspath(TRADES_DB)), "shadow_trades.db")
-SHADOW_TRADES_LEDGER = os.path.join(STATE_DIR, "shadow_trades_ledger.json")
+# RETIRE.3 (r88): the shadow-trades store (r57, the TCS shadow's shadow_trades.db) is gone with the TCS.
 
 
 def trade_envelope(rec: dict, sym: str, day: str, datatype: str = "trade",
@@ -1813,7 +1811,6 @@ def main(argv=None) -> int:
         counters = load_ledger(COUNTERS_PATH)
         ledger = load_ledger()
         t_ledger = load_ledger(TRADES_LEDGER)
-        st_ledger = load_ledger(SHADOW_TRADES_LEDGER)      # r57 (TCS.LOG1)
         misc = load_ledger(MISC_LEDGER)
         c_ledger = load_ledger(CANDLE_LEDGER)
         ds_ledger = load_ledger(DSERIES_LEDGER)
@@ -1856,10 +1853,6 @@ def main(argv=None) -> int:
         #   journal — largest by far, and the most tolerant of lag
         stages = [
             ("trades", lambda: push_trades(s3, BUCKET, TRADES_DB, t_ledger, counters, me=me)),
-            # r57 (TCS.LOG1) — the shadow trades, their own prefix and ledger (absent store: nothing, silently).
-            ("shadow_trades", lambda: push_trades(s3, BUCKET, SHADOW_TRADES_DB, st_ledger, counters,
-                                                  ns="shadow_trades", datatype="shadow_trade",
-                                                  src_file="shadow_trades.db", me=me)),
             ("circuit_breaker", lambda: push_table(
                 s3, BUCKET, TRADES_DB, "circuit_breaker_events", "event_time",
                 "circuit_breaker", t_ledger, me, counters)),

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""tests/check_eod_schedule.py — v5.1
+"""tests/check_eod_schedule.py — v5.2
+v5.2  2026-11-08  OTV5 r88 (RETIRE.3) — E1 reads the credit end from config.CREDIT_ENTRY_END_ET where it read the removed TCS row; VERT and the tent fixture are IronCondorStrategy rows (were TCS). Every assertion unchanged.
 v5.1  2026-11-08  OTV5 r76 (RETIRE.1) — E1/E3 RE-POINTED (WA 38.4): the ORB, VOLT and sweep windows are removed, so E1 reads the four live
       windows; E3's long singles are a Runaway and a Hunt (the classifier is structural, the names were incidental).
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
@@ -99,7 +100,7 @@ def at(h, m):
     return D.datetime(2026, 9, 28, h, m, 5, tzinfo=ET)          # a Monday
 
 
-VERT = {"trade_id": "VERT0001", "strategy": "TrendCreditSpread", "short_symbol": "QQQ   260928C00750000",
+VERT = {"trade_id": "VERT0001", "strategy": "IronCondorStrategy", "short_symbol": "QQQ   260928C00750000",   # r88: was the TCS
         "long_symbol": "QQQ   260928C00751000", "spread_width": 1.0, "entry_premium": 0.40, "contracts": 1,
         "symbol": "QQQ"}
 FLY = {"trade_id": "FLY00001", "strategy": "GEXPinButterfly", "is_butterfly": 1, "lower_symbol": "QQQ   260928C00740000",
@@ -123,7 +124,7 @@ def main() -> int:
     # E1
     try:
         EW, ES = config.ENTRY_WINDOWS, getattr(config, "EOD_SCHEDULE", {})
-        six = ("RunawayContinuation", "LiquidityHunt", "Breakout", "TrendCreditSpread")   # r76: the retired trades' rows are gone
+        six = ("RunawayContinuation", "LiquidityHunt", "Breakout")   # r76: the retired trades' rows are gone; r88: the TCS row
         env = dict(os.environ, OT_DEBIT_CUTOFF_ET="11:30")
         r = subprocess.run([sys.executable, "-c", "import config; print(tuple(config.DEBIT_DIRECTIONAL_CUTOFF_ET))"],
                            cwd=ROOT, env=env, capture_output=True, text=True)
@@ -131,6 +132,7 @@ def main() -> int:
               ES == {"entries_stop": (15, 40), "resting_at": (15, 45), "ladder_at": (15, 50), "cross_at": (15, 55)}
               and all(tuple(EW[n][1]) == ((10, 30) if n in ("RunawayContinuation", "LiquidityHunt", "Breakout")
                                           else (15, 40)) for n in six)
+              and tuple(config.CREDIT_ENTRY_END_ET) == (15, 40)        # r88: the credit end, read where the TCS row was
               and tuple(config.DEBIT_DIRECTIONAL_CUTOFF_ET) == (15, 40) and r.stdout.strip() == "(15, 40)",
               f"ES={ES} ends={[EW[n][1] for n in six]} cutoff={config.DEBIT_DIRECTIONAL_CUTOFF_ET} env-run={r.stdout.strip() or r.stderr[-120:]}")
     except Exception as exc:                                  # noqa: BLE001
@@ -160,7 +162,7 @@ def main() -> int:
     # E3
     try:
         trend_leg = dict(VERT)
-        tent = {"strategy": "TrendCreditSpread", "setup_type": "tent_hedge", "short_symbol": "a", "long_symbol": "b", "lower_symbol": "c"}
+        tent = {"strategy": "IronCondorStrategy", "setup_type": "tent_hedge", "short_symbol": "a", "long_symbol": "b", "lower_symbol": "c"}
         risk = [S.has_assignment_risk(x) for x in (VERT, trend_leg, FLY, SHORT, tent)]
         none = [S.has_assignment_risk(x) for x in (ORB, {"strategy": "LiquidityHunt", "option_symbol": "x"},
                                                     {"strategy": "Breakout", "option_symbol": "x"})]

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_admission.py  v5.3
+tests/check_admission.py  v5.4
+v5.4  2026-11-08  OTV5 r88 (RETIRE.3) — the TCS row is removed: SPEC/ALL lose it, A8 drops its window, and B9, D2/D3, D6 and F1-F3 (which used the TCS as their example) are re-pointed to the GEX fly beside Runaway / PARK / Breakout with the same assertions.
 v5.3  2026-11-08  OTV5 r76 (RETIRE.1) — RE-POINTED (section 38.4): the ORB trade, VOLT, the sweep, the ATP fly and ORCS are
       REMOVED from the table, so SPEC / ALL hold the six that remain and A0 pins exactly those. A8 keeps the 10:29 debit
       end, TCS's 11:31 start, the fly's 13:00 start and the 15:40 stop; B8: every strategy capped at ONE; B8b's None
@@ -104,7 +105,7 @@ def check(name, ok, detail=""):
 
 def main():
     from execution.position_manager import decide, Facts, rules, gates, AdmissionRule
-    from execution.position_manager import RUNAWAY, HUNT, BREAKOUT, TCS, GEXFLY
+    from execution.position_manager import RUNAWAY, HUNT, BREAKOUT, GEXFLY       # r88: TCS removed
 
     T = rules()
     # ⚠️ r78 — BREAKOUT WAS IN SPEC BUT NOT IN `ALL`, so every B-section cap
@@ -112,7 +113,7 @@ def main():
     #    stacked — 19 positions off one opening range — was the one this
     #    checker never asked about. Added; it is not a new belief, it is the
     #    belief SPEC already held going unexercised since r51.
-    ALL = [RUNAWAY, HUNT, BREAKOUT, TCS, GEXFLY, "PARK"]   # r292: PARK was in SPEC, not here (the r78 defect again); r76: the retired five removed
+    ALL = [RUNAWAY, HUNT, BREAKOUT, GEXFLY, "PARK"]   # r88: the TCS removed   # r292: PARK was in SPEC, not here (the r78 defect again); r76: the retired five removed
 
     def ok(strategy, hhmm, **kw):
         return decide(Facts(strategy=strategy, now_et=hhmm, orb_established=True, **kw))
@@ -135,7 +136,6 @@ def main():
         # they are the only ones that move; the debit windows below still close
         # at 15:00 because a debit is flattened by the 15:40 ladder and an entry
         # inside its own flatten window is an entry with no hold time at all.
-        TCS:     (((11, 31), (15, 40)), 1, None),   # r148: the minute its plan opens (AFD.1)
         GEXFLY:  (((13, 0), (15, 0)), 1, 1),     # r273: was 12:00
         "PARK":  (((11, 1), (11, 3)), 1, 1),      # r288 (PARK.1): the ask 11:01-11:02, one per session
     }
@@ -164,11 +164,11 @@ def main():
               f"{before}={bool(ok(s,before))} {at_start}={bool(ok(s,at_start))} "
               f"{before_end}={bool(ok(s,before_end))} {at_end}={bool(ok(s,at_end))}")
 
-    check("A8 r187: Runaway/Hunt/Breakout IN at 10:29 and OUT at 10:30, the TCS OUT until 11:31, the GEX fly OUT until 13:00 (r273); at 15:40 every directional and credit entry is OUT",
+    check("A8 r187: Runaway/Hunt/Breakout IN at 10:29 and OUT at 10:30, the GEX fly OUT until 13:00 (r273); at 15:40 every directional entry is OUT (r88: the TCS removed)",
           all(bool(ok(x, (10, 29))) and not ok(x, (10, 30)) for x in (RUNAWAY, HUNT, BREAKOUT))
-          and not ok(TCS, (11, 30)) and bool(ok(TCS, (11, 31))) and not ok(GEXFLY, (12, 59)) and bool(ok(GEXFLY, (13, 0)))
-          and not any(ok(x, (15, 40)) for x in (RUNAWAY, HUNT, BREAKOUT, TCS)),
-          "directional debits stop at 10:29 (operator 2026-10-02); the TCS's one-minute gap is its plan's own (AFD.1)")
+          and not ok(GEXFLY, (12, 59)) and bool(ok(GEXFLY, (13, 0)))
+          and not any(ok(x, (15, 40)) for x in (RUNAWAY, HUNT, BREAKOUT)),
+          "directional debits stop at 10:29 (operator 2026-10-02)")
 
     check("A9 the GEX fly runs to 15:00 (its 14:00 cutoff was raised by ruling)",
           bool(ok(GEXFLY, (14, 30))) and bool(ok(GEXFLY, (14, 59))) and not ok(GEXFLY, (15, 0)),
@@ -223,10 +223,10 @@ def main():
           all(bool(d) for d in _deep),
           f"1->{bool(_deep[0])} 3->{bool(_deep[1])} 25->{bool(_deep[2])}")
 
-    check("B9 TCS+TCS is impossible, which is the condor rule with no special case",
-          ok(TCS, (13, 0), open_by_strategy={TCS: 1}).gate == "max_open_of_type"
-          and bool(ok(TCS, (13, 0), open_by_strategy={GEXFLY: 1})),
-          "TCS+TCS refused, TCS beside another type admitted")
+    check("B9 two of one type is impossible, one beside another type admits (r88: re-pointed from the removed TCS to the fly)",
+          ok(GEXFLY, (13, 0), open_by_strategy={GEXFLY: 1}).gate == "max_open_of_type"
+          and bool(ok(GEXFLY, (13, 0), open_by_strategy={RUNAWAY: 1})),
+          "fly+fly refused, a fly beside another type admitted")
 
     # ── C — tries per session ───────────────────────────────────────────────
     for s in (GEXFLY,):
@@ -236,15 +236,15 @@ def main():
               and ok(s, mid, tries_used=1).gate == "tries_per_session",
               f"{ok(s, mid, tries_used=1).gate}")
     check("C3 every other strategy is UNLIMITED attempts (r3: runaway per break)",
-          all(T[s].max_tries_per_session is None for s in (RUNAWAY, HUNT, BREAKOUT, TCS))
+          all(T[s].max_tries_per_session is None for s in (RUNAWAY, HUNT, BREAKOUT))
           and bool(ok(RUNAWAY, (10, 0), tries_used=99)),
           "99 attempts still admits")
 
     # ── D — THE INTENT: conflicting theses run together ─────────────────────
     intent = [
         ("D1 Breakout admits with a runaway open", BREAKOUT, (10, 0), {RUNAWAY: 1}),
-        ("D2 the GEX fly admits with a TCS open", GEXFLY, (13, 0), {TCS: 1}),
-        ("D3 TCS admits with a GEX fly open", TCS, (13, 0), {GEXFLY: 1}),
+        ("D2 the GEX fly admits with a runaway open (r88: was a TCS)", GEXFLY, (13, 0), {RUNAWAY: 1}),
+        ("D3 the GEX fly admits with a PARK open (r88: was TCS beside the fly)", GEXFLY, (13, 0), {"PARK": 1}),
         ("D4 hunt admits with a Breakout open (the paired comparison)", HUNT, (10, 0), {BREAKOUT: 1}),
         ("D5 runaway admits with a Breakout and a hunt open", RUNAWAY, (10, 0), {BREAKOUT: 1, HUNT: 1}),
     ]
@@ -253,8 +253,8 @@ def main():
 
     check("D6 NOTHING caps the TOTAL number of open positions",
           bool(ok(GEXFLY, (13, 0),
-                  open_by_strategy={RUNAWAY: 1, HUNT: 1, TCS: 1, BREAKOUT: 1, "PARK": 1})),
-          "five open, a sixth still admits")
+                  open_by_strategy={RUNAWAY: 1, HUNT: 1, BREAKOUT: 1, "PARK": 1})),
+          "four open, a fifth still admits")
 
     # ── E — the universals, each refusing on its own name ───────────────────
     check("E1 not a trading day", decide(Facts(BREAKOUT, (10, 0), trading_day=False)).gate == "trading_day")
@@ -266,27 +266,27 @@ def main():
           decide(Facts(BREAKOUT, (10, 0), orb_established=True, past_hard_close=True)).gate == "hard_close")
     check("E5 the universals are asked of EVERY strategy, not just some",
           all(decide(Facts(s, (13, 0), orb_established=False)).gate == "orb_range" for s in ALL),
-          "all six refuse on orb_range")
+          "all five refuse on orb_range")
 
     # ── F — the blocking matrix, BOTH directions, through an override ───────
     blocked = dict(T)
-    blocked[TCS] = AdmissionRule(T[TCS].window, T[TCS].max_open_of_type,
-                          T[TCS].max_tries_per_session,
+    blocked[GEXFLY] = AdmissionRule(T[GEXFLY].window, T[GEXFLY].max_open_of_type,     # r88: was the TCS
+                          T[GEXFLY].max_tries_per_session,
                           blocks=frozenset(), blocked_by=frozenset({RUNAWAY}))
     check("F1 blocked_by: a named strategy being open refuses this one",
-          decide(Facts(TCS, (13, 0), orb_established=True,
+          decide(Facts(GEXFLY, (13, 0), orb_established=True,
                        open_by_strategy={RUNAWAY: 1}), blocked).gate == "blocked_by")
     check("F2 ...and only the NAMED one — an unnamed open strategy does not block",
-          bool(decide(Facts(TCS, (13, 0), orb_established=True,
+          bool(decide(Facts(GEXFLY, (13, 0), orb_established=True,
                             open_by_strategy={BREAKOUT: 1}), blocked)),
-          "Breakout open, TCS still admits")
+          "Breakout open, the fly still admits")
 
     blocks = dict(T)
     blocks[RUNAWAY] = AdmissionRule(T[RUNAWAY].window, T[RUNAWAY].max_open_of_type,
                            T[RUNAWAY].max_tries_per_session,
-                           blocks=frozenset({TCS}), blocked_by=frozenset())
+                           blocks=frozenset({GEXFLY}), blocked_by=frozenset())
     check("F3 blocks: expressed from the OTHER end, it refuses just the same",
-          decide(Facts(TCS, (13, 0), orb_established=True,
+          decide(Facts(GEXFLY, (13, 0), orb_established=True,
                        open_by_strategy={RUNAWAY: 1}), blocks).gate == "blocks",
           "a half-configured matrix cannot silently do nothing")
     check("F4 the shipped table blocks NOTHING — that is the ruling, not an oversight",
@@ -315,11 +315,11 @@ def main():
             delattr(_cfg, "ADMISSION_RULES")
 
     # ── H — purity ──────────────────────────────────────────────────────────
-    f = Facts(TCS, (13, 0), orb_established=True, open_by_strategy={RUNAWAY: 1})
+    f = Facts(GEXFLY, (13, 0), orb_established=True, open_by_strategy={RUNAWAY: 1})   # r88: was the TCS
     v1, v2 = decide(f), decide(f)
     check("H1 same facts, same verdict — no hidden state", v1 == v2, f"{v1} / {v2}")
     check("H2 the caller's facts are not mutated",
-          f.open_by_strategy == {RUNAWAY: 1} and f.strategy == TCS)
+          f.open_by_strategy == {RUNAWAY: 1} and f.strategy == GEXFLY)
     # ── H3 — decide() REACHES NOTHING OUTSIDE THE ADMISSION BLOCK ──────────
     # ⚠️ TWO EARLIER CUTS OF THIS CHECK ARE RECORDED RATHER THAN REPLACED.
     # (1) The first read `for m in {}.get(...) and []` — iterating an EMPTY LIST,
@@ -377,9 +377,9 @@ def main():
             for hhmm in ((3, 0), (10, 0), (13, 0)):
                 seen.add(decide(Facts(s, hhmm, **kw)).gate)
     seen |= {decide(Facts("Nope", (10, 0), orb_established=True)).gate}
-    seen |= {decide(Facts(TCS, (13, 0), orb_established=True,
+    seen |= {decide(Facts(GEXFLY, (13, 0), orb_established=True,                        # r88: was the TCS
                           open_by_strategy={RUNAWAY: 1}), blocked).gate,
-             decide(Facts(TCS, (13, 0), orb_established=True,
+             decide(Facts(GEXFLY, (13, 0), orb_established=True,
                           open_by_strategy={RUNAWAY: 1}), blocks).gate}
     missing = set(gates()) - seen
     check("X3 EVERY gate in gates() is reachable — none is decorative",

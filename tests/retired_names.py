@@ -1,5 +1,7 @@
 """
-tests/retired_names.py  v5.0
+tests/retired_names.py  v5.1
+v5.1  2026-11-08  OTV5 r88 (RETIRE.3) — REMOVED adds the three TCS shadow modules (strategy.trend_credit_spread, strategy.tcs_plan,
+      execution.shadow_book).
 v5.0  2026-11-08  OTV5 r76 (RETIRE.1) — ONE ANSWER TO "IS THIS MODULE GONE FROM THE LIVE CODE?" for the checks re-pointed
       when the ORB trade, VOLT, the ATP fly, ORCS and the sweep were removed. A module is RETIRED when no live file (outside
       tests/ and docs/, and other than the module itself) imports it. That is the property that matters on a box, and it is
@@ -15,7 +17,9 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # (orcs -> orcs_plan, volt_strategy -> volt_plan), so none of them counts as a live importer.
 REMOVED = ("strategy.orb_strategy", "strategy.volt_strategy", "strategy.volt_plan", "strategy.atp_butterfly",
            "strategy.atp_butterfly_plan", "strategy.orcs", "strategy.orcs_plan", "strategy.sweep_plan",
-           "execution.handoff")
+           "execution.handoff",
+           # r88 (RETIRE.3): the TCS shadow
+           "strategy.trend_credit_spread", "strategy.tcs_plan", "execution.shadow_book")
 _REMOVED_FILES = {os.path.join(ROOT, *m.split(".")) + ".py" for m in REMOVED}
 
 

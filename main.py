@@ -1,5 +1,6 @@
 """
-main.py  v5.14
+main.py  v5.15
+v5.15  2026-11-08  OTV5 r88 (RETIRE.3) — THE TCS SHADOW LEAVES THE TICK. The TrendCreditSpread import, singleton and TC.6 dispatch; _retired_reason (it served only the TCS); _execute_condor_leg's shadow branch, its TCS identity (_is_tcs: strategy, stop_premium, remainder stop, alert) and _credit_window_end's TCS plan window (now 14:00 for every vertical, as for every non-TCS one); _shadow_manage / _shadow_eod / _shadow_resume and their three call sites; the condor-auth TCS skip; and the now-unused macro read. Every live setup's dispatch, admission, management and exits are unchanged (parity on QQQ/SPX/NVDA). The operator, 2026-11-08: "Delete" (the TCS shadow, which never fired: its own gates declined every candidate 11-02..11-06).
 v5.14  2026-11-08  OTV5 r76 (RETIRE.1) — THE RETIRED TRADES LEAVE THE TICK. Imports, singletons and dispatch of the ORB trade, VOLT, the sweep credit spread (and its handoff grant and second-leg window), the ATP butterfly and ORCS are removed, with _attempt_orcs, _attempt_sweep_on_grant, _sweep_stop_premium, the ORB trade's MISSED / CONFIRMED / EXPIRED plan-ledger rows and its retest-depth journal field, the ORB admission alias, their structure-map and scaling-switch rows, and the sizing_distance path only VOLT used. The start-up banner reads ramp_top= (OT_ORB_BUDGET_USD, unchanged) and scaling BRK= only; scaling ORB/VOLT, contract_scale and ORCS= are gone. The ORB ENGINE, its state file, reach-back and release are unchanged. The operator, 2026-11-07: "Running dead code and logging dead code activity is unnecessary drag. Yes, I want all of those things fixed."
 v5.13 2026-11-04  OTV5 r74 (BLIND.1 + ORP.3) — A BLIND BOT STAYS UP AND KEEPS MANAGING; A RANGE IS NEVER BUILT FROM A
       PARTIAL TAPE. BLIND.1: 2026-11-02 the AMZN and GOOGL bots exited 5 times ("Too many errors — shutting down",
@@ -1708,7 +1709,6 @@ from utils import mem_trace          # MEM.2 — in-process tracemalloc, env-gat
 mem_trace.start(logger)
 from strategy.iron_condor_strategy import IronCondorStrategy
 from analysis.condor_trigger_map import build as _build_condor_trigger_map
-from strategy.trend_credit_spread import TrendCreditSpread
 
 from risk.risk_manager import init_risk_manager, get_risk_manager
 from risk.session_guard import get_session_guard
@@ -1749,21 +1749,8 @@ _park_strategy = _Park()
 from strategy.breakout import Breakout as _BreakoutStrategy            # OTV4TEST r51
 _breakout = _BreakoutStrategy()                                        # BRK.1
 _iron_condor_strategy = IronCondorStrategy()
-# TC.6 — trend credit spread. Sits with the other strategy instances and is
-# UNGUARDED on purpose: it imports only config + IronCondorStrategy, both
-# already hard dependencies here, so a guarded import would hide a real
-# breakage rather than tolerate an optional one.
-_trend_credit_strategy = TrendCreditSpread()
-
-
-def _retired_reason(name: str) -> str:
-    """r204 — the TCS is retired by ruling (2026-10-03: "Retire the sweep & TCS").
-    '' when `name` may be asked. Read at call time so a checker can flip the switch."""
-    import config as _c
-    from strategy import plan_state as _ps                      # r303: a LOG TCS is asked (recorded only)
-    if name == "TrendCreditSpread" and not _c.TREND_CREDIT_ACTIVE and not _ps.is_log("TrendCreditSpread"):
-        return "retired by the operator's ruling 2026-10-03 (OT_TCS_ACTIVE=1 restores it; unset = log, r57)"
-    return ""
+# RETIRE.3 (r88) — the TCS shadow is deleted (the operator, 2026-11-08: "Delete"); `_retired_reason` served
+# only it and went with it.
 
 
 class BotState:
@@ -2718,13 +2705,8 @@ def _capture_entry_snapshot(ctx: dict, record: dict, direction: str, tl=None) ->
 def _credit_window_end(signal) -> tuple:
     """When this credit structure's ENTRY window closes — the time gate a
     remainder honours (WORKING_AGREEMENT §37: hunting stops only at the
-    strategy's own time gate). TCS reads its plan's window; anything else
-    falls to 14:00."""
-    name = getattr(signal, "strategy_name", "") or ""
-    if getattr(signal, "is_trend_credit", False) or name == "TrendCreditSpread":
-        # OTV4TEST r9 (HYG.5): the PLAN owns the window; main.py reads it there
-        from strategy import tcs_plan as _tp
-        return _tp.window_end()
+    strategy's own time gate). 14:00 for every credit vertical (RETIRE.3 r88: the TCS plan's own window went
+    with the TCS)."""
     return (14, 0)
 
 
@@ -2958,19 +2940,15 @@ def _execute_condor_leg(signal: "OptionsSignal", state: BotState,
     # r303 (PSTATE.1) — THE CREDIT DOOR. A LOG plan's vertical is recorded and never executed; r254's three
     # doors were all on the debit side, so nothing stopped a credit signal before this line. (After the VIX
     # stamp, which only annotates the signal: check_vix_stamp V4 pins it as the first statement.)
-    # OTV5 r57 (TCS.LOG1) — A LOG TCS IS NOT REFUSED HERE: it runs the rest of this door as a SHADOW trade
-    # (execution/shadow_book.py) - the real gates, contracts, sizing and paper fill - and is booked to its own store
-    # where a real trade is written. It never reaches the live order block below, on any box.
-    from execution import shadow_book as _sbm
-    _shadow = _sbm.is_shadow_signal(signal)
-    if not _shadow and _log_only(signal, ctx):
+    # RETIRE.3 (r88): the TCS shadow branch (r57) is deleted with the TCS.
+    if _log_only(signal, ctx):
         return
     from config import (CONTRACT_MULTIPLIER, CONDOR_NICKEL_CLOSE,
                         CONDOR_STOP_LOSS_PCT, INSTRUMENT)
     from database.trade_logger import make_record, get_trade_logger
     import uuid
 
-    mode = "SHADOW" if _shadow else "PAPER" if state.paper_trading else "LIVE"
+    mode = "PAPER" if state.paper_trading else "LIVE"
 
     # ── 🔴 r101 — NOTHING OPENS BEFORE ENTRY_OPEN_ET (09:35 ET) ─────────────
     # The credit half of the pair of choke points; the debit half is
@@ -2996,13 +2974,6 @@ def _execute_condor_leg(signal: "OptionsSignal", state: BotState,
         logger.error("Condor leg: missing contracts — cannot execute")
         return
 
-    # r57 (TCS.LOG1) — admission's TCS rule (max_open_of_type=1) on the shadow's own book: the real admission and
-    # pairing gate count the real book only, so one open shadow TCS refuses the next, as one real TCS would.
-    if _shadow and _sbm.get_shadow_book().tcs_open():
-        logger.info("[shadow] TCS %s spread NOT booked - a shadow TCS is already open (admission: one TCS open at a "
-                    "time)", signal.option_side)
-        return
-
     net_credit   = signal.net_credit
     spread_width = abs(short_contract.strike - long_contract.strike)
     # Size this vertical at HALF the grade budget — each side is independent,
@@ -3023,7 +2994,7 @@ def _execute_condor_leg(signal: "OptionsSignal", state: BotState,
     _lkey = None
     _req_contracts = contracts
 
-    if not state.paper_trading and not _shadow:                  # r57: a shadow NEVER enters the live block
+    if not state.paper_trading:
         # ── LIVE 2-leg vertical credit entry — FILL-CONFIRMED (v3.7, defect O) ─
         # Submission is not a fill. The record is written ONLY for contracts
         # the broker confirms filled, at the broker's per-leg net credit —
@@ -3041,9 +3012,7 @@ def _execute_condor_leg(signal: "OptionsSignal", state: BotState,
         # ⚠️ CAPTURED BEFORE `contracts` IS REASSIGNED to the filled size.
         try:
             _req_contracts = contracts
-            _strat_name = ("TrendCreditSpread"
-                           if getattr(signal, "is_trend_credit", False)
-                           else (getattr(signal, "strategy_name", "") or "CreditVertical"))
+            _strat_name = getattr(signal, "strategy_name", "") or "CreditVertical"
             _lkey = f"cv:{INSTRUMENT}:{_strat_name}:{signal.option_side}"
             _structure = f"{short_contract.symbol}|{long_contract.symbol}"
             fill, _limit, _lwhy = _post_credit_vertical(
@@ -3081,7 +3050,7 @@ def _execute_condor_leg(signal: "OptionsSignal", state: BotState,
         # non-comparable.
         from execution.limit_ladder import paper_fill_credit
         fill_credit = paper_fill_credit(net_credit)
-        order_id    = "SHADOW" if _shadow else "PAPER"          # r57: a shadow books the paper fill on any box
+        order_id    = "PAPER"
 
     is_leg1  = "Leg 1" in signal.setup_type      # r106: display only, not identity
     max_loss = (spread_width - fill_credit) * contracts * CONTRACT_MULTIPLIER
@@ -3101,7 +3070,6 @@ def _execute_condor_leg(signal: "OptionsSignal", state: BotState,
     # The condor is the ONLY strategy allowed a second concurrent position.
     # One function serves two trades; the identity must come from the SIGNAL,
     # never from the function it happens to route through.
-    _is_tcs = bool(getattr(signal, "is_trend_credit", False))
     # r106 — ONE FLOOR, 15%, for every credit vertical: the lone-vertical floor.
     # The 25% that used to be written here is retired: the live arm evaluated
     # 15% while the ROW said 25%, so the record and the alert both stated a rule
@@ -3111,8 +3079,7 @@ def _execute_condor_leg(signal: "OptionsSignal", state: BotState,
     record = make_record(
         trade_id         = str(uuid.uuid4()),
         symbol           = INSTRUMENT,
-        strategy         = ("TrendCreditSpread" if _is_tcs
-                            else "IronCondorStrategy"),
+        strategy         = "IronCondorStrategy",
         setup_type       = signal.setup_type,
         # ⚠️ r152 — the grade is gone; UNGRADED is a marker, not a verdict.
         setup_grade      = "UNGRADED",
@@ -3140,8 +3107,7 @@ def _execute_condor_leg(signal: "OptionsSignal", state: BotState,
         # TO EXPIRY, UNMANAGED, and its only exits are a breach of the bound or
         # the 15:45 close. Writing a stop here is what made a $0.06 credit
         # closeable on one cent of widening.
-        stop_premium     = (0.0 if _is_tcs
-                            else fill_credit * (1 + _stop_pct)),
+        stop_premium     = fill_credit * (1 + _stop_pct),
         target_premium   = CONDOR_NICKEL_CLOSE,
         underlying_entry = getattr(signal, "underlying_entry", 0.0),
         # ⚠️ TC.6 CARRIES ITS OWN IDENTITY THROUGH THIS PATH (2026-08-14).
@@ -3222,22 +3188,6 @@ def _execute_condor_leg(signal: "OptionsSignal", state: BotState,
         relaxed_entry    = int(getattr(signal, 'relaxed_entry', 0) or 0),   # AUDIT F4 — same drop as entry_engine
         status           = "open",
     )
-    if _shadow:
-        # ── r57 (TCS.LOG1) — THE SHADOW WRITE: everything an executed trade writes, to the SHADOW store. Not
-        # trades.db, not note_entry_risk, not the real position manager, no remainder, no Telegram alert.
-        _sbk = _sbm.get_shadow_book()
-        if not _sbk.open_entry(record, box_paper=state.paper_trading):
-            return
-        if ctx is not None:
-            _capture_entry_snapshot(ctx, record, "neutral", tl=_sbk.logger)
-            _capture_fire_snapshot(ctx, record, link_plan=False)
-            _capture_entry_contract(ctx, record, tl=_sbk.logger)
-        logger.info(
-            f"[shadow] TCS SHADOW TRADE BOOKED (never ordered): {record['trade_id'][:15]} {signal.setup_type} "
-            f"short={short_contract.strike:g} long={long_contract.strike:g} x{contracts} credit=${fill_credit:.2f} "
-            f"exit=breach@{getattr(signal, 'underlying_stop', 0.0):.2f} or nickel or EOD | maxloss=${max_loss:.0f} "
-            f"(OT_TCS_ACTIVE unset/log; =1 trades it)")
-        return
     get_trade_logger().log_entry(record)
     try:                                                        # r208 (CAP.4): log-only
         get_risk_manager().note_entry_risk(record)
@@ -3265,7 +3215,7 @@ def _execute_condor_leg(signal: "OptionsSignal", state: BotState,
                 long_strike=float(long_contract.strike),
                 side=signal.option_side, strategy=record["strategy"],
                 requested=_req_contracts, remaining=_partial_remaining,
-                stop_pct=(0.0 if _is_tcs else _stop_pct),
+                stop_pct=_stop_pct,
                 window_end_et=_credit_window_end(signal)))
         except Exception as _rexc:                              # noqa: BLE001
             logger.error("[remainder] could not register the unfilled %d: %s",
@@ -3278,9 +3228,7 @@ def _execute_condor_leg(signal: "OptionsSignal", state: BotState,
     # has NO premium stop and NO nickel close — breach of the bound or 15:45,
     # nothing else — and advertising a stop here is a lie on the channel that
     # caught the last identity bug.
-    _exit_desc = (f"exit=breach@{getattr(signal, 'underlying_stop', 0.0):.2f} or 15:45"
-                  if _is_tcs else
-                  f"stop=${fill_credit * (1 + _stop_pct):.2f} ({_stop_pct:.0%}) | "
+    _exit_desc = (f"stop=${fill_credit * (1 + _stop_pct):.2f} ({_stop_pct:.0%}) | "
                   f"nickel=${CONDOR_NICKEL_CLOSE:.2f}")
     get_alert_manager()._send(
         f"\U0001F985 [{mode}] {INSTRUMENT} | {signal.setup_type} | "
@@ -3473,11 +3421,6 @@ def _safe_strategy(name: str, fn, ctx=None):
             return None
     except Exception as _ps_exc:                                # noqa: BLE001
         logger.warning("[plans] state of %s unreadable (%s) - asked as before", name, _ps_exc)
-    # r204 — RETIRED BY RULING: not asked, and the board says why (once).
-    _ret = _retired_reason(name)
-    if _ret:
-        _plan_skip(name, _ret, gate="retired")
-        return None
     try:
         sig = fn()
         # r146 — the plan board learns this strategy was ASKED. AFTER fn().
@@ -4412,7 +4355,6 @@ def attempt_new_entry(ctx: dict, ms: MarketState, state: BotState):
         _plan_skip_all("no options chain this tick", gate="no_chain")
         return
 
-    macro = ctx["macro"]
     signal = None          # r43 — RETAINED ONLY AS A "DID ANYTHING FIRE" TALLY.
                            # It no longer arbitrates: see `_fire()` below.
 
@@ -4816,40 +4758,7 @@ def attempt_new_entry(ctx: dict, ms: MarketState, state: BotState):
                                      "spreads (sweep–sweep or TCS–sweep); retired as a "
                                      "strategy, OTV4TEST r10", gate="retired")
 
-    # ── TC.6 TREND CREDIT SPREAD ─────────────────────────────────────────────
-    # v4.3: no longer deferred by condor_active. It fires when _can_open_credit_spread
-    # allows its side. condor_trigger_source="trend_orb" is stamped on the record.
-    if True:                                        # r43 — no slot to claim
-        _tcs_hi, _tcs_lo = _session_extremes(ctx)
-        _orb_hi, _orb_lo = _opening_range(ctx)
-        tcs_sig = _safe_strategy("TrendCreditSpread", lambda: (
-            _trend_credit_strategy.generate_signal(
-                ms=ms, vol_state=ctx["vol"], chain=chain, macro=macro,
-                current_price=ctx["price"], trend=ctx.get("trend"),
-                orb_high=_orb_hi, orb_low=_orb_lo,
-                session_high=_tcs_hi, session_low=_tcs_lo,
-                atm_iv=ctx.get("atm_iv"),            # OTV4TEST r9: the EM band
-                df_1m=ctx.get("df_1m"),              # OTV4TEST r9: the frozen reference
-                # 🔴 r238 — TCS NOW NEEDS THE ORB ENGINE. Its trigger is
-                # `fifty_accepted` and its level is `target_50pct`; the old
-                # docstring said "NO `orb` PARAMETER... there is no morning
-                # level worth anchoring to", which was true of the BOUNDARY
-                # and is not true of the 50.
-                orb=get_orb_engine().data,
-                condor_active=False)), ctx)  # v4.3: gate is _can_open_credit_spread
-        if tcs_sig is not None:
-            tcs_sig.condor_trigger_source = "trend_orb"
-            if _can_open_credit_spread(tcs_sig.option_side,
-                                        tcs_sig, ctx["price"]):
-                # ⚠️ r43 — NO `return` HERE ANY MORE. It ended the whole tick
-                # once the TCS leg was placed, so anything sequenced after it
-                # was never asked. Credit legs route through
-                # `_execute_condor_leg` and do NOT go through `_fire`, so they
-                # are recorded here by hand.
-                _execute_condor_leg(tcs_sig, state, ctx)
-                _fired.append("TrendCreditSpread")
-
-
+    # RETIRE.3 (r88) — the TC.6 trend credit spread dispatch is deleted (the operator, 2026-11-08: "Delete").
 
     # ══ r43 — THE TAIL REPORTS; IT NO LONGER ARBITRATES ══════════════════════
     # Every admitted strategy has already been asked AND executed on its own by
@@ -5319,56 +5228,6 @@ def _log_only(signal, ctx) -> bool:
     except Exception as exc:                                    # noqa: BLE001
         logger.debug("[observe] record failed for %s: %s", name, exc)
     return True
-
-
-def _shadow_manage(ctx) -> None:
-    """r57 (TCS.LOG1) — one management pass over the open SHADOW trades (execution/shadow_book.py): the same
-    position_manager / management / exit-engine code as a real TCS, at the mark, paper fills, its own store and rows.
-    Nothing when no shadow store exists. Never raises."""
-    try:
-        from execution.shadow_book import peek_shadow_book
-        _b = peek_shadow_book()
-        if _b is not None:
-            _b.manage(ctx)
-    except Exception as exc:                                    # noqa: BLE001
-        logger.warning("[shadow] manage pass skipped: %s", exc)
-
-
-def _shadow_eod(state, hc_ctx=None) -> None:
-    """r57 (TCS.LOG1) — the shadow book's end of day: position_manager.flatten_all over the shadows (EOD.1's clock,
-    paper booked at the 15:55 cross), then, before 15:50, the held pass the real branch runs. Never raises."""
-    try:
-        from execution.shadow_book import peek_shadow_book
-        _b = peek_shadow_book()
-        if _b is None or not _b.has_open():
-            return
-        chain = _spot = None
-        try:
-            chain = get_chain_fetcher().fetch_chain()
-        except Exception as e:                                  # noqa: BLE001
-            logger.warning("[shadow] EOD: chain fetch failed (%s) - last marks this pass", e)
-        try:
-            _spot = get_cache().get_price()
-        except Exception:                                       # noqa: BLE001
-            _spot = None
-        _b.flatten(chain=chain, spot=_spot)
-        from utils.time_utils import eod_close_due as _ecd
-        if _b.has_open() and not _ecd(False):
-            _b.manage(hc_ctx if hc_ctx is not None else run_analysis(state))
-    except Exception as exc:                                    # noqa: BLE001
-        logger.warning("[shadow] EOD pass skipped: %s", exc)
-
-
-def _shadow_resume() -> None:
-    """r57 (TCS.LOG1) — boot: the shadow store's expired rows settled, its live rows resumed (what the real paper
-    boot does, minus the broker). Nothing when no shadow store exists. Never raises."""
-    try:
-        from execution.shadow_book import peek_shadow_book
-        _b = peek_shadow_book()
-        if _b is not None:
-            _b.resume_at_boot(settle=_settle_expired_row)
-    except Exception as exc:                                    # noqa: BLE001
-        logger.warning("[shadow] boot resume skipped: %s", exc)
 
 
 def _execute_entry_signal(signal, ctx, ms, state, _sigj=None, *, additive: bool = False):
@@ -6231,7 +6090,6 @@ def main_loop(state: BotState):
                     except Exception as _hc_err:                # noqa: BLE001
                         logger.warning("15:40-15:45 vertical manage pass "
                                        "failed: %s", _hc_err)
-                _shadow_eod(state, _hc_ctx)          # r57 (TCS.LOG1): the shadow book's end of day
                 time.sleep(POLL_INTERVAL_SECONDS)
                 continue
 
@@ -6357,7 +6215,6 @@ def main_loop(state: BotState):
             # ── Manage open position ──────────────────────────────────────
             _supervise_offers(ctx, state)   # r195 — BOTH branches
             _supervise_credit_remainders(ctx, state)   # r315 — BOTH branches
-            _shadow_manage(ctx)             # r57 (TCS.LOG1) — BOTH branches; the shadow book only
             if pos_mgr.has_open_position():
                 # ── Broken-wing roll: FIRST REFUSAL ───────────────────────
                 # The roll must run BEFORE manage_open_position. The per-leg
@@ -6474,7 +6331,6 @@ def main_loop(state: BotState):
                 _auth_side, _auth_why = _iron_condor_strategy.authorize(_open_sides)
                 if _auth_side:
                     _plan_skip("RunawayContinuation", _auth_why, gate="condor_auth")
-                    _plan_skip("TrendCreditSpread", _auth_why, gate="condor_auth")
                 elif _auth_why:
                     _plan_skip_all(_auth_why, gate="condor_auth")
                 # ══ r43 — ADM.1 CLOSED: ENTRY RUNS WITH A POSITION OPEN ═══
@@ -6963,7 +6819,6 @@ def _recover_open_position(state: BotState, restart_type: str = ""):
 
     # ── Step 2: resume every still-live (unexpired) position ─────────────────
     live = trade_logger.get_open_trades_live()
-    _shadow_resume()                                    # r57 (TCS.LOG1): the shadow store, Steps 1-2, no broker
 
     # LIVE ONLY, and only when explicitly enabled: the broker is the source of
     # truth for what's actually open. (Paper has no broker to query; and even on

@@ -1,5 +1,6 @@
 """
-strategy/structure.py  v5.2
+strategy/structure.py  v5.3
+v5.3  2026-11-08  OTV5 r88 (RETIRE.3) — is_trend_participation() is deleted (its one reader, the exit engine's TC.6 branch, went with the TCS); of() still classifies an old TrendCreditSpread row, so history reads. The operator, 2026-11-08: "Delete" (the TCS shadow, which never fired: its own gates declined every candidate 11-02..11-06).
 v5.2  2026-10-31  OTV5 r67 (PARC.4): of() no longer names strategy "PARC" / setup parc_*: PARC is
       removed (no PARC row was ever booked). The operator, 2026-10-31: "On PARC, no. It was an idea. It failed. It's done." and "Yes" to removing its code.
       Every other strategy's structure is unchanged. Gate tests/check_no_parc.py.
@@ -179,15 +180,5 @@ def is_tent(record: Optional[Mapping[str, Any]]) -> bool:
     return of(record) is Structure.TENT
 
 
-def is_trend_participation(record: Optional[Mapping[str, Any]]) -> bool:
-    """Replaces `record.get("is_trend_credit")`.
-
-    ⚠️ THE OLD FLAG IS STILL HONOURED when present, because a position opened by
-    a process running the previous build carries it in memory and its
-    `strategy` field is already correct anyway — so the two agree. What changes
-    is that its ABSENCE is no longer read as "not a trend participation trade",
-    which is what a restart produced.
-    """
-    if record and record.get("is_trend_credit"):
-        return True
-    return of(record) is Structure.TREND_PARTICIPATION
+# RETIRE.3 (r88) — is_trend_participation() is deleted: its one reader, the exit engine's TC.6 branch, went with the
+# TCS. of() still classifies an old TrendCreditSpread row as TREND_PARTICIPATION (a credit structure), so history reads.

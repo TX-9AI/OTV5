@@ -1,5 +1,7 @@
 # TRADES — the specs
 
+**`TRADES.md` v5.11 · 2026-11-08 · OTV5 r88 (RETIRE.3) — the trend credit spread (TrendCreditSpread) and its r57 log-only SHADOW are REMOVED with their code: its roster row goes, OT_TCS_ACTIVE is read by nothing, raw/shadow_trades is no longer pushed. It never fired: its own entry gates declined every candidate 11-02..11-06. The operator, 2026-11-08: "Delete".**
+
 **`TRADES.md` v5.10 · 2026-11-08 · OTV5 r81 (DOC.36) — section 9: PARK sizes on each box's own `OT_RISK_USD` (configure item 2); the QQQ-TEST and SPX-TEST figures went with those boxes (retired 2026-10-25). The Saturday brief 2026-11-07 section 4 item 4.**
 
 **`TRADES.md` v5.9 · 2026-11-08 · OTV5 r76 (RETIRE.1) — the retired trades are REMOVED with their code: the ORB break + retest, VOLT, the sweep credit spread, the ATP butterfly and ORCS leave the roster, and sections 2, 4 and 8 are gone. The opening-range ENGINE stays (Runaway, Breakout and the Hunt read it). The operator, 2026-11-07: "Running dead code and logging dead code activity is unnecessary drag. Yes, I want all of those things fixed."**
@@ -40,14 +42,13 @@ is its `docs/PLAN_SPEC.md` section.
 | Breakout | `Breakout` | ON | none (its end is fixed; r68) | 09:35-10:30 | section 7 below |
 | Liquidity hunt | `LiquidityHunt` | ON | none | 09:35-10:30 | PLAN_SPEC §37 |
 | GEX pin butterfly | `GEXPinButterfly` | ON | `OT_GEX_BUTTERFLY` | 13:00-15:00 | PLAN_SPEC §32 |
-| Trend credit spread | `TrendCreditSpread` | OFF | `OT_TCS_ACTIVE` | 11:31-15:40 | PLAN_SPEC §34; LOG since r57: unset = `log`, a SHADOW trade (execution/shadow_book.py, never ordered); `1` trades it, `0` stops it |
 | PARK | `PARK` | ON | none (`OT_PARK=log` records it, `off` stops it) | 11:01-11:03 | section 9 below |
 
 A window's end is exclusive: 10:30 means the last entry is 10:29. A switch is ACTIVE at
 `1` or `active` (r303 below). The ORB trade, VOLT, the sweep credit spread, the ATP butterfly and ORCS are REMOVED (r76,
-RETIRE.1); the opening-range ENGINE is not removed: Runaway, Breakout and the Hunt read it, and since r222 its
+RETIRE.1), and the trend credit spread with its shadow (r88, RETIRE.3); the opening-range ENGINE is not removed: Runaway, Breakout and the Hunt read it, and since r222 its
 range is checked against the official print. The condor is a management plan with no entry
-of its own; with both credit entries retired it has nothing to manage.
+of its own; with every credit entry removed it has nothing to manage.
 
 **Plan states (r303, PSTATE.1; `strategy/plan_state.py`).** Every plan is ACTIVE (evaluated, written, trades), LOG
 (evaluated and written, every fire recorded LOG-ONLY and never executed) or DORMANT (never asked, writes nothing: no

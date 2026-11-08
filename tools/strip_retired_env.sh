@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 # ==========================================================================
-# tools/strip_retired_env.sh  v5.1
+# tools/strip_retired_env.sh  v5.2
+# v5.2  2026-11-08  OTV5 r88 (RETIRE.3) - THE TCS SHADOW'S KEYS JOIN THE LIST, AND A BACKUP IS NEVER OVERWRITTEN. The operator,
+#       2026-11-08: "Delete" (the TCS shadow). OT_TCS_* , OT_TR_TCS_* , OT_TR_W_TCS_* and OT_SHADOW_TRADES_DB are read by
+#       nothing after r88. A unit that already has .bak-retire1 (r76/r78, the hand strip of 11-08) keeps it; the next
+#       strip writes .bak-retire2, and so on.
 # v5.1  2026-11-08  OTV5 r78 (RETIRE.2) - MATCHES THE UNITS AS setup_ec2.sh / configure.sh ACTUALLY WRITE THEM.
 #       v5.0 matched only `Environment=KEY=` and the fleet's units carry `Environment="KEY=value"`: on 2026-11-08
 #       it reported "0 retired line(s)" on 14/14 while every box still held OT_SCALE_ORB / OT_SCALE_VOLT (removed by
@@ -20,15 +24,17 @@
 #   --check   count only; change nothing (exit 0 either way)
 #
 # ⚠️ PRINTS KEY NAMES AND COUNTS, NEVER A VALUE: a unit holds credentials, and nothing here may echo a line of it.
-# ⚠️ ONE EXACT KEY LIST (or KEY_... for the three families), JUDGED PER ASSIGNMENT ON `Environment=` LINES ONLY,
+# ⚠️ ONE EXACT KEY LIST (or KEY_... for the families), JUDGED PER ASSIGNMENT ON `Environment=` LINES ONLY,
 #   quoted or bare. A credential or live assignment is never removed, never rewritten, never printed.
 # ⚠️ IDEMPOTENT: a second run finds nothing and changes nothing. A changed unit keeps a backup beside it
 #   (<unit>.bak-retire1) and is followed by `systemctl daemon-reload`; the bot is NOT restarted here.
 # ==========================================================================
 set -u
 
-EXACT="OT_SCALE_ORB OT_SCALE_VOLT OT_VOLT OT_ORB_TRADE OT_ATP_BUTTERFLY OT_ORCS OT_SWEEP_CS OT_CONTRACT_SCALE"
-FAMILIES="OT_VOLT_ OT_SWEEP_CS_ OT_VELOCITY_"
+EXACT="OT_SCALE_ORB OT_SCALE_VOLT OT_VOLT OT_ORB_TRADE OT_ATP_BUTTERFLY OT_ORCS OT_SWEEP_CS OT_CONTRACT_SCALE OT_SHADOW_TRADES_DB"
+FAMILIES="OT_VOLT_ OT_SWEEP_CS_ OT_VELOCITY_ OT_TCS_ OT_TR_TCS_ OT_TR_W_TCS_"
+# r88 (RETIRE.3): the TCS shadow - OT_TCS_ACTIVE and every OT_TCS_* dial, its readiness knobs (OT_TR_TCS_*, OT_TR_W_TCS_*)
+# and the shadow store path (OT_SHADOW_TRADES_DB) - are read by nothing once the TCS is removed.
 # OT_VELOCITY_STALL / _ENFORCE / _GRACE_MIN / _STRICTNESS / _CONFIRM: the velocity stall measured only the ORB trade
 # and never cut anything else; it is removed with it.
 
@@ -108,15 +114,19 @@ for unit in "$@"; do
         echo "STRIP $unit: $n retired line(s) would go: $keys"; rm -f "$tmp"
         continue
     fi
-    if ! _sudo "$unit" cp -p "$unit" "$unit.bak-retire1"; then
+    # r88: a backup is NEVER overwritten - the first strip's .bak-retire1 (the unit before RETIRE.1) is kept, and a
+    # later strip writes the next free .bak-retireN.
+    bk="$unit.bak-retire1"; i=1
+    while [ -e "$bk" ]; do i=$((i + 1)); bk="$unit.bak-retire$i"; done
+    if ! _sudo "$unit" cp -p "$unit" "$bk"; then
         echo "STRIP $unit: backup FAILED - unit left as it was"; rm -f "$tmp"; rc=1; continue
     fi
     if ! _sudo "$unit" cp "$tmp" "$unit"; then
-        echo "STRIP $unit: edit FAILED - restore from $unit.bak-retire1"; rm -f "$tmp"; rc=1; continue
+        echo "STRIP $unit: edit FAILED - restore from $bk"; rm -f "$tmp"; rc=1; continue
     fi
     rm -f "$tmp"
     left="$(_plan "$unit" /dev/null)"; left="${left%% *}"
-    echo "STRIP $unit: removed $n retired line(s): $keys (left ${left:-0}; backup $unit.bak-retire1)"
+    echo "STRIP $unit: removed $n retired line(s): $keys (left ${left:-0}; backup $bk)"
     changed=1
 done
 

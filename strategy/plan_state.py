@@ -1,5 +1,6 @@
 """
-strategy/plan_state.py  v5.4
+strategy/plan_state.py  v5.5
+v5.5  2026-11-08  OTV5 r88 (RETIRE.3) — the TrendCreditSpread row, its OT_TCS_ACTIVE read and its _FLAG entry go with the TCS. The operator, 2026-11-08: "Delete" (the TCS shadow, which never fired: its own gates declined every candidate 11-02..11-06).
 v5.4  2026-11-08  OTV5 r76 (RETIRE.1) — the removed trades leave the table (ATPButterfly, VOLT, ORBStrategy, OpeningRangeCreditSpread, SweepCreditSpread), with their switches (OT_ATP_BUTTERFLY, OT_VOLT, OT_ORB_TRADE, OT_ORCS, OT_SWEEP_CS), their _FLAG entries and the ORB / SweepForLeg2 aliases. The live rows are unchanged. The operator, 2026-11-07: "Running dead code and logging dead code activity is unnecessary drag. Yes, I want all of those things fixed."
 v5.3  2026-10-31  OTV5 r67 (PARC.4) — PARC LEAVES THE TABLE (its row and its config.PARC_MODE
       branch): PARC is removed. The operator, 2026-10-31: "On PARC, no. It was an idea. It failed. It's done." and "Yes" to removing its code. Every other plan's
@@ -73,7 +74,6 @@ TABLE: Dict[str, Tuple[str, str, str]] = {
     "LiquidityHunt":            ("OT_HUNT",           ACTIVE,  HOUR),
     "PARK":                     ("OT_PARK",           ACTIVE,  HOUR),
     "GEXPinButterfly":          ("OT_GEX_BUTTERFLY",  ACTIVE,  HOUR),
-    "TrendCreditSpread":        ("OT_TCS_ACTIVE",     LOG,     HOUR),     # OTV5 r57 (TCS.LOG1): unset = log (shadow)
     "IronCondorStrategy":       ("",                  DORMANT, CONDITION),   # no entry of its own (r249)
     "CondorManagement":         ("",                  ACTIVE,  CONDITION),
     "CreditRoll":               ("",                  ACTIVE,  CONDITION),
@@ -96,8 +96,6 @@ def _raw(key: str) -> str:
         v = os.environ.get("OT_BREAKOUT", "")
     elif key == "OT_HUNT":
         v = os.environ.get("OT_HUNT", "")
-    elif key == "OT_TCS_ACTIVE":
-        v = os.environ.get("OT_TCS_ACTIVE", "")       # r57 (TCS.LOG1): unset = log, "0" = dormant
     elif key == "OT_GEX_BUTTERFLY":
         v = os.environ.get("OT_GEX_BUTTERFLY", "1")
     else:
@@ -106,7 +104,7 @@ def _raw(key: str) -> str:
 
 
 # the config flag that decides ACTIVE for a config-read switch (a checker flips the attribute)
-_FLAG = {"TrendCreditSpread": "TREND_CREDIT_ACTIVE", "GEXPinButterfly": "GEX_BUTTERFLY_ENABLED"}
+_FLAG = {"GEXPinButterfly": "GEX_BUTTERFLY_ENABLED"}   # RETIRE.3 (r88): the TCS row went with the TCS
 
 
 def base(name: str) -> str:

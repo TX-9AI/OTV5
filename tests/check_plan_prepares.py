@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_plan_prepares.py  v5.3
+tests/check_plan_prepares.py  v5.4
+v5.4  2026-11-08  OTV5 r88 (RETIRE.3) — the TCS block and its OT_TCS_ACTIVE=1 switch go with the TCS; the condor, butterfly and runaway blocks are unchanged.
 v5.3  2026-11-08  OTV5 r76 (RETIRE.1) — RE-POINTED (WA 38.4): the sweep is removed, so the S block (S1-S9b, the sweep's plan on the store) and T4-T7 (a
       tine as a sweep level) go with it; the condor, butterfly, TCS and runaway blocks are unchanged.
 v5.2  2026-11-03  OTV5 r73 (BFLY.17) — the fly now also asks VIX < 20 and an open inside yesterday's range (the
@@ -185,7 +186,6 @@ import sys
 
 _root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, _root)
-os.environ["OT_TCS_ACTIVE"] = "1"
 # ⚠️ r106 — THE LANDER RUNS CHECKS UNDER SYSTEM `python3`, NOT THE VENV, and
 # the repo imports below reach `tastytrade`, which lives only in the venv — so
 # this file could never be DECLARED as a CHECK. It passed by hand and failed
@@ -524,41 +524,7 @@ def main():
     import pandas as pd
     # ── r76: T4-T7 (a tine as a sweep LEVEL) are removed with the sweep plan they drove ──
     _bind_book()
-    # ── TCS (r164) — the plan prepares off the ORB bound; the vote fires it ──
-    import strategy.trend_credit_spread as tcs
-    TC = tcs.TrendCreditSpread(); TC.planner.symbol = "TST"   # constructs; pinned in check_tcs_plan
-    from datetime import datetime as _dt
-    # 🔴 r237 — THE WINDOW IS RESTORED FOR THE DURATION OF THESE CHECKS, AND
-    # THAT IS DELIBERATE. `TCS_ENTRY_END_ET` is (0,0) in production so TCS
-    # parks at its first gate (operator ruling 2026-09-04). C1-C5 exercise the
-    # strategy's INTERNALS — the ADX floor, the range test, the POP fault, the
-    # wing search — which the rewrite starts from tomorrow, and losing that
-    # coverage the day before a rewrite is the wrong trade.
-    # ⚠️ IT PATCHES THE MODULE, NOT config, so nothing else in this process
-    # sees a different window; and it restores in a `finally` so a failing
-    # check cannot leak an unparked TCS into the checks that follow.
-    # ⚠️ THE PRODUCTION VALUE IS PINNED SEPARATELY by check_tcs_parked P5 —
-    # this file must never be the thing that says TCS is parked, or a patch
-    # here would silently unpark it (§20: the canary cannot live in the file
-    # that does the patching).
-
-    class _Trend:
-        def __init__(self, d, adx=30.0): self.overall_direction, self.primary_adx = d, adx
-
-    class _Vol:
-        atr_current = 0.8
-        df_5m = None
-
-    # 🔴 r238 — C1-C5 REMOVED, NOT PATCHED, AND THAT IS THE HONEST ACTION.
-    # They pinned `adx`, `trend_vote` and `outside_range` — three conditions
-    # the operator's 2026-09-04 rewrite DELETED. A check for a rule that no
-    # longer exists cannot be re-derived, only retired; keeping it green by
-    # editing fixtures would have certified a strategy that is gone.
-    # ⚠️ COVERAGE OF THE NEW SPEC LIVES IN `check_tcs_fifty.py`, which drives
-    # the new trigger, anchor, wing rule and stop. TCS.10 records that the
-    # OLD block's harder cases (the POP fault, the structural-vs-condition
-    # split) have no equivalent yet and are owed.
-
+    # RETIRE.3 (r88): the TCS block (r164 / r237 / r238) goes with the TCS.
 
     # ── THE RUNAWAY (r165) — gamma does the heavy lifting ────────────────
     import strategy.runaway_continuation as rw
@@ -792,13 +758,6 @@ def main():
           bool(_exec_ln) and bool(_mark_ln) and min(_exec_ln) < min(_mark_ln),
           f"execute@{min(_exec_ln) if _exec_ln else '-'} mark@{min(_mark_ln) if _mark_ln else '-'}")
     bfmod.GEXPinButterflyStrategy.PLAYED_PINS.clear()
-
-    # r237 — restore the parked window; see the note at _real_end above.
-    try:
-        import strategy.trend_credit_spread as _t
-        _t.TCS_ENTRY_END_ET = _real_end
-    except Exception:                                           # noqa: BLE001
-        pass
 
     print()
     if _fails:

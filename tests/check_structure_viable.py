@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""tests/check_structure_viable.py  v5.1
+"""tests/check_structure_viable.py  v5.2
+v5.2  2026-11-08  OTV5 r88 (RETIRE.3) — V7 (the TCS plan declares stop_vs_spread) goes with the TCS; V1-V5 and V6c unchanged.
 v5.1  2026-11-08  OTV5 r76 (RETIRE.1) — RE-POINTED (WA 38.4): the sweep is removed, so V6a/V6b (its plan applying the gate) and V8-V12 (its spent levels)
       go with it and V7 reads the TCS plan's declaration; V1-V5 (stop_survivable) and V6c (search_wing calls it) unchanged.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
@@ -133,11 +134,8 @@ def main():
     check("V6c credit_vertical.search_wing calls stop_survivable",
           bool(_sv_calls), f"calls @L{_sv_calls or 'none'}")
 
-    # r76: V6a/V6b/V7 (the sweep plan applying it) and V8-V12 (the sweep's spent levels) are removed with the sweep;
-    # the TCS plan applies the same gate through search_wing (V6c) and pins it in check_stop_spread_report S2.
-    from strategy.tcs_plan import TCSPlan
-    check("V7 the TCS plan declares stop_vs_spread as a plan check (r76: the sweep's declaration removed with it)",
-          "stop_vs_spread" in TCSPlan.PLAN_CHECKS, f"TCSPlan.PLAN_CHECKS has {len(TCSPlan.PLAN_CHECKS)} names")
+    # r76: V6a/V6b (the sweep plan applying it) and V8-V12 (the sweep's spent levels) are removed with the sweep;
+    # r88 (RETIRE.3): V7 (the TCS plan's declaration) goes with the TCS. V1-V5 and V6c pin the gate itself.
 
     print()
     if _fails:

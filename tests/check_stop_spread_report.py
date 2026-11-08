@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_stop_spread_report.py  v5.2
+tests/check_stop_spread_report.py  v5.3
+v5.3  2026-11-08  OTV5 r88 (RETIRE.3) — S2 and S3 (TCSPlan records the ratio) go with the TCS plan; R1-R6 (the report) unchanged.
 v5.2  2026-11-08  OTV5 r76 (RETIRE.1) — S1 and S3's sweep half go with the sweep plan; S2, S3's TCS half and R1-R6 (the report) unchanged.
 v5.1  2026-10-26  OTV5 r38 (HYG.18) — scratch no longer names dir="/var/tmp": mkdtemp honours TMPDIR, which boot_sweep and land.sh point
       at a per-run dir they remove (HYG.14), so a sweep leaves nothing behind (237 dirs had piled up on SOFI). No check changed.
@@ -75,50 +76,13 @@ def _fn(tree, name, cls):
 
 def main() -> int:
     print("=" * 68)
-    print("STOP VS SPREAD: recorded by TCS, counted right by the report")
+    print("STOP VS SPREAD: counted right by the report")
     print("=" * 68)
-    from types import SimpleNamespace as NS
     from strategy.criteria import STOP_VS_SPREAD_MIN as MN
     import strategy.credit_vertical as cv
-    from strategy import tcs_plan as TP
 
-    # ── S1 r76: the sweep (and its SweepPlan ratio) is removed; TCS is the one recorder left ──
-    # ── S2 TCS ───────────────────────────────────────────────────────────
-    def tcs_chain(ask):
-        return NS(calls=[], puts=[
-            NS(strike=198.0, bid=2.40, ask=ask, mark=round((2.40 + ask) / 2, 3), delta=-0.5),
-            NS(strike=197.0, bid=1.60, ask=1.62, mark=1.61, delta=-0.4),
-            NS(strike=196.0, bid=1.00, ask=1.02, mark=1.01, delta=-0.3),
-            NS(strike=194.0, bid=0.38, ask=0.40, mark=0.39, delta=-0.15)])
-    tl = {"level_id": "s2", "price": 198.0, "kind": "resistance", "provenance": "PDH"}
-    if "sv_ratio" not in getattr(TP.Candidate, "__slots__", ()):
-        check("S2 TCSPlan.Candidate carries sv_ratio", False, "no sv_ratio slot")
-    else:
-        ok_c = TP.TCSPlan()._structure(TP.Candidate(tl), tcs_chain(2.44))
-        exp_ok = round(ok_c.stop_dist / 0.04, 4) if ok_c.stop_dist else None
-        check("S2 TCS records the chosen wing's ratio (stop / short bid-ask) on a pass",
-              ok_c.sellable and ok_c.sv_ratio is not None and exp_ok is not None
-              and abs(ok_c.sv_ratio - exp_ok) < 1e-3 and ok_c.sv_ratio >= MN,
-              f"sellable={ok_c.sellable} why={ok_c.why!r} sv_ratio={ok_c.sv_ratio} want={exp_ok}")
-        bad = TP.TCSPlan()._structure(TP.Candidate(tl), tcs_chain(2.90))
-        check("S2 the same chain on a wide short quote is refused as stop_vs_spread "
-              "and carries the best refused ratio (below the minimum)",
-              (not bad.sellable) and bad.why_key == "stop_vs_spread"
-              and bad.sv_ratio is not None and 0 < bad.sv_ratio < MN,
-              f"sellable={bad.sellable} key={bad.why_key!r} sv_ratio={bad.sv_ratio}")
-
-    # ── S3 prepare() writes them ─────────────────────────────────────────
-    def calls_in(fn):
-        out = []
-        for n in ast.walk(fn or ast.parse("")):
-            if (isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute) and n.func.attr == "check"
-                    and n.args and isinstance(n.args[0], ast.Constant) and n.args[0].value == "stop_vs_spread"):
-                out.append(ast.unparse(n))
-        return out
-    tp_calls = calls_in(_fn(ast.parse(open(TP.__file__).read()), "prepare", "TCSPlan"))
-    check("S3 TCSPlan.prepare records the ratio True on a pass and False before a refusal",
-          any("cand.sv_ratio" in c and c.rstrip(")").endswith("True") for c in tp_calls)
-          and any("cand.sv_ratio" in c and c.rstrip(")").endswith("False") for c in tp_calls), f"{tp_calls}")
+    # r76: S1 (the sweep's SweepPlan ratio) went with the sweep; r88 (RETIRE.3): S2 / S3 (TCSPlan, the last recorder)
+    # go with the TCS. R1-R6 pin the report itself, unchanged.
 
     # ── R1-R6 the report on a planted store ──────────────────────────────
     rp_path = os.path.join(ROOT, "tests", "stop_spread_report.py")

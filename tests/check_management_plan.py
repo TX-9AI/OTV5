@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_management_plan.py  v5.2  (2026-11-03)
+tests/check_management_plan.py  v5.3  (2026-11-03)
+v5.3  2026-11-08  OTV5 r88 (RETIRE.3) — M4, M8, D8 and D9 (the TCS's narration, vector, hold and breach) go with the TCS; M7 drops its id and M11 pins it absent; D10's formed condor is two IronCondorStrategy legs (were TCS). Every other check unchanged.
 v5.2  2026-11-08  OTV5 r76 (RETIRE.1) — RE-POINTED (WA 38.4): the sweep and the ATP fly are removed from the management plan, so M3, D5-D7 (the
       sweep vertical) and D12e (the ATP fly) go with them; M7's ids and M11's roster drop them (and M11 pins them absent);
       D10's formed condor is two TCS legs; D12b/D12d (sweep_credit_spread.is_spent, read only by the removed sweep plan)
@@ -45,12 +46,12 @@ Born red at 1b83ee0 (r165): strategy/management.py does not exist.
   M2  the same trade after the trail arms -> "premium <= trail -> out".
   M3  (r76: removed with the sweep) a sweep credit spread -> credit semantics: pnl positive when the
       spread's value FALLS; the premium stop reads ">=".
-  M4  TCS -> breach of the ORB bound, no premium stop, nickel.
+  M4  (r88: removed with the TCS) TCS -> breach of the ORB bound, no premium stop, nickel.
   M5  a butterfly -> stop and target, from the record.
   M6  an ADOPTED record -> no row (no declared conditions, no spec).
   M7  the r66 vector is written for the open position with outcome "manage"
       and the trade_id attached, once per record per tick.
-  M8  the TCS vector exists now (vote, ADX, ORB width over EM).
+  M8  (r88: removed with the TCS) the TCS vector (vote, ADX, ORB width over EM).
   M9  every reading the plan writes comes from the record — the plan holds
       no threshold of its own (AST: no numeric literal compared to a premium).
   M10 main_loop calls the management plan AFTER manage_open_position and
@@ -131,15 +132,7 @@ def main():
     r2b = _row(st, "RunawayContinuation/manage", 2.5)
     check("M2b a SHORT runaway is hurt by a close ABOVE its stop — the row reads '>'",
           r2b and "touch > 100.00 -> out (breach)" in r2b[1], str(r2b))
-    tcs = {"trade_id": "tc1", "strategy": "TrendCreditSpread", "option_side": "put",
-           "is_credit_vertical": True, "is_trend_credit": True, "entry_premium": 1.30,
-           "current_premium": 1.10, "underlying_stop": 351.88, "excursion_ticks": 3}
-    P.begin_tick(4.0)
-    MP.decide(tcs, 1.10, df_1m=None, open_records=[tcs], current_price=353.2, ctx=ctx, exit_engine=None)
-    r4 = _row(st, "TrendCreditSpread/manage", 4.0)
-    check("M4 TCS -> breach of the bound and the nickel; no premium floor named",
-          r4 and "touch < 351.88 -> out (breach)" in r4[1] and "nickel" in r4[1]
-          and "(floor)" not in r4[1], str(r4))
+    # r88 (RETIRE.3): M4 (the TCS's breach-and-nickel narration) goes with the TCS.
 
     fly = {"trade_id": "bf1", "strategy": "GEXPinButterfly", "option_side": "call",
            "is_butterfly": True, "entry_premium": 0.18, "current_premium": 0.22,
@@ -158,14 +151,10 @@ def main():
     notes = st.conn.execute("SELECT strategy, outcome, trade_id, payload FROM strategy_note "
                             "WHERE outcome='manage' ORDER BY rowid").fetchall()
     check("M7 the r66 vector is written per open position with outcome 'manage' and the trade_id",
-          len(notes) >= 4 and all(n[1] == "manage" for n in notes)
-          and {n[2] for n in notes} >= {"rw1", "tc1", "bf1"},
+          len(notes) >= 3 and all(n[1] == "manage" for n in notes)
+          and {n[2] for n in notes} >= {"rw1", "bf1"},                # r88: tc1 (the TCS) removed
           f"{len(notes)} notes, ids {sorted({n[2] for n in notes})}")
-    tcs_note = next((json.loads(n[3]) for n in notes if n[0] == "TrendCreditSpread"), None)
-    spec = (tcs_note or {}).get("specific", {})
-    check("M8 the TCS vector exists now — vote, ADX, ORB width over EM",
-          spec.get("trend_dir") == "BULLISH" and spec.get("adx") == 27.0
-          and abs((spec.get("orb_width_over_em") or 0) - 0.5) < 1e-9, str(spec))
+    # r88 (RETIRE.3): M8 (the TCS vector) goes with the TCS.
 
     # M9 — the plan holds no threshold of its own
     src = open(os.path.join(_root, "strategy", "management.py"), encoding="utf-8").read()
@@ -193,9 +182,10 @@ def main():
           i_m != -1 and i_p != -1 and i_m < i_p and in_try, f"manage@{i_m} plan@{i_p} try={in_try}")
 
     check("M11 every strategy that opens a position declares its exit conditions",
-          {"RunawayContinuation", "TrendCreditSpread", "IronCondorStrategy", "GEXPinButterfly"}
+          {"RunawayContinuation", "IronCondorStrategy", "GEXPinButterfly"}
           <= set(EXIT_CONDITIONS)
-          and not ({"ORBStrategy", "SweepCreditSpread", "ATPButterfly"} & set(EXIT_CONDITIONS)))
+          and not ({"ORBStrategy", "SweepCreditSpread", "ATPButterfly", "TrendCreditSpread"}   # r88: + the TCS
+                   & set(EXIT_CONDITIONS)))
 
     # ══ r167 — THE PLAN DECIDES ═══════════════════════════════════════════
     import pandas as pd
@@ -259,18 +249,11 @@ def main():
           d.should_exit and d.exit_reason.startswith("theta_bleed"))
 
     eng = _Engine()                                  # a fresh calculator (r76: the sweep block that reset it is removed)
-    tc = {"trade_id": "d8", "strategy": "TrendCreditSpread", "option_side": "put",
-          "is_credit_vertical": True, "is_condor_leg": True, "is_trend_credit": True,
+    # r88 (RETIRE.3): D8 / D9 (the TCS holds through +38% and closes on its breach) go with the TCS; D10's formed
+    # condor is two IronCondorStrategy credit legs (were TCS legs).
+    tc = {"trade_id": "d8", "strategy": "IronCondorStrategy", "option_side": "put",
+          "is_credit_vertical": True, "is_condor_leg": True,
           "entry_premium": 1.30, "current_premium": 1.80, "underlying_stop": 351.88}
-    P.begin_tick(17.0)
-    it = MP.decide(tc, 1.80, df_1m=_df([353.0, 352.6]), open_records=[tc], exit_engine=eng)
-    check("D8 TCS at 1.80 (+38% against) but NO premium stop -> HOLD; only the breach or the nickel closes it",
-          it and it.action == "HOLD", str(it and it.action))
-    P.begin_tick(18.0)
-    it = MP.decide(tc, 1.80, df_1m=_df([352.6, 351.5]), open_records=[tc], exit_engine=eng)
-    check("D9 TCS: a 1m close 351.50 through the bound 351.88 -> CLOSE breach",
-          it and it.condition == "breach")
-
     leg2 = dict(tc, trade_id="d10b", option_side="call")
     P.begin_tick(19.0)
     it = MP.decide(tc, 1.20, df_1m=_df([352.6, 352.7]), open_records=[tc, leg2], exit_engine=eng)

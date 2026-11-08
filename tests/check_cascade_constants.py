@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_cascade_constants.py  v5.0
+tests/check_cascade_constants.py  v5.1
+v5.1  2026-11-08  OTV5 r88 (RETIRE.3) — the harnesses' TCS_START_ET / TCS_ENTRY_END_ET now mirror config.CREDIT_ENTRY_START_ET / CREDIT_ENTRY_END_ET (config's TCS_* names went with the TCS; the values are the same).
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.1  2026-09-22  OTV4TEST r92 — MIRRORED 4 -> 8, AND THE SUBSET WAS THE DEFECT. A mirror
       list that is a subset of what it mirrors reports green on everything it
@@ -49,8 +50,8 @@ MIRRORED = {
     "ORB_NO_ENTRY_AFTER_ET":       "ORB_NO_ENTRY_AFTER_ET",
     "DEBIT_DIRECTIONAL_CUTOFF_ET": "DEBIT_DIRECTIONAL_CUTOFF_ET",
     "CONDOR_ENTRY_START_ET":       "CONDOR_ENTRY_START_ET",
-    "TCS_START_ET":                "TCS_START_ET",
-    "TCS_ENTRY_END_ET":            "TCS_ENTRY_END_ET",
+    "TCS_START_ET":                "CREDIT_ENTRY_START_ET",   # r88: config's TCS_* names went with the TCS; same values
+    "TCS_ENTRY_END_ET":            "CREDIT_ENTRY_END_ET",
     "BUTTERFLY_ENTRY_START_ET":    "BUTTERFLY_ENTRY_START_ET",
     "CONDOR_TRIGGER_APPROACH":     "CONDOR_TRIGGER_APPROACH",
     "HARD_CLOSE_ET":               "HARD_CLOSE_ET",

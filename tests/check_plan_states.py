@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_plan_states.py  v5.7
+tests/check_plan_states.py  v5.8
+v5.8  2026-11-08  OTV5 r88 (RETIRE.3) — the TCS is removed: S1 has no LOG plan, S3 drops its two OT_TCS_ACTIVE cases, D6 pins that main._retired_reason is gone. Every other check unchanged.
 v5.7  2026-11-08  OTV5 r76 (RETIRE.1) — RE-POINTED (WA section 38.4): the ORB trade, VOLT, ORCS, the ATP fly and the sweep
       are REMOVED, so S1's ruled dormant roster is the condor entry alone; S3 drops their switch cases and names an
       unknown value on OT_HUNT; D1/D2/D3/D8 use a switched-off Runaway (OT_RUNAWAY=off) as the dormant plan, D4 a LOG
@@ -83,7 +84,7 @@ for _k, _v in (("OT_TRADES_DB", "t.db"), ("OT_DERIVED_DB", "d.db"), ("OT_FEED_DB
                ("OT_WAREHOUSE_STATE", "ws"), ("OT_PLAN_STATES_FILE", "plan_states.json")):
     os.environ[_k] = os.path.join(_TD, _v)
 os.environ.setdefault("OT_INSTRUMENT", "QQQ")
-SWITCHES = ("OT_TCS_ACTIVE", "OT_GEX_BUTTERFLY", "OT_PARK", "OT_RUNAWAY", "OT_BREAKOUT", "OT_HUNT")
+SWITCHES = ("OT_GEX_BUTTERFLY", "OT_PARK", "OT_RUNAWAY", "OT_BREAKOUT", "OT_HUNT")
 for _k in SWITCHES:
     os.environ.pop(_k, None)
 ET = ZoneInfo("America/New_York")
@@ -149,14 +150,14 @@ def main():
     # ── S1-S3: the states, read in fresh interpreters (config reads several switches at import) ──
     ruled_active = ["Breakout", "CondorManagement", "CreditRoll", "GEXPinButterfly", "LiquidityHunt",
                     "PARK", "RunawayContinuation"]
-    ruled_log = ["TrendCreditSpread"]                      # r57 (TCS.LOG1): a shadow trade (r67: PARC removed)
+    ruled_log = []                                         # r88 (RETIRE.3): the TCS, the last LOG plan, is removed
     ruled_dormant = ["IronCondorStrategy"]
     st = fresh("import json\nfrom strategy import plan_state as S\n"
                "print(json.dumps({n: S.state(n) for n in S.TABLE}))")
     act = sorted(k for k, v in st.items() if v == "active")
     dor = sorted(k for k, v in st.items() if v == "dormant")
     lg = sorted(k for k, v in st.items() if v == "log")
-    check("S1 defaults = today's roster (active / dormant as ruled; TCS the LOG plan, r57)",
+    check("S1 defaults = today's roster (active / dormant as ruled; no LOG plan since r88)",
           act == ruled_active and dor == ruled_dormant and lg == ruled_log, f"{st}")
 
     try:
@@ -176,9 +177,7 @@ def main():
              ("GEXPinButterfly", {"OT_GEX_BUTTERFLY": "log"}, "log"),
              ("PARK", {"OT_PARK": "off"}, "dormant"), ("PARK", {"OT_PARK": "log"}, "log"),
              ("RunawayContinuation", {"OT_RUNAWAY": "off"}, "dormant"),
-             ("RunawayContinuation", {"OT_RUNAWAY": "log"}, "log"),
-             ("TrendCreditSpread", {"OT_TCS_ACTIVE": "0"}, "dormant"),       # r57 (TCS.LOG1)
-             ("TrendCreditSpread", {"OT_TCS_ACTIVE": "log"}, "log")]
+             ("RunawayContinuation", {"OT_RUNAWAY": "log"}, "log")]      # r88: the TCS rows removed with it
     got = [(n, e, fresh(probe % n, e)) for n, e, _w in cases]
     miss = [(n, e, g) for (n, e, g), (_n, _e, w) in zip(got, cases) if not (isinstance(g, list) and g[0] == w)]
     true_named = next((g for n, e, g in got if e == {"OT_HUNT": "true"}), None)
@@ -261,13 +260,9 @@ def main():
     finally:
         M.entries_open = orig
     os.environ.pop("OT_RUNAWAY", None)
-    log_reason = M._retired_reason("TrendCreditSpread")                 # unset = log (r57): asked
-    os.environ["OT_TCS_ACTIVE"] = "0"
-    dflt_reason = M._retired_reason("TrendCreditSpread")                # switched off: refused, and said
-    os.environ.pop("OT_TCS_ACTIVE", None)
-    check("D6 a LOG plan's vertical stops at the top of _execute_condor_leg; a LOG TCS is asked, a switched-off "
-          "one refused", not seen and log_reason == "" and dflt_reason != "",
-          f"reached the order path {bool(seen)}, log reason {log_reason!r}, default {dflt_reason!r}")
+    check("D6 a LOG plan's vertical stops at the top of _execute_condor_leg (r88: the TCS and _retired_reason removed)",
+          not seen and not hasattr(M, "_retired_reason"),
+          f"reached the order path {bool(seen)}, _retired_reason present {hasattr(M, '_retired_reason')}")
 
     # ── D7: CondorManagement on the line only while it has legs ──
     cm = P.REGISTRY.get("CondorManagement") or P.Plan("CondorManagement", ("legs",), self_ledgers=True)

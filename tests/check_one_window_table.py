@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
-"""tests/check_one_window_table.py — v5.1
+"""tests/check_one_window_table.py — v5.2
+v5.2  2026-11-08  OTV5 r88 (RETIRE.3) — the TCS row is removed with the TCS, so its admission pin, the two config pins, the two
+      tcs_plan pins and its two W2 pairs go with it. Every live pin is unchanged.
 v5.1  2026-11-08  OTV5 r76 (RETIRE.1) — RE-POINTED (WA 38.4): the ORB, VOLT, ATP and sweep windows are removed, so their 18 pins, their W2 pairs and
       W2b (the sweep's unread start) go with them; W4 overrides Breakout's row. Every live pin is unchanged.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
@@ -75,7 +77,6 @@ PIN = {   # measured on the r148 build; identical to r147 except the TrendCredit
     "admission.GEXPinButterfly.window": ((13, 0), (15, 0)),   # r273
     "admission.LiquidityHunt.window": ((9, 35), (10, 30)),   # r187
     "admission.RunawayContinuation.window": ((9, 35), (10, 30)),   # r187
-    "admission.TrendCreditSpread.window": ((11, 31), (15, 40)),
     "config.BUTTERFLY_ENTRY_CUTOFF_ET": (14, 0),
     "config.BUTTERFLY_ENTRY_START_ET": (13, 0),   # r273
     "config.CONDOR_ENTRY_CUTOFF_ET": (15, 40),
@@ -89,8 +90,6 @@ PIN = {   # measured on the r148 build; identical to r147 except the TrendCredit
     "config.HARD_CLOSE_ET": (15, 55),   # r149
     "config.ORB_NO_ENTRY_AFTER_ET": (15, 40),   # r149
     "config.RUNAWAY_CUTOFF_ET": "10:30",   # r187
-    "config.TCS_ENTRY_END_ET": (15, 40),
-    "config.TCS_START_ET": (11, 31),
     "config.VERTICAL_HOLD_TO_ET": (15, 45),   # r149
     "strategy.breakout.EARLIEST_ET": "09:35",
     "strategy.breakout.LATEST_ET": "10:30",   # r187
@@ -102,8 +101,6 @@ PIN = {   # measured on the r148 build; identical to r147 except the TrendCredit
     "strategy.liquidity_hunt.CUTOFF_ET": (10, 30),   # r187
     "strategy.runaway_continuation.CUTOFF_ET": "10:30",   # r187
     "strategy.runaway_plan._cutoff_hm()": (10, 30),   # r187
-    "strategy.tcs_plan.TCS_ENTRY_END_ET": (15, 40),
-    "strategy.tcs_plan.TCS_START_ET": (11, 31),
 }
 
 
@@ -158,13 +155,11 @@ def main() -> int:
     bad = [n for n in EW if tuple(tuple(x) for x in R[n].window) != tuple(tuple(x) for x in EW[n])]
     check("W1 admission windows == config.ENTRY_WINDOWS", not bad and set(R) == set(EW), f"differ: {bad}, keys {sorted(set(R) ^ set(EW))}")
 
-    from strategy import runaway_continuation, liquidity_hunt, breakout, tcs_plan, gex_pin_butterfly
+    from strategy import runaway_continuation, liquidity_hunt, breakout, gex_pin_butterfly
     pairs = [
         ("RunawayContinuation end", runaway_continuation.CUTOFF_ET, hhmm(EW["RunawayContinuation"][1])),
         ("LiquidityHunt end", liquidity_hunt.CUTOFF_ET, EW["LiquidityHunt"][1]),
         ("Breakout end", breakout.LATEST_ET, hhmm(EW["Breakout"][1])),
-        ("TrendCreditSpread start", tcs_plan.TCS_START_ET, EW["TrendCreditSpread"][0]),
-        ("TrendCreditSpread end", tcs_plan.TCS_ENTRY_END_ET, EW["TrendCreditSpread"][1]),
         ("GEXPinButterfly start", gex_pin_butterfly.EARLIEST_ET, hhmm(EW["GEXPinButterfly"][0])),
         ("GEXPinButterfly end", gex_pin_butterfly.LATEST_ET, hhmm(EW["GEXPinButterfly"][1])),
     ]

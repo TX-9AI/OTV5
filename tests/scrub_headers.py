@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/scrub_headers.py — v5.0
+tests/scrub_headers.py — v5.1
+v5.1  2026-11-08  OTV5 r88 (RETIRE.3) — the strategy/trend_credit_spread.py description goes with the file.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 
 RESET EVERY PORTED FILE'S HEADER TO 4.0. TOUCH NOTHING ELSE.
@@ -185,7 +186,6 @@ DESCRIPTIONS = {
     "strategy/credit_vertical.py": "Credit vertical construction, liquidity and POP helpers.",
     "strategy/orb_strategy.py": "Opening-range break and retest. Label-agnostic by design.",
     "strategy/continuation_strategy.py": "Trend continuation. TRIGGER REBUILT IN PHASE 2.",
-    "strategy/trend_credit_spread.py": "ORB-bounded credit spread. TRIGGER REBUILT IN PHASE 2.",
     "strategy/iron_condor_strategy.py": "Two-leg condor with ladder. TRIGGER REBUILT IN PHASE 2.",
     "strategy/condor_roll.py": "Condor roll handling.",
     "strategy/butterfly_strategy.py": "Butterfly construction and debit ceiling.",

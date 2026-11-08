@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_condor_stop_suppression.py  v5.0
+tests/check_condor_stop_suppression.py  v5.1
+v5.1  2026-11-08  OTV5 r88 (RETIRE.3) — S7 (a TCS row stays out of the condor ladder) goes with the TC.6 branch and the TCS; S1-S6 and S8 unchanged.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.2  2026-09-26  OTV4TEST r149 (EOD.1) — THE CLOCK PIN RE-POINTED, NOT LOOSENED. It pinned the hard close
       shut by setting config.VERTICAL_HOLD_TO_ET = (23, 59); since r149 the vertical's end-of-day clock is
@@ -25,8 +26,7 @@ v1.0  2026-08-24  Born RED at r89b (exit_engine v4.3 armed a 25% stop on the
   S5  the re-arm edge CLEARS both fields (record and DB write)
   S6  stop_premium on the record is byte-identical through all of it —
       the immutable entry-time floor is never mutated (v3.1 trail lesson)
-  S7  a trend credit spread (TCS) never picks up suppression fields —
-      its branch returns before the stop block and must stay uncontaminated
+  S7  (r88: removed with the TCS - its branch was the subject)
   S8  both columns exist in trade_logger's schema AND migration list
 
 All executed against planted state, no real broker calls, no repo-root
@@ -159,23 +159,7 @@ def main() -> int:
     check("S6 no update ever touched stop_premium",
           not any("stop_premium" in f for _, f in fake.updates))
 
-    print("S7  TCS branch stays uncontaminated")
-    tcs = _leg("T-TCS-003", "put", is_trend_credit=1)
-    fake.open_trades = [tcs, call_leg]
-    d = engine._evaluate_condor_leg(tcs, breach, df_1m=None)
-    # 🔴 S7 RE-DERIVED AT r238. It asserted a trend credit has NO premium stop
-    # — true until the operator's 2026-09-04 spec put a 15%-OF-CREDIT stop on
-    # it, deliberately, as the exit doing "the heavy lifting". Asserting the
-    # absence now would certify the trade riding to breach or the flatten,
-    # which is the behaviour that was replaced. The invariant that survives is
-    # the CONDOR ladder's 25% stop still not reaching it: the reason names the
-    # TCS stop, not `condor_stop`.
-    check("S7 a TCS premium stop is the TCS one, never the condor ladder's",
-          (not d.should_exit) or "tcs_stop" in str(d.exit_reason),
-          f"reason={d.exit_reason!r}")
-    check("S7 no suppression fields on a TCS row",
-          not tcs.get("stop_suppressed_ts")
-          and not any(tid == "T-TCS-003" for tid, _ in fake.updates))
+    # r88 (RETIRE.3): S7 (the TC.6 branch stays uncontaminated) goes with that branch and the TCS.
 
     print("S8  columns exist in schema and migration")
     src = open(os.path.join(ROOT, "database", "trade_logger.py")).read()
