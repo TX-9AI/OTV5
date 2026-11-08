@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
-"""tests/check_oi_retry.py — v5.0
+"""tests/check_oi_retry.py — v5.1
+v5.1  2026-11-07  OTV5 RET.2 — O6 re-pointed: plan_tick / plan_check hold 14 days and strategy_note 30 (the operator
+      reversed the 90-day box corpus 2026-11-07; S3 is the corpus). The check is otherwise unchanged.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 THE OI WARNING FIRES ONLY WHEN THE RETRY ALSO FAILS (OI.1).
 
@@ -159,10 +161,11 @@ def _retention():
     rp = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(rp)
     d = rp.DERIVED_CDC_DAYS
-    return (d.get("plan_tick") == 90 and d.get("plan_check") == 90), str(d)
+    return (d.get("plan_tick") == 14 and d.get("plan_check") == 14
+            and d.get("strategy_note") == 30), str(d)
 
 
-guard("O6 plan_tick / plan_check hold 90 days (the wargaming corpus)", _retention)
+guard("O6 plan_tick / plan_check hold 14 days, strategy_note 30 (RET.2; S3 is the corpus)", _retention)
 
 print()
 if FAILED:

@@ -1,6 +1,26 @@
 #!/usr/bin/env python3
 """
-warehouse/retention_purge.py  v5.1
+warehouse/retention_purge.py  v5.2
+v5.2  2026-11-07  OTV5 r77 (RET.2) — THE BOX KEEPS TWO WEEKS OF PLAN ROWS AND A MONTH OF NOTES; S3 KEEPS EVERYTHING.
+      plan_tick / plan_check 90 -> 14 days; strategy_note leaves NEVER_PURGE and is kept 30 days (DERIVED_CDC_DAYS).
+      The operator, 2026-11-07, on SOFI's disk (87.8%, derived_store.db 782M -> 1.03G in a week): "Yes to all of
+      your proposed disk size fixes" - which REVERSES two earlier rulings, said plainly: 2026-09-19's 90-day
+      wargaming corpus on the box (v1.6), and strategy_note as a never-purged biography. WHY THE REVERSAL IS SAFE:
+      the warehouse is now the corpus - every replay and study since 10-25 reads S3 (warehouse_source), nothing on
+      the box reads these tables across sessions (AST/grep: only tools/open_scan.py and tools/plan_board.py read
+      plan_tick/plan_check, both today's latest row; strategy_note has writers only), and SOFI's rows were measured
+      in S3 with matching row ids on 09-25, 10-14, 10-26 and 11-06. MEASURED COST OF THE OLD WINDOW: ~20 MB of
+      plan rows a session against the ~7 MB v1.6 budgeted, so 90 days no longer fits an 8.6G box.
+      🔴 A CDC TABLE IS PRUNED ONLY BELOW ITS FIRST UNSHIPPED ROW. These three ship through push_derived (CDC by
+      rowid, ledger derived_ledger.db), not push_series, so the dseries high-water clamp never applied to them:
+      before this revision plan_tick/plan_check were deleted on age alone. _cdc_cutoff_rid() now finds the lowest
+      rowid older than the window that the CDC ledger has no hash for, and the delete stops below it; a box whose
+      ledger is missing or unreadable deletes NOTHING from these tables (named in the log) unless it provably never
+      pushes (_box_never_pushes, r233), which stays age-only. Batched and budgeted as before, inside the close's
+      purge run; reclaim() vacuums afterwards when its 2.2x headroom fits. Constants in this file only - no env key,
+      no configure.sh item; config.py's inert NEVER PURGED comment block now differs and this file is the code
+      (the rule below; config.py untouched). Gate: tests/check_retention_cdc.py; check_oi_retry O6 and
+      check_purge_reclaim R7 re-pointed.
 v5.1  2026-10-31  OTV5 r66 (RET.1) — THE FOUR TICK TABLES ARE KEPT ONE DAY, STILL NEVER PAST THE PUSH MARK.
       quote_series, greeks_series, prints and last_trade: ARTIFACT_DAYS 3 -> 1. session_summary, theo_series and
       underlying_series stay 3. The operator, 2026-10-31, on GOOGL's disk (92%, 721M free of 8.6G; feed_store.db
@@ -327,6 +347,47 @@ def _safe_cutoff(table, age_cutoff, path, ns):
                      "behind the retention window and the rows above it are "
                      "NOT YET SHIPPED" % (hwm, (age_cutoff - hwm) / 86400))
     return age_cutoff, ""
+
+
+# ── RET.2 — THE CDC CLAMP: a push_derived table is pruned only below its first unshipped row ───────────────────
+# s3_push's CDC ledger: one (tbl, rid, sha) row per row S3 has confirmed (put_and_verify, then put_many).
+CDC_LEDGER_DB = os.path.join(_STATE_DIR, "derived_ledger.db")
+
+
+def _cdc_cutoff_rid(conn, table, cutoff, ledger_db=None):
+    """(rid_ceiling, note). Rows with ts_epoch < cutoff AND rowid < rid_ceiling are safe to delete.
+
+    rid_ceiling is the lowest rowid older than the window that the CDC ledger holds NO hash for (every older row
+    below it was confirmed in S3), or one past the newest old row when all of them are shipped. None = delete
+    nothing: the ledger is missing or unreadable on a box that pushes. A box that provably never pushes is
+    age-only (r233), its ceiling unbounded."""
+    ledger_db = ledger_db or CDC_LEDGER_DB
+    never, why = _box_never_pushes()
+    if never:
+        return float("inf"), "age only: this box never pushes - %s" % why
+    if not os.path.exists(ledger_db):
+        return None, "CDC ledger absent (%s) - nothing deleted: S3 cannot be shown to hold these rows" % ledger_db
+    try:
+        conn.execute("ATTACH DATABASE ? AS cdcled", (ledger_db,))
+    except sqlite3.Error as exc:                                    # noqa: BLE001
+        return None, "CDC ledger unreadable (%s) - nothing deleted" % exc
+    try:
+        first_unshipped = conn.execute(
+            "SELECT MIN(t.rowid) FROM %s t WHERE t.ts_epoch < ? AND NOT EXISTS "
+            "(SELECT 1 FROM cdcled.seen s WHERE s.tbl = ? AND s.rid = t.rowid)" % table,
+            (cutoff, table)).fetchone()[0]
+        if first_unshipped is not None:
+            return first_unshipped, ("CLAMPED below rowid %d: the first row older than the window that S3 has "
+                                     "not confirmed" % first_unshipped)
+        top = conn.execute("SELECT MAX(rowid) FROM %s WHERE ts_epoch < ?" % table, (cutoff,)).fetchone()[0]
+        return (top + 1 if top is not None else 0), ""
+    except sqlite3.Error as exc:                                    # noqa: BLE001
+        return None, "CDC ledger read failed (%s) - nothing deleted" % exc
+    finally:
+        try:
+            conn.execute("DETACH DATABASE cdcled")
+        except sqlite3.Error:
+            pass
 sys.path.insert(0, HERE)
 
 # ── The policy. Mirrors the (commented-out) block in config.py v4.4. ────────
@@ -399,9 +460,12 @@ DERIVED_ARTIFACT_DAYS = {
 # feed, and none of which is possible on a corpus that has already been deleted.
 # ⚠️ NOT `NEVER_PURGE`. A bounded window is still a purge; this is a longer
 # hold, not an exemption, and the disk argument above is what bounds it.
+# 🔴 RET.2 (2026-11-07) — 90 -> 14, AND strategy_note JOINS AT 30. The operator reversed the box corpus: S3 is
+# the corpus (see the v5.2 header). Every table here is pruned only below its first unshipped row (_cdc_cutoff_rid).
 DERIVED_CDC_DAYS = {
-    "plan_tick":   90,
-    "plan_check":  90,
+    "plan_tick":     14,
+    "plan_check":    14,
+    "strategy_note": 30,
 }
 
 # 🔑 r255 — DATE-PARTITIONED FILE TREES under data/. Not tables: the unit of
@@ -437,9 +501,10 @@ ARTIFACT_DAYS = {
 }
 
 # 🔴 NEVER PURGED. Not configurable, not overridable.
+# RET.2 (2026-11-07): strategy_note left this set by the operator's ruling; it is purged at 30 days, shipped rows only.
 NEVER_PURGE = {
     "character_ledger", "plan_ledger", "gate_disposition",
-    "strategy_note", "fire_snapshot", "level_ledger", "level_event",
+    "fire_snapshot", "level_ledger", "level_event",
     "exit_counterfactual", "circuit_breaker_events", "trades",
 }
 
@@ -891,19 +956,35 @@ def purge(apply: bool = False, feed_db: str = "", derived_db: str = "") -> dict:
             if table in NEVER_PURGE:
                 continue
             cutoff = now - days * DAY
-            cutoff, _note = _safe_cutoff(table, cutoff, DSERIES_LEDGER, "dseries")
-            if _note:
-                _log(f"🛡️ derived/{table}: {_note}")
+            if table in DERIVED_CDC_DAYS:
+                # RET.2 — a CDC table has no high-water mark; it is clamped by its own ledger, per row.
+                try:
+                    present = dc.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?",
+                                         (table,)).fetchone()
+                except sqlite3.Error:
+                    present = None
+                if not present:
+                    continue
+                rid_cap, _note = _cdc_cutoff_rid(dc, table, cutoff)
+                if _note:
+                    _log(f"🛡️ derived/{table}: {_note}")
+                if rid_cap is None:
+                    removed[f"derived/{table}"] = 0
+                    continue
+                where, args = "ts_epoch < ? AND rowid < ?", (cutoff, rid_cap)
+            else:
+                cutoff, _note = _safe_cutoff(table, cutoff, DSERIES_LEDGER, "dseries")
+                if _note:
+                    _log(f"🛡️ derived/{table}: {_note}")
+                where, args = "ts_epoch < ?", (cutoff,)
             if not apply:
                 try:
                     removed[f"derived/{table}"] = dc.execute(
-                        f"SELECT COUNT(*) FROM {table}"
-                        " WHERE ts_epoch < ?", (cutoff,)).fetchone()[0]
+                        f"SELECT COUNT(*) FROM {table} WHERE {where}", args).fetchone()[0]
                 except sqlite3.Error as exc:                    # noqa: BLE001
                     _log(f"⚠️ derived/{table}: dry COUNT unavailable ({exc})")
                 continue
-            got, _out = _delete_batched(
-                dc, table, "ts_epoch < ?", (cutoff,), failed, deadline)
+            got, _out = _delete_batched(dc, table, where, args, failed, deadline)
             removed[f"derived/{table}"] = got
         if apply:
             dc.commit()

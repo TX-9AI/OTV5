@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
-"""tests/check_purge_reclaim.py — v5.0
+"""tests/check_purge_reclaim.py — v5.1
+v5.1  2026-11-07  OTV5 RET.2 — R7 re-pointed: strategy_note joins plan_tick and plan_check in DERIVED_CDC_DAYS
+      (the operator's 2026-11-07 ruling took it out of NEVER_PURGE); R7c still pins plan_ledger as protected.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.0  2026-09-05 — r255. THE RECLAIM STAGE, DRIVEN AGAINST A REAL STORE.
 
@@ -228,8 +230,8 @@ def main():
     # `check_purge_pushed` C9 proves a DERIVED_ARTIFACT_DAYS table ships via
     # push_series; these ship via push_derived. Folding them together would turn
     # C9 red for a true reason — the fastest way to get a real check loosened.
-    check("R7 plan_tick and plan_check are purgeable",
-          set(rp.DERIVED_CDC_DAYS) == {"plan_tick", "plan_check"},
+    check("R7 plan_tick, plan_check and strategy_note are purgeable (RET.2)",
+          set(rp.DERIVED_CDC_DAYS) == {"plan_tick", "plan_check", "strategy_note"},
           str(sorted(rp.DERIVED_CDC_DAYS)))
     check("R7b ...and NOT folded into the push_series list",
           not (set(rp.DERIVED_CDC_DAYS) & set(rp.DERIVED_ARTIFACT_DAYS)))
