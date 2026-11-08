@@ -1,6 +1,7 @@
 # WORKING_AGREEMENT.md — how we operate (read this first, every new thread)
 
-**`WORKING_AGREEMENT.md` v5.1 · 2026-10-25 — §0 through §41, plus §15a, §18a, §36a, §38.9 and §40.1. See the CHANGELOG at the foot.**
+**`WORKING_AGREEMENT.md` v5.2 · 2026-11-08 · OTV5 r81 (DOC.36) — §3 and §30 describe the fleet that exists: 14 boxes on OTV5; control holds `~/OTV5`, `~/day_trader_pro` and the frozen `~/options-trader-v4`. See the CHANGELOG at the foot.**
+**v5.1 · 2026-10-25 — §0 through §41, plus §15a, §18a, §36a, §38.9 and §40.1. See the CHANGELOG at the foot.**
 **v5.0 · 2026-10-25 · OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...**
 
 > 🔴 **§0 IS THE FLOOR — AN ATTESTATION, NOT A TIP. Read it first, every thread.**
@@ -229,12 +230,15 @@ layer** vs. a direct prompt. Nested quotes collide with that wrapping.
 - **Bot / fleet boxes:** the running bot's working directory is **`~/options-trader`**
   (NO suffix). Per-box `trades.db`, the live process, and per-box data live here.
   Fleet commands run via the menu fan-out (option 14) and execute in this dir.
-- **Control / reporter box** (`ip-...-32-218`): has TWO relevant dirs —
-  **`~/options-trader-v3`** = the clone of the GitHub repo (repo name is
-  `options-trader-v3`), and **`~/day_trader_pro`** = the reporter + devtools service
-  menu (`./dev*`), the replay harness, the diary, `reports/`, `fleet_trades_<date>.json`.
+- **Control / reporter box** (`ip-...-32-218`): has THREE relevant dirs (measured
+  2026-11-08, OTV5 r81) — **`~/OTV5`** = the clone of this repo (GitHub `TX-9AI/OTV5`), the
+  tree every land goes into; **`~/day_trader_pro`** = the reporter + devtools service
+  menu (`./dev*`), the replay harness, the diary, `reports/`, `fleet_trades_<date>.json`;
+  and **`~/options-trader-v4`** = the predecessor `options_trader_v4`, **FROZEN since otv4 r500**
+  (history and its ledger only; dtp lands still append otv4's docs half there). There is
+  no `~/options-trader-v3` on control any more.
   The control box has NO running-bot `trades.db` of its own.
-- 🔴 **QQQ-TEST (this fork's box), ADDED 2026-09-13 (OTV4TEST r18).** The repo is
+- 🔴 **QQQ-TEST — RETIRED 2026-10-25 (one repo, OTV5; kept as history).** ADDED 2026-09-13 (OTV4TEST r18). The repo is
   **`~/options-trader`** — same path as a bot box, because it IS a bot box: it
   runs `optionsbot.service` and `candle-feed.service` on QQQ in paper. What is
   different is that it is **SEGREGATED FROM CONTROL** (r1): it cannot reach
@@ -264,8 +268,8 @@ layer** vs. a direct prompt. Nested quotes collide with that wrapping.
 - **The trap:** `~/options-trader` exists on **bot boxes**, NOT on the control box.
   Sending `cd ~/options-trader` while the user is on the *control* box fails (this
   happened, repeatedly). Always resolve the path to the box the user is actually on:
-  bot box → `~/options-trader`; control box → `~/options-trader-v3` (repo) or
-  `~/day_trader_pro` (tooling).
+  bot box → `~/options-trader`; control box → `~/OTV5` (repo) or
+  `~/day_trader_pro` (tooling); `~/options-trader-v4` is frozen history.
 
 ## 4. Landed files go to /home/ubuntu, then get moved/extracted.
 When the user uploads files to a box — TAR archives or loose files — assume they land
@@ -914,8 +918,9 @@ entry or exit is wrong, however convenient.
 ## 30. EVERY BOX COLLECTS. THE COLLECTORS ARE THE TRADERS.
 Added 2026-08-19 as "collection is fleet-wide, trading is panel-only, 15 traders
 / 29 collectors". **REWRITTEN 2026-08-25: that split no longer exists.** The
-2026-08-20 pare TERMINATED the other 14 instances, so the fleet is 15 boxes (⚠️ measured
-2026-10-05 by 1-REPORTER: 13 mainline boxes plus SOFI, which runs THIS fork's code) and
+2026-08-20 pare TERMINATED the other 14 instances. ⚠️ **The fleet is 14 boxes, one lineage**
+(measured 2026-11-08: AMD AMZN AVGO CRM CVX GOOGL META NFLX NVDA QQQ SOFI SPX TSLA UNH, 14/14
+on OTV5 a7ac841; MU and PLTR terminated 09-29, QQQ-TEST and SPX-TEST retired 10-25), and
 they both trade and collect.
 
 The rule itself survives intact and is why the section stays: **a box that stops
@@ -1978,6 +1983,8 @@ r0. Everything it inherited carries the predecessor's own history, and that hist
 ---
 
 ## CHANGELOG
+
+**v5.2 — 2026-11-08 — OTV5 r81 — §3 AND §30 DESCRIBE THE FLEET THAT EXISTS (DOC.36).** §3: control holds `~/OTV5` (the live tree), `~/day_trader_pro` and the frozen `~/options-trader-v4`; `~/options-trader-v3` is gone; QQQ-TEST is marked retired. §30: 14 boxes on one lineage. Facts only, no rule changed (the Saturday brief 2026-11-07 section 4 item 5).
 
 **v5.1 — 2026-10-25 — OTV5 r8 — §41: THE LINEAGE STAMP IS `OTV5`.** Facts only, no rule changed.
 

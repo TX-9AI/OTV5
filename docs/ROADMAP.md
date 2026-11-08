@@ -1,7 +1,8 @@
-# docs/ROADMAP.md — v5.0 — options_trader v4
+# docs/ROADMAP.md — v5.1 — options_trader v4
+# v5.1  2026-11-08  OTV5 r81 (DOC.36) — the banner cites docs/GENESIS.md, this tree's ledger (there is no GENESIS-TEST.md). The Saturday brief 2026-11-07 section 4 item 6.
 # v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 
-> 🔴 **SUPERSEDED SNAPSHOT (marked 2026-10-03, OTV4TEST r226).** Kept for the record it is; it does not describe this fork as it runs. Current state: `docs/TRADES.md` §0 (roster), `docs/BACKLOG.md` (work), `docs/GENESIS-TEST.md` (ledger).
+> 🔴 **SUPERSEDED SNAPSHOT (marked 2026-10-03, OTV4TEST r226).** Kept for the record it is; it does not describe this fork as it runs. Current state: `docs/TRADES.md` §0 (roster), `docs/BACKLOG.md` (work), `docs/GENESIS.md` (ledger, r0 onward).
 
 **v4.1 — 2026-10-03 — OTV4TEST r226 — bannered as a superseded snapshot; nothing below was changed.**
 

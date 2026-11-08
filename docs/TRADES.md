@@ -1,5 +1,7 @@
 # TRADES — the specs
 
+**`TRADES.md` v5.10 · 2026-11-08 · OTV5 r81 (DOC.36) — section 9: PARK sizes on each box's own `OT_RISK_USD` (configure item 2); the QQQ-TEST and SPX-TEST figures went with those boxes (retired 2026-10-25). The Saturday brief 2026-11-07 section 4 item 4.**
+
 **`TRADES.md` v5.9 · 2026-11-08 · OTV5 r76 (RETIRE.1) — the retired trades are REMOVED with their code: the ORB break + retest, VOLT, the sweep credit spread, the ATP butterfly and ORCS leave the roster, and sections 2, 4 and 8 are gone. The opening-range ENGINE stays (Runaway, Breakout and the Hunt read it). The operator, 2026-11-07: "Running dead code and logging dead code activity is unnecessary drag. Yes, I want all of those things fixed."**
 
 **`TRADES.md` v5.8 · 2026-11-03 · OTV5 r73 (BFLY.17) — section 3: the GEX pin butterfly holds to the close (no premium stop, no decay stop), is never opened at VIX 20 or above, and asks two more things at the door: the 09:30 open inside yesterday's range, and a debit of at least 15.5% of the width. The operator, 2026-11-03: "For the GEX fly, I want no stop except hold to close, I want the VIX rule enforced & I want more discriminatory entries."**
@@ -662,8 +664,8 @@ the contract and builds the signal.
   ((bid + ask) / 2, floored to the cent; r60 PARK.4, the operator 2026-10-30: "we ladder in from
   aggressive to mark & never worse than mark"). Paper books the mark; live walks the entry ladder from
   25% in off the bid toward the mark, one increment a tick, never above it - unfilled by 11:03 is no trade;
-- sized flat on the box's own risk, floor(risk / (mark x 100)): $1,050 on QQQ-TEST, $2,500 on
-  SPX-TEST. No scaling, no pin-proximity gate (PIN_EXEMPT); what the gate would have said is a
+- sized flat on the box's own risk, floor(OT_RISK_USD / (mark x 100)) - `config.RISK_PER_TRADE_USD`, set per box
+  by configure item 2 (an unaffordable contract is no trade: AMD 11-03/11-05 at $1,050). No scaling, no pin-proximity gate (PIN_EXEMPT); what the gate would have said is a
   counterfactual row on every PARK entry, `data/counterfactual/pin_gate.jsonl`.
 
 **Its own budget.** PARK is cap-exempt (admission) and its closes are left out of the

@@ -1,5 +1,7 @@
 # PLAN_SPEC.md — every strategy declares its intent BEFORE the trigger
 
+**`PLAN_SPEC.md` v5.2 · 2026-11-08 · OTV5 r81 (DOC.36) — §32.3: the GEX pin butterfly has NO stop since OTV5 r73 (BFLY.17); its one exit is the 15:45 flatten, and its door adds VIX ≥ 20 no-fire, an open inside yesterday's range and the 15.5%-of-width debit floor. The Saturday brief 2026-11-07 section 4 item 3.**
+
 **`PLAN_SPEC.md` v5.1 · 2026-11-08 · OTV5 r76 (RETIRE.1) — §29 (the ORB trade), §31 (the sweep credit spread), §39 (the ATP butterfly) and §41 (ORCS) are REMOVED with their code; their headings stay so older references resolve. §37: the Hunt no longer grants a handoff (its only taker was the sweep); its exits are unchanged. The opening-range ENGINE that §29 described is untouched. The operator, 2026-11-07: "Running dead code and logging dead code activity is unnecessary drag. Yes, I want all of those things fixed."**
 
 **`PLAN_SPEC.md` v5.0 · 2026-10-25 · OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...**
@@ -1208,8 +1210,9 @@ No ATM IV · no chain · **open interest summing to zero across the chain** → 
 ### 32.2b The slot — permitted, not expected
 The butterfly is opportunistic like the condor: it is neither blocked by any open position nor blocks one (r161 asks it from the position-open branch; r197 stops `has_blocking_position()` counting it). A box may hold a butterfly plus one other thing.
 
-### 32.3 Exits — unchanged, by ruling
-15% stop (the dead-thesis stop; no separate migration exit) and the 15:45 close. No target: a pinned fly pays as the wings die into the close.
+### 32.3 Exits — hold to the close, by ruling (OTV5 r73, BFLY.17)
+**No stop of any kind.** The operator, 2026-11-03: *"For the GEX fly, I want no stop except hold to close, I want the VIX rule enforced & I want more discriminatory entries."* `config.HOLD_TO_CLOSE_STRATEGIES = ("GEXPinButterfly",)`: exit_engine skips the fly's hard stop and never asks the decay read; its one exit is the 15:45 flatten (the 15:55 resting close untouched). No target: a pinned fly pays as the wings die into the close. (Before r73 the fly carried a 15% dead-thesis stop, 40% before that.)
+**The door, since r73:** `vix` — VIX below `VIX_BUTTERFLY_DISABLE` (20); at or above, no fly (half size at 15-20 is unchanged); `open_in_prior_range` — today's 09:30 1m open inside yesterday's RTH high-low; and the wing search takes the best R only among widths whose debit is at least `BUTTERFLY_MIN_DEBIT_PCT_WIDTH` (15.5%) of the width. Both entry cuts were chosen after looking (~/gex_study) and are forward-scored from 2026-11-09.
 
 ### 32.4 Recorded, not barred
 Three-leg stop-vs-spread ratio (`stop_vs_spread`, already a floor via `STOP_VS_SPREAD_MIN`), pin distance in EM at the fire, persistence in ticks. The first real pins say what the priors should be.
