@@ -1,5 +1,7 @@
 # TRADES — the specs
 
+**`TRADES.md` v5.12 · 2026-11-08 · OTV5 r90 (SHADOW.1) — two LOG-ONLY rules, never deciding: the Hunt records each fire's opening-range / EM verdict (S5 R1, skip below 0.927) and PARK records the daily SMA 50 slope verdict on every tick with a direction (S4). See section 9; rows plan_check shadow_hunt_or_em / shadow_park_sma50.**
+
 **`TRADES.md` v5.11 · 2026-11-08 · OTV5 r88 (RETIRE.3) — the trend credit spread (TrendCreditSpread) and its r57 log-only SHADOW are REMOVED with their code: its roster row goes, OT_TCS_ACTIVE is read by nothing, raw/shadow_trades is no longer pushed. It never fired: its own entry gates declined every candidate 11-02..11-06. The operator, 2026-11-08: "Delete".**
 
 **`TRADES.md` v5.10 · 2026-11-08 · OTV5 r81 (DOC.36) — section 9: PARK sizes on each box's own `OT_RISK_USD` (configure item 2); the QQQ-TEST and SPX-TEST figures went with those boxes (retired 2026-10-25). The Saturday brief 2026-11-07 section 4 item 4.**
@@ -676,6 +678,11 @@ catastrophic cap's day P&L (`config.CAP_EXCLUDED_STRATEGIES`). Displays still co
 +60%, out when the bid falls to +20% (after a restart the persisted best MARK, `max_premium_seen`, re-arms it once - r291); the delta floor - |delta| <= 0.30 from 11:30 (unread delta
 holds); the close at 15:45. No premium stop, no trail. Every exit writes
 `data/counterfactual/park_exit.jsonl` so Saturday prices what holding to 15:45 would have done.
+
+**LOG ONLY, never deciding (OTV5 r90, SHADOW.1).** Every PARK tick that reached a direction records the daily SMA 50
+slope's verdict (keep / would_skip / unknown) as plan_check `shadow_park_sma50` - the S4 equity pick, logged by the
+operator's order (2026-11-08) though it failed blind. The Hunt records the opening-range / EM verdict on each fire as
+`shadow_hunt_or_em`. `tools/shadow_rule_status.py --fleet` proves both are writing.
 
 **Measured** (read-only, 2026-10-17; fit week 10-12..16 reported separately): QQQ 41 days n11
 +10,550 at $1,050 (+1,590 without the fit week); SPX 39 days n14 +13,320 at $2,500. PARK.X (picks

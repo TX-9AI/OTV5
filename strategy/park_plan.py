@@ -1,5 +1,9 @@
 """
-strategy/park_plan.py  v5.5
+strategy/park_plan.py  v5.6
+v5.6  2026-11-08  OTV5 r90 (SHADOW.1) — LOG ONLY: once the first hour gives a direction, and before GATE-G, the commitment
+      gate or the contract can refuse it, prepare() records the daily SMA 50 slope's verdict (S4 S1d_slope, on the box's
+      own TastyTrade 1d candles) through strategy/shadow_rules.record_park: one plan_check row shadow_park_sma50 per tick,
+      one [shadow-rule] line per day and direction. It never decides and never raises (tests/check_shadow_rules.py N2).
 v5.5  2026-11-03  OTV5 r72 (PARK.5) — THE GATE'S TAPE IS WATCHED FROM 10:00, AND A PROBLEM IS PAGED, NOT ONLY LOGGED. The
       operator, 2026-11-03: "Fine, but we need to be more responsive when that happens to mitigate impacts to trading" and
       "the plan should warn if there's a problem". (1) tape_gaps(sess, upto): the early read - what is ALREADY missing by
@@ -614,6 +618,10 @@ class ParkPlan:
         prep.direction = direction
         prep.side = "call" if direction == "long" else "put" if direction == "short" else ""
         prep.gap = fh["gap"]
+        # r90 (SHADOW.1) - LOG ONLY: the daily SMA 50 slope's verdict, on every tick that reached a direction (before
+        # GATE-G / the commitment gate / the contract can refuse it). Never decides, never raises.
+        from strategy import shadow_rules as _shadow
+        _shadow.record_park(t, symbol=sym, day=day, direction=direction, index=is_index(sym))
         if prep.unmet:
             t.refuse(prep.unmet[0], "not this session — " + ", ".join(prep.unmet))
             return prep

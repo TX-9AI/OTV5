@@ -1,5 +1,9 @@
 """
-strategy/liquidity_hunt.py  v5.2
+strategy/liquidity_hunt.py  v5.3
+v5.3  2026-11-08  OTV5 r90 (SHADOW.1) — LOG ONLY: every fire records the opening-range / EM rule's verdict (S5 R1,
+      skip below 0.927) through strategy/shadow_rules.record_hunt on the firing tick, before take(): one plan_check row
+      shadow_hunt_or_em and one [shadow-rule] line. It never decides and never raises; the signal, the verdict and the
+      reason are unchanged (tests/check_shadow_rules.py N1). The operator, 2026-11-08: "this is one time where a log only is worth doing. We've been burned on 'log-only' before, so once we start trading on Monday I want immediate feedback that it's really logging. Log only: opening range rule and SMA 50 rule, confirm it's logging Monday morning."
 v5.2  2026-10-27  OTV5 r44 (BAR.1) — THE CLOSED BAR IS THE LAST BAR CLOSED BY TIME. break_state and the fake-fail walk read
       df_1m.iloc[-2], one bar stale on a tick before the new minute's first row exists (META 2026-10-27 3f2b1372: a Breakout short fired 10:10:00 ET on the 10:08 bar while 10:09 had already closed back inside the 623.20 edge). They now read
       utils.time_utils.closed_pos(df_1m, now_et); unchanged when the forming row is present. SOFI 2026-10-26 87de220f
@@ -120,6 +124,7 @@ import logging
 import config
 from strategy import relaxed
 from strategy import observe as _observe   # r254 (OBS.1)
+from strategy import shadow_rules as _shadow   # r90 (SHADOW.1): log-only, never decides
 from strategy.base_strategy import OptionsSignal as Signal
 from strategy.plan import Plan, _n
 from strategy.runaway_continuation import gamma_leverage_pick, target_delta, ATR_FLOOR_PCT
@@ -637,6 +642,9 @@ class LiquidityHunt:
         sig.underlying_stop_is_thesis = True
         sig.disarms_retest = False                       # the ORB is untouched
         relaxed.tag(sig)
+        # r90 (SHADOW.1) - LOG ONLY: the opening-range / EM rule's verdict on this fire. Never decides, never raises.
+        _shadow.record_hunt(prep.tick, symbol=_symbol_of(), now_et=now_et, price=price_now, direction=prep.direction,
+                            entry=prep.entry, contract=c, atm_iv=atm_iv, observed=_observe.is_active(self.name))
         if _observe.is_active(self.name):
             # r254 (OBS.1) - a LOG-ONLY fire never touches the real one-per-break set.
             logger.debug("[hunt] LOG-ONLY %s %s — %s", prep.entry, prep.direction, prep.trade_line())
