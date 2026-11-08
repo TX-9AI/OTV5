@@ -4,9 +4,9 @@
 Do not edit by hand: the generator runs inside the land command and
 the canary fails on drift (WORKING_AGREEMENT 33).
 
-524 Python modules across 12 local packages.
+526 Python modules across 12 local packages.
 
-**Reached by:** 129 imported · 25 declared entry points · 264 referenced from a script, unit or doc but never imported · **106 by nothing here**.
+**Reached by:** 129 imported · 25 declared entry points · 266 referenced from a script, unit or doc but never imported · **106 by nothing here**.
 
 ⚠️ The last group is a REVIEW LIST, not a delete list. A
 `land.spec CHECK` line ships inside a tarball and is never
@@ -42,7 +42,7 @@ execution.exit_engine); every such edge is listed below like any other.
 - `analysis/market_state.py` - the structural state assembly.
   **Carries the vocabulary, classifies nothing.**
 
-**Where the evidence lives:** `tests/` holds 330 standing
+**Where the evidence lives:** `tests/` holds 331 standing
 checks (`check_*.py`, all run by `tools/boot_sweep.py` at boot)
 plus the studies that produced every threshold in
 `docs/TRADES.md`. **A number in a strategy file should be
@@ -918,6 +918,10 @@ Change these with the most care; a break here reaches everything downstream.
 - **called by:** (not imported) — referenced in `docs/BACKLOG.md`
 
 ### `tests/check_et_offset.py`
+- **calls:** (none)
+- **called by:** (not imported) — referenced in `docs/BACKLOG.md`
+
+### `tests/check_excursions_report.py`
 - **calls:** (none)
 - **called by:** (not imported) — referenced in `docs/BACKLOG.md`
 
@@ -1868,6 +1872,10 @@ Change these with the most care; a break here reaches everything downstream.
 ### `tests/eod_compare.py`
 - **calls:** `config.py`
 - **called by:** (not imported) — referenced in `docs/BACKLOG.md`
+
+### `tests/excursions.py`
+- **calls:** (none)
+- **called by:** (not imported) — referenced in `devtools.sh`, `docs/BACKLOG.md`, `docs/WORKING_AGREEMENT.md`
 
 ### `tests/exit_record.py`
 - **calls:** (none)
