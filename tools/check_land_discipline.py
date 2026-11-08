@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
-# tools/check_land_discipline.py — v5.1
+# tools/check_land_discipline.py — v5.2
+# v5.2  2026-11-08  OTV5 r83 (OTV4DEP.2) — the Run example lands against ~/OTV5 (--rev r82); it named the frozen
+#   ~/options-trader-v4. Comment only; no behaviour changed.
 # v5.1  2026-10-25  (LAND.1) — A RE-ISSUED REVISION'S ROW IS FOUND. §26 suffixes a re-issue of a shipped revision
 #   (r18_r2, r18_r3), and the ledger-row regex `r\d+[a-z]?` could not match one, so the land of a genuine re-issue died
 #   with "no row for r18_r2" and the payload loose in the tree (hit 2026-09-13). The row id now allows one optional
@@ -65,7 +67,7 @@
 #   this one and calling the delivery verified would be exactly the laundered
 #   green WORKING_AGREEMENT §18 warns about.
 #
-# Run:  python3 tools/check_land_discipline.py --repo ~/options-trader-v4 --rev r183
+# Run:  python3 tools/check_land_discipline.py --repo ~/OTV5 --rev r82
 #       python3 tools/check_land_discipline.py --repo ~/day_trader_pro
 #       python3 tools/check_land_discipline.py --selftest
 

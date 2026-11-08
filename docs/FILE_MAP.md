@@ -6,7 +6,7 @@ the canary fails on drift (WORKING_AGREEMENT 33).
 
 528 Python modules across 12 local packages.
 
-**Reached by:** 129 imported · 25 declared entry points · 266 referenced from a script, unit or doc but never imported · **108 by nothing here**.
+**Reached by:** 129 imported · 25 declared entry points · 268 referenced from a script, unit or doc but never imported · **106 by nothing here**.
 
 ⚠️ The last group is a REVIEW LIST, not a delete list. A
 `land.spec CHECK` line ships inside a tarball and is never
@@ -763,7 +763,7 @@ Change these with the most care; a break here reaches everything downstream.
 
 ### `tests/check_condor_rails.py`
 - **calls:** `analysis/__init__.py`, `analysis/pitchfork.py`, `analysis/pitchfork_observer.py`, `config.py`
-- **called by:** (nothing — no importer and no mention in any script, unit or doc here)
+- **called by:** (not imported) — referenced in `docs/BACKLOG.md`
 
 ### `tests/check_condor_sibling_default.py`
 - **calls:** `database/__init__.py`, `database/trade_logger.py`, `execution/exit_engine.py`
@@ -975,7 +975,7 @@ Change these with the most care; a break here reaches everything downstream.
 
 ### `tests/check_ext_polarity.py`
 - **calls:** `config.py`, `data/candle_feed.py`
-- **called by:** (nothing — no importer and no mention in any script, unit or doc here)
+- **called by:** (not imported) — referenced in `docs/BACKLOG.md`
 
 ### `tests/check_fed_day_record.py`
 - **calls:** `config.py`, `data/macro_data.py`, `utils/time_utils.py`
@@ -983,7 +983,7 @@ Change these with the most care; a break here reaches everything downstream.
 
 ### `tests/check_feed_always_on.py`
 - **calls:** `data/__init__.py`, `data/candle_feed.py`
-- **called by:** (not imported) — referenced in `docs/ENV.md`
+- **called by:** (not imported) — referenced in `docs/BACKLOG.md`, `docs/ENV.md`
 
 ### `tests/check_feed_fractional_size.py`
 - **calls:** `data/candle_feed.py`

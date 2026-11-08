@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """
-tests/check_ext_polarity.py  v5.0
+tests/check_ext_polarity.py  v5.1
+v5.1  2026-11-08  OTV5 r83 (OTV4DEP.2) — the Run line cds into ~/OTV5, the tree this lives in; it named the frozen
+      ~/options-trader-v4. Docstring only; no check changed.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 
 `tho=true` is the RTH echo. Its ABSENCE is the extended one.
@@ -32,7 +34,7 @@ BORN RED, verified against HEAD f68e228 + r55:
   C1 -> "NVDA{=m,tho=true} reported ext=True - that is the RTH echo"
   C3 -> "1m resolves to NO route - candles are being dropped"
 
-Run:  cd ~/options-trader-v4 && python3 tests/check_ext_polarity.py
+Run:  cd ~/OTV5 && python3 tests/check_ext_polarity.py
 """
 
 from __future__ import annotations

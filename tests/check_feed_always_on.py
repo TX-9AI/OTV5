@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """
-tests/check_feed_always_on.py  v5.0
+tests/check_feed_always_on.py  v5.1
+v5.1  2026-11-08  OTV5 r83 (OTV4DEP.2) — the Run line cds into ~/OTV5, the tree this lives in; it named the frozen
+      ~/options-trader-v4. Docstring only; no check changed.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 
 The feed subscribes whenever the box is up, and the RTH series stays pure.
@@ -28,7 +30,7 @@ the session used to fall through and connect.
 BORN RED, verified 2026-08-20 against pristine HEAD c1531a6:
   C1 -> "feed still stands down outside RTH - the gate was not removed"
 
-Run:  cd ~/options-trader-v4 && python3 tests/check_feed_always_on.py
+Run:  cd ~/OTV5 && python3 tests/check_feed_always_on.py
 """
 
 from __future__ import annotations
