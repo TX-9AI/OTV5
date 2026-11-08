@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""tests/check_disk_watch.py — v5.1
+"""tests/check_disk_watch.py — v5.2
+v5.2  2026-11-08  (ROUTE.1) — D13: a real alert tells control too: alert_route.note_direct("DSK", the unescaped text,
+      {"pct": ...}) once per episode, also when there is no sender; the drill does not; a note_direct that raises
+      costs nothing (check() still returns, the box still sends).
 v5.1  2026-10-26  (TG.1) — THE VERDICT COMES FROM THE SENDER'S CALLBACK. TelegramSender v5.1 queues, so send() -> True
       is ACCEPTED, not delivered. D10 the DRILL returns at once, never calls send_sync, and writes "DRILL delivered=True"
       only when the callback reports it (False on a drop); D11 a real alert the sender finally does NOT deliver re-arms,
@@ -293,11 +296,43 @@ def main():
     check("D12 a late failure from an OLDER episode does not re-arm the current one",
           len(a.sent) == 2 and D._state["over"] is True, f"sent={len(a.sent)} over={D._state['over']}")
 
+    # ══ D13 — v5.2 (ROUTE.1): control hears every real disk alert ══════════
+    import notifications.alert_route as AR
+    notes = []
+    real_note = AR.note_direct
+    AR.note_direct = lambda code, text, meta=None: notes.append((code, text, meta)) or True
+    try:
+        D._state.update(over=False, last_check=0.0)
+        _arm(D, 94.0)
+        a13 = _AsyncSender()
+        D.check(sender=a13, instrument="QQQ")
+        _arm(D, 94.0)
+        D.check(sender=a13, instrument="QQQ")                        # same episode: no second note
+        D._state.update(over=False, last_check=0.0)
+        _arm(D, 95.0)
+        D.check(sender=None, instrument="QQQ")                       # no sender: control still hears it
+        n_before = len(notes)
+        AR.note_direct = lambda *a, **k: (_ for _ in ()).throw(RuntimeError("boom"))
+        D._state.update(over=False, last_check=0.0)
+        _arm(D, 96.0)
+        a13b = _AsyncSender()
+        raised = False
+        try:
+            D.check(sender=a13b, instrument="QQQ")
+        except Exception:                                            # noqa: BLE001
+            raised = True
+    finally:
+        AR.note_direct = real_note
+    ok13 = (n_before == 2 and notes[0][0] == "DSK" and notes[0][2] == {"pct": 94.0} and "DISK 94%" in notes[0][1]
+            and notes[1][2] == {"pct": 95.0} and not raised and len(a13b.sent) == 1)
+    check("D13 a real disk alert is noted to control once per episode, also with no sender; a fault costs nothing",
+          ok13, f"notes={[(c, m) for c, _t, m in notes]} raised={raised} sent={len(a13b.sent)}")
+
     print()
     if FAILED:
         print(f"RED — {len(FAILED)} failed: {', '.join(FAILED)}")
         return 1
-    print("GREEN — 26 checks")
+    print("GREEN — 27 checks")
     return 0
 
 

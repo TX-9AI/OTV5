@@ -1,4 +1,8 @@
-"""data/disk_watch.py — v5.2
+"""data/disk_watch.py — v5.3
+v5.3  2026-11-08  (ROUTE.1) — THE DISK ALERT REACHES CONTROL TOO. Before the real alert's direct send (whether it is sent or not),
+      notifications.alert_route.note_direct("DSK", text, {"pct": ...}) writes its `[alert]` line, so control's triage
+      sees the disk event (outside RTH it runs the box's retention purge on a flat box; in RTH it is the operator's).
+      The box still sends it itself at once; control never re-sends it. Never raises. Gate tests/check_disk_watch.py.
 v5.2  2026-10-26  (TG.1) — THE VERDICT COMES FROM THE SENDER'S CALLBACK, AND THE LOOP NEVER WAITS FOR TELEGRAM.
       notifications/telegram_sender v5.1 queues: send() -> True means ACCEPTED, not delivered. Both sends pass
       on_result=, through _send_async (a sender whose send() takes no on_result is treated as synchronous: its bool is
@@ -93,6 +97,15 @@ import stat
 import time
 
 log = logging.getLogger(__name__)
+
+
+def _note_control(text: str, pct: float) -> None:
+    """v5.3 (ROUTE.1) — the `[alert]` line control triages. NEVER raises."""
+    try:
+        from notifications.alert_route import note_direct
+        note_direct("DSK", text, {"pct": round(float(pct), 1)})
+    except Exception:                                       # noqa: BLE001
+        pass
 
 
 def _page() -> None:
@@ -316,6 +329,7 @@ def check(sender=None, instrument: str = "?") -> bool:
     # the sender directly and so must do the same: a FILE PATH is not ours to
     # trust either.
     msg = html.escape("\n".join(lines))
+    _note_control("\n".join(lines), pct)                    # v5.3 (ROUTE.1) — control's triage, sent or not
 
     if sender is None:
         log.error("disk_watch: no sender — alert NOT delivered:\n%s", msg)

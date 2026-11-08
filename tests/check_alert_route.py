@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """
-tests/check_alert_route.py  v5.0
+tests/check_alert_route.py  v5.1
+v5.1  2026-11-08  (ROUTE.1) — R10: note_direct() on a managed box writes one via=direct, crit [alert] line (code DSK,
+      meta kept, the text unescaped) and sends nothing; standalone it writes nothing; a fault inside it returns False.
 v5.0  2026-11-02  OTV5 r71 (PAGE.2) — new. A MANAGED BOX HANDS ITS ALERTS TO CONTROL'S ROUTER; CRITICAL ALERTS AND A
       STALE CONTROL STREAM STILL SEND FROM THE BOX. Born red on 2ee301d: notifications/alert_route.py does not exist
       (R0) and every check after it fails with it.
@@ -294,6 +296,27 @@ def main():
     ar.ack_path = real_path
     check("R8 a router fault sends from the box and never raises out of _send", not bad, "; ".join(bad))
     ar._pending.clear()
+
+    # R10 — note_direct (v5.1, ROUTE.1)
+    _choose("managed")
+    _ack()
+    CAP.recs.clear()
+    ok_m = ar.note_direct("DSK", "DISK 94% on QQQ <act>", {"pct": 94.0})
+    recs10 = CAP.alerts()
+    _choose("standalone")
+    CAP.recs.clear()
+    ok_s = ar.note_direct("DSK", "x")
+    none_s = CAP.alerts()
+    _choose("managed")
+    real_write = ar._write
+    ar._write = lambda rec: (_ for _ in ()).throw(RuntimeError("boom"))
+    ok_f = ar.note_direct("DSK", "x")
+    ar._write = real_write
+    r10 = recs10[0] if len(recs10) == 1 else {}
+    check("R10 note_direct: managed -> one via=direct crit DSK line; standalone -> none; a fault -> False",
+          ok_m is True and r10.get("via") == "direct" and r10.get("crit") is True and r10.get("code") == "DSK"
+          and r10.get("pct") == 94.0 and "<act>" in r10.get("text", "") and ok_s is False and none_s == []
+          and ok_f is False, "recs=%r ok=%r/%r/%r" % (recs10, ok_m, ok_s, ok_f))
 
     # R9 — no token
     leaked = [x for x in CAP.raw() if TOKEN in x] + [ln for ln in open(log, encoding="utf-8") if TOKEN in ln]

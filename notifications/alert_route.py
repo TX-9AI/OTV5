@@ -1,5 +1,9 @@
 """
-notifications/alert_route.py  v5.0
+notifications/alert_route.py  v5.1
+v5.1  2026-11-08  (ROUTE.1) — note_direct(): an alert a box sends OUTSIDE the AlertManager (the disk guard) also writes
+      its `[alert]` line, via=direct, so control sees it and triages it (dtp alert_triage, by event type) while the
+      box still delivers it itself at once. The operator, 2026-11-08: "The telegram alerts should be flowing to
+      control—that's your 'notification' when something happens." Unmanaged box: nothing written. Never raises.
 v5.0  2026-11-02  (PAGE.2) — new. A MANAGED BOX HANDS ITS ALERTS TO CONTROL; CONTROL SENDS ONE PACED, GROUPED TELEGRAM
       QUEUE FOR THE FLEET. 2026-11-02 09:30 and 14:19 ET a dxFeed node failure made 3, then 8+, boxes each send its own
       "BOT IS BLIND" inside a minute; the operator: "we need that message routing slash queue triage more than ever".
@@ -157,6 +161,23 @@ def route(code: str, ref: str, text: str, send_direct, meta: dict = None):
             return True, bool(send_direct())
         except Exception:                                       # noqa: BLE001
             return True, False
+
+
+def note_direct(code: str, text: str, meta: dict = None) -> bool:
+    """Tell control about an alert this box already sent itself (outside route()). -> True if the line was written.
+    via=direct, so control records and triages it and never re-sends it. NEVER raises."""
+    try:
+        if not _pager.is_managed():
+            return False
+        rec = {"id": _next_id(), "code": str(code or "MSG").upper(), "ref": "", "sym": _instrument(), "via": "direct",
+               "crit": True, "ts": round(time.time(), 3), "text": str(text)[:3800]}
+        for k, v in (meta or {}).items():
+            if k not in rec and v is not None:
+                rec[k] = v
+        _write(rec)
+        return True
+    except Exception:                                           # noqa: BLE001
+        return False
 
 
 def check_pending(now: float = None, force: bool = False) -> list:

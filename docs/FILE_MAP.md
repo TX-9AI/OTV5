@@ -6,7 +6,7 @@ the canary fails on drift (WORKING_AGREEMENT 33).
 
 523 Python modules across 12 local packages.
 
-**Reached by:** 127 imported · 25 declared entry points · 270 referenced from a script, unit or doc but never imported · **101 by nothing here**.
+**Reached by:** 127 imported · 25 declared entry points · 271 referenced from a script, unit or doc but never imported · **100 by nothing here**.
 
 ⚠️ The last group is a REVIEW LIST, not a delete list. A
 `land.spec CHECK` line ships inside a tarball and is never
@@ -206,7 +206,7 @@ Change these with the most care; a break here reaches everything downstream.
 - **called by:** `analysis/gate_report.py`, `derived/anchors.py`, `derived/gamma_regime.py`, `derived/registry.py`, `derived/snapshot.py`, `execution/exit_engine.py`, `main.py`, `strategy/breakout_plan.py`, `strategy/liquidity_hunt.py`, `strategy/plan.py`, `tests/check_bfly_vwap_band.py`, `tests/check_breakout_rearm.py`, `tests/check_derived_layer.py`, `tests/check_engine_status.py`, `tests/check_foreign_symbol_board.py`, `tests/check_fork_closed_bars.py`, `tests/check_fork_invalidation.py`, `tests/check_handoff_entry_time.py`, `tests/check_hunt_runway_sign.py`, `tests/check_indicator_votes.py`, `tests/check_level_defences.py`, `tests/check_level_engine_book.py`, `tests/check_level_flip.py`, `tests/check_level_source.py`, `tests/check_liquidity_hunt.py`, `tests/check_market_time.py`, `tests/check_plan_heartbeat.py`, `tests/check_plan_states.py`, `tests/check_rails_book.py`, `tests/check_runaway_plan.py`, `tests/check_shadow_rules.py`, `tests/check_store_paths.py`, `tests/check_surface_columns.py`, `tests/check_zones.py`
 
 ### `data/disk_watch.py`
-- **calls:** `notifications/pager.py`
+- **calls:** `notifications/alert_route.py`, `notifications/pager.py`
 - **called by:** `main.py`, `tests/check_alert_page.py`, `tests/check_disk_watch.py`
 
 ### `data/gex_data.py`
@@ -387,7 +387,7 @@ Change these with the most care; a break here reaches everything downstream.
 
 ### `notifications/alert_route.py`
 - **calls:** `config.py`, `notifications/__init__.py`, `notifications/pager.py`, `notifications/telegram_sender.py`
-- **called by:** `notifications/alert_manager.py`, `tests/check_alert_route.py`
+- **called by:** `data/disk_watch.py`, `notifications/alert_manager.py`, `tests/check_alert_route.py`, `tests/check_disk_watch.py`
 
 ### `notifications/pager.py`
 - **calls:** (none)
@@ -846,8 +846,8 @@ Change these with the most care; a break here reaches everything downstream.
 - **called by:** (not imported) — referenced in `devtools.sh`, `docs/BACKLOG.md`
 
 ### `tests/check_disk_watch.py`
-- **calls:** `data/disk_watch.py`
-- **called by:** (nothing — no importer and no mention in any script, unit or doc here)
+- **calls:** `data/disk_watch.py`, `notifications/alert_route.py`
+- **called by:** (not imported) — referenced in `docs/BACKLOG.md`
 
 ### `tests/check_dispatch.py`
 - **calls:** `strategy/gex_pin_butterfly.py`, `strategy/runaway_continuation.py`
