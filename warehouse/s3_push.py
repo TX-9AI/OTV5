@@ -1,5 +1,12 @@
 """
-warehouse/s3_push.py  v5.9
+warehouse/s3_push.py  v5.10
+v5.10 2026-11-08  OTV5 r98 (CAP.6) — A DAILY BAR IS FILED UNDER ITS OWN SESSION. dxFeed stamps a 1d candle at 00:00 UTC
+      of its session date; push_candles took dt from that stamp in ET, which is 19:00/20:00 the evening BEFORE, so every
+      daily bar landed one dt early (NVDA's 11-06 session close 186.68 sits in dt=2026-11-05). It misled the earnings
+      study into "daily bars end 11-04". Daily and coarser (1d, 1w, ...) now take dt from the UTC date of the stamp,
+      which is the session date; intraday bars are unchanged (ET date of the newest bar). Objects pushed before r98 keep
+      their old dt: readers fold by ts_epoch_ms (seed_candles_from_warehouse) and are unaffected; a dt-scanning reader
+      of 1d must also look one dt earlier for sessions before 2026-11-09. Gate tests/check_candle_dt.py.
 v5.9  2026-11-08  OTV5 r88 (RETIRE.3) — the shadow_trades stage, SHADOW_TRADES_DB and its ledger go with the TCS shadow (raw/shadow_trades never had an object). The operator, 2026-11-08: "Delete" (the TCS shadow, which never fired: its own gates declined every candidate 11-02..11-06).
 v5.8  2026-11-03  OTV5 r72 (PARK.5) — AN ALLOW-LIST: A BOX UPLOADS ITS OWN SYMBOL AND NOTHING ELSE. The operator, 2026-11-03:
       "Make sure the boxes not trading qqq are hard blocked from uploading any other symbol." Every stage that ships
@@ -1083,6 +1090,17 @@ def _closed_bars(rows, iv, now_ms):
             if int(r["ts_epoch_ms"]) + span + _CLOSE_GRACE_MS <= now_ms]
 
 
+def candle_dt(ts_ms, iv):
+    """The dt= partition for a candle object whose newest bar is stamped ts_ms. Intraday (and any interval this
+    function cannot read): the ET date of the bar, as before. Daily and coarser ("1d", "d", "2d", "1w", "1mo", ...):
+    dxFeed stamps them at 00:00 UTC of the session date, so the UTC date IS the session; its ET date would be the
+    evening before (v5.10, CAP.6)."""
+    utc = datetime.fromtimestamp(int(ts_ms) / 1000, tz=timezone.utc)
+    if re.fullmatch(r"\d*(d|w|mo)", str(iv or "").strip().lower()):
+        return utc.date().isoformat()
+    return utc.astimezone(ZoneInfo("America/New_York")).date().isoformat()
+
+
 def push_candles(s3, bucket, db_path, ledger, me, counters=None):
     """feed_store candles — ALL intervals, high-water mark per symbol+interval.
 
@@ -1132,8 +1150,7 @@ def push_candles(s3, bucket, db_path, ledger, me, counters=None):
         if not rows:
             continue
         top = int(rows[-1]["ts_epoch_ms"])
-        day = datetime.fromtimestamp(top / 1000, tz=timezone.utc).astimezone(
-            ZoneInfo("America/New_York")).date().isoformat()
+        day = candle_dt(top, iv)                                 # v5.10 (CAP.6): a daily bar under its own session
         sha = _sha256(_canon(rows))
         body = _wrap("candles", rows, sym, day,
                      {"interval": iv, "n_bars": len(rows),

@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 """
-tests/check_capture_all.py  v5.0
+tests/check_capture_all.py  v5.1
+v5.1  2026-11-08  OTV5 r98 (CAP.6) — candles-recent: C3/T1 re-stated for the fourth timer (it opens a stream, so it must
+      refuse while optionsbot is active: G1); L1 the lookback windows and labels (1d / 1d_eth / 1h / 5m, the extended-hours
+      daily asked with extended_trading_hours=True); F1 front-month futures from /instruments/futures; W1 the SPX box adds
+      CONTEXT + futures; C1 allows warehouse/self_close.py, which RUNS the tool (it reads nothing it records).
 v5.0  2026-11-08  OTV5 r94 (CAP.1) — new. tools/capture_all.py records everything TastyTrade serves that the feed does
       not keep, into the warehouse; deploy/install_capture_timer.sh schedules it; retention_purge v5.3 purges its spool.
       The operator, 2026-11-08: "If they offer it, we better be downloading it. Non-negotiable."
@@ -17,7 +21,13 @@ v5.0  2026-11-08  OTV5 r94 (CAP.1) — new. tools/capture_all.py records everyth
   K2  the RAW response is stored whole: a field TastyTrade adds tomorrow survives the round trip (no model, no column list)
   B1  chain batches are at most 100 symbols (the by-type combined limit) and every option of every expiry is asked
       when --max-dte is not given; --max-dte drops only the later expiries
-  T1  the installer writes three timers at the documented times, REST modes only, MemoryMax and idle IO set
+  T1  the installer writes four timers at the documented times (metrics/chain/events REST; candles-recent 16:12),
+      MemoryMax and idle IO set
+  G1  candles-recent refuses (no session opened) while optionsbot is active; unknown counts as active; --force overrides
+  L1  candles-recent asks 1d (21 d), 1d extended hours (21 d, label 1d_eth), 1h (5 d), 5m (3 d), one stream at a time,
+      and files each under raw/candles_full/interval=<label>/
+  F1  front_futures: the active-month contract's streamer symbol per product; a product with none is skipped, not guessed
+  W1  on the SPX box candles-recent adds CONTEXT and the front futures; elsewhere only the box symbol
   R1  retention_purge: spool files older than 3 days are counted (dry) / removed (apply); fresh files and dirs untouched
 """
 from __future__ import annotations
@@ -60,6 +70,7 @@ def main() -> int:
     allowed = {os.path.join(ROOT, p) for p in ("tools/capture_all.py", "tests/check_capture_all.py",
                                                 "tests/gen_file_map.py", "deploy/install_capture_timer.sh",
                                                 "warehouse/retention_purge.py", "setup_ec2.sh",
+                                                "warehouse/self_close.py",
                                                 "tests/check_bootstrap.py")}
     pat = re.compile(r"capture_all|capture_spool|raw/market_metrics|raw/chain_rest|raw/chain_listing|"
                      r"raw/corporate_events|raw/candles_full")
@@ -75,8 +86,9 @@ def main() -> int:
     inst = open(os.path.join(ROOT, "deploy", "install_capture_timer.sh")).read()
     dx_where = [m.start() for m in re.finditer(r"DXLinkStreamer", src)]
     cand_s, cand_e = src.index("async def _candles"), src.index("def do_candles")
-    check("C3 timer modes are metrics/chain/events only; DXLink appears only inside _candles",
-          'MODES="metrics chain events"' in inst and "candles" not in inst.split("MODES=")[1].split("\n")[0]
+    check("C3 timer modes are metrics/chain/events + candles-recent (never the unbounded `candles`); DXLink only in _candles",
+          'MODES="metrics chain events candles-recent"' in inst
+          and " candles " not in " " + inst.split("MODES=")[1].split("\n")[0].strip('"') + " "
           and all(cand_s <= w < cand_e for w in dx_where[1:]) and dx_where,
           f"dx at {dx_where}")
 
@@ -172,9 +184,84 @@ def main() -> int:
     # ── T1 ──
     cal = re.findall(r"(\w+)\)\s+printf '([^']*)'", inst)
     times = {k: re.findall(r"(\d\d:\d\d):00", v) for k, v in cal}
-    check("T1 three timers at 09:38/15:52, 09:42/12:30/16:15, 16:25; idle IO, MemoryMax",
-          times == {"metrics": ["09:38", "15:52"], "chain": ["09:42", "12:30", "16:15"], "events": ["16:25"]}
+    cal = re.findall(r"([\w-]+)\)\s+printf '([^']*)'", inst)
+    times = {k: re.findall(r"(\d\d:\d\d):00", v) for k, v in cal}
+    check("T1 four timers at 09:38/15:52, 09:42/12:30/16:15, 16:25, 16:12; idle IO, MemoryMax",
+          times == {"metrics": ["09:38", "15:52"], "chain": ["09:42", "12:30", "16:15"], "events": ["16:25"],
+                    "candles-recent": ["16:12"]}
           and "IOSchedulingClass=idle" in inst and "MemoryMax=" in inst, str(times))
+
+    # ── G1 / L1 / F1 / W1 ──
+    import asyncio
+    from datetime import date as _date
+    opened = []
+
+    async def fake_candles(_s, symbols, interval, since, idle_s=20.0, max_s=600.0, eth=False):
+        opened.append((tuple(symbols), interval, since.date(), eth))
+        return {sym: {1793836800000: {k: (sym if k == "event_symbol" else 1793836800000 if k == "time" else 1.0)
+                                      for k in ca.CANDLE_FIELDS}} for sym in symbols}
+
+    real_candles, real_active, real_sess = ca._candles, ca.bot_active, None
+    ca._candles = fake_candles
+    stored.clear()
+    fake.client = lambda *_a, **_k: Keep2()
+    raw_store = {}
+
+    class Keep2:
+        def put_object(self, **kw):
+            raw_store[kw["Key"]] = kw["Body"]
+
+    fake.client = lambda *_a, **_k: Keep2()
+    ca.bot_active = lambda: True
+    ds = types.ModuleType("data.tasty_client")
+    ds.get_session = lambda: opened.append("SESSION") or object()
+    ds.run_async = lambda c: None
+    sys.modules["data.tasty_client"] = ds
+    ca._load_service_env = lambda: 0
+    os.environ["OT_INSTRUMENT"] = "NVDA"
+    rc_g = ca.main(["candles-recent"])
+    g_refused = rc_g == 0 and opened == []
+    ca.bot_active = lambda: False
+    real_sub = subprocess.run
+    try:
+        subprocess.run = lambda *a, **k: (_ for _ in ()).throw(OSError("no systemctl"))
+        unknown_active = real_active() is True
+    finally:
+        subprocess.run = real_sub
+    check("G1 candles-recent refuses while optionsbot is active (no session opened); unknown counts as active",
+          g_refused and unknown_active, f"rc={rc_g} opened={opened} unknown={unknown_active}")
+    opened.clear()
+    raw_store.clear()
+    rc_l = ca.main(["candles-recent"])
+    want = [(("NVDA",), "1d", 21, False), (("NVDA",), "1d", 21, True), (("NVDA",), "1h", 5, False),
+            (("NVDA",), "5m", 3, False)]
+    today = ca.et_now().date()
+    got_l = [(o[0], o[1], (today - o[2]).days, o[3]) for o in opened if o != "SESSION"]
+    labels = sorted(re.search(r"interval=([^/]+)/", k).group(1) for k in raw_store)
+    check("L1 lookbacks 1d/1d_eth 21d, 1h 5d, 5m 3d (eth only for 1d_eth), filed per label; NVDA only off the SPX box (W1)",
+          rc_l == 0 and got_l == want and labels == ["1d", "1d_eth", "1h", "5m"]
+          and all(f"/sym=NVDA/pulled={today}.csv.gz" in k for k in raw_store), f"{got_l} {labels}")
+    fut = {"ES": {"items": [{"streamer-symbol": "/ESU26:XCME", "expiration-date": "2026-09-18"},
+                            {"streamer-symbol": "/ESH27:XCME", "expiration-date": "2027-03-19"},
+                            {"streamer-symbol": "/ESZ26:XCME", "expiration-date": "2026-12-18", "active-month": True}]},
+           "NQ": {"items": [{"streamer-symbol": "/NQZ26:XCME", "expiration-date": "2026-12-18"},
+                            {"streamer-symbol": "/NQH27:XCME", "expiration-date": "2027-03-19"}]},
+           "XX": {"items": []}}
+    ca._get = lambda _s, path, params=None: fut.get(params["product-code[]"][0], {"items": []}) \
+        if path == "/instruments/futures" else {}
+    ff = ca.front_futures(None, ("ES", "NQ", "XX"))
+    check("F1 front futures: active-month wins, else the nearest expiry; a product with none is skipped",
+          ff == ["/ESZ26:XCME", "/NQZ26:XCME"], str(ff))
+    os.environ["OT_INSTRUMENT"] = "SPX"
+    ca.FUT_PRODUCTS = ("ES",)
+    real_ff = ca.front_futures
+    ca.front_futures = lambda s, products=("ES",): real_ff(s, products)
+    opened.clear()
+    ca.main(["candles-recent"])
+    syms_spx = next(o[0] for o in opened if o != "SESSION")
+    check("W1 the SPX box adds CONTEXT and the front futures",
+          syms_spx[0] == "SPX" and set(ca.CONTEXT) <= set(syms_spx) and "/ESZ26:XCME" in syms_spx, str(syms_spx))
+    ca._candles = real_candles
 
     # ── R1 ──
     import warehouse.retention_purge as rp

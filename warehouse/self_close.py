@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """
-warehouse/self_close.py  v5.2
+warehouse/self_close.py  v5.3
+v5.3  2026-11-08  OTV5 r98 (CAP.6) — STEP 2c: once the feed is stopped, tools/capture_all.py candles-recent re-pulls
+      every Candle field over a lookback (raw/candles_full had no forward capture). Here because the 16:12 timer finds
+      optionsbot still up on a day the conductor did not close the box; bounded by `timeout` and it NEVER blocks the halt.
 v5.2  2026-10-31  OTV5 r64 (SER.1) — DRIFT NEVER EXCUSES A SERIES BACKLOG. s3_push v5.4 grades --verify SHORT while a series
       table's confirmed mark is below what the drain owed, and prints `  SERIES_LAG <ns|table> series_lag_s=N`. The
       COUNTER DRIFT pass (a small consistent prefix shortfall) would have halted such a box anyway; series_lag_max()
@@ -206,6 +209,17 @@ def main(argv=None) -> int:
     except Exception as exc:                                    # noqa: BLE001
         _log(f"could not stop candle-feed ({exc}) — the checkpoint will "
              f"report BUSY and reclaim less; continuing")
+
+    # ── 2c. CANDLES OVER A LOOKBACK (r98 CAP.6) ─────────────────────────────
+    # optionsbot and the feed are both stopped now, so one DXLink stream adds no session. Bounded, and never blocks
+    # the halt: a failure is logged and stepped over, and a later night's lookback covers today.
+    try:
+        r = subprocess.run(["timeout", "--kill-after=10", "300", sys.executable,
+                            os.path.join(HERE, "tools", "capture_all.py"), "candles-recent"],
+                           capture_output=True, text=True, timeout=330)
+        _log("candles-recent: " + " | ".join(((r.stdout or "") + (r.stderr or "")).strip().splitlines()[-2:])[:300])
+    except Exception as exc:                                    # noqa: BLE001
+        _log(f"candles-recent skipped: {exc}")
 
     # ── 3. trim expired local data ──────────────────────────────────────────
     # 🔑 HERE, AND NOWHERE ELSE, BECAUSE VERIFICATION HAS JUST SUCCEEDED. The

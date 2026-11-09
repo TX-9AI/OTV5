@@ -1,6 +1,16 @@
 #!/usr/bin/env python3
 """
-tools/capture_all.py  v5.0 — EVERYTHING TASTYTRADE SERVES THAT THE FEED DOES NOT ALREADY KEEP, INTO THE WAREHOUSE.
+tools/capture_all.py  v5.1 — EVERYTHING TASTYTRADE SERVES THAT THE FEED DOES NOT ALREADY KEEP, INTO THE WAREHOUSE.
+v5.1  2026-11-08  OTV5 r98 (CAP.6) — raw/candles_full HAD NO FORWARD CAPTURE, AND TASTYTRADE LAGS THE RTH DAILY. The
+      earnings study found the equity daily candles ending 11-04. Measured on AMD's box 11-08: the {=d,tho=true} daily
+      history TastyTrade serves stops two sessions back for every equity and ETF (NVDA/AMD/SPY 1d: ..11-04 on a Sunday),
+      while SPX/VIX and the futures are current and the extended-hours {=d} daily is current for all (NVDA ..11-06).
+      r94 only ever ran `candles` by hand (the 11-08 backfill), so nothing would ever fill those days. NEW mode
+      `candles-recent`, on its own timer at 16:12 ET (and from self_close after the feed stops): one DXLink stream at a time,
+      run ONLY while optionsbot is stopped (the conductor stops it at 16:05), so the streamer-session count never goes
+      above the trading-hours count. Each run re-pulls a LOOKBACK - 1d RTH 21 days, 1d extended hours 21 days
+      (interval=1d_eth), 1h 5 days, 5m 3 days - so a bar TastyTrade publishes late is picked up by a later night, and
+      the SPX box also pulls the CONTEXT symbols and the front-month futures (resolved from /instruments/futures each run).
 v5.0  2026-11-08  OTV5 r94 (CAP.1). The operator, 2026-11-08: "download fucking everything whether we use it or not
       ... We might need it later." / "If they offer it, we better be downloading it. Non-negotiable. It all goes to the
       fucking warehouse."
@@ -14,7 +24,7 @@ Every response is stored RAW (the JSON TastyTrade returned, or every Candle fiel
 field is dropped by a model or a column list. Objects go straight to S3 from a local spool that is deleted on a
 successful PUT (a failed PUT leaves the file for the next run; retention_purge removes spool files older than 3 days).
 
-MODES (each is one call of this script; the timer runs metrics / chain / events):
+MODES (each is one call of this script; the timers run metrics / chain / events / candles-recent):
   metrics  /market-metrics for the box family + CONTEXT symbols: IV index/rank/percentile (tw + tos), IV per expiry,
            IV30, HV30/60/90, IV-HV, beta, corr_spy, liquidity, earnings + dividend dates, borrow rate, lendability...
            -> raw/market_metrics/dt=<ET day>/sym=<box>/<HHMMSS>.json.gz
@@ -29,8 +39,11 @@ MODES (each is one call of this script; the timer runs metrics / chain / events)
   candles  DXLink Candle with EVERY field (OHLC, volume, vwap, bid/ask volume, imp_volatility, open_interest, count)
            for --symbols at --interval from --since. -> raw/candles_full/interval=<i>/sym=<SYM>/pulled=<day>.csv.gz
            (the feed's raw/candles keeps OHLCV only: vwap / bid-ask volume / imp_volatility / OI were never stored).
+  candles-recent  the same Candle fields over a LOOKBACK (RECENT below), for a STOPPED bot only (it refuses while
+           optionsbot is active): the box's own symbol, plus CONTEXT and the front futures on the SPX box.
+           -> raw/candles_full/interval=<1d|1d_eth|1h|5m>/sym=<SYM>/pulled=<ET day>.csv.gz
 
-Usage:  python3 tools/capture_all.py metrics|chain|events [--symbols A,B] [--max-dte N] [--dry-run]
+Usage:  python3 tools/capture_all.py metrics|chain|events|candles-recent [--symbols A,B] [--max-dte N] [--dry-run] [--force]
         python3 tools/capture_all.py candles --symbols SPX,VIX --interval 1d --since 2015-01-01
 """
 from __future__ import annotations
@@ -63,6 +76,11 @@ INDEXES = {"SPX", "VIX", "VIX9D", "VVIX", "VIX3M", "NDX", "RUT", "XSP"}
 # Context symbols captured once, by the SPX box (the same ownership rule s3_push applies to VIX).
 CONTEXT = ["VIX", "VIX9D", "VVIX", "VIX3M", "SPY", "QQQ", "IWM", "DIA", "TLT", "GLD", "USO", "HYG",
            "XLK", "XLF", "XLE", "XLV", "XLY", "XLC", "XLI", "XLP", "XLU", "XLB", "XLRE", "SMH"]
+# candles-recent: (interval, lookback days, extended hours, stored interval label). The RTH daily lags two sessions at
+# TastyTrade for equities (measured 11-08), so 21 days of lookback re-pulls it until it has been published.
+RECENT = (("1d", 21, False, "1d"), ("1d", 21, True, "1d_eth"), ("1h", 5, False, "1h"), ("5m", 3, False, "5m"))
+# Front-month futures the SPX box pulls (the 11-08 backfill's set), resolved to streamer symbols each run.
+FUT_PRODUCTS = ("ES", "NQ", "RTY", "YM", "ZN", "ZB", "CL", "GC", "6E", "VX")
 
 
 def _load_service_env() -> int:
@@ -137,7 +155,7 @@ def gz_json(obj) -> bytes:
 
 def meta(mode: str, **kw) -> dict:
     return {"source": "tastytrade", "mode": mode, "captured_at": datetime.now(timezone.utc).isoformat(),
-            "box": box_symbol(), "tool": "tools/capture_all.py v5.0", **kw}
+            "box": box_symbol(), "tool": "tools/capture_all.py v5.1", **kw}
 
 
 # ── REST modes ─────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -249,12 +267,12 @@ CANDLE_FIELDS = ["event_symbol", "time", "sequence", "count", "open", "high", "l
                  "bid_volume", "ask_volume", "imp_volatility", "open_interest", "event_flags", "index"]
 
 
-async def _candles(session, symbols, interval, since, idle_s=20.0, max_s=600.0):
+async def _candles(session, symbols, interval, since, idle_s=20.0, max_s=600.0, eth=False):
     from tastytrade import DXLinkStreamer
     from tastytrade.dxfeed import Candle
     got = {s: {} for s in symbols}
     async with DXLinkStreamer(session) as streamer:
-        await streamer.subscribe_candle(symbols, interval, start_time=since, extended_trading_hours=False)
+        await streamer.subscribe_candle(symbols, interval, start_time=since, extended_trading_hours=eth)
         loop = asyncio.get_event_loop()
         t0 = last = loop.time()
         while loop.time() - last < idle_s and loop.time() - t0 < max_s:
@@ -269,12 +287,12 @@ async def _candles(session, symbols, interval, since, idle_s=20.0, max_s=600.0):
     return got
 
 
-def do_candles(session, symbols, interval, since, dry):
-    got = asyncio.run(_candles(session, symbols, interval, since))
+def _write_candles(got, label, dry):
+    """One raw/candles_full object per symbol: every Candle field, sorted by time."""
     day = et_now().date()
     for sym, bars in got.items():
         if not bars:
-            print(f"CANDLES {sym} {interval} 0 bars served", flush=True)
+            print(f"CANDLES {sym} {label} 0 bars served", flush=True)
             continue
         buf = io.StringIO()
         w = csv.writer(buf)
@@ -283,18 +301,65 @@ def do_candles(session, symbols, interval, since, dry):
         for t in sorted(bars):
             w.writerow([bars[t][k] for k in CANDLE_FIELDS] + ["dxfeed_tastytrade", pulled])
         safe = sym.replace("/", "_").replace(":", "_")
-        key = f"raw/candles_full/interval={interval}/sym={safe}/pulled={day}.csv.gz"
+        key = f"raw/candles_full/interval={label}/sym={safe}/pulled={day}.csv.gz"
         r = spool_put(key, gzip.compress(buf.getvalue().encode()), dry)
         ts = sorted(bars)
         iv = sum(1 for t in ts if bars[t].get("imp_volatility") not in (None, 0) and str(bars[t]["imp_volatility"]) != "NaN")
         first = datetime.fromtimestamp(ts[0] / 1000, timezone.utc).date()
         last = datetime.fromtimestamp(ts[-1] / 1000, timezone.utc).date()
-        print(f"CANDLES {r} {sym} {interval} rows={len(ts)} {first}..{last} with_iv={iv}", flush=True)
+        print(f"CANDLES {r} {sym} {label} rows={len(ts)} {first}..{last} with_iv={iv}", flush=True)
+
+
+def do_candles(session, symbols, interval, since, dry):
+    _write_candles(asyncio.run(_candles(session, symbols, interval, since)), interval, dry)
+
+
+def bot_active() -> bool:
+    """optionsbot running? candles-recent never opens a stream beside it (the streamer-session ceiling)."""
+    try:
+        return subprocess.run(["systemctl", "is-active", "optionsbot"], capture_output=True, text=True,
+                              timeout=10).stdout.strip() == "active"
+    except Exception:
+        return True                     # unknown counts as active: never risk a session while it may be trading
+
+
+def front_futures(session, products=FUT_PRODUCTS):
+    """The front (active-month) contract's streamer symbol per product, from /instruments/futures. A product that does
+    not answer is skipped and named, never guessed."""
+    out = []
+    for p in products:
+        try:
+            items = (_get(session, "/instruments/futures", {"product-code[]": [p]}) or {}).get("items", [])
+        except Exception as e:
+            print(f"FUTURES {p} lookup failed: {type(e).__name__}", flush=True)
+            continue
+        live = [i for i in items if i.get("streamer-symbol") and not i.get("is-closing-only")]
+        act = [i for i in live if i.get("active-month")] or sorted(
+            (i for i in live if i.get("expiration-date")), key=lambda i: i["expiration-date"])[:1]
+        if act:
+            out.append(act[0]["streamer-symbol"])
+        else:
+            print(f"FUTURES {p} no active contract", flush=True)
+    return out
+
+
+async def _candles_recent(session, symbols, today):
+    got = {}
+    for iv, days, eth, label in RECENT:
+        since = datetime.combine(today - timedelta(days=days), datetime.min.time(), tzinfo=timezone.utc)
+        got[label] = await _candles(session, symbols, iv, since, eth=eth)
+    return got
+
+
+def do_candles_recent(session, symbols, dry):
+    for label, g in asyncio.run(_candles_recent(session, symbols, et_now().date())).items():
+        _write_candles(g, label, dry)
 
 
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("mode", choices=["metrics", "chain", "events", "candles", "flush"])
+    ap.add_argument("mode", choices=["metrics", "chain", "events", "candles", "candles-recent", "flush"])
+    ap.add_argument("--force", action="store_true", help="candles-recent: run even while optionsbot is active")
     ap.add_argument("--symbols", default="")
     ap.add_argument("--max-dte", type=int, default=None)
     ap.add_argument("--interval", default="1d")
@@ -315,6 +380,10 @@ def main(argv=None) -> int:
         print(f"FLUSH re-put {flushed} spooled object(s)", flush=True)
     if a.mode == "flush":
         return 0
+    if a.mode == "candles-recent" and not a.force and bot_active():
+        print("CANDLES-RECENT SKIP optionsbot is active - no extra DXLink session while trading; a later run's "
+              "lookback covers today", flush=True)
+        return 0
     from data.tasty_client import get_session
     session = get_session()
     if a.mode == "metrics":
@@ -326,6 +395,10 @@ def main(argv=None) -> int:
     elif a.mode == "candles":
         since = datetime.fromisoformat(a.since).replace(tzinfo=timezone.utc)
         do_candles(session, syms, a.interval, since, a.dry_run)
+    elif a.mode == "candles-recent":
+        if me == "SPX" and not a.symbols:
+            syms = syms + [c for c in CONTEXT if c not in syms] + front_futures(session)
+        do_candles_recent(session, syms, a.dry_run)
     return 0
 
 
