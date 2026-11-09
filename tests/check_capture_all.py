@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """
-tests/check_capture_all.py  v5.1
+tests/check_capture_all.py  v5.2
+v5.2  2026-11-08  OTV5 r99 (CAP.6) — measured on the fleet: candles-recent needs candle-feed stopped too (G1), it has no
+      timer any more (C3/T1 back to the three REST timers, plus the r98 unit removed), and the front-futures lookup runs in
+      the streams' own event loop (F1 pick_front + the async lookup; W1 fails if tasty_client.run_async is used).
 v5.1  2026-11-08  OTV5 r98 (CAP.6) — candles-recent: C3/T1 re-stated for the fourth timer (it opens a stream, so it must
       refuse while optionsbot is active: G1); L1 the lookback windows and labels (1d / 1d_eth / 1h / 5m, the extended-hours
       daily asked with extended_trading_hours=True); F1 front-month futures from /instruments/futures; W1 the SPX box adds
@@ -21,13 +24,13 @@ v5.0  2026-11-08  OTV5 r94 (CAP.1) — new. tools/capture_all.py records everyth
   K2  the RAW response is stored whole: a field TastyTrade adds tomorrow survives the round trip (no model, no column list)
   B1  chain batches are at most 100 symbols (the by-type combined limit) and every option of every expiry is asked
       when --max-dte is not given; --max-dte drops only the later expiries
-  T1  the installer writes four timers at the documented times (metrics/chain/events REST; candles-recent 16:12),
-      MemoryMax and idle IO set
-  G1  candles-recent refuses (no session opened) while optionsbot is active; unknown counts as active; --force overrides
+  T1  the installer writes three timers at the documented times (REST modes), MemoryMax and idle IO set, and removes
+      r98's optbot-capture-candles-recent unit where present
+  G1  candles-recent refuses (no session opened) while optionsbot or candle-feed is active; unknown counts as active
   L1  candles-recent asks 1d (21 d), 1d extended hours (21 d, label 1d_eth), 1h (5 d), 5m (3 d), one stream at a time,
       and files each under raw/candles_full/interval=<label>/
-  F1  front_futures: the active-month contract's streamer symbol per product; a product with none is skipped, not guessed
-  W1  on the SPX box candles-recent adds CONTEXT and the front futures; elsewhere only the box symbol
+  F1  pick_front / _front_futures: the active-month contract per product, else the nearest; none -> skipped, not guessed
+  W1  on the SPX box candles-recent adds CONTEXT and the front futures (looked up in the same loop); elsewhere only its own
   R1  retention_purge: spool files older than 3 days are counted (dry) / removed (apply); fresh files and dirs untouched
 """
 from __future__ import annotations
@@ -86,9 +89,8 @@ def main() -> int:
     inst = open(os.path.join(ROOT, "deploy", "install_capture_timer.sh")).read()
     dx_where = [m.start() for m in re.finditer(r"DXLinkStreamer", src)]
     cand_s, cand_e = src.index("async def _candles"), src.index("def do_candles")
-    check("C3 timer modes are metrics/chain/events + candles-recent (never the unbounded `candles`); DXLink only in _candles",
-          'MODES="metrics chain events candles-recent"' in inst
-          and " candles " not in " " + inst.split("MODES=")[1].split("\n")[0].strip('"') + " "
+    check("C3 timer modes are metrics/chain/events only; DXLink appears only inside _candles",
+          'MODES="metrics chain events"' in inst and "candles" not in inst.split("MODES=")[1].split("\n")[0]
           and all(cand_s <= w < cand_e for w in dx_where[1:]) and dx_where,
           f"dx at {dx_where}")
 
@@ -182,18 +184,17 @@ def main() -> int:
           str(len(asked45)))
 
     # ── T1 ──
-    cal = re.findall(r"(\w+)\)\s+printf '([^']*)'", inst)
-    times = {k: re.findall(r"(\d\d:\d\d):00", v) for k, v in cal}
     cal = re.findall(r"([\w-]+)\)\s+printf '([^']*)'", inst)
     times = {k: re.findall(r"(\d\d:\d\d):00", v) for k, v in cal}
-    check("T1 four timers at 09:38/15:52, 09:42/12:30/16:15, 16:25, 16:12; idle IO, MemoryMax",
-          times == {"metrics": ["09:38", "15:52"], "chain": ["09:42", "12:30", "16:15"], "events": ["16:25"],
-                    "candles-recent": ["16:12"]}
-          and "IOSchedulingClass=idle" in inst and "MemoryMax=" in inst, str(times))
+    check("T1 three timers at 09:38/15:52, 09:42/12:30/16:15, 16:25; idle IO, MemoryMax; r98's candles-recent unit "
+          "is removed where present",
+          times == {"metrics": ["09:38", "15:52"], "chain": ["09:42", "12:30", "16:15"], "events": ["16:25"]}
+          and "IOSchedulingClass=idle" in inst and "MemoryMax=" in inst
+          and 'RETIRED="candles-recent"' in inst and 'rm -f "/etc/systemd/system/optbot-capture-$m.timer"' in inst,
+          str(times))
 
     # ── G1 / L1 / F1 / W1 ──
     import asyncio
-    from datetime import date as _date
     opened = []
 
     async def fake_candles(_s, symbols, interval, since, idle_s=20.0, max_s=600.0, eth=False):
@@ -201,10 +202,22 @@ def main() -> int:
         return {sym: {1793836800000: {k: (sym if k == "event_symbol" else 1793836800000 if k == "time" else 1.0)
                                       for k in ca.CANDLE_FIELDS}} for sym in symbols}
 
-    real_candles, real_active, real_sess = ca._candles, ca.bot_active, None
+    fut = {"ES": {"items": [{"streamer-symbol": "/ESU26:XCME", "expiration-date": "2026-09-18"},
+                            {"streamer-symbol": "/ESH27:XCME", "expiration-date": "2027-03-19"},
+                            {"streamer-symbol": "/ESZ26:XCME", "expiration-date": "2026-12-18", "active-month": True}]},
+           "NQ": {"items": [{"streamer-symbol": "/NQZ26:XCME", "expiration-date": "2026-12-18"},
+                            {"streamer-symbol": "/NQH27:XCME", "expiration-date": "2027-03-19"}]},
+           "XX": {"items": []}}
+
+    class FakeSession:
+        loops = []
+
+        async def _get(self, path, params=None):
+            FakeSession.loops.append(asyncio.get_running_loop())
+            return fut.get(params["product-code[]"][0], {"items": []}) if path == "/instruments/futures" else {}
+
+    real_candles, real_active = ca._candles, ca.streams_active
     ca._candles = fake_candles
-    stored.clear()
-    fake.client = lambda *_a, **_k: Keep2()
     raw_store = {}
 
     class Keep2:
@@ -212,24 +225,35 @@ def main() -> int:
             raw_store[kw["Key"]] = kw["Body"]
 
     fake.client = lambda *_a, **_k: Keep2()
-    ca.bot_active = lambda: True
     ds = types.ModuleType("data.tasty_client")
-    ds.get_session = lambda: opened.append("SESSION") or object()
-    ds.run_async = lambda c: None
+    ds.get_session = lambda: opened.append("SESSION") or FakeSession()
+    ds.run_async = lambda c: (_ for _ in ()).throw(AssertionError("run_async used: a second event loop"))
     sys.modules["data.tasty_client"] = ds
     ca._load_service_env = lambda: 0
     os.environ["OT_INSTRUMENT"] = "NVDA"
+    ca.streams_active = lambda: True
     rc_g = ca.main(["candles-recent"])
     g_refused = rc_g == 0 and opened == []
-    ca.bot_active = lambda: False
     real_sub = subprocess.run
+
+    def units(active):
+        return lambda cmd, **k: types.SimpleNamespace(stdout="active\n" if cmd[-1] in active else "inactive\n")
     try:
+        subprocess.run = units({"candle-feed"})
+        feed_only = real_active() is True
+        subprocess.run = units({"optionsbot"})
+        bot_only = real_active() is True
+        subprocess.run = units(set())
+        neither = real_active() is False
         subprocess.run = lambda *a, **k: (_ for _ in ()).throw(OSError("no systemctl"))
         unknown_active = real_active() is True
     finally:
         subprocess.run = real_sub
-    check("G1 candles-recent refuses while optionsbot is active (no session opened); unknown counts as active",
-          g_refused and unknown_active, f"rc={rc_g} opened={opened} unknown={unknown_active}")
+    check("G1 candles-recent refuses while optionsbot OR candle-feed is active (no session opened); both stopped runs; "
+          "unknown counts as active",
+          g_refused and feed_only and bot_only and neither and unknown_active,
+          f"rc={rc_g} opened={opened} feed={feed_only} bot={bot_only} neither={neither} unknown={unknown_active}")
+    ca.streams_active = lambda: False
     opened.clear()
     raw_store.clear()
     rc_l = ca.main(["candles-recent"])
@@ -241,26 +265,22 @@ def main() -> int:
     check("L1 lookbacks 1d/1d_eth 21d, 1h 5d, 5m 3d (eth only for 1d_eth), filed per label; NVDA only off the SPX box (W1)",
           rc_l == 0 and got_l == want and labels == ["1d", "1d_eth", "1h", "5m"]
           and all(f"/sym=NVDA/pulled={today}.csv.gz" in k for k in raw_store), f"{got_l} {labels}")
-    fut = {"ES": {"items": [{"streamer-symbol": "/ESU26:XCME", "expiration-date": "2026-09-18"},
-                            {"streamer-symbol": "/ESH27:XCME", "expiration-date": "2027-03-19"},
-                            {"streamer-symbol": "/ESZ26:XCME", "expiration-date": "2026-12-18", "active-month": True}]},
-           "NQ": {"items": [{"streamer-symbol": "/NQZ26:XCME", "expiration-date": "2026-12-18"},
-                            {"streamer-symbol": "/NQH27:XCME", "expiration-date": "2027-03-19"}]},
-           "XX": {"items": []}}
-    ca._get = lambda _s, path, params=None: fut.get(params["product-code[]"][0], {"items": []}) \
-        if path == "/instruments/futures" else {}
-    ff = ca.front_futures(None, ("ES", "NQ", "XX"))
+    picks = [ca.pick_front(fut[p]["items"]) for p in ("ES", "NQ", "XX")]
+    FakeSession.loops.clear()
+    ff = asyncio.run(ca._front_futures(FakeSession(), ("ES", "NQ", "XX")))
     check("F1 front futures: active-month wins, else the nearest expiry; a product with none is skipped",
-          ff == ["/ESZ26:XCME", "/NQZ26:XCME"], str(ff))
+          picks == ["/ESZ26:XCME", "/NQZ26:XCME", None] and ff == ["/ESZ26:XCME", "/NQZ26:XCME"], f"{picks} {ff}")
     os.environ["OT_INSTRUMENT"] = "SPX"
     ca.FUT_PRODUCTS = ("ES",)
-    real_ff = ca.front_futures
-    ca.front_futures = lambda s, products=("ES",): real_ff(s, products)
+    real_ff = ca._front_futures
+    ca._front_futures = lambda s, products=("ES",): real_ff(s, products)
     opened.clear()
-    ca.main(["candles-recent"])
-    syms_spx = next(o[0] for o in opened if o != "SESSION")
-    check("W1 the SPX box adds CONTEXT and the front futures",
-          syms_spx[0] == "SPX" and set(ca.CONTEXT) <= set(syms_spx) and "/ESZ26:XCME" in syms_spx, str(syms_spx))
+    FakeSession.loops.clear()
+    rc_w = ca.main(["candles-recent"])
+    syms_spx = next((o[0] for o in opened if o != "SESSION"), ())
+    check("W1 the SPX box adds CONTEXT and the front futures, looked up inside the streams' own event loop",
+          rc_w == 0 and syms_spx[:1] == ("SPX",) and set(ca.CONTEXT) <= set(syms_spx) and "/ESZ26:XCME" in syms_spx
+          and len(FakeSession.loops) == 1, f"rc={rc_w} {syms_spx} loops={len(FakeSession.loops)}")
     ca._candles = real_candles
 
     # ── R1 ──

@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
 """
-warehouse/self_close.py  v5.3
+warehouse/self_close.py  v5.4
+v5.4  2026-11-08  OTV5 r99 (CAP.6) — step 2c's reason restated: candles-recent needs optionsbot AND candle-feed stopped
+      (measured: with the feed up, 10 of 13 boxes were refused at the user-session limit), and the r98 timer is gone; the
+      conductor starts it on the boxes it closes (dtp r543), this step on a box that closes itself. No code change here.
 v5.3  2026-11-08  OTV5 r98 (CAP.6) — STEP 2c: once the feed is stopped, tools/capture_all.py candles-recent re-pulls
-      every Candle field over a lookback (raw/candles_full had no forward capture). Here because the 16:12 timer finds
-      optionsbot still up on a day the conductor did not close the box; bounded by `timeout` and it NEVER blocks the halt.
+      every Candle field over a lookback (raw/candles_full had no forward capture). Bounded by `timeout`; it NEVER
+      blocks the halt.
 v5.2  2026-10-31  OTV5 r64 (SER.1) — DRIFT NEVER EXCUSES A SERIES BACKLOG. s3_push v5.4 grades --verify SHORT while a series
       table's confirmed mark is below what the drain owed, and prints `  SERIES_LAG <ns|table> series_lag_s=N`. The
       COUNTER DRIFT pass (a small consistent prefix shortfall) would have halted such a box anyway; series_lag_max()
