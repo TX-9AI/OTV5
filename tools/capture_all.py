@@ -1,6 +1,12 @@
 #!/usr/bin/env python3
 """
-tools/capture_all.py  v5.2 — EVERYTHING TASTYTRADE SERVES THAT THE FEED DOES NOT ALREADY KEEP, INTO THE WAREHOUSE.
+tools/capture_all.py  v5.3 — EVERYTHING TASTYTRADE SERVES THAT THE FEED DOES NOT ALREADY KEEP, INTO THE WAREHOUSE.
+v5.3  2026-11-08  OTV5 r100 (CAP.6) — 🔴 candles-recent OVERWROTE THE BACKFILL. Both modes wrote
+      raw/candles_full/interval=<i>/sym=<S>/pulled=<ET day>.csv.gz, so the first live candles-recent run (11-08 evening,
+      ET day 2026-11-08 - the backfill's day) replaced 36 backfill objects (12 symbols x 1d / 1h / 5m: history from 2023 /
+      01-27 / 08-10) with its 21 / 5 / 3-day lookbacks. Restored the same evening by re-pulling the backfill ranges from
+      TastyTrade (AMD's box). candles-recent now writes pulled=<day>_recent.csv.gz, a key `candles` never writes, so a
+      lookback can never replace a history again (gate L2). Readers that take the newest key per prefix still sort it last.
 v5.2  2026-11-08  OTV5 r99 (CAP.6) — MEASURED ON THE FLEET, r98's 16:12 SLOT WAS WRONG ON TWO COUNTS. (1) With optionsbot
       stopped and candle-feed still up, 10 of 13 boxes were REFUSED ("The number of user sessions has exceeded the
       configured limit"); with candle-feed stopped too, 13 of 13 pulled. The feed's streamer is the one that counts, and at
@@ -51,7 +57,8 @@ conductor and by self_close after the close):
            (the feed's raw/candles keeps OHLCV only: vwap / bid-ask volume / imp_volatility / OI were never stored).
   candles-recent  the same Candle fields over a LOOKBACK (RECENT below), with the bot AND the feed stopped (it refuses
            while either is active): the box's own symbol, plus CONTEXT and the front futures on the SPX box.
-           -> raw/candles_full/interval=<1d|1d_eth|1h|5m>/sym=<SYM>/pulled=<ET day>.csv.gz
+           -> raw/candles_full/interval=<1d|1d_eth|1h|5m>/sym=<SYM>/pulled=<ET day>_recent.csv.gz (v5.3: never the
+              `candles` key, which r98-r99 shared and so overwrote the backfill)
 
 Usage:  python3 tools/capture_all.py metrics|chain|events|candles-recent [--symbols A,B] [--max-dte N] [--dry-run] [--force]
         python3 tools/capture_all.py candles --symbols SPX,VIX --interval 1d --since 2015-01-01
@@ -165,7 +172,7 @@ def gz_json(obj) -> bytes:
 
 def meta(mode: str, **kw) -> dict:
     return {"source": "tastytrade", "mode": mode, "captured_at": datetime.now(timezone.utc).isoformat(),
-            "box": box_symbol(), "tool": "tools/capture_all.py v5.2", **kw}
+            "box": box_symbol(), "tool": "tools/capture_all.py v5.3", **kw}
 
 
 # ── REST modes ─────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -297,8 +304,9 @@ async def _candles(session, symbols, interval, since, idle_s=20.0, max_s=600.0, 
     return got
 
 
-def _write_candles(got, label, dry):
-    """One raw/candles_full object per symbol: every Candle field, sorted by time."""
+def _write_candles(got, label, dry, suffix=""):
+    """One raw/candles_full object per symbol: every Candle field, sorted by time. suffix "_recent" (candles-recent)
+    keeps a lookback from ever sharing a key with a `candles` history pulled the same day (v5.3)."""
     day = et_now().date()
     for sym, bars in got.items():
         if not bars:
@@ -311,7 +319,7 @@ def _write_candles(got, label, dry):
         for t in sorted(bars):
             w.writerow([bars[t][k] for k in CANDLE_FIELDS] + ["dxfeed_tastytrade", pulled])
         safe = sym.replace("/", "_").replace(":", "_")
-        key = f"raw/candles_full/interval={label}/sym={safe}/pulled={day}.csv.gz"
+        key = f"raw/candles_full/interval={label}/sym={safe}/pulled={day}{suffix}.csv.gz"
         r = spool_put(key, gzip.compress(buf.getvalue().encode()), dry)
         ts = sorted(bars)
         iv = sum(1 for t in ts if bars[t].get("imp_volatility") not in (None, 0) and str(bars[t]["imp_volatility"]) != "NaN")
@@ -376,7 +384,7 @@ async def _candles_recent(session, symbols, today, futures=False):
 
 def do_candles_recent(session, symbols, dry, futures=False):
     for label, g in asyncio.run(_candles_recent(session, symbols, et_now().date(), futures)).items():
-        _write_candles(g, label, dry)
+        _write_candles(g, label, dry, suffix="_recent")
 
 
 def main(argv=None) -> int:
