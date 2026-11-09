@@ -1,5 +1,6 @@
 """
-strategy/gex_pin_butterfly.py  v5.14
+strategy/gex_pin_butterfly.py  v5.15
+v5.15  2026-11-08  OTV5 r97 (RETIRE.5) — CUT FROM 2026-11-09: config.GEX_BUTTERFLY_ENABLED is False in code, so ENABLED is False and plan_state reads the plan DORMANT; main never asks it. The operator, 2026-11-08: "I concur on both, in that order". The file is removed after the 11-09 close (step 2). Nothing in it changes but this header and the ENABLED fallback.
 v5.14  2026-11-03  OTV5 r73 (BFLY.17) — THE VIX RULE IS ENFORCED, THE DOOR IS NARROWER, AND THE FLY HOLDS TO THE CLOSE. The
       operator, 2026-11-03: "For the GEX fly, I want no stop except hold to close, I want the VIX rule enforced & I want more
       discriminatory entries." (1) VIX: a new condition `vix` - the macro snapshot's VIX (the number every trade row
@@ -386,7 +387,7 @@ def _gate(name: str, reason: str) -> None:
 # been validated against outcomes, because the data to do it did not exist until
 # 2026-08-19. `GEX_PIN_CONCENTRATION = 0.15` in gex_data was tuned against the
 # gamma-squared surface and means nothing for real positioning.
-ENABLED = getattr(config, "GEX_BUTTERFLY_ENABLED", True)       # v4.3: ON
+ENABLED = getattr(config, "GEX_BUTTERFLY_ENABLED", False)      # r97 (RETIRE.5): cut
 # 🔴 r208 — `WING_EM_FRAC` IS DELETED. The wing is no longer a fraction of the
 # expected move; it is SEARCHED over the chain's listed strikes, bracketed by
 # R_FLOOR on the wide side and survivability on the narrow side, narrowest

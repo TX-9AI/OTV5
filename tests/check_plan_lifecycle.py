@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_plan_lifecycle.py  v5.0
+tests/check_plan_lifecycle.py  v5.1
+v5.1  2026-11-08  OTV5 r97 (RETIRE.5) —  GEX fly is cut in production (OFF in code); this checker flips it on to exercise its code until step 2 removes it.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.1  2026-10-19  OTV4TEST r303 (PSTATE.1) — its subject SweepCreditSpread is DORMANT by default and a dormant plan now
       writes nothing by ruling, so this run switches it ACTIVE (OT_SWEEP_CS=1); what it pins is unchanged.
@@ -43,6 +44,8 @@ import sys
 
 _root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, _root)
+import config as _r97_cfg                                       # noqa: E402  r97 (RETIRE.5): the GEX fly is cut in production (OFF in code); this checker flips it on to exercise its code until step 2 removes it
+_r97_cfg.GEX_BUTTERFLY_ENABLED = True
 os.environ["OT_SWEEP_CS"] = "1"   # r303: the subject writes (check_plan_states pins dormant)
 
 _fails = []

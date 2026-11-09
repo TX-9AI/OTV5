@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_plan_states.py  v5.8
+tests/check_plan_states.py  v5.9
+v5.9  2026-11-08  OTV5 r97 (RETIRE.5) — RE-POINTED (WA section 38.4): the GEX pin butterfly is cut, so S1's ruled roster moves GEXPinButterfly to dormant and S3's two OT_GEX_BUTTERFLY cases read dormant for "0", "1" and "log" (a cut plan has no LOG state). What each check pins is unchanged. The operator, 2026-11-08: "I concur on both, in that order".
 v5.8  2026-11-08  OTV5 r88 (RETIRE.3) — the TCS is removed: S1 has no LOG plan, S3 drops its two OT_TCS_ACTIVE cases, D6 pins that main._retired_reason is gone. Every other check unchanged.
 v5.7  2026-11-08  OTV5 r76 (RETIRE.1) — RE-POINTED (WA section 38.4): the ORB trade, VOLT, ORCS, the ATP fly and the sweep
       are REMOVED, so S1's ruled dormant roster is the condor entry alone; S3 drops their switch cases and names an
@@ -148,10 +149,10 @@ def main():
     dc = store.conn
 
     # ── S1-S3: the states, read in fresh interpreters (config reads several switches at import) ──
-    ruled_active = ["Breakout", "CondorManagement", "CreditRoll", "GEXPinButterfly", "LiquidityHunt",
+    ruled_active = ["Breakout", "CondorManagement", "CreditRoll", "LiquidityHunt",
                     "PARK", "RunawayContinuation"]
     ruled_log = []                                         # r88 (RETIRE.3): the TCS, the last LOG plan, is removed
-    ruled_dormant = ["IronCondorStrategy"]
+    ruled_dormant = ["GEXPinButterfly", "IronCondorStrategy"]   # r97 (RETIRE.5): the GEX fly is cut
     st = fresh("import json\nfrom strategy import plan_state as S\n"
                "print(json.dumps({n: S.state(n) for n in S.TABLE}))")
     act = sorted(k for k, v in st.items() if v == "active")
@@ -174,7 +175,8 @@ def main():
              ("Breakout", {"OT_BREAKOUT": "log"}, "log"), ("LiquidityHunt", {"OT_HUNT": "true"}, "active"),
              ("LiquidityHunt", {"OT_HUNT": "off"}, "dormant"),
              ("GEXPinButterfly", {"OT_GEX_BUTTERFLY": "0"}, "dormant"),
-             ("GEXPinButterfly", {"OT_GEX_BUTTERFLY": "log"}, "log"),
+             ("GEXPinButterfly", {"OT_GEX_BUTTERFLY": "1"}, "dormant"),      # r97 (RETIRE.5): cut - no env turns it on
+             ("GEXPinButterfly", {"OT_GEX_BUTTERFLY": "log"}, "dormant"),    # r97: a cut plan has no LOG state
              ("PARK", {"OT_PARK": "off"}, "dormant"), ("PARK", {"OT_PARK": "log"}, "log"),
              ("RunawayContinuation", {"OT_RUNAWAY": "off"}, "dormant"),
              ("RunawayContinuation", {"OT_RUNAWAY": "log"}, "log")]      # r88: the TCS rows removed with it

@@ -1,5 +1,6 @@
 """
-strategy/plan_state.py  v5.5
+strategy/plan_state.py  v5.6
+v5.6  2026-11-08  OTV5 r97 (RETIRE.5) — GEXPinButterfly defaults DORMANT and a flag-read plan whose default is DORMANT has no LOG state: with config.GEX_BUTTERFLY_ENABLED False (code) it is DORMANT whatever OT_GEX_BUTTERFLY says, so the cut fly is never asked and writes nothing. The operator, 2026-11-08: "I concur on both, in that order" (cut from 11-09; code removed after that close).
 v5.5  2026-11-08  OTV5 r88 (RETIRE.3) — the TrendCreditSpread row, its OT_TCS_ACTIVE read and its _FLAG entry go with the TCS. The operator, 2026-11-08: "Delete" (the TCS shadow, which never fired: its own gates declined every candidate 11-02..11-06).
 v5.4  2026-11-08  OTV5 r76 (RETIRE.1) — the removed trades leave the table (ATPButterfly, VOLT, ORBStrategy, OpeningRangeCreditSpread, SweepCreditSpread), with their switches (OT_ATP_BUTTERFLY, OT_VOLT, OT_ORB_TRADE, OT_ORCS, OT_SWEEP_CS), their _FLAG entries and the ORB / SweepForLeg2 aliases. The live rows are unchanged. The operator, 2026-11-07: "Running dead code and logging dead code activity is unnecessary drag. Yes, I want all of those things fixed."
 v5.3  2026-10-31  OTV5 r67 (PARC.4) — PARC LEAVES THE TABLE (its row and its config.PARC_MODE
@@ -73,7 +74,7 @@ TABLE: Dict[str, Tuple[str, str, str]] = {
     "Breakout":                 ("OT_BREAKOUT",       ACTIVE,  HOUR),
     "LiquidityHunt":            ("OT_HUNT",           ACTIVE,  HOUR),
     "PARK":                     ("OT_PARK",           ACTIVE,  HOUR),
-    "GEXPinButterfly":          ("OT_GEX_BUTTERFLY",  ACTIVE,  HOUR),
+    "GEXPinButterfly":          ("OT_GEX_BUTTERFLY",  DORMANT, HOUR),   # RETIRE.5 (r97): cut from 2026-11-09
     "IronCondorStrategy":       ("",                  DORMANT, CONDITION),   # no entry of its own (r249)
     "CondorManagement":         ("",                  ACTIVE,  CONDITION),
     "CreditRoll":               ("",                  ACTIVE,  CONDITION),
@@ -151,6 +152,8 @@ def state(name: str) -> str:
             import config as _c
             if bool(getattr(_c, _FLAG[n], dflt == ACTIVE)):
                 return ACTIVE
+            if dflt == DORMANT:                                 # r97 (RETIRE.5): a cut plan has no LOG state
+                return DORMANT
             if raw == "log":
                 return LOG
             if dflt == LOG:                                     # r57 (TCS.LOG1): a default-LOG trade

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_admission_wired.py  v5.1
+tests/check_admission_wired.py  v5.2
+v5.2  2026-11-08  OTV5 r97 (RETIRE.5) — the GEX fly is cut in production (OFF in code); this checker flips it on to exercise its code until step 2 removes it.
 v5.1  2026-11-08  OTV5 r76 (RETIRE.1) — A3 RE-POINTED (WA 38.4): the ORB trade and its "ORB" dispatch alias are removed, so A3 pins
       that a live label IS its table key (Breakout asked when admitted, not when only PARK is) and the alias map is gone;
       A2/A5's placeholder admitted set names PARK, not the removed sweep.
@@ -43,6 +44,8 @@ import tempfile
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
+import config as _r97_cfg                                       # noqa: E402  r97 (RETIRE.5): the GEX fly is cut in production (OFF in code); this checker flips it on to exercise its code until step 2 removes it
+_r97_cfg.GEX_BUTTERFLY_ENABLED = True
 os.environ.setdefault("OT_TRADES_DB", os.path.join(tempfile.mkdtemp(), "t.db"))
 os.environ.setdefault("OT_DERIVED_DB", os.path.join(tempfile.mkdtemp(), "d.db"))
 FAILED, RAN = [], []

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""tests/check_bfly_vwap_band.py  v5.1
+"""tests/check_bfly_vwap_band.py  v5.2
+v5.2  2026-11-08  OTV5 r97 (RETIRE.5) — the GEX fly is cut in production (OFF in code); this checker flips it on to exercise its code until step 2 removes it.
 v5.1  2026-11-03  OTV5 r73 (BFLY.17) — the fly now also asks VIX < 20 and an open inside yesterday's range (the
       operator, 2026-11-03: "I want the VIX rule enforced & I want more discriminatory entries"); neither is this
       check's subject, so vix_now and prior_range_read are pinned to a VIX of 17 and an open inside the range.
@@ -62,6 +63,8 @@ from zoneinfo import ZoneInfo
 
 _root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, _root)
+import config as _r97_cfg                                       # noqa: E402  r97 (RETIRE.5): the GEX fly is cut in production (OFF in code); this checker flips it on to exercise its code until step 2 removes it
+_r97_cfg.GEX_BUTTERFLY_ENABLED = True
 # ⚠️ r101 — THE LANDER RUNS CHECKS UNDER SYSTEM `python3`, NOT THE VENV, and
 # every repo import below reaches `tastytrade`, which lives only in the venv.
 # This file was therefore UNRUNNABLE as a declared CHECK — it died on a

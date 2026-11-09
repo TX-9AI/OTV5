@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_gex_hold_close.py  v5.0
+tests/check_gex_hold_close.py  v5.1
+v5.1  2026-11-08  OTV5 r97 (RETIRE.5) — the GEX fly is cut in production (OFF in code); this checker flips it on to exercise its code until step 2 removes it.
 v5.0  2026-11-03  OTV5 r73 (BFLY.17) — new. THE GEX PIN BUTTERFLY HOLDS TO THE CLOSE, HONOURS ITS VIX RULE, AND IS PICKIER AT
       THE DOOR. The operator, 2026-11-03: "For the GEX fly, I want no stop except hold to close, I want the VIX rule enforced
       & I want more discriminatory entries." strategy/gex_pin_butterfly v5.14, execution/exit_engine v5.14,
@@ -38,6 +39,8 @@ from zoneinfo import ZoneInfo
 
 _root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, _root)
+import config as _r97_cfg                                       # noqa: E402  r97 (RETIRE.5): the GEX fly is cut in production (OFF in code); this checker flips it on to exercise its code until step 2 removes it
+_r97_cfg.GEX_BUTTERFLY_ENABLED = True
 os.environ.setdefault("OT_PAPER_TRADING", "1")
 os.environ["OT_RELAXED_ENTRY"] = "0"
 ET = ZoneInfo("America/New_York")

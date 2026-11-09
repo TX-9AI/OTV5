@@ -1,5 +1,6 @@
 """
-main.py  v5.15
+main.py  v5.16
+v5.16  2026-11-08  OTV5 r97 (RETIRE.5) — THE CUT GEX PIN BUTTERFLY IS NOT ASKED AND WRITES NOTHING: _attempt_butterfly returns first when plan_state reads GEXPinButterfly DORMANT, before its one-per-session and no-chain skip rows (which ran ahead of _safe_strategy's dormant check). Exits and management of any fly are untouched. The operator, 2026-11-08: "I concur on both, in that order" (cut from 11-09; code removed after that close).
 v5.15  2026-11-08  OTV5 r88 (RETIRE.3) — THE TCS SHADOW LEAVES THE TICK. The TrendCreditSpread import, singleton and TC.6 dispatch; _retired_reason (it served only the TCS); _execute_condor_leg's shadow branch, its TCS identity (_is_tcs: strategy, stop_premium, remainder stop, alert) and _credit_window_end's TCS plan window (now 14:00 for every vertical, as for every non-TCS one); _shadow_manage / _shadow_eod / _shadow_resume and their three call sites; the condor-auth TCS skip; and the now-unused macro read. Every live setup's dispatch, admission, management and exits are unchanged (parity on QQQ/SPX/NVDA). The operator, 2026-11-08: "Delete" (the TCS shadow, which never fired: its own gates declined every candidate 11-02..11-06).
 v5.14  2026-11-08  OTV5 r76 (RETIRE.1) — THE RETIRED TRADES LEAVE THE TICK. Imports, singletons and dispatch of the ORB trade, VOLT, the sweep credit spread (and its handoff grant and second-leg window), the ATP butterfly and ORCS are removed, with _attempt_orcs, _attempt_sweep_on_grant, _sweep_stop_premium, the ORB trade's MISSED / CONFIRMED / EXPIRED plan-ledger rows and its retest-depth journal field, the ORB admission alias, their structure-map and scaling-switch rows, and the sizing_distance path only VOLT used. The start-up banner reads ramp_top= (OT_ORB_BUDGET_USD, unchanged) and scaling BRK= only; scaling ORB/VOLT, contract_scale and ORCS= are gone. The ORB ENGINE, its state file, reach-back and release are unchanged. The operator, 2026-11-07: "Running dead code and logging dead code activity is unnecessary drag. Yes, I want all of those things fixed."
 v5.13 2026-11-04  OTV5 r74 (BLIND.1 + ORP.3) — A BLIND BOT STAYS UP AND KEEPS MANAGING; A RANGE IS NEVER BUILT FROM A
@@ -4856,6 +4857,14 @@ def _attempt_park(ctx, ms, state, chain=None) -> None:
 
 
 def _attempt_butterfly(ctx, ms, state, *, additive: bool) -> None:
+    # r97 (RETIRE.5) — CUT: a DORMANT fly is not asked and writes no skip row (the operator, 2026-11-08).
+    try:
+        from strategy import plan_state as _ps_bf
+        if _ps_bf.is_dormant("GEXPinButterfly"):
+            return
+    except Exception as _ps_bf_exc:                             # noqa: BLE001
+        logger.warning("[plans] GEXPinButterfly state unreadable (%s) - not asked", _ps_bf_exc)
+        return
     # r179 — ONE PER SESSION ON THIS BOX (operator: "Only one GEX Pin
     # butterfly allowed per session on a box"). Checked BEFORE the strategy
     # is asked, at the one entry point every butterfly attempt routes

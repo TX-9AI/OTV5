@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_plan_prepares.py  v5.4
+tests/check_plan_prepares.py  v5.5
+v5.5  2026-11-08  OTV5 r97 (RETIRE.5) —  GEX fly is cut in production (OFF in code); this checker flips it on to exercise its code until step 2 removes it.
 v5.4  2026-11-08  OTV5 r88 (RETIRE.3) — the TCS block and its OT_TCS_ACTIVE=1 switch go with the TCS; the condor, butterfly and runaway blocks are unchanged.
 v5.3  2026-11-08  OTV5 r76 (RETIRE.1) — RE-POINTED (WA 38.4): the sweep is removed, so the S block (S1-S9b, the sweep's plan on the store) and T4-T7 (a
       tine as a sweep level) go with it; the condor, butterfly, TCS and runaway blocks are unchanged.
@@ -186,6 +187,8 @@ import sys
 
 _root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, _root)
+import config as _r97_cfg                                       # noqa: E402  r97 (RETIRE.5): the GEX fly is cut in production (OFF in code); this checker flips it on to exercise its code until step 2 removes it
+_r97_cfg.GEX_BUTTERFLY_ENABLED = True
 # ⚠️ r106 — THE LANDER RUNS CHECKS UNDER SYSTEM `python3`, NOT THE VENV, and
 # the repo imports below reach `tastytrade`, which lives only in the venv — so
 # this file could never be DECLARED as a CHECK. It passed by hand and failed

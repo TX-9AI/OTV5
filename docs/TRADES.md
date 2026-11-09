@@ -1,5 +1,7 @@
 # TRADES — the specs
 
+**`TRADES.md` v5.13 · 2026-11-08 · OTV5 r97 (RETIRE.5) — the GEX pin butterfly is CUT from 2026-11-09: OFF in code (config.GEX_BUTTERFLY_ENABLED False; OT_GEX_BUTTERFLY no longer turns it on), never asked, writes nothing; exits untouched. Its code is removed after the 11-09 close. The operator, 2026-11-08: "I concur on both, in that order". Evidence: window EV −$6,482 [−19.2k, +3.2k], lunch entries lose, no fly since 11-03.**
+
 **`TRADES.md` v5.12 · 2026-11-08 · OTV5 r90 (SHADOW.1) — two LOG-ONLY rules, never deciding: the Hunt records each fire's opening-range / EM verdict (S5 R1, skip below 0.927) and PARK records the daily SMA 50 slope verdict on every tick with a direction (S4). See section 9; rows plan_check shadow_hunt_or_em / shadow_park_sma50.**
 
 **`TRADES.md` v5.11 · 2026-11-08 · OTV5 r88 (RETIRE.3) — the trend credit spread (TrendCreditSpread) and its r57 log-only SHADOW are REMOVED with their code: its roster row goes, OT_TCS_ACTIVE is read by nothing, raw/shadow_trades is no longer pushed. It never fired: its own entry gates declined every candidate 11-02..11-06. The operator, 2026-11-08: "Delete".**
@@ -43,7 +45,7 @@ is its `docs/PLAN_SPEC.md` section.
 | Runaway | `RunawayContinuation` | ON | none (its end is fixed; r68) | 09:35-10:30 | PLAN_SPEC §30 |
 | Breakout | `Breakout` | ON | none (its end is fixed; r68) | 09:35-10:30 | section 7 below |
 | Liquidity hunt | `LiquidityHunt` | ON | none | 09:35-10:30 | PLAN_SPEC §37 |
-| GEX pin butterfly | `GEXPinButterfly` | ON | `OT_GEX_BUTTERFLY` | 13:00-15:00 | PLAN_SPEC §32 |
+| GEX pin butterfly | `GEXPinButterfly` | OFF | `OT_GEX_BUTTERFLY` | 13:00-15:00 | PLAN_SPEC §32 — CUT from 2026-11-09 (r97, RETIRE.5); code removed after that close |
 | PARK | `PARK` | ON | none (`OT_PARK=log` records it, `off` stops it) | 11:01-11:03 | section 9 below |
 
 A window's end is exclusive: 10:30 means the last entry is 10:29. A switch is ACTIVE at

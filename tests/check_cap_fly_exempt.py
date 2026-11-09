@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_cap_fly_exempt.py  v5.4
+tests/check_cap_fly_exempt.py  v5.5
+v5.5  2026-11-08  OTV5 r97 (RETIRE.5) — the GEX fly is cut in production (OFF in code); this checker flips it on to exercise its code until step 2 removes it.
 v5.4  2026-11-08  OTV5 r76 (RETIRE.1) — RE-POINTED (WA 38.4): the ATP fly is removed, so FLIES is the pin fly alone; F4 switches the pin fly's
       exemption off (PARK keeps its own, Breakout cannot be granted one); F6/F10 ask and refuse the one fly; F11 another
       strategy's trade leaves it asked. What each pins is unchanged.
@@ -84,6 +85,8 @@ for _base in (ROOT, os.path.expanduser("~/options-trader")):
     if _found:
         break
 sys.path.insert(0, ROOT)
+import config as _r97_cfg                                       # noqa: E402  r97 (RETIRE.5): the GEX fly is cut in production (OFF in code); this checker flips it on to exercise its code until step 2 removes it
+_r97_cfg.GEX_BUTTERFLY_ENABLED = True
 
 # Self-isolating: run by hand without the harness, no live store is touched.
 _SCR = tempfile.mkdtemp(prefix="check_cap_fly_exempt_")

@@ -1,5 +1,6 @@
 """
-config.py  v5.15
+config.py  v5.16
+v5.16  2026-11-08  OTV5 r97 (RETIRE.5) — THE GEX PIN BUTTERFLY IS CUT: GEX_BUTTERFLY_ENABLED is False in code and OT_GEX_BUTTERFLY no longer turns it on. The operator, 2026-11-08: "I agree that our GEX fly may be on the chopping block ... I'm considering cutting it starting tomorrow" / "I concur on both, in that order" (no new fly from 11-09; the code is removed after the 11-09 close). Evidence: window EV -$6,482 [-19.2k, +3.2k], lunch entries lose, no fly since 11-03 (research r2). Its exits and management are untouched.
 v5.15  2026-11-08  OTV5 r88 (RETIRE.3) — THE TCS KEYS GO: ENTRY_WINDOWS loses TrendCreditSpread; TREND_CREDIT_ACTIVE, TCS_MODE, TCS_ENV_REFUSED and every TCS_* dial are deleted. CREDIT_ENTRY_START_ET = (11, 31) and CONDOR_ENTRY_CUTOFF_ET = EOD_SCHEDULE['entries_stop'] are now written directly (they read the TCS row; the values are identical). The operator, 2026-11-08: "Delete" (the TCS shadow, which never fired: its own gates declined every candidate 11-02..11-06).
 v5.14  2026-11-08  OTV5 r76 (RETIRE.1) — THE RETIRED TRADES' DIALS GO: ENTRY_WINDOWS loses ORBStrategy, VOLT, SweepCreditSpread, ATPButterfly and OpeningRangeCreditSpread; the VOLT_*, ORCS_*, ATP_*, SWEEP_CS_* (except SWEEP_CS_MAX_REJECTION_PCT, read by derived/levels), SCALE_ORB, SCALE_VOLT, CONTRACT_SCALE, HANDOFF_TTL_TICKS and VELOCITY_* keys and their env reads are removed. ORB_NO_ENTRY_AFTER_ET (the ENGINE's cutoff) now reads EOD_SCHEDULE["entries_stop"] directly - same value, 15:40. DELTA_PAR, BREAKOUT_DELTA_PAR and every live dial are unchanged. The operator, 2026-11-07: "Running dead code and logging dead code activity is unnecessary drag. Yes, I want all of those things fixed."
 v5.13  2026-11-03  OTV5 r73 (BFLY.17) — THE GEX PIN BUTTERFLY HOLDS TO THE CLOSE, HONOURS ITS VIX RULE, AND IS PICKIER AT THE
@@ -1740,9 +1741,9 @@ BUTTERFLY_ENTRY_CUTOFF_ET   = (14, 0)   # gates NOTHING since r209 (its session_
 # everyone reads is decorative.
 BUTTERFLY_ENTRY_START_ET    = ENTRY_WINDOWS["GEXPinButterfly"][0]   # No butterfly entries before noon
 GEX_BFLY_EARLIEST_ET        = f"{BUTTERFLY_ENTRY_START_ET[0]}:{BUTTERFLY_ENTRY_START_ET[1]:02d}"
-# r147 — UNPARKED. Operator, 2026-08-26: "I want it active. It already has to
-# clear a high bar to fire." OT_GEX_BUTTERFLY=0 parks it again.
-GEX_BUTTERFLY_ENABLED       = os.environ.get("OT_GEX_BUTTERFLY", "1") == "1"
+# r97 (RETIRE.5) — CUT. The operator, 2026-11-08: "I concur on both, in that order": no new GEX pin butterfly from
+# 2026-11-09, its code removed after that close. A code default, not a switch: no env value turns it back on.
+GEX_BUTTERFLY_ENABLED       = False
 GEX_BFLY_WING_EM_FRAC       = float(os.environ.get("OT_GEX_BFLY_WING_EM_FRAC", "0.25"))  # ⟨PRIOR⟩
 # ⚠️ THE DEBIT CUTOFF, ALSO A DEFAULT-ONLY VALUE UNTIL NOW. 11:30 is correct
 # and load-bearing: the credit start is 11:31, so this is the one minute of
