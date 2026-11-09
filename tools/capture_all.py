@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 """
-tools/capture_all.py  v5.3 — EVERYTHING TASTYTRADE SERVES THAT THE FEED DOES NOT ALREADY KEEP, INTO THE WAREHOUSE.
+tools/capture_all.py  v5.4 — EVERYTHING TASTYTRADE SERVES THAT THE FEED DOES NOT ALREADY KEEP, INTO THE WAREHOUSE.
+v5.4  2026-11-08  OTV5 r101 (CAP.6) — EACH INTERVAL IS WRITTEN AS SOON AS ITS STREAM ENDS. v5.0-v5.3 collected all four
+      lookbacks and wrote at the end, so a run cut short wrote NOTHING; on the SPX box (45 symbols: CONTEXT + futures)
+      one run outlasted 300 s, the conductor's bound, and a takedown can stop any box first. Now 1d, 1d_eth, 1h, 5m are
+      each written when their stream ends (dailies first), so a cut keeps what finished.
 v5.3  2026-11-08  OTV5 r100 (CAP.6) — 🔴 candles-recent OVERWROTE THE BACKFILL. Both modes wrote
       raw/candles_full/interval=<i>/sym=<S>/pulled=<ET day>.csv.gz, so the first live candles-recent run (11-08 evening,
       ET day 2026-11-08 - the backfill's day) replaced 36 backfill objects (12 symbols x 1d / 1h / 5m: history from 2023 /
@@ -172,7 +176,7 @@ def gz_json(obj) -> bytes:
 
 def meta(mode: str, **kw) -> dict:
     return {"source": "tastytrade", "mode": mode, "captured_at": datetime.now(timezone.utc).isoformat(),
-            "box": box_symbol(), "tool": "tools/capture_all.py v5.3", **kw}
+            "box": box_symbol(), "tool": "tools/capture_all.py v5.4", **kw}
 
 
 # ── REST modes ─────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -372,19 +376,23 @@ async def _front_futures(session, products=FUT_PRODUCTS):
     return out
 
 
-async def _candles_recent(session, symbols, today, futures=False):
+async def _candles_recent(session, symbols, today, futures=False, sink=None):
+    """Each lookback in RECENT order; `sink(label, got)` is called as soon as its stream ends (v5.4), so a run cut short
+    keeps every interval that finished. Returns {label: got} as well."""
     if futures:
         symbols = list(symbols) + [f for f in await _front_futures(session) if f not in symbols]
     got = {}
     for iv, days, eth, label in RECENT:
         since = datetime.combine(today - timedelta(days=days), datetime.min.time(), tzinfo=timezone.utc)
         got[label] = await _candles(session, symbols, iv, since, eth=eth)
+        if sink is not None:
+            sink(label, got[label])
     return got
 
 
 def do_candles_recent(session, symbols, dry, futures=False):
-    for label, g in asyncio.run(_candles_recent(session, symbols, et_now().date(), futures)).items():
-        _write_candles(g, label, dry, suffix="_recent")
+    asyncio.run(_candles_recent(session, symbols, et_now().date(), futures,
+                                sink=lambda label, g: _write_candles(g, label, dry, suffix="_recent")))
 
 
 def main(argv=None) -> int:

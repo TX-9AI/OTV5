@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """
-tests/check_capture_all.py  v5.3
+tests/check_capture_all.py  v5.4
+v5.4  2026-11-08  OTV5 r101 (CAP.6) — L3: each lookback is written as soon as its stream ends (a run killed during the 5m
+      stream has already written 1d, 1d_eth and 1h).
 v5.3  2026-11-08  OTV5 r100 (CAP.6) — L2: candles-recent and candles never share a key (r98-r99 did, and the first live
       candles-recent run overwrote 36 backfill objects); L1 now expects the _recent suffix.
 v5.2  2026-11-08  OTV5 r99 (CAP.6) — measured on the fleet: candles-recent needs candle-feed stopped too (G1), it has no
@@ -33,6 +35,7 @@ v5.0  2026-11-08  OTV5 r94 (CAP.1) — new. tools/capture_all.py records everyth
       and files each under raw/candles_full/interval=<label>/
   L2  candles-recent writes pulled=<day>_recent.csv.gz and `candles` pulled=<day>.csv.gz: a lookback never replaces a
       same-day history
+  L3  each interval is written when its stream ends: a run that dies in the 5m stream keeps 1d, 1d_eth and 1h
   F1  pick_front / _front_futures: the active-month contract per product, else the nearest; none -> skipped, not guessed
   W1  on the SPX box candles-recent adds CONTEXT and the front futures (looked up in the same loop); elsewhere only its own
   R1  retention_purge: spool files older than 3 days are counted (dry) / removed (apply); fresh files and dirs untouched
@@ -277,6 +280,21 @@ def main() -> int:
           rc_c == 0 and hist_keys == {f"raw/candles_full/interval=1d/sym=NVDA/pulled={today}.csv.gz"}
           and not (hist_keys & recent_keys) and f"raw/candles_full/interval=1d/sym=NVDA/pulled={today}_recent.csv.gz"
           in recent_keys, f"hist={hist_keys} recent={sorted(recent_keys)[:2]}")
+    async def dies_at_5m(_s, symbols, interval, since, idle_s=20.0, max_s=600.0, eth=False):
+        if interval == "5m":
+            raise KeyboardInterrupt("killed during the 5m stream")
+        return await fake_candles(_s, symbols, interval, since, eth=eth)
+    ca._candles = dies_at_5m
+    raw_store.clear()
+    try:
+        ca.main(["candles-recent"])
+        died = False
+    except KeyboardInterrupt:
+        died = True
+    labels3 = sorted(re.search(r"interval=([^/]+)/", k).group(1) for k in raw_store)
+    check("L3 a run killed in the 5m stream has already written 1d, 1d_eth and 1h",
+          died and labels3 == ["1d", "1d_eth", "1h"], f"died={died} {labels3}")
+    ca._candles = fake_candles
     picks = [ca.pick_front(fut[p]["items"]) for p in ("ES", "NQ", "XX")]
     FakeSession.loops.clear()
     ff = asyncio.run(ca._front_futures(FakeSession(), ("ES", "NQ", "XX")))
