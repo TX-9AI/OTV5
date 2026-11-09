@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_noncompete.py  v5.2
+tests/check_noncompete.py  v5.3
+v5.3  2026-11-09  OTV5 r103 (RETIRE.5 step 2) — N7/N7b (one butterfly path, carrying r178's mark_pin_played) re-pointed: the GEX fly is removed, so N7 pins NO butterfly path - no _attempt_butterfly, no _gex_bfly_strategy call, no mark_pin_played anywhere in main. Every other check unchanged.
 v5.2  2026-11-08  OTV5 r88 (RETIRE.3) — N1b needs the two dispatches left in attempt_new_entry's own tree (Runaway, Breakout): the TCS dispatch is removed.
 v5.1  2026-11-08  OTV5 r76 (RETIRE.1) — N1b/N6 RE-POINTED (WA 38.4): the ORB, VOLT and sweep dispatches are removed, so N1b needs the three left
       (Runaway, Breakout, TCS) and N6 pins the hunt asked once and the sweep-on-grant gone.
@@ -205,15 +206,17 @@ def main():
         return not any(isinstance(n, ast.Call)
                        and getattr(getattr(n.func, "value", None), "id", "") == "_gex_bfly_strategy"
                        for n in ast.walk(fn))
-    guard("N7 exactly ONE butterfly path — the helper, with no inline copy beside it",
-          lambda: bfly is not None and inline_copy_gone(),
-          "two paths for one behaviour is how they drift")
+    # r103 (RETIRE.5): the GEX fly is removed, so there is no butterfly path left to keep single.
+    guard("N7 (r103) NO butterfly path: no _attempt_butterfly, no inline _gex_bfly_strategy call",
+          lambda: bfly is None and inline_copy_gone()
+          and not any(isinstance(n, ast.Call) and getattr(getattr(n.func, "value", None), "id", "") == "_gex_bfly_strategy"
+                      for n in ast.walk(tree)),
+          "the fly's entry path went with the fly")
 
-    guard("N7b 🔴 r178's mark_pin_played is ON that path",
-          lambda: bfly is not None and any(
-              isinstance(n, ast.Call) and getattr(n.func, "attr", "") == "mark_pin_played"
-              for n in ast.walk(bfly)),
-          "the guard against the 2026-08-28 five-in-ninety-seconds stack")
+    guard("N7b (r103) and mark_pin_played (its guard) is called nowhere in main",
+          lambda: not any(isinstance(n, ast.Call) and getattr(n.func, "attr", "") == "mark_pin_played"
+                          for n in ast.walk(tree)),
+          "a guard outliving the thing it guarded")
 
     # ══ N8 — A FIRE MUST NOT END THE TICK ═════════════════════════════════
     # 🔴 r43 MISSED ONE AND THIS IS WHY N8 EXISTS. N1 tests for dispatches

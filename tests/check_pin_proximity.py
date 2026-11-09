@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_pin_proximity.py  v5.1
+tests/check_pin_proximity.py  v5.2
+v5.2  2026-11-09  OTV5 r103 (RETIRE.5 step 2) — the fixture's EM is analysis.volatility_measures.expected_move_session, the function the gate calls since r103 (the GEX fly wrapper is removed).
 v5.1  2026-10-31  OTV5 r68 (CFG.5) — P6 RE-POINTED (section 38.4): the gate is fixed ON in config v5.10 and OT_PIN_PROXIMITY_ACTIVE
       is not read (the operator, 2026-10-31: "7. Pin gate, default "on" —remove from the menu"); P6 asserts ON, not switchable.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
@@ -94,7 +95,7 @@ def _ctx(pin, env, price=744.0, iv=0.19):
 # 🔑 THE EM IS THE REAL ONE. Deriving the fixture's distances from the same
 # `expected_move()` the gate calls keeps this from testing a second definition
 # (§0.4) — and it means the cases stay correct if the EM formula ever moves.
-from strategy.gex_pin_butterfly import expected_move              # noqa: E402
+from analysis.volatility_measures import expected_move_session as expected_move   # noqa: E402  r103: the gate's own source
 
 _PX, _IV = 744.0, 0.19
 _EM = expected_move(_PX, _IV)

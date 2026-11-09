@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""tests/check_one_window_table.py — v5.2
+"""tests/check_one_window_table.py — v5.3
+v5.3  2026-11-09  OTV5 r103 (RETIRE.5 step 2) — the GEX fly row is removed with the fly, so its admission pin, the three config pins (BUTTERFLY_ENTRY_START_ET, GEX_BFLY_EARLIEST_ET, BUTTERFLY_ENTRY_CUTOFF_ET - the last gated nothing since r209), session_guard's _BUTTERFLY_CUTOFF, the two gex_pin_butterfly pins and its two W2 pairs go with it. Every live pin is unchanged.
 v5.2  2026-11-08  OTV5 r88 (RETIRE.3) — the TCS row is removed with the TCS, so its admission pin, the two config pins, the two
       tcs_plan pins and its two W2 pairs go with it. Every live pin is unchanged.
 v5.1  2026-11-08  OTV5 r76 (RETIRE.1) — RE-POINTED (WA 38.4): the ORB, VOLT, ATP and sweep windows are removed, so their 18 pins, their W2 pairs and
@@ -74,11 +75,8 @@ def hhmm(t) -> str:
 
 PIN = {   # measured on the r148 build; identical to r147 except the TrendCreditSpread admission row
     "admission.Breakout.window": ((9, 35), (10, 30)),   # r187
-    "admission.GEXPinButterfly.window": ((13, 0), (15, 0)),   # r273
     "admission.LiquidityHunt.window": ((9, 35), (10, 30)),   # r187
     "admission.RunawayContinuation.window": ((9, 35), (10, 30)),   # r187
-    "config.BUTTERFLY_ENTRY_CUTOFF_ET": (14, 0),
-    "config.BUTTERFLY_ENTRY_START_ET": (13, 0),   # r273
     "config.CONDOR_ENTRY_CUTOFF_ET": (15, 40),
     "config.CONDOR_ENTRY_START_ET": (11, 31),
     "config.CREDIT_ENTRY_END_ET": (15, 40),
@@ -86,7 +84,6 @@ PIN = {   # measured on the r148 build; identical to r147 except the TrendCredit
     "config.DEBIT_DIRECTIONAL_CUTOFF_ET": (15, 40),   # r149
     "config.ENTRY_OPEN_ET": (9, 35),
     "config.FLATTEN_WINDOW_OPEN_ET": (15, 45),   # r149
-    "config.GEX_BFLY_EARLIEST_ET": "13:00",   # r273
     "config.HARD_CLOSE_ET": (15, 55),   # r149
     "config.ORB_NO_ENTRY_AFTER_ET": (15, 40),   # r149
     "config.RUNAWAY_CUTOFF_ET": "10:30",   # r187
@@ -95,9 +92,6 @@ PIN = {   # measured on the r148 build; identical to r147 except the TrendCredit
     "strategy.breakout.LATEST_ET": "10:30",   # r187
     "strategy.liquidity_hunt.WINDOW_OPEN_ET": (9, 35),
     "strategy.runaway_plan.WINDOW_OPEN_ET": (9, 35),
-    "risk.session_guard._BUTTERFLY_CUTOFF": "14:00",
-    "strategy.gex_pin_butterfly.EARLIEST_ET": "13:00",   # r273
-    "strategy.gex_pin_butterfly.LATEST_ET": "15:00",
     "strategy.liquidity_hunt.CUTOFF_ET": (10, 30),   # r187
     "strategy.runaway_continuation.CUTOFF_ET": "10:30",   # r187
     "strategy.runaway_plan._cutoff_hm()": (10, 30),   # r187
@@ -155,13 +149,11 @@ def main() -> int:
     bad = [n for n in EW if tuple(tuple(x) for x in R[n].window) != tuple(tuple(x) for x in EW[n])]
     check("W1 admission windows == config.ENTRY_WINDOWS", not bad and set(R) == set(EW), f"differ: {bad}, keys {sorted(set(R) ^ set(EW))}")
 
-    from strategy import runaway_continuation, liquidity_hunt, breakout, gex_pin_butterfly
+    from strategy import runaway_continuation, liquidity_hunt, breakout   # r103: gex_pin_butterfly removed
     pairs = [
         ("RunawayContinuation end", runaway_continuation.CUTOFF_ET, hhmm(EW["RunawayContinuation"][1])),
         ("LiquidityHunt end", liquidity_hunt.CUTOFF_ET, EW["LiquidityHunt"][1]),
         ("Breakout end", breakout.LATEST_ET, hhmm(EW["Breakout"][1])),
-        ("GEXPinButterfly start", gex_pin_butterfly.EARLIEST_ET, hhmm(EW["GEXPinButterfly"][0])),
-        ("GEXPinButterfly end", gex_pin_butterfly.LATEST_ET, hhmm(EW["GEXPinButterfly"][1])),
     ]
     norm = lambda v: tuple(v) if isinstance(v, (tuple, list)) else v
     mism = [f"{n}: plan {norm(a)!r} vs table {norm(b)!r}" for n, a, b in pairs if norm(a) != norm(b)]

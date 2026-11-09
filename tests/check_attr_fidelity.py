@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""check_attr_fidelity.py — v5.1
+"""check_attr_fidelity.py — v5.2
+v5.2  2026-11-09  OTV5 r103 (RETIRE.5 step 2) — A4 drops the five GEX_BFLY_* dials (removed with the GEX pin butterfly): 20 pinned dials, each unchanged.
 v5.1  2026-11-08  OTV5 r76 (RETIRE.1) — A4 drops HANDOFF_TTL_TICKS and the three SWEEP_CS_* dials (removed with the handoff and the
       sweep): 25 pinned dials, each unchanged.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
@@ -203,8 +204,6 @@ def main():
         PINS = {"BRK_FLOW_IMBALANCE_MIN": 0.10, "BRK_FLOW_TAGGED_MIN": 0.60, "BRK_REGIME_MAX": 0.0,
                 "BRK_DEPTH_DEPLETION_MIN": 0.0, "BRK_ROOM_MIN_R": 1.0, "BRK_R_FLOOR": 1.0,
                 "BRK_RANGE_MIN_PCT": 0.0023, "BRK_RANGE_MAX_PCT": 0.0350, "BRK_RANGE_CLEAN_MAX": 0.0,
-                "GEX_BFLY_PIN_CONC_MIN": 0.25, "GEX_BFLY_EM_MIN_FRAC": 0.30, "GEX_BFLY_EM_MAX_FRAC": 1.00,
-                "GEX_BFLY_SMOOTH_WINDOW": 12, "GEX_BFLY_PERSIST_TICKS": 8,
                 "RUNAWAY_ATR_FLOOR_PCT": 0.08, "RUNAWAY_ATR_VETO_PCT": 0.05, "RUNAWAY_ATR_DEEP_PCT": 0.20,
                 "RUNAWAY_DELTA_NEAR": 0.25, "RUNAWAY_DELTA_DEEP": 0.40, "RUNAWAY_STRENGTH_GRIND": 0.40,
                 "RUNAWAY_STRENGTH_RIP": 0.70, "RUNAWAY_BAND_GRIND": 0.5, "RUNAWAY_BAND_RIP": 1.5}
@@ -215,7 +214,7 @@ def main():
             off["HUNT_MAX_LOSS_PCT"] = hunt
         if adm is not None:
             off["ADMISSION_RULES"] = adm
-        check("A4 the 25 dials config now defines hold the values their modules were using",
+        check("A4 the 20 dials config now defines hold the values their modules were using (r103: the five GEX_BFLY_* removed)",
               not off, str(off) if off else "27 literals + HUNT follows RUNAWAY_MAX_LOSS_PCT + ADMISSION_RULES None")
 
     print()

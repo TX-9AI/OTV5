@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_dispatch.py  v5.1
+tests/check_dispatch.py  v5.2
+v5.2  2026-11-09  OTV5 r103 (RETIRE.5 step 2) — RE-POINTED (WA 38.4): the GEX fly is removed, so sections 1/2/4 wire, order and run Runaway alone, and a new line pins the fly not imported, built or dispatched. Section 3 unchanged.
 v5.1  2026-11-08  OTV5 r76 (RETIRE.1) — RE-POINTED (WA 38.4): the sweep and the ORB trade are removed, so section 1/2 wire and order Runaway -> the GEX fly,
       and the ORB-first check becomes 'no ORB dispatch'. Section 3 (names bound before use) unchanged.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
@@ -71,7 +72,7 @@ ROOT = os.path.join(HERE, "..")
 sys.path.insert(0, ROOT)
 
 PROBLEMS = []
-EXPECTED_ORDER = ["RunawayContinuation", "GEXPinButterfly"]      # r76: the sweep is removed
+EXPECTED_ORDER = ["RunawayContinuation"]      # r76: the sweep is removed; r103: the GEX fly is removed
 
 
 def check(label, cond, detail=""):
@@ -88,8 +89,12 @@ def main(argv):
     tree = ast.parse(src)
 
     # ── 1. wired at all ────────────────────────────────────────────────────
-    for cls, inst in (("RunawayContinuationStrategy", "_runaway_strategy"),
-                      ("GEXPinButterflyStrategy", "_gex_bfly_strategy")):
+    _imported = {a.name for n in ast.walk(tree) if isinstance(n, ast.ImportFrom) for a in n.names} | \
+                {n.module for n in ast.walk(tree) if isinstance(n, ast.ImportFrom) and n.module}
+    check("r103: the GEX fly is not imported, built or dispatched",
+          "strategy.gex_pin_butterfly" not in _imported and "GEXPinButterflyStrategy" not in _imported
+          and "_gex_bfly_strategy" not in src and "def _attempt_butterfly" not in src)
+    for cls, inst in (("RunawayContinuationStrategy", "_runaway_strategy"),):   # r103: the GEX fly removed
         check(f"{cls} imported", f"import {cls}" in src)
         check(f"{inst} instantiated", f"{inst} = {cls}()" in src)
         check(f"{inst} dispatched", f"{inst}.generate_signal" in src)
@@ -97,7 +102,7 @@ def main(argv):
     # ── 2. order ───────────────────────────────────────────────────────────
     pos = [(src.index(f'_safe_strategy("{n}"'), n) for n in EXPECTED_ORDER
            if f'_safe_strategy("{n}"' in src]
-    check("dispatch order: runaway -> butterfly",
+    check("dispatch order: runaway alone (r103: the fly removed)",
           [n for _, n in sorted(pos)] == EXPECTED_ORDER,
           f"found {[n for _, n in sorted(pos)]}")
     check("r76: the ORB trade is removed - nothing dispatches under the ORB label",
@@ -176,7 +181,6 @@ def main(argv):
     # ── 4. the strategies actually RUN ─────────────────────────────────────
     try:
         from strategy.runaway_continuation import RunawayContinuationStrategy
-        from strategy.gex_pin_butterfly import GEXPinButterflyStrategy
 
         class _ORB:
             state = "OPEN_LONG"
@@ -233,9 +237,6 @@ def main(argv):
               f"strike={getattr(r, 'strike', None)} prem={getattr(r, 'entry_premium', None)}")
 
 
-        b = GEXPinButterflyStrategy().generate_signal(
-            gex=None, price_now=600.0, now_et="13:30", atm_iv=0.35)
-        check("GEXPinButterfly.generate_signal RUNS and is PARKED", b is None)
     except Exception as e:                                     # noqa: BLE001
         check("strategies execute", False, f"{type(e).__name__}: {e}")
 

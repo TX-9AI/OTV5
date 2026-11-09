@@ -1,5 +1,6 @@
 """
-strategy/management.py  v5.7
+strategy/management.py  v5.8
+v5.8  2026-11-09  OTV5 r103 (RETIRE.5 step 2) — THE GEX PIN BUTTERFLY IS REMOVED: its EXIT_CONDITIONS row, BUTTERFLIES, its COVERED entry and the HOLD_TO_CLOSE_STRATEGIES reads (the fly was the only member) go. The live strategies' conditions and intents are unchanged. The operator, 2026-11-08: "I concur on both, in that order" (cut 11-09, code removed after that close).
 v5.7  2026-11-08  OTV5 r88 (RETIRE.3) — the TrendCreditSpread EXIT_CONDITIONS row and COVERED entry, and its four special cases (no premium stop, 'breach', the credit classification), go with the TCS. The operator, 2026-11-08: "Delete" (the TCS shadow, which never fired: its own gates declined every candidate 11-02..11-06).
 v5.6  2026-11-08  OTV5 r76 (RETIRE.1) — EXIT_CONDITIONS, BUTTERFLIES and COVERED drop the removed ORB, sweep and ATP trades. The live strategies' conditions are unchanged. The operator, 2026-11-07: "Running dead code and logging dead code activity is unnecessary drag. Yes, I want all of those things fixed."
 v5.5  2026-11-03  OTV5 r73 (BFLY.17) — THE GEX PIN BUTTERFLY DECLARES ONE EXIT: THE 15:45 FLATTEN. The operator, 2026-11-03:
@@ -207,12 +208,6 @@ EXIT_CONDITIONS: Dict[str, Dict[str, str]] = {
         "ladder":         "CondorManagement decides: ROLL / TENT / CLOSE (TRADES.md)",
         "premium_stop":   "spread value >= credit x (1 + 25%) while a lone vertical",
     },
-    "GEXPinButterfly": {
-        # r73 (BFLY.17) — operator, 2026-11-03: "For the GEX fly, I want no stop except hold to close". The 40% stop
-        # (r24; r169: "1545 flatten or 25% loss") is gone: the study cut all five outliers with stops. No target, no
-        # max hold, no decay stop: a pin pays into the close.
-        "flatten":        "the 15:45 hard close - the ONLY exit (no premium stop, no decay stop)",
-    },
     # r51 (BRK.1) — THE BREAKOUT HAS NO TARGET, SO EXHAUSTION IS ITS EXIT.
     # Operator, 2026-09-18, distinguishing the three ORB-born trades: *"the
     # liquidity hunt has an identified target and the breakout has to identify
@@ -251,8 +246,6 @@ EXIT_CONDITIONS: Dict[str, Dict[str, str]] = {
                            "The move is continuing on fumes"),
     },
 }
-# OTV4TEST r26 — the ATP butterfly's exits are the pin butterfly's, by construction. — the ATP butterfly's exits are the pin butterfly's, by construction.
-BUTTERFLIES = ("GEXPinButterfly",)
 # r82 — strategies whose winner is ended by PAR DELTA rather than a premium
 # target. VOLT is NOT here: it owns `_evaluate_volt` and carries its own rung.
 DELTA_PAR_STRATEGIES = ("Breakout",)
@@ -478,8 +471,7 @@ def _record_exhaust_checks(t, ev) -> None:
     except Exception as exc:                                   # noqa: BLE001
         logger.debug("[manage] exhaustion check rows not written: %s", exc)
 
-COVERED = ("RunawayContinuation", "GEXPinButterfly",
-           "Breakout")
+COVERED = ("RunawayContinuation", "Breakout")
 NICKEL = 0.05
 
 
@@ -669,11 +661,10 @@ class ManagementPlan:
 
             # ── 1. THE DECLARED SPEC CONDITIONS — never outranked ──────────
             intent = None
-            _hold = strategy in tuple(getattr(_cfg, "HOLD_TO_CLOSE_STRATEGIES", ()) or ())     # r73 (BFLY.17)
-            if prem is not None and stop_p and not _hold:
+            if prem is not None and stop_p:
                 hit = (prem >= stop_p) if credit else (prem <= stop_p)
                 if hit:
-                    name = "premium_stop" if credit else ("stop" if strategy in BUTTERFLIES else "hard_stop")
+                    name = "premium_stop" if credit else "hard_stop"
                     floor_pct = (abs(stop_p - entry) / entry) if entry else 0.0
                     intent = Intent("CLOSE", f"{name}_{floor_pct:.0%} pnl={pnl:.1%}", name, pnl_pct=pnl)
             if intent is None and ustop and last_close is not None:
@@ -758,7 +749,6 @@ class ManagementPlan:
             # predicate now matches the sentence for the strategies that have
             # been ruled on, rather than the sentence being quietly wrong.
             if (intent is None and prem is not None and target and not credit
-                    and strategy not in BUTTERFLIES
                     and strategy not in DELTA_PAR_STRATEGIES and prem >= target):
                 intent = Intent("CLOSE", f"target_hit pnl={pnl:.1%}", "target", pnl_pct=pnl)
             if intent is None and credit and prem is not None and prem <= NICKEL:
@@ -901,8 +891,7 @@ class ManagementPlan:
     @staticmethod
     def _next_tick_line(record, credit, stop_p, ustop, trail, target) -> str:
         outs = []
-        _hold = str(record.get("strategy", "")) in tuple(getattr(_cfg, "HOLD_TO_CLOSE_STRATEGIES", ()) or ())  # r73
-        if stop_p and not _hold:
+        if stop_p:
             outs.append(f"premium {'>=' if credit else '<='} {stop_p:.2f} -> out (floor)")
         if ustop:
             side = str(record.get("option_side", "") or "")
@@ -913,10 +902,8 @@ class ManagementPlan:
             outs.append(f"touch {thru} {ustop:.2f} -> out (breach)")
         if trail:
             outs.append(f"premium <= {trail:.2f} -> out (trail)")
-        if target and not credit and str(record.get("strategy", "")) not in BUTTERFLIES:
+        if target and not credit:
             outs.append(f"premium >= {target:.2f} -> out (target)")
-        if str(record.get("strategy", "")) in BUTTERFLIES:
-            outs.append("15:45 -> flatten (rides to the close)" + (" - the only exit" if _hold else ""))
         if credit:
             outs.append("value <= nickel -> out")
         return "; ".join(outs) if outs else "no exit condition readable"

@@ -1,5 +1,6 @@
 """
-strategy/plan_state.py  v5.6
+strategy/plan_state.py  v5.7
+v5.7  2026-11-09  OTV5 r103 (RETIRE.5 step 2) — the GEXPinButterfly row, its OT_GEX_BUTTERFLY read and the _FLAG table (the fly was its last entry) with its config-flag branch go with the GEX pin butterfly. The live rows read exactly as before. The operator, 2026-11-08: "I concur on both, in that order".
 v5.6  2026-11-08  OTV5 r97 (RETIRE.5) — GEXPinButterfly defaults DORMANT and a flag-read plan whose default is DORMANT has no LOG state: with config.GEX_BUTTERFLY_ENABLED False (code) it is DORMANT whatever OT_GEX_BUTTERFLY says, so the cut fly is never asked and writes nothing. The operator, 2026-11-08: "I concur on both, in that order" (cut from 11-09; code removed after that close).
 v5.5  2026-11-08  OTV5 r88 (RETIRE.3) — the TrendCreditSpread row, its OT_TCS_ACTIVE read and its _FLAG entry go with the TCS. The operator, 2026-11-08: "Delete" (the TCS shadow, which never fired: its own gates declined every candidate 11-02..11-06).
 v5.4  2026-11-08  OTV5 r76 (RETIRE.1) — the removed trades leave the table (ATPButterfly, VOLT, ORBStrategy, OpeningRangeCreditSpread, SweepCreditSpread), with their switches (OT_ATP_BUTTERFLY, OT_VOLT, OT_ORB_TRADE, OT_ORCS, OT_SWEEP_CS), their _FLAG entries and the ORB / SweepForLeg2 aliases. The live rows are unchanged. The operator, 2026-11-07: "Running dead code and logging dead code activity is unnecessary drag. Yes, I want all of those things fixed."
@@ -74,7 +75,6 @@ TABLE: Dict[str, Tuple[str, str, str]] = {
     "Breakout":                 ("OT_BREAKOUT",       ACTIVE,  HOUR),
     "LiquidityHunt":            ("OT_HUNT",           ACTIVE,  HOUR),
     "PARK":                     ("OT_PARK",           ACTIVE,  HOUR),
-    "GEXPinButterfly":          ("OT_GEX_BUTTERFLY",  DORMANT, HOUR),   # RETIRE.5 (r97): cut from 2026-11-09
     "IronCondorStrategy":       ("",                  DORMANT, CONDITION),   # no entry of its own (r249)
     "CondorManagement":         ("",                  ACTIVE,  CONDITION),
     "CreditRoll":               ("",                  ACTIVE,  CONDITION),
@@ -97,15 +97,9 @@ def _raw(key: str) -> str:
         v = os.environ.get("OT_BREAKOUT", "")
     elif key == "OT_HUNT":
         v = os.environ.get("OT_HUNT", "")
-    elif key == "OT_GEX_BUTTERFLY":
-        v = os.environ.get("OT_GEX_BUTTERFLY", "1")
     else:
         v = ""
     return str(v or "").strip().lower()
-
-
-# the config flag that decides ACTIVE for a config-read switch (a checker flips the attribute)
-_FLAG = {"GEXPinButterfly": "GEX_BUTTERFLY_ENABLED"}   # RETIRE.3 (r88): the TCS row went with the TCS
 
 
 def base(name: str) -> str:
@@ -148,23 +142,6 @@ def state(name: str) -> str:
             import config as _c
             return {"trade": ACTIVE, "log": LOG, "off": DORMANT}.get(str(getattr(_c, "PARK_MODE", "trade")), ACTIVE)
         raw = _raw(key)
-        if n in _FLAG:
-            import config as _c
-            if bool(getattr(_c, _FLAG[n], dflt == ACTIVE)):
-                return ACTIVE
-            if dflt == DORMANT:                                 # r97 (RETIRE.5): a cut plan has no LOG state
-                return DORMANT
-            if raw == "log":
-                return LOG
-            if dflt == LOG:                                     # r57 (TCS.LOG1): a default-LOG trade
-                if raw in _OFF:
-                    return DORMANT
-                if raw not in ("", "1"):                        # "1" with the flag off: a checker's flip
-                    _note(n, key, raw)
-                return LOG
-            if dflt == ACTIVE and raw not in _OFF and raw not in _ON:
-                _note(n, key, raw)
-            return DORMANT
         if raw == "log":
             return LOG
         if raw in _ON or (dflt == ACTIVE and raw == ""):

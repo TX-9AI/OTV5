@@ -1,5 +1,7 @@
 # TRADES — the specs
 
+**`TRADES.md` v5.14 · 2026-11-09 · OTV5 r103 (RETIRE.5 step 2) — the GEX pin butterfly is REMOVED with its code: its roster row and section 3 are gone, OT_GEX_BUTTERFLY is read by nothing. The operator, 2026-11-08: "I concur on both, in that order" (cut 11-09, code removed after that close).**
+
 **`TRADES.md` v5.13 · 2026-11-08 · OTV5 r97 (RETIRE.5) — the GEX pin butterfly is CUT from 2026-11-09: OFF in code (config.GEX_BUTTERFLY_ENABLED False; OT_GEX_BUTTERFLY no longer turns it on), never asked, writes nothing; exits untouched. Its code is removed after the 11-09 close. The operator, 2026-11-08: "I concur on both, in that order". Evidence: window EV −$6,482 [−19.2k, +3.2k], lunch entries lose, no fly since 11-03.**
 
 **`TRADES.md` v5.12 · 2026-11-08 · OTV5 r90 (SHADOW.1) — two LOG-ONLY rules, never deciding: the Hunt records each fire's opening-range / EM verdict (S5 R1, skip below 0.927) and PARK records the daily SMA 50 slope verdict on every tick with a direction (S4). See section 9; rows plan_check shadow_hunt_or_em / shadow_park_sma50.**
@@ -45,12 +47,11 @@ is its `docs/PLAN_SPEC.md` section.
 | Runaway | `RunawayContinuation` | ON | none (its end is fixed; r68) | 09:35-10:30 | PLAN_SPEC §30 |
 | Breakout | `Breakout` | ON | none (its end is fixed; r68) | 09:35-10:30 | section 7 below |
 | Liquidity hunt | `LiquidityHunt` | ON | none | 09:35-10:30 | PLAN_SPEC §37 |
-| GEX pin butterfly | `GEXPinButterfly` | OFF | `OT_GEX_BUTTERFLY` | 13:00-15:00 | PLAN_SPEC §32 — CUT from 2026-11-09 (r97, RETIRE.5); code removed after that close |
 | PARK | `PARK` | ON | none (`OT_PARK=log` records it, `off` stops it) | 11:01-11:03 | section 9 below |
 
 A window's end is exclusive: 10:30 means the last entry is 10:29. A switch is ACTIVE at
 `1` or `active` (r303 below). The ORB trade, VOLT, the sweep credit spread, the ATP butterfly and ORCS are REMOVED (r76,
-RETIRE.1), and the trend credit spread with its shadow (r88, RETIRE.3); the opening-range ENGINE is not removed: Runaway, Breakout and the Hunt read it, and since r222 its
+RETIRE.1), the trend credit spread with its shadow (r88, RETIRE.3) and the GEX pin butterfly (r103, RETIRE.5); the opening-range ENGINE is not removed: Runaway, Breakout and the Hunt read it, and since r222 its
 range is checked against the official print. The condor is a management plan with no entry
 of its own; with every credit entry removed it has nothing to manage.
 
@@ -80,8 +81,8 @@ above as EOD_SCHEDULE).
 (`RUNAWAY_MAX_LOSS_PCT`). Hunt: NO premium stop - it RECORDS the same floor
 (`HUNT_MAX_LOSS_PCT`, also used to pick its contract) and the exit engine HOLDS through it,
 logging "would-have-floored" (r209; corrected r227 - r226 wrote this line as if it stopped).
-Other single legs: **25%** (`MAX_LOSS_PCT`). Butterflies: **40%** of the debit
-(`BUTTERFLY_STOP_LOSS_PCT`; section 3's 15% is stale). Every other exit rule lives in `strategy/management.py` and
+Other single legs: **25%** (`MAX_LOSS_PCT`). A butterfly record still on a book (none can open since r103): **40%** of the debit
+(`BUTTERFLY_STOP_LOSS_PCT`). Every other exit rule lives in `strategy/management.py` and
 `execution/exit_engine.py`, not in a number that can be quoted here.
 
 **The fill observers (r270, PMAP.1 + FILL.2).** Every open single long gets a premium-map row a minute, and the
@@ -169,62 +170,6 @@ band from 0-15 to 40-100 produced the same median excursion.
 **Exit** — trailing stop. `orb_trail_stop` 96% / 85 trades / **+$30,696**, worst
 −$16. `bos_exit` 34% / 217 / **−$7,085** with the largest single loss in the v3
 book, so **BOS is not used.**
-
----
-
-## 3. GEX Pin Butterfly — `gex_pin_butterfly.py`
-
-**OTV5 r73 (BFLY.17), 2026-11-03 — what changed, in the operator's words: "For the GEX fly, I want no stop except hold to
-close, I want the VIX rule enforced & I want more discriminatory entries."**
-- **The exit is the 15:45 flatten (the 15:55 resting close) and nothing else.** No 40% stop, no decay stop
-  (config.HOLD_TO_CLOSE_STRATEGIES, whatever OT_DECAY_STOP_EXEMPT says). The debit is the most it can lose; sizing is the
-  risk control. Still able to close a fly early: the emergency watchdog, a broker reconcile that no longer finds it, the
-  startup sweep of an expired orphan, a person. The ATP butterfly (off) keeps its stop.
-- **VIX: no fly at VIX 20 or above** (VIX_BUTTERFLY_DISABLE, read from the macro snapshot every row stamps as
-  vix_at_entry; 20.0 itself disables, and so does the conservative 20.0 the macro uses when VIX cannot be read). Half
-  size at 15-20, unchanged.
-- **The open inside yesterday's range:** today's 09:30 1m open must sit inside the prior session's RTH high-low; an open
-  beyond either is no fly. An unreadable tape is no fly.
-- **The cheap-fly floor:** among the widths that pass R and survivability, the best R is taken only from those whose
-  debit is at least 15.5% of the width; none passing is a decline that names the floor.
-- **Evidence, said plainly:** both entry cuts were chosen AFTER looking (~/gex_study) and failed the multiple-test
-  correction; on the 75 study flies with quotes, holding the 36 the three gates keep made +$6,419 at the mark (+$3,572 at
-  natural fills) before $1,263 of fees, against -$826 as built; all five outliers kept. They are forward-scored from
-  2026-11-09, not proven.
-
-**OTV4TEST r6 — UN-PARKED BY DATA, re-specced with the operator; PLAN_SPEC §32 is the spec.** Real open interest is arriving on the box (2026-09-09); zero OI is now a STARVED input the row states, not a park flag. Where the text below disagrees with §32 (best-R wing, smoothed persistence, firm EM 1.00), §32 wins.
-
-**Apex on the gamma pin, out of the money. Buy the move to the magnet.**
-
-⚠️ **PARKED until real open interest accumulates (~2 weeks from 2026-08-19).**
-`open_interest` was a declared field with **no producer**, so GEX has been
-`~100,000 × gamma² × spot` — a gamma-squared surface, not dealer positioning.
-The "pin" therefore always sat at spot, and swung 12.4M → 0.1M → 2.0M in three
-minutes.
-
-**THE ASYMMETRY IS THE TRADE.** Apex payoff is fixed at the wing width while the
-**debit collapses as the apex moves OTM.** A pin at 90% of the expected move
-costs a fraction of one at 20% and pays the same. **Distance is the edge.**
-
-**FOUNDATIONAL** — `PINNING`; the apex sits **on** the pin; the pin is **OTM**.
-
-**SELECTION** — pin concentration 0.25 (⚠️ *relaxed with reluctance*: far out,
-the trade **relies** on the magnet pulling, so a weak pin far away is the worst
-cell in the matrix); window; EM ceiling 1.00 → 1.30.
-
-**FEASIBILITY** — no ATM IV means **no trade**, not a fallback; and the EM floor
-at 0.30, because nearer than that the asymmetry — the whole reason for the
-structure — is gone.
-
-**Expected move comes from the chain's ATM IV**, not VIX. v3 applied SPX 30-day
-implied vol to every symbol on a 0DTE horizon.
-
-⚠️ **RARE BY DESIGN — an opportunity-cost question, not a defect.** It needs a
-strong pin far from spot, most likely near monthly expiration when real
-positioning sits at a strike. **It costs nothing while it waits**: no position
-slot, no capital, no competition. Its evidence will be **structural, not
-statistical** — the test is *"when it fires, does the payoff justify keeping
-it?"*, answerable on a small sample in a way a win rate is not.
 
 ---
 

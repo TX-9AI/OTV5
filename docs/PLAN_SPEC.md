@@ -1,5 +1,7 @@
 # PLAN_SPEC.md — every strategy declares its intent BEFORE the trigger
 
+**`PLAN_SPEC.md` v5.4 · 2026-11-09 · OTV5 r103 (RETIRE.5 step 2) — §32 (the GEX pin butterfly) is REMOVED from the code; the section keeps its heading and points to the history. The operator, 2026-11-08: "I concur on both, in that order".**
+
 **`PLAN_SPEC.md` v5.3 · 2026-11-08 · OTV5 r88 (RETIRE.3) — §34 (the trend credit spread, and its r57 log-only shadow) is REMOVED from the code; the section keeps its heading and points to the history. The operator, 2026-11-08: "Delete".**
 
 **`PLAN_SPEC.md` v5.2 · 2026-11-08 · OTV5 r81 (DOC.36) — §32.3: the GEX pin butterfly has NO stop since OTV5 r73 (BFLY.17); its one exit is the 15:45 flatten, and its door adds VIX ≥ 20 no-fire, an open inside yesterday's range and the 15.5%-of-width debit floor. The Saturday brief 2026-11-07 section 4 item 3.**
@@ -1192,34 +1194,7 @@ The momentum exit and the sweep entry are the same event seen from two sides. Th
 
 ## 32. OTV4TEST r6 — THE GEX PIN BUTTERFLY SPEC AND ITS PLAN CONTRACT (agreed with the operator 2026-09-09)
 
-*"Only the pin strength, during GEX pinning behavior and pin is reachable, with economic performance planned to best available payoff asymmetry, earliest possible no less than 1-R, taken as a debit. EM at 1.0 firm, no relaxed conditions."*
-
-### 32.1 The spec
-| part | definition |
-|---|---|
-| anchor | the pin, only — no level, no tine strengthens it |
-| regime | PINNING |
-| reachable | pin at 0.30–1.00 of the expected move, FIRM — no relaxed dial anywhere in this trade (confirmed by reading: none was live after r321) |
-| pin strength | concentration ≥ 0.25, firm |
-| **persistence, smoothed** | the acting pin is the MODE of the last `SMOOTH_WINDOW` (12) instant pins — chatter between adjacent strikes does not move it, a migration does — and it must have held `PERSIST_TICKS` (8). Both are declared priors, recorded every tick (`pin_raw`, `pin_persist_ticks`) |
-| structure | every listed wing width priced per side; **the pick is the MAX R** (payoff ÷ debit) among those that clear R_FLOOR (≥ 1R) and the stop-vs-spread floor. "Narrowest first" is superseded |
-| fire | the earliest tick the best structure clears 1R; a debit; the whole position through the §6 ladder walk |
-| one per session | main.py's r179 DB-backed cap; no additional attempts. One structure per pin (PLAYED_PINS) stays underneath it |
-
-### 32.2 Starved inputs — the park as a state, not a flag
-No ATM IV · no chain · **open interest summing to zero across the chain** → `NO PLAN: starved open_interest`. GEX without OI is gamma² × spot and the pin sits at spot; that was the reason for the 08-19 park. The row now states it every tick, and the trade un-parks itself the day real OI arrives — which it did: 2026-09-09, 226 non-zero strikes by 15:43, once `data/open_interest.py` stopped losing the first batch of every cycle to a closed event loop (v4.2).
-
-### 32.2b The slot — permitted, not expected
-The butterfly is opportunistic like the condor: it is neither blocked by any open position nor blocks one (r161 asks it from the position-open branch; r197 stops `has_blocking_position()` counting it). A box may hold a butterfly plus one other thing.
-
-### 32.3 Exits — hold to the close, by ruling (OTV5 r73, BFLY.17)
-**No stop of any kind.** The operator, 2026-11-03: *"For the GEX fly, I want no stop except hold to close, I want the VIX rule enforced & I want more discriminatory entries."* `config.HOLD_TO_CLOSE_STRATEGIES = ("GEXPinButterfly",)`: exit_engine skips the fly's hard stop and never asks the decay read; its one exit is the 15:45 flatten (the 15:55 resting close untouched). No target: a pinned fly pays as the wings die into the close. (Before r73 the fly carried a 15% dead-thesis stop, 40% before that.)
-**The door, since r73:** `vix` — VIX below `VIX_BUTTERFLY_DISABLE` (20); at or above, no fly (half size at 15-20 is unchanged); `open_in_prior_range` — today's 09:30 1m open inside yesterday's RTH high-low; and the wing search takes the best R only among widths whose debit is at least `BUTTERFLY_MIN_DEBIT_PCT_WIDTH` (15.5%) of the width. Both entry cuts were chosen after looking (~/gex_study) and are forward-scored from 2026-11-09.
-
-### 32.4 Recorded, not barred
-Three-leg stop-vs-spread ratio (`stop_vs_spread`, already a floor via `STOP_VS_SPREAD_MIN`), pin distance in EM at the fire, persistence in ticks. The first real pins say what the priors should be.
-
-**As built (OTV4TEST r6):** `strategy/gex_pin_butterfly.py` v5.0 (the plan lives in its `prepare()`, as the engine does for the ORB — the split into a `butterfly_plan.py` is a later tidy, not a behaviour), `data/open_interest.py` v4.2, `strategy/plan.py` (HYG.4), `devtools.sh` v2.1. Hypotheticals: `check_plan_prepares` B1–B14 (B12 on the smoothed pin, B14 the persistence bar), `check_butterfly_foundational`, `check_butterfly_legs`, `check_butterfly_wing_grid`.
+**REMOVED, OTV5 r103 (RETIRE.5 step 2), 2026-11-09** — the trade and its plan are deleted from the code (cut from 2026-11-09 by OTV5 r97; the operator, 2026-11-08: "I concur on both, in that order"); this section's contract is history (see git history before r103).
 
 ## 33. OTV4TEST r7 — THE JOURNAL: RECORDED WHOLE, READ HUSHED (operator 2026-09-09)
 

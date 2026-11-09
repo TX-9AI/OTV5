@@ -1,6 +1,8 @@
 #!/bin/bash
 # ==========================================================================
-# deploy/check_versions.sh  v5.2
+# deploy/check_versions.sh  v5.3
+# v5.3  2026-11-09  OTV5 r103 (RETIRE.5 step 2) — the two config.py butterfly canaries (BUTTERFLY_WING_SPX,
+#       BUTTERFLY_ENTRY_START_ET) go with the GEX pin butterfly's keys (the operator, 2026-11-08: "I concur on both, in that order").
 # v5.2  2026-11-08  OTV5 r88 (RETIRE.3) — the two TC.6 canaries (exit_engine's is_trend_participation binding, main.py's
 #       `_is_tcs` condor-leg identity) go with the TCS (the operator, 2026-11-08: "Delete").
 # v5.1  2026-11-08  OTV5 r76 (RETIRE.1) — the strategy/orb_strategy.py check goes with the file (the ORB trade is removed).
@@ -853,8 +855,6 @@ check "strategy/butterfly_strategy.py"   "_fired_today"                 "One but
 check "execution/exit_engine.py"         "POST_TARGET_TRAIL_LOCK_PCT"   "FVG trail past 100% TP"
 check "execution/exit_engine.py"         "_find_1m_fvgs"                "1m FVG detection"
 check "execution/position_manager.py"    "notify_position_closed"       "ORB re-arm hook on position close"
-check "config.py"                        "BUTTERFLY_WING_SPX"           "Butterfly config constants"
-check "config.py"                        "BUTTERFLY_ENTRY_START_ET"     "Butterfly noon entry window"
 check "deploy/push.sh"                          "Detected malformed remote"    "Self-healing remote URL"
 check "deploy/push.sh"                          "diverged"                    "Diverged history handling"
 check "setup_ec2.sh"                     'GITHUB_REPO#https://'         "GitHub URL normalization"

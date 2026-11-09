@@ -1,5 +1,6 @@
 """
-tests/retired_names.py  v5.1
+tests/retired_names.py  v5.2
+v5.2  2026-11-09  OTV5 r103 (RETIRE.5 step 2) — REMOVED adds strategy.gex_pin_butterfly (the GEX pin butterfly).
 v5.1  2026-11-08  OTV5 r88 (RETIRE.3) — REMOVED adds the three TCS shadow modules (strategy.trend_credit_spread, strategy.tcs_plan,
       execution.shadow_book).
 v5.0  2026-11-08  OTV5 r76 (RETIRE.1) — ONE ANSWER TO "IS THIS MODULE GONE FROM THE LIVE CODE?" for the checks re-pointed
@@ -19,7 +20,9 @@ REMOVED = ("strategy.orb_strategy", "strategy.volt_strategy", "strategy.volt_pla
            "strategy.atp_butterfly_plan", "strategy.orcs", "strategy.orcs_plan", "strategy.sweep_plan",
            "execution.handoff",
            # r88 (RETIRE.3): the TCS shadow
-           "strategy.trend_credit_spread", "strategy.tcs_plan", "execution.shadow_book")
+           "strategy.trend_credit_spread", "strategy.tcs_plan", "execution.shadow_book",
+           # r103 (RETIRE.5 step 2): the GEX pin butterfly
+           "strategy.gex_pin_butterfly")
 _REMOVED_FILES = {os.path.join(ROOT, *m.split(".")) + ".py" for m in REMOVED}
 
 

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_park.py  v5.2
+tests/check_park.py  v5.3
+v5.3  2026-11-09  OTV5 r103 (RETIRE.5 step 2) — K13a intercepts _attempt_park alone: _attempt_butterfly is removed with the GEX fly. Every check unchanged.
 v5.2  2026-10-30  OTV5 r60 (PARK.4) — K1 PINS THE MARK, NOT THE ASK. The operator, 2026-10-30: "That's not my spec… you
       know park is a borrowed trade. To match my spec, we ladder in from aggressive to mark & never worse than mark".
       K1: entry = the mark 1.60 of the 1.58/1.62 quote (was "entry = ask 1.62"). K8's park_signal.jsonl row still
@@ -357,9 +358,8 @@ def main():
     # stores and declines. The recorder must see PARK asked WITH the chain (the capped branch passes none).
     import main as _MN0
     _calls = []
-    _orig_park, _orig_fly = _MN0._attempt_park, _MN0._attempt_butterfly
+    _orig_park = _MN0._attempt_park                             # r103: _attempt_butterfly removed with the GEX fly
     _MN0._attempt_park = lambda ctx, ms, state, chain=None: _calls.append(("park", chain is not None))
-    _MN0._attempt_butterfly = lambda *a, **k: _calls.append(("fly",))
 
     class _MS:
         adx, trend_direction, structure_sequence = 20.0, "NEUTRAL", ""
@@ -387,7 +387,7 @@ def main():
     except Exception as _e:                                     # noqa: BLE001
         _err = f"{type(_e).__name__}: {_e}"
     finally:
-        _MN0._attempt_park, _MN0._attempt_butterfly = _orig_park, _orig_fly
+        _MN0._attempt_park = _orig_park
         for _m, _n in _swapped:
             setattr(_m, _n, _real[_n])
     check("K13a DRIVEN: attempt_new_entry() asks _attempt_park WITH the chain on the normal-day path",

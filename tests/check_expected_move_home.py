@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_expected_move_home.py  v5.1
+tests/check_expected_move_home.py  v5.2
+v5.2  2026-11-09  OTV5 r103 (RETIRE.5 step 2) — E1 drops the GEX fly's wrapper (strategy/gex_pin_butterfly.py removed): expected_move_session itself is held to the old body on the same grid and floor, and E1b pins the three callers the wrapper served (the pin gate, the Hunt, the snapshot) importing it directly. E2-E5 unchanged.
 v5.1  2026-11-08  OTV5 r76 (RETIRE.1) — E5 drops the ORCS call site (strategy/orcs_plan.py removed with ORCS); the condor and readiness sites unchanged.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.1  2026-10-03  OTV4TEST r229 (EM.2) — E5 RE-POINTED: by the operator's ruling the condor, readiness and ORCS call sites
@@ -143,7 +144,6 @@ def chains():
 def main():
     try:
         from analysis import volatility_measures as VM
-        from strategy import gex_pin_butterfly as GPB
         from zoneinfo import ZoneInfo
         et = ZoneInfo("America/New_York")
         grid = []
@@ -154,12 +154,20 @@ def main():
         def same(a, b):
             return (a is None and b is None) or (a is not None and b is not None and (a == b or (a != a and b != b)))
         bad = [(S, iv, t.strftime("%H:%M")) for S, iv, t in grid
-               if not same(GPB.expected_move(S, iv, t), old_expected_move(S, iv, t))
-               or not same(VM.expected_move_session(S, iv, t), old_expected_move(S, iv, t))]
-        floor = GPB.expected_move(750.0, 0.2, _dt.datetime(2026, 10, 5, 15, 59, tzinfo=et))
+               if not same(VM.expected_move_session(S, iv, t), old_expected_move(S, iv, t))]
+        floor = VM.expected_move_session(750.0, 0.2, _dt.datetime(2026, 10, 5, 15, 59, tzinfo=et))
         want_floor = 750.0 * 0.2 * math.sqrt(0.25 / 6.5) / math.sqrt(252)
         check(f"E1 the butterflies' expected move is identical on {len(grid)} cases; the 15-minute floor holds at 15:59",
               not bad and abs(floor - want_floor) < 1e-12, f"differs: {bad[:4]}; floor {floor} want {want_floor}")
+        # r103: the fly's wrapper is gone; its three callers import the function it wrapped
+        _callers = {"main.py": "from analysis.volatility_measures import expected_move_session as _em_fn",
+                    "strategy/liquidity_hunt.py": "from analysis.volatility_measures import expected_move_session",
+                    "derived/snapshot.py": "from analysis.volatility_measures import expected_move_session as _em_fn"}
+        _root_ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        _miss = [f for f, line in _callers.items()
+                 if line not in open(os.path.join(_root_, f), encoding="utf-8").read()
+                 or "gex_pin_butterfly import" in open(os.path.join(_root_, f), encoding="utf-8").read()]
+        check("E1b the pin gate, the Hunt and the snapshot read expected_move_session directly (r103)", not _miss, str(_miss))
     except Exception as exc:                                  # noqa: BLE001
         check("E1 (did not run)", False, f"{type(exc).__name__}: {exc}")
         VM = None

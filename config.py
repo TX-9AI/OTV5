@@ -1,5 +1,6 @@
 """
-config.py  v5.16
+config.py  v5.17
+v5.17  2026-11-09  OTV5 r103 (RETIRE.5 step 2) — THE GEX PIN BUTTERFLY'S KEYS GO: ENTRY_WINDOWS loses GEXPinButterfly; GEX_BUTTERFLY_ENABLED, HOLD_TO_CLOSE_STRATEGIES, every GEX_BFLY_* dial (PIN_CONC_MIN, EM_MIN/MAX_FRAC, SMOOTH_WINDOW, PERSIST_TICKS, VWAP_BAND_EM_FRAC, EARLIEST_ET, LATEST_ET, WING_EM_FRAC and its OT_GEX_BFLY_WING_EM_FRAC read), the debit gates (BUTTERFLY_MAX/MIN_DEBIT_PCT_WIDTH, _HICONV, BUTTERFLY_DEBIT_CEILING, BUTTERFLY_DISC_CONV_LO/HI and their OT_BFLY_* reads), BUTTERFLY_ENTRY_START_ET, BUTTERFLY_ENTRY_CUTOFF_ET (it gated nothing since r209), BUTTERFLY_WING_SPX/QQQ, BUTTERFLY_GEX_PIN_PROXIMITY_MULT and VIX_BUTTERFLY_HALF_SIZE are deleted. KEPT: BUTTERFLY_STOP_LOSS_PCT / _TP_PCT / _MAX_HOLD_MIN (exit_engine prices any butterfly record still on a book) and VIX_BUTTERFLY_DISABLE (macro_data's regime and the condor read it). Every live value is identical (diffed). The operator, 2026-11-08: "I concur on both, in that order".
 v5.16  2026-11-08  OTV5 r97 (RETIRE.5) — THE GEX PIN BUTTERFLY IS CUT: GEX_BUTTERFLY_ENABLED is False in code and OT_GEX_BUTTERFLY no longer turns it on. The operator, 2026-11-08: "I agree that our GEX fly may be on the chopping block ... I'm considering cutting it starting tomorrow" / "I concur on both, in that order" (no new fly from 11-09; the code is removed after the 11-09 close). Evidence: window EV -$6,482 [-19.2k, +3.2k], lunch entries lose, no fly since 11-03 (research r2). Its exits and management are untouched.
 v5.15  2026-11-08  OTV5 r88 (RETIRE.3) — THE TCS KEYS GO: ENTRY_WINDOWS loses TrendCreditSpread; TREND_CREDIT_ACTIVE, TCS_MODE, TCS_ENV_REFUSED and every TCS_* dial are deleted. CREDIT_ENTRY_START_ET = (11, 31) and CONDOR_ENTRY_CUTOFF_ET = EOD_SCHEDULE['entries_stop'] are now written directly (they read the TCS row; the values are identical). The operator, 2026-11-08: "Delete" (the TCS shadow, which never fired: its own gates declined every candidate 11-02..11-06).
 v5.14  2026-11-08  OTV5 r76 (RETIRE.1) — THE RETIRED TRADES' DIALS GO: ENTRY_WINDOWS loses ORBStrategy, VOLT, SweepCreditSpread, ATPButterfly and OpeningRangeCreditSpread; the VOLT_*, ORCS_*, ATP_*, SWEEP_CS_* (except SWEEP_CS_MAX_REJECTION_PCT, read by derived/levels), SCALE_ORB, SCALE_VOLT, CONTRACT_SCALE, HANDOFF_TTL_TICKS and VELOCITY_* keys and their env reads are removed. ORB_NO_ENTRY_AFTER_ET (the ENGINE's cutoff) now reads EOD_SCHEDULE["entries_stop"] directly - same value, 15:40. DELTA_PAR, BREAKOUT_DELTA_PAR and every live dial are unchanged. The operator, 2026-11-07: "Running dead code and logging dead code activity is unnecessary drag. Yes, I want all of those things fixed."
@@ -1134,12 +1135,6 @@ _DECAY_EXEMPT_DEFAULT = ("RunawayContinuation", "PARK")
 _dx_raw = os.environ.get("OT_DECAY_STOP_EXEMPT")
 DECAY_STOP_EXEMPT = (_DECAY_EXEMPT_DEFAULT if _dx_raw is None
                      else tuple(x.strip() for x in _dx_raw.split(",") if x.strip()))
-# r73 (BFLY.17) — HOLD TO THE CLOSE. The operator, 2026-11-03: "For the GEX fly, I want no stop except hold to close".
-# These strategies have NO premium stop and NO decay stop (exit_engine._evaluate_butterfly / _decay_read,
-# strategy/management.decide): the 15:45 flatten is the exit. Kept apart from DECAY_STOP_EXEMPT on purpose - an
-# OT_DECAY_STOP_EXEMPT list that omits the fly cannot put a stop back on it. The study (~/gex_study): the decay stop cut
-# all five outliers to +$497 of their +$5,362; the 40% stop cut the other winners (median -41% before they pinned).
-HOLD_TO_CLOSE_STRATEGIES = ("GEXPinButterfly",)
 
 ENTRY_WINDOWS = {
     # r149: directional debits run ALL DAY to the entries stop (operator: "A").
@@ -1147,7 +1142,6 @@ ENTRY_WINDOWS = {
     "RunawayContinuation":  ((9, 35),  RUNAWAY_END),   # r187: 10:29 last entry (r68: fixed, no per-box key)
     "LiquidityHunt":        ((9, 35),  (10, 30)),   # r187
     "Breakout":             ((9, 35),  BREAKOUT_END),   # r187: 10:29 last entry (r68: fixed, no per-box key)
-    "GEXPinButterfly":      ((13, 0),  (15, 0)),   # r273 (BFLY.10): was 12:00; the operator, 2026-10-12: "reduce the fly window to 1300"
     "PARK":                 ((11, 1),  (11, 3)),   # r288 (PARK.1): 11:01-11:02 after the 11:00 bar closes; r60 (PARK.4): at the mark, laddered live
 }
 
@@ -1219,40 +1213,6 @@ INSTRUMENT_LISTED   = INSTRUMENT in STRIKE_INCREMENTS
 # Was {"SPY","QQQ","SPX","IWM"}, which silently excluded 26 of 29 live boxes.
 FULL_STRATEGY_INSTRUMENTS    = set(STRIKE_INCREMENTS)
 
-# ── Butterfly discount gate (2026-07-14, operator directive) ──────────────────
-# The fly's edge is buying the tent at a DISCOUNT while price still has to walk
-# into it: require net_debit <= this fraction of wing width (0.33 => min ~2:1
-# reward:risk). Self-normalizing across symbols; needs only marks. PRIOR —
-# calibrate from logged debit-ratio vs outcome once fleet-wide entries accrue.
-BUTTERFLY_MAX_DEBIT_PCT_WIDTH = 0.33
-# r73 (BFLY.17) — THE CHEAP-FLY FLOOR. The wing search (strategy/gex_pin_butterfly) takes the best R ONLY among widths whose
-# debit is >= this fraction of the width, so "max R" can no longer steer to the cheapest, least likely fly. The study
-# (~/gex_study, 75 flies with paths, hold to the close): skipping debit <= 15.5% of width (the train tercile, 0.1547)
-# saved $5,122, both halves, kept all five outliers. CHOSEN POST-HOC AND FAILED BH (q 0.118): forward-scored from 11-09.
-BUTTERFLY_MIN_DEBIT_PCT_WIDTH = 0.155
-# ── Conviction-scaled DISCOUNT gate (v-convdiscount 2026-07-28) ─────────────
-# MEASURED on QQQ's full log: debit ratios 0.41-0.64 (min 0.41, cluster
-# 0.47-0.53) against a flat 0.33 ceiling -> the gate rejected 100% of setups that
-# reached it. Three butterflies exist in the entire fleet archive. Proximity was
-# NOT the constraint: zero "too far from pin" rejections were ever logged.
-# The tent is expensive because price sits near the pin. With high conviction it
-# STAYS pinned, paying more is justified; with low conviction, demand the cheap
-# tent. So the ceiling scales from the strict floor to a high-conviction ceiling.
-# Bounds are set against the OBSERVED conviction range (0.000-0.582), NOT 0-1.
-# ALL PRIOR -- refit from the debit-ratio ledger, which logs every evaluation.
-BUTTERFLY_MAX_DEBIT_PCT_WIDTH_HICONV = float(os.environ.get("OT_BFLY_DEBIT_HICONV", "0.50"))
-
-# ── BFLY.3 (2026-08-15) — THE FLAT DEBIT CEILING ─────────────────────────────
-# Max profit is `wing - debit`, so at ratio 0.50 you risk exactly what you can
-# win. **0.50 IS THE STRUCTURE'S OWN BREAK-EVEN**, not a fitted threshold — it
-# needs no holdout and cannot be overfit. Above it the payoff is upside-down.
-# Replaces the conviction-scaled ceiling: measured fleet-wide across 29 boxes,
-# the conv->ratio slope is POSITIVE on 5 of 7 sampled symbols, so scaling up
-# with conviction paid MORE exactly where the trade was WORSE. It also cost real
-# trades — SMH had 46 setups at mean ratio 0.379 and fired 3.
-BUTTERFLY_DEBIT_CEILING = float(os.environ.get("OT_BFLY_DEBIT_CEILING", "0.50"))
-BUTTERFLY_DISC_CONV_LO = float(os.environ.get("OT_BFLY_DISC_CONV_LO", "0.30"))
-BUTTERFLY_DISC_CONV_HI = float(os.environ.get("OT_BFLY_DISC_CONV_HI", "0.55"))
 DIRECTIONAL_ONLY_INSTRUMENTS = set(STRIKE_INCREMENTS) - FULL_STRATEGY_INSTRUMENTS
 DIRECTIONAL_ONLY             = INSTRUMENT in DIRECTIONAL_ONLY_INSTRUMENTS
 CONTRACT_MULTIPLIER = 100
@@ -1507,12 +1467,6 @@ BRK_R_FLOOR                 = 1.0
 BRK_RANGE_MIN_PCT           = 0.0023
 BRK_RANGE_MAX_PCT           = 0.0350
 BRK_RANGE_CLEAN_MAX         = 0.0
-# The GEX pin butterfly (strategy/gex_pin_butterfly.py): its pin-concentration floor 0.25.
-GEX_BFLY_PIN_CONC_MIN       = 0.25
-GEX_BFLY_EM_MIN_FRAC        = 0.30
-GEX_BFLY_EM_MAX_FRAC        = 1.00
-GEX_BFLY_SMOOTH_WINDOW      = 12       # ticks (~3 min)
-GEX_BFLY_PERSIST_TICKS      = 8        # ticks (~2 min)
 # Runaway (strategy/runaway_continuation.py, strategy/runaway_plan.py)
 RUNAWAY_ATR_FLOOR_PCT       = 0.08
 RUNAWAY_ATR_VETO_PCT        = 0.05
@@ -1568,7 +1522,6 @@ SIZE_ON_RISK_TO_STOP = os.environ.get("OT_SIZE_ON_RISK", "0") == "1"
 DEPLOY_CAP_MULT = float(os.environ.get("OT_DEPLOY_CAP_MULT", "2.0"))
 
 BUTTERFLY_STOP_LOSS_PCT = 0.40   # OTV4TEST r24, operator: "Widen it to 40%." (was 0.25)
-GEX_BFLY_VWAP_BAND_EM_FRAC = 0.10   # OTV4TEST r25 (BFLY.5): pin within ±this x EM of today's VWAP waives the conc floor
 # Max-loss stop applied to an ADOPTED position (one discovered open at the
 # broker on a LIVE restart with no DB plan). Defaults to the same threshold
 # every strategy already respects, so an adopted position exits at the same
@@ -1604,7 +1557,6 @@ VIX_LOW_THRESHOLD           = 15
 VIX_ELEVATED_THRESHOLD      = 20
 VIX_CRISIS_THRESHOLD        = 30
 VIX_BUTTERFLY_DISABLE       = 20
-VIX_BUTTERFLY_HALF_SIZE     = 15
 VIX_NO_ENTRY_THRESHOLD      = 30
 IV_RANK_HIGH                = 50
 
@@ -1729,22 +1681,6 @@ DEBIT_BLOCK_ACTIVE          = os.environ.get("OT_DEBIT_BLOCK_ACTIVE", "1") == "1
 # 15:40/15:45 flatten ladder) bounds the day; a redundant global veto is the
 # guard-outlives-decision shape this repo keeps finding.
 # RETIRE.3 (r88): the TCS window notes (r237 park, r238 spec, r81 _TCS_ENTRY_END_ET_NOTE) went with the TCS.
-BUTTERFLY_ENTRY_CUTOFF_ET   = (14, 0)   # gates NOTHING since r209 (its session_guard branch could never run and is deleted); ENTRY_WINDOWS bounds the flies
-# 🔴 NOON, AND IT IS NOW ACTUALLY IN FORCE (r142). Operator, 2026-08-26:
-# *"Butterfly is debit & any sooner than noon to reach a pin is unlikely to
-# hold all the way to the closing bell."*
-# ⚠️ THIS CONSTANT WAS READ BY NOTHING IN PRODUCTION — only by a test harness.
-# The live gate was `gex_pin_butterfly.EARLIEST_ET`, a getattr DEFAULT of
-# "11:00" whose key did not exist in this file, so the butterfly would have
-# opened a full HOUR before the rule the operator just stated. Same shape as
-# SWEEP_CS_EARLIEST_ET: a default is the only source, and the config value
-# everyone reads is decorative.
-BUTTERFLY_ENTRY_START_ET    = ENTRY_WINDOWS["GEXPinButterfly"][0]   # No butterfly entries before noon
-GEX_BFLY_EARLIEST_ET        = f"{BUTTERFLY_ENTRY_START_ET[0]}:{BUTTERFLY_ENTRY_START_ET[1]:02d}"
-# r97 (RETIRE.5) — CUT. The operator, 2026-11-08: "I concur on both, in that order": no new GEX pin butterfly from
-# 2026-11-09, its code removed after that close. A code default, not a switch: no env value turns it back on.
-GEX_BUTTERFLY_ENABLED       = False
-GEX_BFLY_WING_EM_FRAC       = float(os.environ.get("OT_GEX_BFLY_WING_EM_FRAC", "0.25"))  # ⟨PRIOR⟩
 # ⚠️ THE DEBIT CUTOFF, ALSO A DEFAULT-ONLY VALUE UNTIL NOW. 11:30 is correct
 # and load-bearing: the credit start is 11:31, so this is the one minute of
 # daylight between the two. Defined here so the pair cannot drift apart.
@@ -1752,7 +1688,6 @@ RUNAWAY_CUTOFF_ET           = _hhmm(ENTRY_WINDOWS["RunawayContinuation"][1])
 HUNT_CUTOFF_ET              = ENTRY_WINDOWS["LiquidityHunt"][1]        # r148: read by liquidity_hunt; never existed before
 BREAKOUT_LATEST_ET          = _hhmm(ENTRY_WINDOWS["Breakout"][1])      # r148: read by breakout; never existed before
 BREAKOUT_EARLIEST_ET        = "%02d:%02d" % ENTRY_WINDOWS["Breakout"][0]  # r148: never existed; zero-padded "09:35" exactly as the literal was
-GEX_BFLY_LATEST_ET          = _hhmm(ENTRY_WINDOWS["GEXPinButterfly"][1])  # r148: read by gex_pin_butterfly; never existed before
 ORB_WINDOW_MINUTES          = 5
 
 # ─── ORB STRATEGY ─────────────────────────────────────────────────────────────
@@ -1939,14 +1874,6 @@ SWEEP_BOS_LOOKBACK          = 5      # 1m candles used as the BOS structure refe
 BUTTERFLY_TP_PCT            = 0.20   # informational only (r169)
 BUTTERFLY_MAX_HOLD_MIN      = 150    # not read by any exit (r169)
 
-# Fixed wing widths by instrument
-BUTTERFLY_WING_SPX          = 25     # 25-point wings on SPX
-BUTTERFLY_WING_QQQ          = 5      # $5 wings on QQQ/SPY
-
-# GEX pin proximity gate: price must be within 1x expected move of pin
-# Formula: underlying × VIX% × sqrt(hours_remaining/6.5) / sqrt(252)
-# Computed at runtime in butterfly_strategy.py
-BUTTERFLY_GEX_PIN_PROXIMITY_MULT = 1.0  # Multiplier on expected move
 
 # ─── IRON CONDOR STRATEGY ─────────────────────────────────────────────────────
 # Strike selection is BOLLINGER-BAND ANCHORED — there is NO delta anywhere in the

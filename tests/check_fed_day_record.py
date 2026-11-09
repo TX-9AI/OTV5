@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_fed_day_record.py  v5.1
+tests/check_fed_day_record.py  v5.2
+v5.2  2026-11-09  OTV5 r103 (RETIRE.5 step 2) — F7 reads the four live strategies: strategy/gex_pin_butterfly.py is removed with the GEX fly. F1-F6 unchanged.
 v5.1  2026-11-08  OTV5 r76 (RETIRE.1) — F7 RE-POINTED (WA 38.4): the ORB trade is removed, so F7 pins FED_DAY_ORB_BOOST gone with it and reads the five live
       strategies for a Fed-day block that assigns (none may: fed days change no behaviour).
 v5.0  2026-10-25  (MEAS.3) — THE FED-DAY FLAG IS RECORDED CORRECTLY, AND CHANGES NO TRADING.
@@ -150,7 +151,7 @@ def main():
         gone = not hasattr(C, "FED_DAY_ORB_BOOST") and __import__("retired_names").retired("strategy.orb_strategy")
         writes = []
         for _f in ("strategy/runaway_continuation.py", "strategy/breakout.py", "strategy/liquidity_hunt.py",
-                   "strategy/park.py", "strategy/gex_pin_butterfly.py"):
+                   "strategy/park.py"):                    # r103: strategy/gex_pin_butterfly.py removed
             tree = ast.parse(open(os.path.join(_root, _f), encoding="utf-8").read())
             for n in ast.walk(tree):
                 if isinstance(n, ast.If) and "is_fed_day" in ast.unparse(n.test):

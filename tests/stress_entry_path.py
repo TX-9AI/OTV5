@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/stress_entry_path.py  v5.0
+tests/stress_entry_path.py  v5.1
+v5.1  2026-11-09  OTV5 r103 (RETIRE.5 step 2) — stress_butterfly goes with the GEX pin butterfly (strategy/gex_pin_butterfly.py deleted); every other path unchanged.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 Hostile inputs against every entry path. Nothing crashes, nothing fires on
 garbage.
@@ -148,27 +149,6 @@ def stress_sweep():
           or not math.isnan(pierced_strike(float("nan"), 600.0, True, 1.0) or 0))
 
 
-def stress_butterfly():
-    from strategy.gex_pin_butterfly import (GEXPinButterflyStrategy,
-                                            expected_move)
-    s = GEXPinButterflyStrategy()
-    gx = NS(gex_environment="PINNING", pin_concentration=0.40, pin_strike=606.0)
-    probe("butterfly gex=None",
-          lambda: s.generate_signal(gex=None, price_now=600.0,
-                                    now_et="13:00", atm_iv=0.35))
-    for v in HOSTILE:
-        probe(f"butterfly atm_iv={v!r}",
-              lambda v=v: s.generate_signal(gex=gx, price_now=600.0,
-                                            now_et="13:00", atm_iv=v))
-    check("butterfly: expected_move on NaN IV -> None or finite",
-          expected_move(600.0, float("nan")) is None
-          or math.isfinite(expected_move(600.0, float("nan")) or 0))
-    check("butterfly: expected_move with no IV -> None",
-          expected_move(600.0, 0.0) is None)
-    check("butterfly: PARKED by default", s.generate_signal(
-        gex=gx, price_now=600.0, now_et="13:00", atm_iv=0.35) is None)
-
-
 def stress_ladder():
     from execution.entry_ladder import rungs, LadderState
     # ⚠️ A CROSSED QUOTE IS NOT HYPOTHETICAL. It appears around the open, on
@@ -252,7 +232,7 @@ def stress_excursion():
 def main_(argv):
     print("STRESS: hostile inputs against every entry path")
     print("=" * 72)
-    for fn in (stress_runaway, stress_sweep, stress_butterfly, stress_ladder,
+    for fn in (stress_runaway, stress_sweep, stress_ladder,          # r103: stress_butterfly removed with the GEX fly
                stress_relaxed_and_cutoff, stress_excursion):
         try:
             fn()

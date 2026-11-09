@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_platform_em.py  v5.1
+tests/check_platform_em.py  v5.2
+v5.2  2026-11-09  OTV5 r103 (RETIRE.5 step 2) — M6 RE-POINTED (WA 38.4): the GEX fly's expected_move wrapper is removed, so M6 holds volatility_measures.expected_move_session to the session formula and pins that the pin gate (its reader) never names the platform function. M1-M5 unchanged.
 v5.1  2026-11-08  OTV5 r76 (RETIRE.1) — M5 RE-POINTED (WA 38.4): ORCS is removed, so M5 pins its plan gone (check_expected_move_home E5 pins the condor and
       readiness readers); M1-M4 and M6 unchanged.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
@@ -19,8 +20,8 @@ v1.0  2026-10-03  OTV4TEST r229 (EM.2) — THE EXPECTED MOVE IS THE TASTYTRADE P
   M4  the ATM strike is the nearest listed on BOTH sides
   M5  (r76: ORCS removed) ORCS's implied move IS this function, and the REAL plan records it with the
       old straddle beside it (atm_straddle)
-  M6  THE BUTTERFLY IS UNTOUCHED: gex_pin_butterfly.expected_move is still the
-      session formula, and its source never names the platform function
+  M6  THE SESSION EM IS UNTOUCHED: volatility_measures.expected_move_session is still the
+      session formula, and the pin gate (its reader since r103; the fly's wrapper is removed) never names the platform function
 
 Run:  python3 tests/check_platform_em.py   (exit 0 green, 1 red)
 """
@@ -89,14 +90,19 @@ def main():
         import importlib.util as _ilu
         check("M5 r76: ORCS (this function's first reader) is removed; the condor and readiness still read it",
               __import__("retired_names").retired("strategy.orcs_plan"))
-        from strategy import gex_pin_butterfly as G
+        from analysis import volatility_measures as VM          # r103: the GEX fly wrapper is removed
+        import ast as _ast
         import datetime as _dt
         from zoneinfo import ZoneInfo
         t = _dt.datetime(2026, 10, 5, 13, 0, tzinfo=ZoneInfo("America/New_York"))
         want6 = 750.0 * 0.3 * math.sqrt(3.0 / 6.5) / math.sqrt(252)
-        check("M6 the butterfly's expected move is still the session formula and its file never names the platform one",
-              abs(G.expected_move(750.0, 0.3, t) - want6) < 1e-9 and "expected_move_platform" not in open(G.__file__).read(),
-              f"{G.expected_move(750.0, 0.3, t)} want {want6}")
+        _msrc = open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "main.py"), encoding="utf-8").read()
+        _pg = next(n for n in _ast.walk(_ast.parse(_msrc)) if isinstance(n, _ast.FunctionDef) and n.name == "pin_proximity_verdict")
+        _pgs = _ast.unparse(_pg)
+        check("M6 the session EM is still the session formula, and the pin gate reads it, never the platform one (r103)",
+              abs(VM.expected_move_session(750.0, 0.3, t) - want6) < 1e-9
+              and "expected_move_session" in _pgs and "expected_move_platform" not in _pgs,
+              f"{VM.expected_move_session(750.0, 0.3, t)} want {want6}")
     except Exception as exc:                                  # noqa: BLE001
         for n in ("M1", "M2", "M3", "M4", "M5", "M6"):
             if n not in FAILED:
@@ -104,7 +110,7 @@ def main():
     if FAILED:
         print(f"\nRED — {len(set(FAILED))} check(s): {sorted(set(FAILED))}")
         return 1
-    print("\nGREEN — the platform's expected move; the butterfly is untouched")
+    print("\nGREEN — the platform's expected move; the session EM is untouched")
     return 0
 
 

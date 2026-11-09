@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_admission_wired.py  v5.2
+tests/check_admission_wired.py  v5.3
+v5.3  2026-11-09  OTV5 r103 (RETIRE.5 step 2) — the GEX fly is removed, so the r97 flag flip goes and A1, A2 and A4 probe LiquidityHunt (a live plan in the table) where they probed the fly. Every other check unchanged.
 v5.2  2026-11-08  OTV5 r97 (RETIRE.5) — the GEX fly is cut in production (OFF in code); this checker flips it on to exercise its code until step 2 removes it.
 v5.1  2026-11-08  OTV5 r76 (RETIRE.1) — A3 RE-POINTED (WA 38.4): the ORB trade and its "ORB" dispatch alias are removed, so A3 pins
       that a live label IS its table key (Breakout asked when admitted, not when only PARK is) and the alias map is gone;
@@ -44,8 +45,6 @@ import tempfile
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
-import config as _r97_cfg                                       # noqa: E402  r97 (RETIRE.5): the GEX fly is cut in production (OFF in code); this checker flips it on to exercise its code until step 2 removes it
-_r97_cfg.GEX_BUTTERFLY_ENABLED = True
 os.environ.setdefault("OT_TRADES_DB", os.path.join(tempfile.mkdtemp(), "t.db"))
 os.environ.setdefault("OT_DERIVED_DB", os.path.join(tempfile.mkdtemp(), "d.db"))
 FAILED, RAN = [], []
@@ -88,9 +87,9 @@ def main():
         return ran["n"] > 0, out
 
     guard("A1 an ADMITTED strategy is asked and its signal returned",
-          lambda: probe("GEXPinButterfly", ["GEXPinButterfly"]) == (True, "SIGNAL"))
+          lambda: probe("LiquidityHunt", ["LiquidityHunt"]) == (True, "SIGNAL"))   # r103: was the GEX fly
     guard("A2 a strategy NOT admitted this tick is NEVER ASKED — fn does not run",
-          lambda: probe("GEXPinButterfly", ["PARK"]) == (False, None),
+          lambda: probe("LiquidityHunt", ["PARK"]) == (False, None),
           "this is what removes the NOT ASKED rows: no ask, so no refusal to journal")
 
     # ── A3 — the ORB dispatches under a label the table does not use ────────
@@ -101,7 +100,7 @@ def main():
 
     # ── A4/A5 — fails OPEN, in both directions ─────────────────────────────
     guard("A4 with NO admission computed, every strategy is asked (pre-r40 exactly)",
-          lambda: probe("GEXPinButterfly", None)[0] is True)
+          lambda: probe("LiquidityHunt", None)[0] is True)
     guard("A5 a name the table does not carry is asked — admission has no opinion",
           lambda: probe("UnlistedStrategy", ["PARK"])[0] is True,     # r303: IronCondorStrategy is DORMANT
           "IronCondorStrategy is retired as an entry; a silent veto would hide that")

@@ -1,5 +1,6 @@
 """
-tests/check_strike_ladder.py  v5.0
+tests/check_strike_ladder.py  v5.1
+v5.1  2026-11-09  OTV5 r103 (RETIRE.5 step 2) — L2 re-pointed: strategy/gex_pin_butterfly.py (the one _chain_increment alias) is removed with the GEX fly, so L2 pins it retired and chain_increment the one reader. L1, L3-L7 unchanged.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.0  2026-10-02  OTV4TEST r185 (LADR.1) — SHARED GATE, byte-identical in
       OTV4TEST and otv4 but for this header. STRIKES ARE READ FROM THE CHAIN,
@@ -19,8 +20,8 @@ WHAT IT DRIVES (never source text, WA section 21):
   L1  data.options_chain.chain_increment — the REAL function on hand ladders:
       $2.50, $0.50 (SOFI), $1, a $2.50 ladder carrying one stray half-strike
       (the MEDIAN, not the min), and the < 3 strikes fallback.
-  L2  strategy.gex_pin_butterfly._chain_increment IS that function — one
-      ladder reader, not two copies that can drift.
+  L2  (r103) strategy.gex_pin_butterfly, the one alias of that function, is removed with the GEX fly:
+      no live module names a second ladder reader.
   L3  OptionsChainFetcher.select_butterfly_strikes is GONE (0 callers in both
       trees; it centred on the table BFLY.3 measured wrong).
   L4  round/floor/ceil_to_strike keep a fractional increment (r137's _strike)
@@ -137,10 +138,8 @@ def main():
               and ci([], 190.0, 0.5) == 0.5)
 
     # ── L2 one reader ────────────────────────────────────────────────────
-    import strategy.gex_pin_butterfly as B
-    check("L2 the butterfly's _chain_increment IS data.options_chain.chain_increment",
-          ci is not None and getattr(B, "_chain_increment", None) is ci,
-          f"fly={getattr(B, '_chain_increment', None)} chain={ci}")
+    check("L2 (r103) the fly's alias went with it: chain_increment is the one ladder reader",
+          ci is not None and __import__("retired_names").retired("strategy.gex_pin_butterfly"))
 
     # ── L3 the dead fly selector is gone ─────────────────────────────────
     check("L3 OptionsChainFetcher.select_butterfly_strikes is deleted",

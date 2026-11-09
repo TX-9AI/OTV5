@@ -1,5 +1,6 @@
 """
-risk/session_guard.py  v5.0
+risk/session_guard.py  v5.1
+v5.1  2026-11-09  OTV5 r103 (RETIRE.5 step 2) — config.BUTTERFLY_ENTRY_CUTOFF_ET and _BUTTERFLY_CUTOFF go with the GEX pin butterfly: they gated nothing since r209. can_enter keeps its is_butterfly parameter, accepted and unused, so no caller breaks. The operator, 2026-11-08: "I concur on both, in that order".
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v4.4  2026-10-03  OTV4TEST r209 (EXIT.4) — THE BUTTERFLY CUTOFF BRANCH IS DELETED. It could never run (no caller has ever
       passed is_butterfly=True) and its 14:00 contradicted the butterflies' own 12:00-15:00 window in
@@ -70,8 +71,6 @@ Entry gates (evaluated in order; first failing gate blocks):
 
 import logging
 from typing import Optional
-from datetime import datetime, time as dtime
-from config import BUTTERFLY_ENTRY_CUTOFF_ET
 
 from utils.time_utils import (
     is_rth, is_orb_complete, is_hard_close_time,
@@ -81,10 +80,6 @@ from data.macro_data import MacroSnapshot
 
 logger = logging.getLogger(__name__)
 
-# Convert config tuple (15, 0) to time object
-
-
-_BUTTERFLY_CUTOFF = dtime(BUTTERFLY_ENTRY_CUTOFF_ET[0], BUTTERFLY_ENTRY_CUTOFF_ET[1])   # r209: pinned by check_one_window_table; gates nothing
 
 
 class SessionGuard:
@@ -101,7 +96,7 @@ class SessionGuard:
 
         Args:
             macro:        Current macro snapshot
-            is_butterfly: True for butterfly — allowed until BUTTERFLY_ENTRY_CUTOFF_ET
+            is_butterfly: accepted and unused (r209; the cutoff it named is removed, r103)
             rehearsal:    r102 — evaluate EVERY gate instead of stopping at the
                           RTH one, for the outside-RTH dispatch pass. The verdict
                           is still honest: a rehearsal that would be blocked

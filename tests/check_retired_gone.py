@@ -1,6 +1,12 @@
 #!/usr/bin/env python3
 """
-tests/check_retired_gone.py  v5.2
+tests/check_retired_gone.py  v5.3
+v5.3  2026-11-09  OTV5 r103 (RETIRE.5 step 2) - THE GEX PIN BUTTERFLY IS GONE TOO. The operator, 2026-11-08: "I concur on both, in that
+      order". G1/G2 add strategy/gex_pin_butterfly.py and its names (GEXPinButterflyStrategy, _gex_bfly_strategy,
+      _attempt_butterfly, mark_pin_played); G3 moves GEXPinButterfly to the removed trades; G4 adds GEX_BFLY_* /
+      GEX_BUTTERFLY_ENABLED / HOLD_TO_CLOSE_STRATEGIES and the fly's debit and window keys; G5 is the four live setups
+      and G5b the fly's singleton; new G12 (the strip tool takes OT_GEX_BUTTERFLY, OT_BFLY_* and OT_GEX_BFLY_* off a
+      unit).
 v5.2  2026-11-08  OTV5 r88 (RETIRE.3) - THE TCS SHADOW IS GONE TOO. The operator, 2026-11-08: "Delete". G1/G2 add the three
       TCS shadow modules and their names; G3 moves TrendCreditSpread to the removed trades; G4 adds the TCS_* / TREND_CREDIT
       keys; G5 is the five live setups and G5b the TCS singletons and shadow passes; G9b pins strike_beyond_sweep gone. New
@@ -61,10 +67,13 @@ REMOVED_MODULES = ("strategy/orb_strategy.py", "strategy/volt_strategy.py", "str
                    "strategy/atp_butterfly.py", "strategy/atp_butterfly_plan.py", "strategy/orcs.py",
                    "strategy/orcs_plan.py", "strategy/sweep_plan.py", "execution/handoff.py",
                    # r88 (RETIRE.3): the TCS shadow
-                   "strategy/trend_credit_spread.py", "strategy/tcs_plan.py", "execution/shadow_book.py")
+                   "strategy/trend_credit_spread.py", "strategy/tcs_plan.py", "execution/shadow_book.py",
+                   # r103 (RETIRE.5): the GEX pin butterfly
+                   "strategy/gex_pin_butterfly.py")
 REMOVED_TRADES = ("ORBStrategy", "VOLT", "ATPButterfly", "OpeningRangeCreditSpread", "SweepCreditSpread",
-                  "TrendCreditSpread")                                                     # r88
-LIVE_TRADES = ("RunawayContinuation", "Breakout", "LiquidityHunt", "PARK", "GEXPinButterfly")
+                  "TrendCreditSpread",                                                     # r88
+                  "GEXPinButterfly")                                                       # r103
+LIVE_TRADES = ("RunawayContinuation", "Breakout", "LiquidityHunt", "PARK")
 
 # ── G1 ───────────────────────────────────────────────────────────────────────────────────────────────
 sys.path.insert(0, os.path.join(ROOT, "tests"))
@@ -73,7 +82,7 @@ from retired_names import importers                            # noqa: E402
 # still on disk while this runs. What matters on a box is that nothing live imports them.
 _live_imp = {m: importers(m[:-3].replace("/", ".")) for m in REMOVED_MODULES}
 _live_imp = {k: v for k, v in _live_imp.items() if v}
-check("G1 nothing live imports any of the twelve removed modules (r88: + the three TCS shadow modules)", not _live_imp,
+check("G1 nothing live imports any of the thirteen removed modules (r88: + the three TCS shadow modules; r103: + the GEX fly)", not _live_imp,
       str(_live_imp))
 
 # ── G2 ───────────────────────────────────────────────────────────────────────────────────────────────
@@ -85,6 +94,9 @@ PAT = re.compile(
     r"|execution import shadow_book\b|execution\.shadow_book\b|\b(TrendCreditSpread|TCSPlan|ShadowBook)\("
     r"|\b(_shadow_manage|_shadow_eod|_shadow_resume|_retired_reason|_trend_credit_strategy|strike_beyond_sweep"
     r"|is_trend_participation|TREND_CREDIT_ACTIVE|TCS_MODE|SHADOW_TRADES_DB)\b"
+    r"|strategy\.gex_pin_butterfly\b|from strategy import gex_pin_butterfly\b"                          # r103
+    r"|\b(GEXPinButterflyStrategy|_gex_bfly_strategy|_attempt_butterfly|mark_pin_played|GEX_BUTTERFLY_ENABLED"
+    r"|HOLD_TO_CLOSE_STRATEGIES)\b"
     r"|\b(ORBStrategy|VoltStrategy|SweepCreditSpreadStrategy|ATPButterflyStrategy|OpeningRangeCreditSpread)\("
     r"|\b(_attempt_orcs|_attempt_sweep_on_grant|_sweep_stop_premium|_evaluate_volt|_sweep_breach_accepted"
     r"|_velocity_stall|_place_standing_offer|_mark_orb_confirmation_spent|_is_standing_offer)\b"
@@ -135,7 +147,10 @@ check("G3b a removed name is never ACTIVE through a stale alias (ALIAS holds no 
 # ── G4 ───────────────────────────────────────────────────────────────────────────────────────────────
 bad = sorted(n for n in dir(config) if re.match(
     r"^(VOLT_|ORCS_|ATP_|VELOCITY_|SCALE_ORB$|SCALE_VOLT$|CONTRACT_SCALE|HANDOFF_TTL_TICKS$|SWEEP_CS_"
-    r"|TCS_|_TCS_|_tcs_|TREND_CREDIT_ACTIVE$)", n)                                       # r88: the TCS keys
+    r"|TCS_|_TCS_|_tcs_|TREND_CREDIT_ACTIVE$"                                            # r88: the TCS keys
+    r"|GEX_BFLY_|GEX_BUTTERFLY_ENABLED$|HOLD_TO_CLOSE_STRATEGIES$|BUTTERFLY_MAX_DEBIT|BUTTERFLY_MIN_DEBIT"
+    r"|BUTTERFLY_DEBIT_CEILING$|BUTTERFLY_DISC_CONV_|BUTTERFLY_ENTRY_|BUTTERFLY_WING_|BUTTERFLY_GEX_PIN"
+    r"|VIX_BUTTERFLY_HALF_SIZE$)", n)                                                    # r103: the GEX fly keys
     and n != "SWEEP_CS_MAX_REJECTION_PCT")
 check("G4 config carries no removed key (SWEEP_CS_MAX_REJECTION_PCT stays for derived/levels)",
       not bad and hasattr(config, "SWEEP_CS_MAX_REJECTION_PCT"), str(bad))
@@ -150,19 +165,19 @@ logging.disable(logging.CRITICAL)
 import main as M                                                # noqa: E402
 src = open(os.path.join(ROOT, "main.py"), encoding="utf-8").read()
 want = {"_runaway_strategy": "RunawayContinuationStrategy", "_liquidity_hunt": "LiquidityHunt",
-        "_breakout": "Breakout", "_park_strategy": "Park", "_gex_bfly_strategy": "GEXPinButterflyStrategy"}
+        "_breakout": "Breakout", "_park_strategy": "Park"}                       # r103: the GEX fly removed
 wired = {k: type(getattr(M, k, None)).__name__ for k in want}
 calls = all(c in src for c in ('_safe_strategy("RunawayContinuation"', '_safe_strategy("Breakout"',
                                 '_safe_strategy("LiquidityHunt"', '_safe_strategy("PARK"',
-                                '_safe_strategy("GEXPinButterfly"', '_attempt_hunt(', '_attempt_park(',
-                                '_attempt_butterfly('))
-check("G5 main builds the five live setups and dispatches each (r88: the TCS shadow removed)",
+                                '_attempt_hunt(', '_attempt_park('))
+check("G5 main builds the four live setups and dispatches each (r88: the TCS shadow removed; r103: the GEX fly)",
       wired == want and calls, f"{wired} calls={calls}")
 check("G5b the removed singletons are gone from main",
       not any(hasattr(M, n) for n in ("_orb_strategy", "_volt_strategy", "_sweep_cs_strategy",
                                       "_atp_bfly_strategy", "_orcs_strategy", "_handoff",
                                       # r88 (RETIRE.3)
                                       "_trend_credit_strategy", "_retired_reason", "_shadow_manage",
+                                      "_gex_bfly_strategy", "_attempt_butterfly",                       # r103
                                       "_shadow_eod", "_shadow_resume")))
 
 # ── G6 ───────────────────────────────────────────────────────────────────────────────────────────────
@@ -292,6 +307,19 @@ check("G11 the TCS keys (OT_TCS_*, OT_TR_TCS_*, OT_TR_W_TCS_*, OT_SHADOW_TRADES_
 check("G11b an existing .bak-retire1 is kept as it was; the new backup is .bak-retire2",
       open(unit4 + ".bak-retire1").read() == "THE FIRST BACKUP\n" and os.path.exists(unit4 + ".bak-retire2")
       and "OT_TCS_ACTIVE" in open(unit4 + ".bak-retire2").read(), run6.stdout.strip())
+
+# ── G12 (r103): the strip tool takes the GEX fly's keys off a unit; the readiness knobs OT_TR_BFLY_* stay ──────
+unit5 = os.path.join(_SCR, "optionsbot_bfly.service")
+KEEP5 = ["[Service]", 'Environment="OT_PARK=log"', 'Environment="OT_TR_BFLY_PIN_NEAR=0.25"',
+         'Environment="OT_RISK_USD=1050"']
+DROP5 = ['Environment="OT_GEX_BUTTERFLY=0"', 'Environment="OT_BFLY_DEBIT_CEILING=0.5"',
+         'Environment="OT_BFLY_DISC_CONV_LO=0.3"', 'Environment="OT_GEX_BFLY_WING_EM_FRAC=0.25"']
+open(unit5, "w").write("\n".join(KEEP5[:2] + DROP5 + KEEP5[2:] + ["ExecStart=/bin/true"]) + "\n")
+run7 = subprocess.run(["bash", tool, unit5], capture_output=True, text=True, env=env)
+b5 = [l for l in open(unit5).read().split("\n") if l]
+check("G12 the GEX fly keys (OT_GEX_BUTTERFLY, OT_BFLY_*, OT_GEX_BFLY_*) are stripped; OT_TR_BFLY_* and the rest kept",
+      run7.returncode == 0 and b5 == KEEP5 + ["ExecStart=/bin/true"] and "removed 4 retired line(s)" in run7.stdout,
+      run7.stdout.strip())
 
 print()
 if FAIL:

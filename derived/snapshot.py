@@ -1,5 +1,6 @@
 """
-derived/snapshot.py  v5.0
+derived/snapshot.py  v5.1
+v5.1  2026-11-09  OTV5 r103 (RETIRE.5 step 2) — pin_em_frac reads the expected move from analysis.volatility_measures.expected_move_session, the function strategy/gex_pin_butterfly.expected_move wrapped since r223 (same value; the fly module is removed). The operator, 2026-11-08: "I concur on both, in that order".
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v4.7  2026-10-24  CD.2 — the VWAP slope is measured in MARKET time: the comparison row is the one whose bar_ts_ms is
       ~600 s before the current bar's, carrying the SAME session anchor. By write time, across a restart gap, the
@@ -258,7 +259,7 @@ class SnapshotEngine(DerivedEngine):
         _gex_env = str(_gex_env) if _gex_env else None
         _pin_frac = None
         try:
-            from strategy.gex_pin_butterfly import expected_move as _em_fn
+            from analysis.volatility_measures import expected_move_session as _em_fn   # RETIRE.5 (r103): was the fly's wrapper
             _em = _em_fn(price, _f(ctx.get("atm_iv"))) if price else None
             if _pin and _em and _em > 0:
                 _pin_frac = abs(_pin - price) / _em

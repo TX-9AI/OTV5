@@ -1,5 +1,6 @@
 """
-execution/exit_engine.py  v5.16
+execution/exit_engine.py  v5.17
+v5.17  2026-11-09  OTV5 r103 (RETIRE.5 step 2) — THE GEX PIN BUTTERFLY IS REMOVED: r73's two HOLD_TO_CLOSE_STRATEGIES reads go (the fly was the only member; config no longer carries the key), so evaluate() asks _decay_read and _evaluate_butterfly checks its hard stop exactly as for any record. KEPT, said plainly: _evaluate_butterfly, _close_butterfly and the multi-leg pricing stay - they close any butterfly record still on a book (the startup sweep, the reconcile, the 15:45 flatten); no live strategy opens one. The live setups route and decide exactly as before. The operator, 2026-11-08: "I concur on both, in that order".
 v5.16  2026-11-08  OTV5 r88 (RETIRE.3) — the TC.6 branch (the 15%-of-credit stop and the breach backstop, answering only a TrendCreditSpread row) and its TCS_STOP_PCT_OF_CREDIT / is_trend_participation imports go with the TCS. The operator, 2026-11-08: "Delete" (the TCS shadow, which never fired: its own gates declined every candidate 11-02..11-06).
 v5.15  2026-11-08  OTV5 r76 (RETIRE.1) — THE REMOVED TRADES' EXITS GO: the ORBStrategy and VOLT routes, _evaluate_volt, _sweep_breach_accepted (sweep verticals only), the velocity stall (it measured only the ORB trade and never cut anything else - _velocity_stall, its call, VELOCITY_* import), the Hunt's handoff GRANT to the sweep (its hunt_target_wicked exit is unchanged; the reason text loses "; handoff granted to the sweep"), and three uncalled helpers (_get_bos_tracker, _held_minutes, _underlying_from_5m). STRUCTURE_TRAIL_STRATEGIES is ("Breakout",). Runaway, Hunt, Breakout, PARK and the GEX fly route and decide exactly as before. The operator, 2026-11-07: "Running dead code and logging dead code activity is unnecessary drag. Yes, I want all of those things fixed."
 v5.14 2026-11-03  OTV5 r73 (BFLY.17) — THE GEX PIN BUTTERFLY HOLDS TO THE CLOSE. The operator, 2026-11-03: "For the GEX fly, I
@@ -1436,10 +1437,6 @@ class ExitEngine:
             self._park_late_read(record, current_premium, existing_exit=bool(getattr(d, "should_exit", False)))
         except Exception as exc:                                  # noqa: BLE001
             logger.debug("[park-late shadow] read failed for %s: %s", str(record.get("trade_id", ""))[:8], exc)
-        # r73 (BFLY.17) — HOLD TO THE CLOSE: no decay stop for these, whatever OT_DECAY_STOP_EXEMPT says (asked here,
-        # not inside _decay_read, so the decay read stays byte-for-byte what check_park_late_shadow B1 pins).
-        if str(record.get("strategy", "") or "") in tuple(getattr(_cfg, "HOLD_TO_CLOSE_STRATEGIES", ()) or ()):
-            return d
         try:
             rd = self._decay_read(record, current_premium, existing_exit=bool(getattr(d, "should_exit", False)))
         except Exception as exc:                                  # noqa: BLE001
@@ -2596,9 +2593,8 @@ class ExitEngine:
         #    "I want both adjusted for best case. 1545 flatten or 25% loss.
         #    Whichever comes first." A pin play pays as the wings die into the
         #    close; a 150-minute clock sold the thesis before it finished.
-        # 3. HARD STOP — r73 (BFLY.17): not for a hold-to-close strategy (the GEX pin fly), whose exit is the flatten.
-        if (str(record.get("strategy", "") or "") not in tuple(getattr(_cfg, "HOLD_TO_CLOSE_STRATEGIES", ()) or ())
-                and current_premium <= stop_prem):
+        # 3. HARD STOP (r73's hold-to-close exemption went with the GEX pin fly, RETIRE.5 r103).
+        if current_premium <= stop_prem:
             decision.should_exit = True
             decision.exit_reason = f"stop_hit pnl={pnl_pct:.1%}"
             return decision

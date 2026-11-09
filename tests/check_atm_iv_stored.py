@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""tests/check_atm_iv_stored.py  v5.0
+"""tests/check_atm_iv_stored.py  v5.1
+v5.1  2026-11-09  OTV5 r103 (RETIRE.5 step 2) — A3b counts the stored-value readers by ctx.get("atm_iv"): its one counted line was in _attempt_butterfly, removed with the GEX fly. A3 (no recompute) unchanged.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 `atm_iv` REACHES ctx, AND EVERY READER TAKES THE SAME VALUE.
 
@@ -81,9 +82,11 @@ def main():
     # the code, not on the rule — the rule is "read the stored value, never
     # recompute it", and A3 above is what enforces the second half. A3b now
     # demands at least one reader and no zero.
-    _n = src.count('_atm_iv = ctx.get("atm_iv")')
-    check("A3b the branches read the stored value",
-          _n >= 1, f"found {_n} (was 2 while two butterfly paths existed)")
+    # r103 (RETIRE.5): the last dispatch reader (_attempt_butterfly) went with the GEX fly; the readers left take the stored
+    # value through ctx.get("atm_iv") - the pin-proximity gate and the PARK / Hunt / Runaway asks.
+    _n = src.count('ctx.get("atm_iv")')
+    check("A3b the readers read the stored value",
+          _n >= 1, f"found {_n}")
 
     # ── A2 / A4: EXECUTED, against the extracted conversion ───────────────
     # 🔑 `run_analysis` needs live market data and raises in a sandbox, so a

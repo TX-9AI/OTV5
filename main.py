@@ -1,5 +1,6 @@
 """
-main.py  v5.16
+main.py  v5.17
+v5.17  2026-11-09  OTV5 r103 (RETIRE.5 step 2) — THE GEX PIN BUTTERFLY LEAVES THE TICK: its import and singleton, _attempt_butterfly and its two call sites (the capped branch now asks PARK alone; the dispatch asks PARK, then the directionals), its _STRUCTURE_BY_NAME row and the admission tries loop that named only it are removed. pin_proximity_verdict reads the expected move from analysis.volatility_measures.expected_move_session (the function the fly's wrapper called since r223; identical value). The generic multi-leg execution (_place_butterfly, the leg capture, the exits) stays for any butterfly record still on a book. Runaway, Hunt, Breakout and PARK dispatch exactly as before. The operator, 2026-11-08: "I concur on both, in that order" (cut 11-09; code removed after that close).
 v5.16  2026-11-08  OTV5 r97 (RETIRE.5) — THE CUT GEX PIN BUTTERFLY IS NOT ASKED AND WRITES NOTHING: _attempt_butterfly returns first when plan_state reads GEXPinButterfly DORMANT, before its one-per-session and no-chain skip rows (which ran ahead of _safe_strategy's dormant check). Exits and management of any fly are untouched. The operator, 2026-11-08: "I concur on both, in that order" (cut from 11-09; code removed after that close).
 v5.15  2026-11-08  OTV5 r88 (RETIRE.3) — THE TCS SHADOW LEAVES THE TICK. The TrendCreditSpread import, singleton and TC.6 dispatch; _retired_reason (it served only the TCS); _execute_condor_leg's shadow branch, its TCS identity (_is_tcs: strategy, stop_premium, remainder stop, alert) and _credit_window_end's TCS plan window (now 14:00 for every vertical, as for every non-TCS one); _shadow_manage / _shadow_eod / _shadow_resume and their three call sites; the condor-auth TCS skip; and the now-unused macro read. Every live setup's dispatch, admission, management and exits are unchanged (parity on QQQ/SPX/NVDA). The operator, 2026-11-08: "Delete" (the TCS shadow, which never fired: its own gates declined every candidate 11-02..11-06).
 v5.14  2026-11-08  OTV5 r76 (RETIRE.1) — THE RETIRED TRADES LEAVE THE TICK. Imports, singletons and dispatch of the ORB trade, VOLT, the sweep credit spread (and its handoff grant and second-leg window), the ATP butterfly and ORCS are removed, with _attempt_orcs, _attempt_sweep_on_grant, _sweep_stop_premium, the ORB trade's MISSED / CONFIRMED / EXPIRED plan-ledger rows and its retest-depth journal field, the ORB admission alias, their structure-map and scaling-switch rows, and the sizing_distance path only VOLT used. The start-up banner reads ramp_top= (OT_ORB_BUDGET_USD, unchanged) and scaling BRK= only; scaling ORB/VOLT, contract_scale and ORCS= are gone. The ORB ENGINE, its state file, reach-back and release are unchanged. The operator, 2026-11-07: "Running dead code and logging dead code activity is unnecessary drag. Yes, I want all of those things fixed."
@@ -1697,7 +1698,6 @@ if TYPE_CHECKING:                     # v4.9 — resolves the quoted annotation 
                                       # run at ZERO tolerance instead of one.
 from strategy.runaway_continuation import RunawayContinuationStrategy
 from strategy import observe as _observe      # r254 (OBS.1): the plan always looks
-from strategy.gex_pin_butterfly import GEXPinButterflyStrategy
 from strategy.liquidity_hunt import LiquidityHunt                       # OTV4TEST r12
 from config import SWEEP_SETUP_FLOOR
 from utils import mem_trace          # MEM.2 — in-process tracemalloc, env-gated
@@ -1743,7 +1743,6 @@ def _disk_sender():
 
 # Strategy singletons
 _runaway_strategy = RunawayContinuationStrategy()
-_gex_bfly_strategy = GEXPinButterflyStrategy()
 _liquidity_hunt = LiquidityHunt()                                      # OTV4TEST r12
 from strategy.park import Park as _Park                                 # r288 (PARK.1)
 _park_strategy = _Park()
@@ -4011,7 +4010,6 @@ def _afternoon_debit_blocked(strategy_or_signal, now) -> bool:
 # after the cutoff - deliberately the restrictive default.
 _STRUCTURE_BY_NAME = {
     "RunawayContinuation":  "long_debit",
-    "GEXPinButterfly":      "butterfly",
     "IronCondorStrategy":   "vertical",
     # r51 — a long option, so the afternoon debit cutoff governs it
     "Breakout":             "long_debit",
@@ -4273,9 +4271,7 @@ def attempt_new_entry(ctx: dict, ms: MarketState, state: BotState):
         _pm_adm = get_position_manager(state.paper_trading)
         from execution.position_manager import rules as _adm_rules
         _pm_adm_rules = _adm_rules()
-        _tries = {}
-        for _bn in ("GEXPinButterfly",):
-            _tries[_bn] = 1 if _one_per_session_used(_bn) else 0
+        _tries = {}          # RETIRE.5 (r103): the GEX fly was the only name counted here
         # r42 — ONE PASS. `logging_state()` returns the binary AND the gate for
         # every strategy in the table, from a single walk. It replaced
         # `eligible_now()` + a `why_not()` loop: two calls, the same facts
@@ -4333,10 +4329,10 @@ def attempt_new_entry(ctx: dict, ms: MarketState, state: BotState):
             logger.info("[admission] may be asked: %s",
                         ", ".join(_eligible) if _eligible else "(none)")
 
-    # ══ r178 (CAP.2) — AT THE CAP, ONLY THE BUTTERFLIES ARE ASKED ═════════════
+    # ══ r178 (CAP.2) — AT THE CAP, ONLY THE CAP-EXEMPT ARE ASKED ══════════════
     # The admission table has already refused every strategy but a cap-exempt
-    # one (gate catastrophic_cap, one plan row each). This branch asks the
-    # butterfly path and RETURNS, so no other strategy below is reached.
+    # one (gate catastrophic_cap, one plan row each). This branch asks PARK
+    # (the GEX fly went with RETIRE.5, r103) and RETURNS, so no other strategy below is reached.
     # ⚠️ FAILS CLOSED. The admission block above fails OPEN when the table
     # cannot be computed (every name passes); at the cap that would let every
     # strategy trade, so here an uncomputed table means nothing is asked.
@@ -4346,7 +4342,6 @@ def attempt_new_entry(ctx: dict, ms: MarketState, state: BotState):
                            "unavailable — nothing is asked", gate="catastrophic_cap")
             return
         _attempt_park(ctx, ms, state)                    # r288 (PARK.1): cap-exempt, its own budget
-        _attempt_butterfly(ctx, ms, state, additive=True)
         return
 
     # ── Fetch options chain (shared across strategies) ────────────────────────
@@ -4619,22 +4614,8 @@ def attempt_new_entry(ctx: dict, ms: MarketState, state: BotState):
             except Exception:                                  # noqa: BLE001
                 pass
 
-    # ── Priority 4: GEX PIN BUTTERFLY ───────────────────────────────────────
-    # ⚠️ PARKED - `ENABLED` is False and generate_signal returns None on the
-    # first line. Wired anyway so the plumbing is exercised and audited NOW
-    # rather than on the day it is unparked, ~2 weeks after real open interest
-    # starts accumulating (2026-08-19).
-    # ── BUTTERFLIES — one path, called, not inlined (r43) ────────────────────
-    # r179 (one per session on this box) and OTV4TEST r26 (one butterfly of
-    # EITHER kind) BOTH live inside `_attempt_butterfly`, which is also what
-    # `check_atp_butterfly` drives directly to prove them.
-    # ⚠️ THE CAP IS NOT RE-CHECKED HERE, DELIBERATELY. My first cut of r43 had
-    # it in both places — two mechanisms for one rule, which is the drift this
-    # revision spent its morning removing everywhere else.
-    # ⚠️ ALWAYS ADDITIVE NOW: the butterfly never took a slot (r161) and after
-    # r43 there is no slot left to take.
+    # RETIRE.5 (r103): the GEX pin butterfly's slot here (_attempt_butterfly) is removed with the fly.
     _attempt_park(ctx, ms, state, chain=chain)          # r288 (PARK.1)
-    _attempt_butterfly(ctx, ms, state, additive=True)
 
 
     # Priority 2 (was sweep): Trend Continuation.
@@ -4856,90 +4837,6 @@ def _attempt_park(ctx, ms, state, chain=None) -> None:
         _execute_entry_signal(sig, ctx, ms, state, None, additive=True)
 
 
-def _attempt_butterfly(ctx, ms, state, *, additive: bool) -> None:
-    # r97 (RETIRE.5) — CUT: a DORMANT fly is not asked and writes no skip row (the operator, 2026-11-08).
-    try:
-        from strategy import plan_state as _ps_bf
-        if _ps_bf.is_dormant("GEXPinButterfly"):
-            return
-    except Exception as _ps_bf_exc:                             # noqa: BLE001
-        logger.warning("[plans] GEXPinButterfly state unreadable (%s) - not asked", _ps_bf_exc)
-        return
-    # r179 — ONE PER SESSION ON THIS BOX (operator: "Only one GEX Pin
-    # butterfly allowed per session on a box"). Checked BEFORE the strategy
-    # is asked, at the one entry point every butterfly attempt routes
-    # through. DB-backed, survives restarts, fails closed.
-    # 🔴 r85 — ONE PER SESSION *EACH*, NOT ONE BETWEEN THEM. Operator,
-    # 2026-09-21, reading the board after a single GEX pin had fired: *"I
-    # think we only hit one butterfly the other one should still be allowed
-    # ... Two different scenarios for those to fire under. And on certain
-    # days, we might actually hit both."*
-    # ⚠️ THE `or` GENERALISED A RULING PAST ITS OWN WORDS. r179 is quoted in
-    # the comment above as *"Only one GEX Pin butterfly allowed per session on
-    # a box"* — it names ONE strategy. The admission table has always agreed
-    # with the operator: GEXFLY and ATPFLY each carry
-    # max_tries_per_session=1, one EACH. This site read them with an `or` and
-    # blocked BOTH the moment either fired — and because it is checked BEFORE
-    # the strategy is asked, the admission table was never consulted. That is
-    # r71's shape exactly: a plan-level check running ahead of admission and
-    # disagreeing with it. MEASURED 2026-09-21: GEXPinButterfly fired at
-    # 12:01 ET and ATPButterfly was refused for the rest of the session having
-    # never traded.
-    # ⚠️ r178's GUARD IS UNTOUCHED AND STILL DOES ITS JOB. The 2026-08-28
-    # 15:00 stack was FIVE BUTTERFLIES ON ONE PIN in ninety seconds; the
-    # per-strategy cap plus `mark_pin_played` are its two halves, and neither
-    # needs the other kind blocked to work.
-    if _one_per_session_used("GEXPinButterfly"):
-        _plan_skip("GEXPinButterfly", "one per session on this box — already "
-                   "traded today", gate="tries_per_session")
-        return
-    """r161 — ask the butterfly's plan (dormant outside its slot) and, on a
-    fire, execute it.
-
-    🔑 r43 — THE ONE BUTTERFLY PATH. There were two: this, called from
-    main_loop's position-open branch as r161's additive/exempt route, and an
-    in-dispatch copy inside `attempt_new_entry` that COMPETED for the `signal`
-    slot. r43 removed the slot, which made the two genuinely redundant — and
-    the right survivor is THIS one, not the inline copy.
-    ⚠️ AND THE CHECKERS ARE WHY. `check_atp_butterfly` drives this function
-    DIRECTLY to prove the one-per-session cap (S1/S2); inlining it destroyed
-    that seam and the check crashed on `module 'main' has no attribute
-    '_attempt_butterfly'`. A behaviour that can only be tested through a
-    700-line dispatch is a behaviour that stops being tested.
-    ⚠️ IT ALSO CARRIES r178's `mark_pin_played` — the guard against the
-    2026-08-28 15:00 stack of five butterflies in ninety seconds — which the
-    in-dispatch copy NEVER called. Keeping this one keeps the guard on the
-    live path by construction rather than by my remembering to copy it."""
-    try:
-        chain = ctx.get("chain")
-        if chain is None:
-            _plan_skip("GEXPinButterfly", "no options chain this tick", gate="no_chain")
-            return
-        # r205 — ONE SOURCE. Computed once in run_analysis and stored on ctx.
-        # Recomputing here would let the dispatch and the snapshot disagree
-        # about the same tick, which is the bug nobody would ever find.
-        _atm_iv = ctx.get("atm_iv")
-        bf_sig = _safe_strategy("GEXPinButterfly",
-                                lambda: _gex_bfly_strategy.generate_signal(
-                                    gex=ctx.get("gex"), price_now=ctx["price"],
-                                    now_et=now_et().strftime("%H:%M"),
-                                    atm_iv=_atm_iv, chain=chain), ctx)
-        if bf_sig is not None:
-            _execute_entry_signal(bf_sig, ctx, ms, state, None, additive=additive)
-            # r178 — the fired pin is PLAYED for the session (one butterfly
-            # per pin; the 2026-08-28 15:00 five-in-ninety-seconds stack).
-            # Marked AFTER execution so a refused/zero-sized fire does not
-            # burn the pin.
-            try:
-                from strategy.gex_pin_butterfly import GEXPinButterflyStrategy as _BF
-                _BF.mark_pin_played(getattr(bf_sig, "pin_strike", None)
-                                    or getattr(bf_sig, "strike", None))
-            except Exception as _pp_err:                        # noqa: BLE001
-                logger.warning("pin-played mark failed: %s", _pp_err)
-    except Exception as exc:                                    # noqa: BLE001
-        logger.warning("Butterfly attempt failed: %s", exc)
-
-
 def _one_per_session_used(strategy: str) -> bool:
     """r179 — the durable session cap. True when this strategy has already
     entered a trade this ET session on this box (open OR closed), read from
@@ -4993,7 +4890,7 @@ def pin_proximity_verdict(ctx) -> tuple:
         pin = float(getattr(gx, "pin_strike", 0) or 0) if gx else 0.0
         env = str(getattr(gx, "gex_environment", "") or "") if gx else ""
         px = float(ctx.get("price") or 0)
-        from strategy.gex_pin_butterfly import expected_move as _em_fn
+        from analysis.volatility_measures import expected_move_session as _em_fn   # RETIRE.5 (r103): was the fly's wrapper
         em = _em_fn(px, float(ctx.get("atm_iv") or 0)) if px else None
         if not (pin and em and em > 0):
             return False, None, env, pin, f"pin={pin or None} em={em}"

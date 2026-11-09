@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_r_basis.py  v5.0
+tests/check_r_basis.py  v5.1
+v5.1  2026-11-09  OTV5 r103 (RETIRE.5 step 2) — B5b goes with the GEX fly (strategy/gex_pin_butterfly.py deleted); every other check unchanged.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.0  2026-09-03  r234 — R IS JUDGED AGAINST THE RISK ACTUALLY TAKEN, AND ONLY
       WHERE THE STOP IS THE PLANNED EXIT. Operator, 2026-09-03, on splitting
@@ -87,11 +88,7 @@ def main():
     # each naming its basis, so they cannot collapse into one (§35).
     check("B5 R_FLOOR and R_FLOOR_STOP are separate constants",
           hasattr(CR, "R_FLOOR") and hasattr(CR, "R_FLOOR_STOP"))
-    bfly = open(os.path.join(os.path.dirname(os.path.dirname(
-        os.path.abspath(__file__))), "strategy", "gex_pin_butterfly.py"),
-        encoding="utf-8").read()
-    check("B5b the butterfly does NOT import the stop basis",
-          "R_FLOOR_STOP" not in bfly)
+    # r103 (RETIRE.5): B5b (the butterfly does not import the stop basis) goes with strategy/gex_pin_butterfly.py.
     roll = open(os.path.join(os.path.dirname(os.path.dirname(
         os.path.abspath(__file__))), "strategy", "condor_roll.py"),
         encoding="utf-8").read()

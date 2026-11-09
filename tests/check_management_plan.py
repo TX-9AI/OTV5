@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_management_plan.py  v5.3  (2026-11-03)
+tests/check_management_plan.py  v5.4  (2026-11-09)
+v5.4  2026-11-09  OTV5 r103 (RETIRE.5 step 2) — the GEX pin fly leaves the management plan: M5, D12 and D12a pin that a GEXPinButterfly record is no longer the plan's (decide -> None, no row); M7's ids drop bf1; M11 pins its EXIT_CONDITIONS row absent and Breakout's present. D12c (the engine's generic butterfly path) unchanged.
 v5.3  2026-11-08  OTV5 r88 (RETIRE.3) — M4, M8, D8 and D9 (the TCS's narration, vector, hold and breach) go with the TCS; M7 drops its id and M11 pins it absent; D10's formed condor is two IronCondorStrategy legs (were TCS). Every other check unchanged.
 v5.2  2026-11-08  OTV5 r76 (RETIRE.1) — RE-POINTED (WA 38.4): the sweep and the ATP fly are removed from the management plan, so M3, D5-D7 (the
       sweep vertical) and D12e (the ATP fly) go with them; M7's ids and M11's roster drop them (and M11 pins them absent);
@@ -140,9 +141,8 @@ def main():
     P.begin_tick(5.0)
     MP.decide(fly, 0.22, df_1m=None, current_price=100.6, ctx=ctx, exit_engine=None)
     r5 = _row(st, "GEXPinButterfly/manage", 5.0)
-    check("M5 (r73) the GEX pin fly -> the 15:45 flatten as its ONLY exit: no floor, no target",
-          r5 and "(floor)" not in r5[1] and "15:45 -> flatten" in r5[1] and "the only exit" in r5[1]
-          and "target" not in r5[1], str(r5))
+    check("M5 (r103) a GEXPinButterfly record is no longer the plan's: no management row is written",
+          not r5, str(r5))
 
     P.begin_tick(6.0)
     n6 = MP.tick(ctx, [{"trade_id": "ad1", "strategy": "ADOPTED", "entry_premium": 1.0}], 100.0)
@@ -152,7 +152,7 @@ def main():
                             "WHERE outcome='manage' ORDER BY rowid").fetchall()
     check("M7 the r66 vector is written per open position with outcome 'manage' and the trade_id",
           len(notes) >= 3 and all(n[1] == "manage" for n in notes)
-          and {n[2] for n in notes} >= {"rw1", "bf1"},                # r88: tc1 (the TCS) removed
+          and {n[2] for n in notes} >= {"rw1", "rw2"} and "bf1" not in {n[2] for n in notes},   # r88: tc1 removed; r103: bf1 (the fly) removed
           f"{len(notes)} notes, ids {sorted({n[2] for n in notes})}")
     # r88 (RETIRE.3): M8 (the TCS vector) goes with the TCS.
 
@@ -182,9 +182,10 @@ def main():
           i_m != -1 and i_p != -1 and i_m < i_p and in_try, f"manage@{i_m} plan@{i_p} try={in_try}")
 
     check("M11 every strategy that opens a position declares its exit conditions",
-          {"RunawayContinuation", "IronCondorStrategy", "GEXPinButterfly"}
+          {"RunawayContinuation", "IronCondorStrategy", "Breakout"}
           <= set(EXIT_CONDITIONS)
-          and not ({"ORBStrategy", "SweepCreditSpread", "ATPButterfly", "TrendCreditSpread"}   # r88: + the TCS
+          and not ({"ORBStrategy", "SweepCreditSpread", "ATPButterfly", "TrendCreditSpread",   # r88: + the TCS
+                    "GEXPinButterfly"}                                                         # r103: + the GEX fly
                    & set(EXIT_CONDITIONS)))
 
     # ══ r167 — THE PLAN DECIDES ═══════════════════════════════════════════
@@ -268,14 +269,12 @@ def main():
     P.begin_tick(20.0)
     it = MP.decide(bf, 0.62, df_1m=_df([100.9, 101.0]), exit_engine=eng)
     rd12 = _row(st, "GEXPinButterfly/manage", 20.0)
-    check("D12 (r169) the butterfly at 0.62 above its old target 0.60 -> HOLD: it rides to the 15:45 "
-          "flatten or the 25% floor, whichever first",
-          it and it.action == "HOLD" and rd12 and "15:45 -> flatten" in rd12[1] and "target" not in rd12[1],
-          f"{it and it.action} {rd12}")
+    check("D12 (r103) a GEXPinButterfly record above its old target is not the plan's: decide -> None, no row",
+          it is None and not rd12, f"{it and it.action} {rd12}")
     P.begin_tick(20.5)
     it = MP.decide(dict(bf, current_premium=0.13), 0.13, df_1m=_df([100.9, 101.0]), exit_engine=eng)
-    check("D12a (r73) the GEX pin fly at 0.13 <= its old floor 0.135 -> HOLD: no stop, it holds to the 15:45 flatten",
-          it and it.action == "HOLD", str(it and (it.action, it.reason)))
+    check("D12a (r103) ...and below its old floor: still None (the fly's hold-to-close row is removed)",
+          it is None, str(it and (it.action, it.reason)))
     bfb = next(n for n in ast.walk(ast.parse(esrc if 'esrc' in dir() else open(os.path.join(_root, "execution", "exit_engine.py"), encoding="utf-8").read()))
                if isinstance(n, ast.FunctionDef) and n.name == "_evaluate_butterfly")
     bfs = "\n".join(l for l in ast.unparse(bfb).split("\n") if not l.strip().startswith("#"))

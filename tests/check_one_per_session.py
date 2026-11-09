@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_one_per_session.py  v5.0
+tests/check_one_per_session.py  v5.1
+v5.1  2026-11-09  OTV5 r103 (RETIRE.5 step 2) — RE-POINTED (WA 38.4): the GEX fly and _attempt_butterfly are removed, so S2-S4 count PARK (the other one-per-session trade) and S5 pins _attempt_park checking BEFORE asking PARK, with the remaining guard sites (Runaway, PARK). S1, S5b, S6 unchanged.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.1  2026-10-11  r481 / RUN.1 — S6: THE RUNAWAY CAP MUST GATE, NOT NARRATE.
       S5 counted guard CALLS and pinned the butterfly's order, and never asked
@@ -74,29 +75,29 @@ def main():
           str(lg.count_today("RunawayContinuation")))
     _ins("RunawayContinuation", now - timedelta(minutes=5), "OPEN")
     check("S1b a trade this session counts", lg.count_today("RunawayContinuation") == 1)
-    _ins("GEXPinButterfly", now - timedelta(minutes=90), "CLOSED")
+    _ins("PARK", now - timedelta(minutes=90), "CLOSED")          # r103: was the GEX fly
     check("S2 a CLOSED trade still spends the session's one shot",
-          lg.count_today("GEXPinButterfly") == 1)
+          lg.count_today("PARK") == 1)
     lg2 = TradeLogger(db_path=db)                       # the restart
     check("S3 a fresh logger over the same DB reads the same count — a restart "
-          "cannot re-arm it", lg2.count_today("GEXPinButterfly") == 1
+          "cannot re-arm it", lg2.count_today("PARK") == 1
           and lg2.count_today("RunawayContinuation") == 1)
     lg4 = TradeLogger(db_path=db)
     lg4._connect = lambda: (_ for _ in ()).throw(sqlite3.OperationalError("disk gone"))
     check("S4 an unreadable DB FAILS CLOSED (counts as traded)",
-          lg4.count_today("GEXPinButterfly") >= 1)
+          lg4.count_today("PARK") >= 1)
 
     src = open(os.path.join(_root, "main.py"), encoding="utf-8").read()
     tree = ast.parse(src)
     n_guards = src.count("_one_per_session_used(")
     fn = next(n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef)
-              and n.name == "_attempt_butterfly")
+              and n.name == "_attempt_park")                       # r103: _attempt_butterfly removed
     fb = ast.unparse(fn)
-    i_g = fb.find("_one_per_session_used('GEXPinButterfly')")
-    i_a = fb.find("_safe_strategy('GEXPinButterfly'")
-    check("S5 all three sites guarded, and _attempt_butterfly checks BEFORE asking "
-          "the strategy",
-          n_guards >= 4 and i_g != -1 and (i_a == -1 or i_g < i_a),
+    i_g = fb.find("_one_per_session_used('PARK')")
+    i_a = fb.find("_safe_strategy('PARK'")
+    check("S5 the guard sites stand (Runaway, PARK), and _attempt_park checks BEFORE asking "
+          "the strategy (r103: the fly's site removed)",
+          n_guards >= 3 and i_g != -1 and i_a != -1 and i_g < i_a,
           f"guards={n_guards} order={i_g}<{i_a}")
     check("S5b the skips are plan rows",
           'one per session on this box' in src and src.count("one per session on this box") >= 3)

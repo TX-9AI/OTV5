@@ -1,5 +1,6 @@
 """
-strategy/liquidity_hunt.py  v5.3
+strategy/liquidity_hunt.py  v5.4
+v5.4  2026-11-09  OTV5 r103 (RETIRE.5 step 2) — the expected move is read from analysis.volatility_measures.expected_move_session, the function strategy/gex_pin_butterfly.expected_move wrapped since r223 (same value; the fly module is removed). The operator, 2026-11-08: "I concur on both, in that order".
 v5.3  2026-11-08  OTV5 r90 (SHADOW.1) — LOG ONLY: every fire records the opening-range / EM rule's verdict (S5 R1,
       skip below 0.927) through strategy/shadow_rules.record_hunt on the firing tick, before take(): one plan_check row
       shadow_hunt_or_em and one [shadow-rule] line. It never decides and never raises; the signal, the verdict and the
@@ -435,8 +436,8 @@ class LiquidityHunt:
         prep.above, prep.below = na, nb
         em = None
         try:
-            from strategy.gex_pin_butterfly import expected_move
-            em = expected_move(price_now, atm_iv)
+            from analysis.volatility_measures import expected_move_session   # RETIRE.5 (r103): was the fly's wrapper
+            em = expected_move_session(price_now, atm_iv)
         except Exception:                                       # noqa: BLE001
             em = None
         da = (float(na["price"]) - hi) if na else None

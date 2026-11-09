@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_plan_prepares.py  v5.5
+tests/check_plan_prepares.py  v5.6
+v5.6  2026-11-09  OTV5 r103 (RETIRE.5 step 2) — the GEX pin butterfly is removed: its r97 flag flip, the butterfly block (B1-B5, the fly's plan on the store) and the r178 block (B10-B14b, pin_played and persistence) go with it; B6 pins that attempt_new_entry asks no butterfly. B7 (add_open_position appends), the condor and runaway blocks are unchanged.
 v5.5  2026-11-08  OTV5 r97 (RETIRE.5) —  GEX fly is cut in production (OFF in code); this checker flips it on to exercise its code until step 2 removes it.
 v5.4  2026-11-08  OTV5 r88 (RETIRE.3) — the TCS block and its OT_TCS_ACTIVE=1 switch go with the TCS; the condor, butterfly and runaway blocks are unchanged.
 v5.3  2026-11-08  OTV5 r76 (RETIRE.1) — RE-POINTED (WA 38.4): the sweep is removed, so the S block (S1-S9b, the sweep's plan on the store) and T4-T7 (a
@@ -187,8 +188,6 @@ import sys
 
 _root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, _root)
-import config as _r97_cfg                                       # noqa: E402  r97 (RETIRE.5): the GEX fly is cut in production (OFF in code); this checker flips it on to exercise its code until step 2 removes it
-_r97_cfg.GEX_BUTTERFLY_ENABLED = True
 # ⚠️ r106 — THE LANDER RUNS CHECKS UNDER SYSTEM `python3`, NOT THE VENV, and
 # the repo imports below reach `tastytrade`, which lives only in the venv — so
 # this file could never be DECLARED as a CHECK. It passed by hand and failed
@@ -368,136 +367,7 @@ def main():
           rung == "FINAL" and m5 and m5[0] == "HOLD" and "FINAL FORM" in m5[1] and "floor" in m5[1]
           and "TENT" not in m5[1], str(m5)[:160])
 
-    # ── THE BUTTERFLY (r161) — earns its entry; exempt from the slot rule ──
-    from strategy.gex_pin_butterfly import GEXPinButterflyStrategy
-    import strategy.gex_pin_butterfly as bf
-    # r73 (BFLY.17): the VIX rule and the prior-range read are not this check's subject - a VIX under 20 and
-    # an open inside yesterday's range, so the fly is judged on what this check is about
-    bf.vix_now = lambda: 17.0
-    bf.prior_range_read = lambda _s, _d: (1.0, 0.0, 2.0)
-    bf.ENABLED = True
-    bf.EARLIEST_ET, bf.LATEST_ET = "09:30", "16:00"
-    B = GEXPinButterflyStrategy()
-
-    # OTV4TEST r6: persistence is a bar (8 ticks); these fixtures assert SELECTION on
-    # a single tick, so the bar is set to 1 here and pinned on its own in check_plan_prepares B13.
-    import strategy.gex_pin_butterfly as _bfm; _bfm.PERSIST_TICKS = 1
-    B.planner.symbol = "TST"
-    # PIN THE CLOCK: expected_move() reads wall time for the remaining-session
-    # scaling, so an unpinned test drifts with the hour it is run at (it broke
-    # at 06:17 ET with EM 9.2 where a 12:30 run gives 2.1). Production behavior
-    # unchanged; the hypothetical states its time of day like its prices.
-    _em_real = bf.expected_move
-    from utils.time_utils import ET as _ET_pin
-    _fixed_now = bf.datetime(2026, 8, 27, 12, 30, tzinfo=_ET_pin)
-    bf.expected_move = lambda u, iv, now=None: _em_real(u, iv, now=_fixed_now)
-
-    class _GEX:
-        def __init__(self, env="PINNING", pin=101.0, conc=0.60):
-            self.gex_environment, self.pin_strike, self.pin_concentration = env, pin, conc
-
-    # 🔴 r208 — THE OLD `calls_good` WAS THE 2026-09-01 TRADE. Penny legs on a
-    # 1-wide ladder price a 0.18 debit at R 4.6, and the old code took it: that
-    # is META/CRM/MU, stopped out inside the minute they opened on floors of
-    # 4.3c to 7.0c. A fly's quote is FOUR leg-spreads wide, so on this ladder no
-    # debit can both clear R 1.00 and hold its floor — width >= 64 x leg-spread
-    # means 2c legs need $1.28 of wing. It is KEPT, as the refusal case.
-    calls_unsurvivable = [_C(k, m - 0.01, m + 0.01) for k, m in
-                          ((99, 1.60), (100, 1.00), (101, 0.55), (102, 0.28), (103, 0.14))]
-    # A ladder where a fly IS constructible: half-cent legs, and TWO wings
-    # clear both bounds — 1-wide at R 1.50 and 2-wide at R 1.00 — so "prefer
-    # narrower" has something to prefer.
-    # ⚠️ 104 IS HERE FOR B12, and its absence is a real lesson rather than a
-    # fixture convenience: with the ladder ending at 103 the MIGRATED pin at
-    # 102 had exactly one constructible wing (101/102/103, debit 0.05, R 19)
-    # and the search refused it as unsurvivable — correctly. A pin near the
-    # edge of the listed chain has fewer wings to choose from, so "the magnet
-    # moved" and "the magnet moved somewhere we can trade" are different
-    # facts. 104 gives pin 102 its 2-wide (100/102/104, debit 0.60, R 2.33).
-    calls_good = [_C(k, m - 0.005, m + 0.005) for k, m in
-                  ((99, 2.55), (100, 1.70), (101, 1.00), (102, 0.70),
-                   (103, 0.45), (104, 0.30))]
-    calls_fat = [_C(k, m - 0.005, m + 0.005) for k, m in
-                 ((99, 2.00), (100, 1.50), (101, 0.55), (102, 0.28), (103, 0.14))]
-    # debit 1.50 - 1.10 + 0.28 = 0.68 on width 1 -> R 0.47, nothing clears
-    # atm_iv 0.90 -> EM ~4.1 at the pinned 12:30 clock, so a 2.00 pin distance
-    # sits at 49% of it (inside the 30-100% band) with spot at 99.
-    bcommon = dict(price_now=99.0, now_et="12:30", atm_iv=0.90)
-
-    os.environ["OT_RELAXED_ENTRY"] = "0"
-    P.begin_tick(20.0)
-    sig = B.generate_signal(gex=_GEX(conc=0.15), chain=_Chain([], calls_good), **bcommon)
-    rb1 = _row(st, "GEXPinButterfly", 20.0)
-    check("B1 PINNING but the pin is weak -> HOLD with the fly PREPARED, waiting on pin_concentration",
-          sig is None and rb1 and rb1[0] == "HOLD" and "PREPARED" in rb1[1]
-          and "buy 100/101/102" in rb1[1] and "pin_concentration" in rb1[1], str(rb1))
-    # ── B1b (r208) — the 2026-09-01 fly is refused, and the row names WHICH
-    # bound refused it. "No fly" and "no fly that can hold its stop" are
-    # different facts and the fit has to tell them apart.
-    # ⚠️ r24 — THE 40% FLOOR (operator ruling) made this ladder's 2-wide wing
-    # survivable: 99/101/103 debit 0.64 against a four-leg spread of 0.08 has a
-    # stop of 0.16 at 25% (exactly 2.0x, refused) and 0.256 at 40% (3.2x, taken).
-    # The 2026-09-01 trade itself was the 1-WIDE (debit 0.18, R 4.6): its stop is
-    # 0.072 at 40% against the same 0.08 spread, still under 1x. So B1b is the
-    # real trade alone, and B1c records what the wider floor now admits.
-    P.begin_tick(20.5)
-    sig_bad = B.generate_signal(gex=_GEX(), chain=_Chain([], [c for c in calls_unsurvivable
-                                                           if 100 <= c.strike <= 102]), **bcommon)
-    rb1b = _row(st, "GEXPinButterfly", 20.5)
-    check("B1b the 2026-09-01 fly is REFUSED and the row names the bound",
-          sig_bad is None and rb1b and rb1b[0] == "DECLINE"
-          and "wing_search" in rb1b[1] and "clear their own spread" in rb1b[1],
-          str(rb1b)[:120])
-    P.begin_tick(20.7)
-    sig_c = B.generate_signal(gex=_GEX(), chain=_Chain([], calls_unsurvivable), **bcommon)
-    rb1c = _row(st, "GEXPinButterfly", 20.7)
-    check("B1c (r24) the 40% floor admits the 2-wide on the same ladder: 99/101/103 at 3.2x its spread",
-          sig_c is not None and rb1c and rb1c[0] == "TAKE" and "buy 99/101/103" in rb1c[1],
-          str(rb1c)[:120])
-    P.begin_tick(21.0)
-    sig = B.generate_signal(gex=_GEX(), chain=_Chain([], calls_good), **bcommon)
-    rb2 = _row(st, "GEXPinButterfly", 21.0)
-    check("B2 pinning, strong, reachable -> fires the BEST-R qualifying wing (r6; here also the narrowest)",
-          sig is not None and sig.is_valid and sig.is_butterfly
-          and sig.center_contract.strike == 101.0
-          and sig.lower_contract.strike == 100.0
-          and sig.upper_contract.strike == 102.0
-          and abs(sig.net_debit - 0.40) < 1e-9 and rb2 and rb2[0] == "TAKE", f"{rb2}")
-    P.begin_tick(22.0)
-    sig = B.generate_signal(gex=_GEX(), chain=_Chain([], calls_fat), **bcommon)
-    rb3 = _row(st, "GEXPinButterfly", 22.0)
-    check("B3 everything true but no wing clears R 1.00 -> DECLINE, best R stated",
-          sig is None and rb3 and rb3[0] == "DECLINE"
-          and rb3[1].startswith("wing_search:") and "too wide for R>=" in rb3[1],
-          str(rb3))
-    # ── B3b (r208) — RELAXED CANNOT REACH THIS STRATEGY AT ALL ────────────
-    # 🔴 THE OLD B3b ASSERTED "relaxed does NOT waive economic feasibility" and
-    # it still PASSES — for a reason that no longer exists. Operator, 2026-09-01:
-    # "the relaxed is adding unnecessary complexity — get rid of relaxed
-    # entirely", scoped to the butterfly (the sweep stays loose on purpose to
-    # collect parameters). So the claim worth pinning is stronger and simpler:
-    # the flag changes NOTHING here, verified by driving both postures over the
-    # same chain and comparing the verdicts — not by reading the source.
-    os.environ["OT_RELAXED_ENTRY"] = "1"
-    P.begin_tick(22.5)
-    sig_rx = B.generate_signal(gex=_GEX(), chain=_Chain([], calls_fat), **bcommon)
-    rb3b = _row(st, "GEXPinButterfly", 22.5)
-    check("B3b the relaxed flag changes nothing on the butterfly",
-          sig_rx is None and rb3b and rb3b[0] == rb3[0] and rb3b[1] == rb3[1],
-          f"strict={rb3} relaxed={rb3b}")
-    os.environ["OT_RELAXED_ENTRY"] = "0"
-    P.begin_tick(23.0)
-    sig = B.generate_signal(gex=_GEX(env="NEUTRAL"), chain=_Chain([], calls_good), **bcommon)
-    rb4 = _row(st, "GEXPinButterfly", 23.0)
-    check("B4 not PINNING (pin strike still published) -> HOLD, fly prepared at the pin, waiting on pinning",
-          sig is None and rb4 and rb4[0] == "HOLD" and "pinning" in rb4[1], str(rb4))
-    P.begin_tick(24.0)
-    sig = B.generate_signal(gex=_GEX(), chain=_Chain([], [c for c in calls_good if c.strike != 101.0]),
-                            **bcommon)
-    rb5 = _row(st, "GEXPinButterfly", 24.0)
-    check("B5 no exact strike at the pin -> DECLINE legs, never a substitute apex",
-          sig is None and rb5 and rb5[0] == "DECLINE" and rb5[1].startswith("legs:"), str(rb5))
-
+    # r103 (RETIRE.5): the butterfly block (B1-B5) is removed with the GEX pin butterfly.
     # B6 — wiring: main_loop asks the butterfly in the position-open branch and
     # appends its record; the authorization no longer skips it.
     import ast as _ast
@@ -513,9 +383,9 @@ def main():
     # path, not the address of one call.
     _anb = next(n for n in _ast.walk(_ast.parse(msrc))
                 if isinstance(n, _ast.FunctionDef) and n.name == "attempt_new_entry")
-    check("B6 the butterfly is asked with a position OPEN, additively",
+    check("B6 (r103) main_loop asks attempt_new_entry in both branches, and no butterfly is asked any more",
           "attempt_new_entry(ctx, ms, state)" in mls
-          and "_attempt_butterfly(ctx, ms, state, additive=True)" in _ast.unparse(_anb)
+          and "_attempt_butterfly" not in _ast.unparse(_anb) and "def _attempt_butterfly" not in msrc
           and '_plan_skip("GEXPinButterfly", _auth_why)' not in mls)
     from execution.position_manager import PositionManager
     pm = PositionManager.__new__(PositionManager)
@@ -695,72 +565,8 @@ def main():
     # `puts_tcs` fixture, both deleted by the rewrite. See TCS.10.
 
 
-    # ── r178 — THE TICK AFTER THE TAKE (the 08-28 15:00 stack) ───────────
-    import strategy.gex_pin_butterfly as bfmod
-    bfmod.GEXPinButterflyStrategy.PLAYED_PINS.clear()
-    P.begin_tick(60.0)
-    sigB = B.generate_signal(gex=_GEX(), chain=_Chain([], calls_good), **bcommon)
-    check("B10 (r178) the pin fires once — the baseline TAKE",
-          sigB is not None and getattr(sigB, "pin_strike", None) == 101.0,
-          f"pin={sigB and getattr(sigB, 'pin_strike', None)}")
-    bfmod.GEXPinButterflyStrategy.mark_pin_played(sigB.pin_strike)
-    P.begin_tick(61.0)
-    sigB2 = B.generate_signal(gex=_GEX(), chain=_Chain([], calls_good), **bcommon)
-    r61b = _row(st, "GEXPinButterfly", 61.0)
-    check("B11 (r178) the NEXT TICK with identical conditions -> structural DECLINE "
-          "pin_played; no second fly on the same magnet, relaxed does not waive it",
-          sigB2 is None and r61b and r61b[0] == "DECLINE" and "already has a butterfly" in r61b[1],
-          str(r61b))
-    # OTV4TEST r6 — SMOOTHED: one tick at a new strike is chatter, not a migration.
-    P.begin_tick(62.0)
-    sigB3 = B.generate_signal(gex=_GEX(pin=102.0), chain=_Chain([], calls_good), **bcommon)
-    check("B12a (r6) ONE tick at a new pin is chatter — the smoothed pin stays 101, still played",
-          sigB3 is None and _row(st, "GEXPinButterfly", 62.0)[0] == "DECLINE"
-          and "pin_played" in _row(st, "GEXPinButterfly", 62.0)[1], str(_row(st, "GEXPinButterfly", 62.0)))
-    for i in range(_bfm.SMOOTH_WINDOW):
-        P.begin_tick(62.5 + i * 0.01)
-        sigB3 = B.generate_signal(gex=_GEX(pin=102.0), chain=_Chain([], calls_good), **bcommon)
-    check("B12 (r178/r6) the magnet MIGRATES (the new pin is the mode of the window) -> a new trade may prepare",
-          (sigB3 is not None) or (_row(st, "GEXPinButterfly", 62.5 + (_bfm.SMOOTH_WINDOW - 1) * 0.01)
-                                  and _row(st, "GEXPinButterfly", 62.5 + (_bfm.SMOOTH_WINDOW - 1) * 0.01)[0] in ("HOLD", "TAKE")),
-          str(_row(st, "GEXPinButterfly", 62.5 + (_bfm.SMOOTH_WINDOW - 1) * 0.01)))
-    # B14 (r6) — PERSISTENCE AS A BAR: with the real 8-tick bar, a fresh strategy holds
-    # "waiting on pin_persistence" for 7 ticks and fires on the 8th; a one-tick
-    # wobble to the adjacent strike in the middle does not reset it.
-    _bfm.PERSIST_TICKS = 8
-    _bfm.GEXPinButterflyStrategy.PLAYED_PINS.clear()
-    B2 = GEXPinButterflyStrategy(); B2.planner.symbol = "TST"
-    fired_at = None
-    for i in range(10):
-        P.begin_tick(70.0 + i)
-        pin = 100.0 if i == 4 else 101.0        # tick 5 wobbles to the neighbour
-        sg = B2.generate_signal(gex=_GEX(pin=pin), chain=_Chain([], calls_good), **bcommon)
-        if sg is not None and fired_at is None:
-            fired_at = i + 1
-    r70 = _row(st, "GEXPinButterfly", 70.0)
-    check("B14 (r6) persistence is a bar: tick 1 HOLDS waiting on pin_persistence",
-          r70 and r70[0] == "HOLD" and "pin_persistence" in r70[1], str(r70))
-    check("B14b ...and the fly fires on the 8th tick, the wobble at tick 5 notwithstanding",
-          fired_at == 8, f"fired_at={fired_at}")
-    _bfm.PERSIST_TICKS = 1
-    msrc2 = open(os.path.join(_root, "main.py"), encoding="utf-8").read()
-    # 🔴 r43 — B13 MATCHED A MENTION, NOT A CALL, AND A COMMENT BROKE IT.
-    # It did `msrc.index("mark_pin_played")` against the raw file, so the FIRST
-    # occurrence won — and r43 added a docstring line naming `mark_pin_played`
-    # above the fire site. The rule (mark AFTER execution, so a refused or
-    # zero-sized fire does not burn the pin) was never violated; the canary was
-    # reading prose. §20/§21: assert the BINDING. Anchored on the two CALLS,
-    # located by line number in the AST, inside the one path that fires.
-    _bf_fn = next(x for x in _ast.walk(_ast.parse(msrc2))
-                  if isinstance(x, _ast.FunctionDef) and x.name == "_attempt_butterfly")
-    _exec_ln = [n.lineno for n in _ast.walk(_bf_fn)
-                if isinstance(n, _ast.Call) and getattr(n.func, "id", "") == "_execute_entry_signal"]
-    _mark_ln = [n.lineno for n in _ast.walk(_bf_fn)
-                if isinstance(n, _ast.Call) and getattr(n.func, "attr", "") == "mark_pin_played"]
-    check("B13 (r178) the fire site marks the pin played AFTER execution",
-          bool(_exec_ln) and bool(_mark_ln) and min(_exec_ln) < min(_mark_ln),
-          f"execute@{min(_exec_ln) if _exec_ln else '-'} mark@{min(_mark_ln) if _mark_ln else '-'}")
-    bfmod.GEXPinButterflyStrategy.PLAYED_PINS.clear()
+    # r103 (RETIRE.5): the r178 block (B10-B14b: pin_played, smoothing, persistence, the mark after execution) is removed
+    # with the GEX pin butterfly.
 
     print()
     if _fails:

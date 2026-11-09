@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 # ==========================================================================
-# tools/strip_retired_env.sh  v5.2
+# tools/strip_retired_env.sh  v5.3
+# v5.3  2026-11-09  OTV5 r103 (RETIRE.5 step 2) - THE GEX PIN BUTTERFLY'S KEYS JOIN THE LIST. The operator, 2026-11-08: "I concur
+#       on both, in that order". OT_GEX_BUTTERFLY (its switch), OT_BFLY_* (its debit-gate dials) and OT_GEX_BFLY_* (its wing
+#       dial) are read by nothing after r103. The readiness track's OT_TR_BFLY_* knobs are NOT in the family (still read).
 # v5.2  2026-11-08  OTV5 r88 (RETIRE.3) - THE TCS SHADOW'S KEYS JOIN THE LIST, AND A BACKUP IS NEVER OVERWRITTEN. The operator,
 #       2026-11-08: "Delete" (the TCS shadow). OT_TCS_* , OT_TR_TCS_* , OT_TR_W_TCS_* and OT_SHADOW_TRADES_DB are read by
 #       nothing after r88. A unit that already has .bak-retire1 (r76/r78, the hand strip of 11-08) keeps it; the next
@@ -31,8 +34,10 @@
 # ==========================================================================
 set -u
 
-EXACT="OT_SCALE_ORB OT_SCALE_VOLT OT_VOLT OT_ORB_TRADE OT_ATP_BUTTERFLY OT_ORCS OT_SWEEP_CS OT_CONTRACT_SCALE OT_SHADOW_TRADES_DB"
-FAMILIES="OT_VOLT_ OT_SWEEP_CS_ OT_VELOCITY_ OT_TCS_ OT_TR_TCS_ OT_TR_W_TCS_"
+EXACT="OT_SCALE_ORB OT_SCALE_VOLT OT_VOLT OT_ORB_TRADE OT_ATP_BUTTERFLY OT_ORCS OT_SWEEP_CS OT_CONTRACT_SCALE OT_SHADOW_TRADES_DB OT_GEX_BUTTERFLY"
+FAMILIES="OT_VOLT_ OT_SWEEP_CS_ OT_VELOCITY_ OT_TCS_ OT_TR_TCS_ OT_TR_W_TCS_ OT_BFLY_ OT_GEX_BFLY_"
+# r103 (RETIRE.5 step 2): the GEX pin butterfly - its switch OT_GEX_BUTTERFLY, OT_BFLY_DEBIT_* / OT_BFLY_DISC_CONV_* and
+# OT_GEX_BFLY_WING_EM_FRAC are read by nothing once the fly is removed.
 # r88 (RETIRE.3): the TCS shadow - OT_TCS_ACTIVE and every OT_TCS_* dial, its readiness knobs (OT_TR_TCS_*, OT_TR_W_TCS_*)
 # and the shadow store path (OT_SHADOW_TRADES_DB) - are read by nothing once the TCS is removed.
 # OT_VELOCITY_STALL / _ENFORCE / _GRACE_MIN / _STRICTNESS / _CONFIRM: the velocity stall measured only the ORB trade

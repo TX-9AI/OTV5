@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_brk_spec_1029.py  v5.2
+tests/check_brk_spec_1029.py  v5.3
+v5.3  2026-11-09  OTV5 r103 (RETIRE.5 step 2) — P1-P5 read the expected move from analysis.volatility_measures.expected_move_session (the pin gate's own source since r103; the GEX fly module is removed).
 v5.2  2026-10-31  OTV5 r68 (CFG.5) — OT_RESTING_STOP_STATE leaves the scratch env: the resting stop and its state file are deleted
       (the operator, 2026-10-31: "Resting stop was a study. It failed. Get this the fuck out of here"). No check changed.
 v5.1  2026-10-30  OTV5 r58 (DECAY.1) — OT_DECAY_STOP=0 HERE: this checker pins a pre-decay exit in isolation. T1 / T3 (a +30% Breakout given back to 1.90 below 0.5W, and the 2.60 -> 2.00 tick before the 0.5W arm) now close on the peak-decay stop, which is the r57 rule working, not the trail;
@@ -329,7 +330,7 @@ def main():
           f"trail={a.new_trail_stop} exit={a.should_exit}")
 
     # ── P1-P5: the pin gate ────────────────────────────────────────────────
-    from strategy.gex_pin_butterfly import expected_move
+    from analysis.volatility_measures import expected_move_session as expected_move   # r103: the fly wrapper is removed
     px, iv = 500.0, 0.20
     em = expected_move(px, iv)
     near = em * C.PIN_PROXIMITY_MIN_FRAC * 0.5

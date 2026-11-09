@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""check_entry_windows.py — v5.3
+"""check_entry_windows.py — v5.4
+v5.4  2026-11-09  OTV5 r103 (RETIRE.5 step 2) — the GEX pin butterfly is removed: the butterfly NOTE, W4 and W4c (its noon/13:00 start, driven through its prepare()) go with it and W4 now pins its window row and start keys gone; W7 drops GEXPinButterflyStrategy. W1-W3, W6, W8 unchanged.
 v5.3  2026-11-08  OTV5 r88 (RETIRE.3) — the TCS is removed: W1 and W8 pin the one credit start and end on the condor and
       that TCS_START_ET / TCS_ENTRY_END_ET are gone; W7 drops TCSPlan.
 v5.2  2026-11-08  OTV5 r76 (RETIRE.1) — RE-POINTED (WA 38.4): the sweep is removed, so W1 pins the one credit start on condor + TCS (and no sweep
@@ -125,16 +126,6 @@ def main():
           start < C.CONDOR_ENTRY_CUTOFF_ET,
           f"{start} -> {C.CONDOR_ENTRY_CUTOFF_ET}")
 
-    # ⚠️ THE BUTTERFLY OPENS LATER THAN THE CREDIT SPREADS, AND THAT IS THE
-    # RULING, not an oversight. Operator, 2026-08-26: *"Butterfly is debit &
-    # any sooner than noon to reach a pin is unlikely to hold all the way to
-    # the closing bell."* It is a DEBIT that needs the pin to hold into the
-    # close, so a later start is protective rather than restrictive.
-    bf = C.BUTTERFLY_ENTRY_START_ET
-    print(f"  NOTE  butterfly (debit) starts {bf}, "
-          f"{(bf[0]*60+bf[1]) - (start[0]*60+start[1])} min after the credit "
-          f"spreads — RULED 2026-08-26, a debit needs the pin to hold to the bell")
-
     # ⚠️ AND THE WINDOW LENGTH IS A REAL COST, so state it rather than bury it.
     mins = ((C.CONDOR_ENTRY_CUTOFF_ET[0]*60 + C.CONDOR_ENTRY_CUTOFF_ET[1])
             - (start[0]*60 + start[1]))
@@ -148,29 +139,15 @@ def main():
     # constant production read NOWHERE — and `RUNAWAY_CUTOFF_ET` defaulted to
     # "11:30". A config value nobody reads is decorative; a default nobody can
     # see is the real setting.
-    import strategy.gex_pin_butterfly as _bf
     import strategy.runaway_continuation as _rc
 
     def _hm(t):
         return tuple(int(x) for x in t.split(":")) if isinstance(t, str) else tuple(t)
 
-    check("W4 the butterfly STRATEGY honours the config noon rule",
-          _hm(_bf.EARLIEST_ET) == tuple(C.BUTTERFLY_ENTRY_START_ET),
-          f"strategy {_bf.EARLIEST_ET} vs config {C.BUTTERFLY_ENTRY_START_ET}")
-
-    # ── W4c — r273 (BFLY.10): 13:00, DRIVEN through prepare(), not read off a constant ─
-    def _window_open(hhmm):
-        # Out of window prepare() returns dormant BEFORE recording the entry_window
-        # condition; in window it records it. The condition list is the signal.
-        p = _bf.GEXPinButterflyStrategy().prepare(gex=None, price_now=100.0, now_et=hhmm)
-        return "entry_window" in repr(getattr(p, "conditions", p))
-
-    _ew = C.ENTRY_WINDOWS
-    check("W4c the fly starts at (13, 0) and GEX prepare() is dormant at 12:59, open at 13:00",
-          tuple(_ew["GEXPinButterfly"][0]) == (13, 0)
-          and not _window_open("12:59") and _window_open("13:00"),
-          f"GEX={_ew['GEXPinButterfly']} "
-          f"12:59 open={_window_open('12:59')} 13:00 open={_window_open('13:00')}")
+    check("W4 r103: the GEX fly's window row and its start keys are gone (removed with the fly)",
+          "GEXPinButterfly" not in C.ENTRY_WINDOWS
+          and not any(hasattr(C, n) for n in ("BUTTERFLY_ENTRY_START_ET", "GEX_BFLY_EARLIEST_ET", "GEX_BFLY_LATEST_ET")),
+          str([k for k in C.ENTRY_WINDOWS]))
 
     # 🔴 r149 — ONE STOP FOR EVERY ENTRY. The 08-24 daylight (debit cutoff one
     # minute before the credit start) is superseded: debits run all day, and
@@ -222,11 +199,10 @@ def main():
     # reading the strategy CLASS found nothing. Read the classes that DECLARE
     # it; the butterfly and the condor still declare on the strategy class.
     from strategy.runaway_plan import RunawayPlan
-    from strategy.gex_pin_butterfly import GEXPinButterflyStrategy
     from strategy.iron_condor_strategy import IronCondorStrategy
     _missing = [c.__name__ for c in (
         RunawayPlan,
-        GEXPinButterflyStrategy, IronCondorStrategy)
+        IronCondorStrategy)                                    # r103: GEXPinButterflyStrategy removed
         if "entry_window" not in getattr(c, "PLAN_CHECKS", ())]
     check("W7 every entry strategy's plan declares an entry_window check",
           not _missing, ", ".join(_missing) or "none")

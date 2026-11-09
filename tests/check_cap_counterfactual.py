@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_cap_counterfactual.py  v5.0
+tests/check_cap_counterfactual.py  v5.1
+v5.1  2026-11-09  OTV5 r103 (RETIRE.5 step 2) — K3's exempt example is PARK (cap-exempt, its own budget) where it was the GEX fly, removed. Every other check unchanged.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.1  2026-10-18  OTV4TEST r288 (PARK.1) — the fake realized_pnl_today takes the cap's new exclude_strategies argument
       (RiskManager.day_realized_pnl passes config.CAP_EXCLUDED_STRATEGIES); no check changed.
@@ -102,13 +103,13 @@ def main():
                             "stop_premium": 0.0, "contracts": 1, "credit_received": 0.28, "max_loss": 672.0,
                             "total_cost": 672.0, "is_condor_leg": 1})
         c = lines()[-1]
-        rm.note_entry_risk({"trade_id": "cccccccc-1", "strategy": "GEXPinButterfly", "entry_premium": 0.50,
+        rm.note_entry_risk({"trade_id": "cccccccc-1", "strategy": "PARK", "entry_premium": 0.50,   # r103: was the removed GEX fly
                             "stop_premium": 0.0, "contracts": 4, "total_cost": 200.0, "max_loss": 200.0})
         b = lines()[-1]
-        check("K3 a credit vertical has NO stop risk and its max loss 672 > headroom 500 would refuse; the fly is exempt",
+        check("K3 a credit vertical has NO stop risk and its max loss 672 > headroom 500 would refuse; PARK (cap-exempt) is exempt",
               c.get("risk_stop") is None and c.get("risk_max") == 672.0 and c.get("refuse_stop") == 1
               and c.get("refuse_max") == 1 and c.get("exempt") == 0 and b.get("exempt") == 1 and b.get("refuse_max") == 0,
-              f"credit {c}; fly {b}")
+              f"credit {c}; PARK {b}")
     except Exception as exc:                                  # noqa: BLE001
         check("K1 (did not run)", False, f"{type(exc).__name__}: {exc}")
 

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_snapshot_pin.py  v5.0
+tests/check_snapshot_pin.py  v5.1
+v5.1  2026-11-09  OTV5 r103 (RETIRE.5 step 2) — S2 pins the clock on analysis.volatility_measures.expected_move_session, the snapshot's own source since r103 (the GEX fly wrapper is removed); S5 (the fly's EM band) goes with the fly. S1, S3, S4, S6+ unchanged.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.3  2026-09-22  OTV4TEST r99 — S7a-e: the VWAP context on the fire
       snapshot. `price_vs_vwap` was NULL on EVERY row ever written because a
@@ -57,7 +58,7 @@ class _Gex:
 
 def main():
     from derived.snapshot import SnapshotEngine
-    from strategy.gex_pin_butterfly import expected_move, EM_MIN_FRAC, EM_MAX_FRAC
+    from analysis.volatility_measures import expected_move_session as expected_move   # noqa: F401  r103: the fly is removed
     from datetime import datetime as _dt
     from utils.time_utils import ET as _ET
 
@@ -95,18 +96,18 @@ def main():
     # gate's own arithmetic rather than inventing a second definition of it"
     # (r243). A slack tolerance would pass a genuine second definition that
     # merely rounds to something similar, which is the defect, not the fixture.
-    import strategy.gex_pin_butterfly as _gpb
-    _real_em = _gpb.expected_move
+    import analysis.volatility_measures as _gpb                # r103: the snapshot's own source (the fly wrapper is removed)
+    _real_em = _gpb.expected_move_session
     _fixed = _dt.now(_ET).replace(hour=12, minute=0, second=0, microsecond=0)
-    _gpb.expected_move = lambda u, atm, now=None, _f=_fixed: _real_em(u, atm, now=_f)
+    _gpb.expected_move_session = lambda u, atm, now=None, _f=_fixed: _real_em(u, atm, now=_f)
     try:
         # `derived/snapshot.py` imports the name INSIDE the function, so the
         # payload picks up the pinned clock on this call — the real function,
         # the real arithmetic, one instant.
         got = e.build_payload({"price": price, "atm_iv": iv, "gex": _Gex(pin)})
-        want = abs(pin - price) / _gpb.expected_move(price, iv)
+        want = abs(pin - price) / _gpb.expected_move_session(price, iv)
     finally:
-        _gpb.expected_move = _real_em     # never leave the module patched
+        _gpb.expected_move_session = _real_em     # never leave the module patched
     check("S2 the fraction equals |pin - spot| / expected_move()",
           abs(got["pin_em_fraction"] - want) < 1e-9,
           f"{got['pin_em_fraction']:.6f} vs {want:.6f}")
@@ -135,13 +136,7 @@ def main():
     else:
         check("S4 build_payload never raises on a degenerate ctx", True)
 
-    # ══ S5 — THE BAND IS STILL HARD-CAPPED ════════════════════════════════
-    # ⚠️ r208: `cap=EM_MAX_FRAC` makes the relaxed value equal the base, so the
-    # ceiling cannot widen. Recording the fraction must not become a reason to
-    # loosen the gate that made it worth recording.
-    check("S5 the EM band is unchanged at 0.30-1.00",
-          EM_MIN_FRAC == 0.30 and EM_MAX_FRAC == 1.00,
-          f"{EM_MIN_FRAC}-{EM_MAX_FRAC}")
+    # r103 (RETIRE.5): S5 (the fly's 0.30-1.00 EM band) goes with the GEX pin butterfly.
 
     # ══ S6 — ALL THREE PIN MEASURES, NOT JUST THE EM FRACTION ════════════
     # 🔴 r244. `pin_concentration` (29% fail) and the GEX environment behind

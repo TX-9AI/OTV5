@@ -1,5 +1,6 @@
 """
-execution/position_manager.py  v5.33
+execution/position_manager.py  v5.34
+v5.34  2026-11-09  OTV5 r103 (RETIRE.5 step 2) — the GEX pin butterfly's admission row and its GEXFLY name constant go. PARK keeps its own row (one per session, cap-exempt); every live row is unchanged. The generic multi-leg record handling (is_butterfly) stays for any butterfly record still on a book. The operator, 2026-11-08: "I concur on both, in that order".
 v5.33  2026-11-08  OTV5 r88 (RETIRE.3) — the TCS admission row and name, the SHADOW flag and the r57 shadow seams (_exit_engine / _management and the four SHADOW branches) go with the TCS shadow; every real path is unchanged. The operator, 2026-11-08: "Delete" (the TCS shadow, which never fired: its own gates declined every candidate 11-02..11-06).
 v5.32  2026-11-08  OTV5 r76 (RETIRE.1) — the admission table loses the removed trades' rows (ORB, VOLT, SWEEP, ATPFLY, ORCS) and their name constants; the ORB-trade close hook (standing-offer remainder cancel + engine re-arm, keyed on "ORB" in the strategy) is removed; get_open_record (no caller) is removed. The live rows are unchanged. The operator, 2026-11-07: "Running dead code and logging dead code activity is unnecessary drag. Yes, I want all of those things fixed."
 v5.31 2026-11-04  OTV5 r74 (BLIND.1) — A BLIND BOT PRICES ITS OPEN POSITIONS FROM TASTYTRADE REST MARKS, ON PAPER TOO.
@@ -415,7 +416,6 @@ _WARNED_LEG_COUNT: set = set()   # SWALLOW T1: warn once on an unreadable count
 RUNAWAY = "RunawayContinuation"
 HUNT = "LiquidityHunt"
 BREAKOUT = "Breakout"
-GEXFLY = "GEXPinButterfly"
 PARK = "PARK"                         # r288 (PARK.1): the 11:00 first-hour continuation
 
 
@@ -522,11 +522,7 @@ _DEFAULT_RULES = {
     # spreads."*
     # RETIRE.3 (r88): the TCS row (EXCEPTION 1, vertical spreads) is deleted with the TCS.
     # the GEX fly's cutoff was raised from 14:00 to 15:00 by the operator
-    # ══ EXCEPTION 2 of 2 — THE BUTTERFLIES, ONE PER SESSION ════════════════
-    # r178: on 2026-08-28 at 15:00 a stack of FIVE BUTTERFLIES fired in NINETY
-    # SECONDS on the same pin. `max_tries_per_session=1` is the admission half
-    # of that guard; `mark_pin_played` is the other.
-    GEXFLY:  AdmissionRule(config.ENTRY_WINDOWS[GEXFLY], max_open_of_type=1, max_tries_per_session=1, cap_exempt=True),
+    # RETIRE.5 (r103): the GEX pin butterfly's row (EXCEPTION 2, one per session, cap-exempt) is deleted with the fly.
     # r288 (PARK.1) — one per session, and its own budget: the cap neither refuses it nor counts its P&L
     # (config.CAP_EXCLUDED_STRATEGIES).
     PARK:    AdmissionRule(config.ENTRY_WINDOWS[PARK], max_open_of_type=1, max_tries_per_session=1, cap_exempt=True),

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_pin_bounded.py  v5.0
+tests/check_pin_bounded.py  v5.1
+v5.1  2026-11-09  OTV5 r103 (RETIRE.5 step 2) — B5 reads the GEX snapshot (data/gex_data.py), which records pin_dist_pct and pin_strike_raw: the GEX fly's plan_check rows went with strategy/gex_pin_butterfly.py. B1-B4 unchanged.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.0  2026-09-01  r215 — A PIN IS A CLAIM ABOUT TODAY'S PRICE.
 
@@ -111,11 +112,11 @@ def main():
     # ── B5 — THE PRIOR IS RECORDED SO IT CAN BE FITTED ──────────────────
     # r208's discipline: a carried constant that nobody measured stays visible
     # in the data until somebody does.
-    src = open(os.path.join(_root, "strategy", "gex_pin_butterfly.py"),
-               encoding="utf-8").read()
-    check("B5 pin_dist_pct and the raw argmax ride every evaluation",
-          '"pin_dist_pct"' in src and '"pin_strike_raw"' in src
-          and "pin_dist_pct" in src.split("PLAN_CHECKS")[1][:400],
+    # r103 (RETIRE.5): the GEX fly's plan_check rows went with the fly; the GEX snapshot still records both.
+    src = open(os.path.join(_root, "data", "gex_data.py"), encoding="utf-8").read()
+    check("B5 pin_dist_pct and the raw argmax ride every GEX snapshot",
+          "pin_strike_raw:" in src and "pin_dist_pct:" in src
+          and "snapshot.pin_strike_raw = pin.strike" in src and "snapshot.pin_dist_pct = " in src,
           "so 3% can become a fit instead of staying a guess")
 
     print()

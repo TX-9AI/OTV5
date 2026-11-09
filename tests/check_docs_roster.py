@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_docs_roster.py  v5.2
+tests/check_docs_roster.py  v5.3
+v5.3  2026-11-09  OTV5 r103 (RETIRE.5 step 2) — the OT_GEX_BUTTERFLY row goes with the GEX pin butterfly (config.GEX_BUTTERFLY_ENABLED removed); R1-R5 unchanged.
 v5.2  2026-11-08  OTV5 r88 (RETIRE.3) — the OT_TCS_ACTIVE row goes with the TCS (config.TREND_CREDIT_ACTIVE removed); R1-R5 unchanged.
 v5.1  2026-11-08  OTV5 r76 (RETIRE.1) — the probe no longer reads the removed trades' config flags (ORCS_ENABLED,
       ATP_BUTTERFLY_ENABLED, SWEEP_CS_ENABLED); their roster rows are gone with them. R1-R5 unchanged.
@@ -40,7 +41,6 @@ out = {
  "windows": {k: [list(v[0]), list(v[1])] for k, v in c.ENTRY_WINDOWS.items()},
  "eod": {k: list(v) for k, v in c.EOD_SCHEDULE.items()},
  "on": {
-  "OT_GEX_BUTTERFLY": bool(c.GEX_BUTTERFLY_ENABLED),
  },
  "stops": [c.RUNAWAY_MAX_LOSS_PCT, c.MAX_LOSS_PCT, c.BUTTERFLY_STOP_LOSS_PCT],
 }

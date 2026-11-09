@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_trade_switches.py  v5.4
+tests/check_trade_switches.py  v5.5
+v5.5  2026-11-09  OTV5 r103 (RETIRE.5 step 2) — S0 adds the GEX fly (strategy.gex_pin_butterfly, OT_GEX_BUTTERFLY); S9 pins PARK's window and the fly's row removed (was the fly's 13:00-15:00). Every other check unchanged.
 v5.4  2026-11-08  OTV5 r88 (RETIRE.3) — S9 pins the GEX fly's window and that the TCS row is removed (r88).
 v5.3  2026-11-08  OTV5 r84 (VENV.1) — a bare run (control's /usr/bin/python3 3.14, no pandas) stops with one
       ModuleNotFoundError line naming the venv to use, not a traceback: utils.venv_guard.require_venv before the first
@@ -118,10 +119,11 @@ def main():
     # S0 — the removed trades are gone
     from retired_names import importers
     still = [m for m in ("strategy.volt_plan", "strategy.volt_strategy", "strategy.orb_strategy",
-                         "strategy.atp_butterfly", "strategy.atp_butterfly_plan") if importers(m)]
+                         "strategy.atp_butterfly", "strategy.atp_butterfly_plan",
+                         "strategy.gex_pin_butterfly") if importers(m)]                  # r103: + the GEX fly
     src = open(os.path.join(_root, "config.py")).read() + open(os.path.join(_root, "strategy", "plan_state.py")).read()
-    keys = [k for k in ("OT_VOLT", "OT_ORB_TRADE", "OT_ATP_BUTTERFLY") if f'"{k}"' in src]
-    check("S0 VOLT, the ORB trade and the ATP fly are removed: no module imports, no switch is read",
+    keys = [k for k in ("OT_VOLT", "OT_ORB_TRADE", "OT_ATP_BUTTERFLY", "OT_GEX_BUTTERFLY") if f'"{k}"' in src]
+    check("S0 VOLT, the ORB trade, the ATP fly and the GEX fly (r103) are removed: no module imports, no switch is read",
           not still and not keys, f"modules {still}, keys {keys}")
 
     # S6 — unchanged: Breakout's selector, the ORB engine
@@ -139,9 +141,10 @@ def main():
           all(v == want for v in ends.values()) and acts["runaway"] == want and acts["hunt"] == want
           and acts["breakout"] == "10:30", f"{ends} {acts}")
     # S9 — unchanged rows
-    keep = {k: tuple(map(tuple, C.ENTRY_WINDOWS[k])) for k in ("GEXPinButterfly",)}
-    check("S9 UNCHANGED: the GEX fly keeps its window (13:00-15:00, r273); the TCS row is removed (r88)",
-          keep["GEXPinButterfly"] == ((13, 0), (15, 0)) and "TrendCreditSpread" not in C.ENTRY_WINDOWS, str(keep))
+    keep = {k: tuple(map(tuple, C.ENTRY_WINDOWS[k])) for k in ("PARK",)}
+    check("S9 PARK keeps its window (11:01-11:03); the TCS row (r88) and the GEX fly row (r103) are removed",
+          keep["PARK"] == ((11, 1), (11, 3)) and "TrendCreditSpread" not in C.ENTRY_WINDOWS
+          and "GEXPinButterfly" not in C.ENTRY_WINDOWS, str(keep))
 
     import subprocess
     sps = _glob.glob(os.path.join(_root, "venv", "lib", "python*", "site-packages"))   # r106 bootstrap, as above

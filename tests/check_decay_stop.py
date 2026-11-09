@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_decay_stop.py  v5.3
+tests/check_decay_stop.py  v5.4
+v5.4  2026-11-09  OTV5 r103 (RETIRE.5 step 2) — B2 re-pointed (WA 38.4): HOLD_TO_CLOSE_STRATEGIES is removed with the GEX fly, so B2 pins that a record under the fly's name now decays exactly as B1. Every other check unchanged.
 v5.3  2026-11-08  OTV5 r88 (RETIRE.3) — H1 (a shadow TCS through execution/shadow_book) goes with the TCS shadow; every other check unchanged.
 v5.2  2026-11-03  OTV5 r73 (BFLY.17) — THE GEX PIN FLY HOLDS TO THE CLOSE. The operator, 2026-11-03: "For the GEX fly, I want
       no stop except hold to close". B1's butterfly mechanics now ride the ATP butterfly (the decay stop still applies to it);
@@ -33,7 +34,7 @@ v5.0  2026-10-30  OTV5 r58 (DECAY.1) — THE PEAK-DECAY PROFIT STOP. A TRADING C
       captured credit closes; a RISING cost (a loss) never arms
   B1  butterfly: position_manager prices the net lower + upper - 2 x center, and the decay p is that net - entry;
       the 29% / 30% boundary on the butterfly (ATPButterfly since r73)
-  B2  the GEX pin fly (HOLD_TO_CLOSE_STRATEGIES): the same marks never close on decay, and no reading is kept
+  B2  r103: HOLD_TO_CLOSE_STRATEGIES is removed with the GEX fly, so a record under that name decays exactly as B1
   R1  RunawayContinuation: the same path that closes a Breakout does not close it, and no reading is kept
   R2  PARK is exempt by default (no decay close, no reading); with DECAY_STOP_EXEMPT = ("RunawayContinuation",) (what
       OT_DECAY_STOP_EXEMPT=RunawayContinuation sets) the same PARK path closes on decay
@@ -224,9 +225,9 @@ check("B1 butterfly: the mark is the net lower + upper - 2 x center; p = net - e
       f"nets {_nets_r} decays {[is_decay(d) for d, _ in b1]} reading {b1[2][1] if b1 else None}")
 
 b2 = run(fly_rec("b2", strategy="GEXPinButterfly", stop_premium=0.0), _nets_r) if None not in _nets_r else []
-check("B2 the GEX pin fly holds to the close: the B1 marks close nothing on decay and keep no reading",
-      b2 and not any(is_decay(d) for d, _ in b2) and not any(rd for _, rd in b2),
-      f"decays {[is_decay(d) for d, _ in b2]} readings {[rd for _, rd in b2]}")
+check("B2 r103: nothing holds to the close any more - a GEXPinButterfly-named record decays on the B1 marks exactly as B1",
+      b2 and b1 and [is_decay(d) for d, _ in b2] == [is_decay(d) for d, _ in b1] and any(is_decay(d) for d, _ in b2),
+      f"b2 {[is_decay(d) for d, _ in b2]} b1 {[is_decay(d) for d, _ in b1]}")
 
 # ── R exempt, O off ──────────────────────────────────────────────────────────────────────────────────
 r1 = run(rec("r1", "RunawayContinuation", stop_premium=1.0), [2.10, 2.20, 2.15, 2.14, 2.10])

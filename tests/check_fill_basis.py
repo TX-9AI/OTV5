@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_fill_basis.py  v5.2
+tests/check_fill_basis.py  v5.3
+v5.3  2026-11-09  OTV5 r103 (RETIRE.5 step 2) — the source scan reads the four live strategies: strategy/gex_pin_butterfly.py is removed with the GEX fly.
 v5.2  2026-11-08  OTV5 r88 (RETIRE.3) — F5 drops strategy/trend_credit_spread.py (deleted with the TCS).
 v5.1  2026-11-08  OTV5 r76 (RETIRE.1) — F5 reads the five live strategies (the ORB trade and the sweep removed; Breakout, the Hunt and PARK added -
       a wider sweep of the same claim); F7 RE-POINTED (WA 38.4): the ORB standing offer, the one ladder exemption, is removed
@@ -210,8 +211,8 @@ def main():
     # on a backslash-n collapsing a level inside a generator — the same trap
     # that broke a shell command earlier today. Iterating lines needs no
     # escapes at all, so there is nothing to get wrong.
-    paths = ("runaway_continuation.py", "breakout.py", "liquidity_hunt.py", "park.py",
-             "gex_pin_butterfly.py")       # r76: the ORB trade and the sweep are removed; r88: the TCS
+    paths = ("runaway_continuation.py", "breakout.py", "liquidity_hunt.py", "park.py")
+    # r76: the ORB trade and the sweep are removed; r88: the TCS; r103: gex_pin_butterfly.py
     bad = []
     for fn in paths:
         src = open(os.path.join(_root, "strategy", fn), encoding="utf-8")

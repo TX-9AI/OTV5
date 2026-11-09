@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""check_plan_signal.py — v5.2
+"""check_plan_signal.py — v5.3
+v5.3  2026-11-09  OTV5 r103 (RETIRE.5 step 2) — PS7 drops the GEX fly (strategy/gex_pin_butterfly.py deleted); every other check unchanged.
 v5.2  2026-11-08  OTV5 r88 (RETIRE.3) — PS7 drops the TCS (strategy/trend_credit_spread.py deleted); every other check unchanged.
 v5.1  2026-11-08  OTV5 r76 (RETIRE.1) — PS1-PS3 (the ORB TRADE's plan checks and its 'Waiting on' narration) go with the trade, replaced by one check
       that it is gone; PS7 drops the removed sweep; PS4-PS6 and PS8 unchanged.
@@ -101,8 +102,7 @@ def main():
 
     # ── PS7 — the reason must be TIME-INVARIANT or dedupe does nothing ───
     # "09:40 ET is before..." and "09:41 ET is before..." are different strings.
-    for rel in ("strategy/iron_condor_strategy.py",          # r88: the TCS removed
-                "strategy/gex_pin_butterfly.py"):        # r76: the sweep is removed
+    for rel in ("strategy/iron_condor_strategy.py",):        # r88: the TCS removed; r76: the sweep; r103: the GEX fly
         s = open(os.path.join(_root, rel), encoding="utf-8").read()
         tree = ast.parse(s)
         bad_call = False
