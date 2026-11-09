@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """
-tests/check_capture_all.py  v5.4
+tests/check_capture_all.py  v5.5
+v5.5  2026-11-08  OTV5 r102 (CAP.6) — I1: a live market's endless updates of the forming bar do not hold a pull open (the
+      real _candles against a fake streamer: 3 history bars then updates of the last one forever -> ends after idle_s).
 v5.4  2026-11-08  OTV5 r101 (CAP.6) — L3: each lookback is written as soon as its stream ends (a run killed during the 5m
       stream has already written 1d, 1d_eth and 1h).
 v5.3  2026-11-08  OTV5 r100 (CAP.6) — L2: candles-recent and candles never share a key (r98-r99 did, and the first live
@@ -36,6 +38,8 @@ v5.0  2026-11-08  OTV5 r94 (CAP.1) — new. tools/capture_all.py records everyth
   L2  candles-recent writes pulled=<day>_recent.csv.gz and `candles` pulled=<day>.csv.gz: a lookback never replaces a
       same-day history
   L3  each interval is written when its stream ends: a run that dies in the 5m stream keeps 1d, 1d_eth and 1h
+  I1  the real _candles ends idle_s after the last NEW bar even while updates of a known bar keep arriving (a live
+      market), with the newest version of that bar kept
   F1  pick_front / _front_futures: the active-month contract per product, else the nearest; none -> skipped, not guessed
   W1  on the SPX box candles-recent adds CONTEXT and the front futures (looked up in the same loop); elsewhere only its own
   R1  retention_purge: spool files older than 3 days are counted (dry) / removed (apply); fresh files and dirs untouched
@@ -312,6 +316,47 @@ def main() -> int:
           rc_w == 0 and syms_spx[:1] == ("SPX",) and set(ca.CONTEXT) <= set(syms_spx) and "/ESZ26:XCME" in syms_spx
           and len(FakeSession.loops) == 1, f"rc={rc_w} {syms_spx} loops={len(FakeSession.loops)}")
     ca._candles = real_candles
+
+    # ── I1 ──
+    tt = types.ModuleType("tastytrade")
+    dxf = types.ModuleType("tastytrade.dxfeed")
+
+    class Candle:
+        pass
+
+    class FakeStreamer:
+        def __init__(self, _session):
+            self.n = 0
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *a):
+            return False
+
+        async def subscribe_candle(self, symbols, interval, start_time=None, extended_trading_hours=False):
+            self.sym = symbols[0]
+
+        async def get_event(self, _cls):
+            await asyncio.sleep(0.02)
+            self.n += 1
+            c = Candle()
+            for k in ca.CANDLE_FIELDS:
+                setattr(c, k, None)
+            c.event_symbol = self.sym + "{=5m}"
+            c.time = 1_000_000 + min(self.n, 3) * 300_000          # bars 1..3, then bar 3 updated forever
+            c.close = float(self.n)
+            return c
+
+    tt.DXLinkStreamer = FakeStreamer
+    dxf.Candle = Candle
+    sys.modules["tastytrade"], sys.modules["tastytrade.dxfeed"] = tt, dxf
+    t0 = time.time()
+    g = asyncio.run(real_candles(None, ["ES"], "5m", None, idle_s=0.4, max_s=8.0))
+    took = time.time() - t0
+    bars = g.get("ES", {})
+    check("I1 a live market's updates of a known bar do not hold the pull open (ends ~idle_s after the last new bar)",
+          took < 3.0 and len(bars) == 3 and bars[1_900_000]["close"] > 3, f"took={took:.1f}s bars={sorted(bars)}")
 
     # ── R1 ──
     import warehouse.retention_purge as rp

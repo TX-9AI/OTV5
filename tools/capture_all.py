@@ -1,6 +1,11 @@
 #!/usr/bin/env python3
 """
-tools/capture_all.py  v5.4 — EVERYTHING TASTYTRADE SERVES THAT THE FEED DOES NOT ALREADY KEEP, INTO THE WAREHOUSE.
+tools/capture_all.py  v5.5 — EVERYTHING TASTYTRADE SERVES THAT THE FEED DOES NOT ALREADY KEEP, INTO THE WAREHOUSE.
+v5.5  2026-11-08  OTV5 r102 (CAP.6) — A LIVE MARKET NEVER LET A STREAM END. _candles ended a pull after idle_s with no
+      event, but every live update of the forming bar reset that clock: on the SPX box on a Sunday evening (CME futures
+      open from 18:00 ET) the stream ran on to max_s (600 s) for EACH of the four lookbacks - 9 minutes and still in the
+      first, measured. The same holds at 16:1x ET, when the futures still trade. Now only a bar the pull has not seen
+      before resets the idle clock; an update to a known bar is still stored (the latest version wins) but does not.
 v5.4  2026-11-08  OTV5 r101 (CAP.6) — EACH INTERVAL IS WRITTEN AS SOON AS ITS STREAM ENDS. v5.0-v5.3 collected all four
       lookbacks and wrote at the end, so a run cut short wrote NOTHING; on the SPX box (45 symbols: CONTEXT + futures)
       one run outlasted 300 s, the conductor's bound, and a takedown can stop any box first. Now 1d, 1d_eth, 1h, 5m are
@@ -176,7 +181,7 @@ def gz_json(obj) -> bytes:
 
 def meta(mode: str, **kw) -> dict:
     return {"source": "tastytrade", "mode": mode, "captured_at": datetime.now(timezone.utc).isoformat(),
-            "box": box_symbol(), "tool": "tools/capture_all.py v5.4", **kw}
+            "box": box_symbol(), "tool": "tools/capture_all.py v5.5", **kw}
 
 
 # ── REST modes ─────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -303,8 +308,10 @@ async def _candles(session, symbols, interval, since, idle_s=20.0, max_s=600.0, 
                 continue
             base = (c.event_symbol or "").split("{", 1)[0]
             if base in got and c.time:
+                new_bar = int(c.time) not in got[base]
                 got[base][int(c.time)] = {k: getattr(c, k, None) for k in CANDLE_FIELDS}
-                last = loop.time()
+                if new_bar:                      # v5.5: a live update of a known bar does not hold the stream open
+                    last = loop.time()
     return got
 
 
