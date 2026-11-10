@@ -1,6 +1,19 @@
 #!/usr/bin/env python3
 """
-tools/capture_all.py  v5.5 — EVERYTHING TASTYTRADE SERVES THAT THE FEED DOES NOT ALREADY KEEP, INTO THE WAREHOUSE.
+tools/capture_all.py  v5.6 — EVERYTHING TASTYTRADE SERVES THAT THE FEED DOES NOT ALREADY KEEP, INTO THE WAREHOUSE.
+v5.6  2026-11-09  OTV5 r104 (CAP.7) — THE DAY'S OPTION CANDLES, EVERY NIGHT, BEFORE TASTYTRADE ROLLS THEM OFF. dxFeed serves
+      option Candle history for expired contracts, but only for a rolling window (measured 11-09 on the AMD/UNH boxes):
+      1m from 09-27 (about 6 weeks), 5m from 08-11 (about 90 days), 1h from 07-01 or earlier, 1d the contract's life;
+      and the `price=bid` / `price=ask` / `price=mark` candles - the ONLY historical quote series there is (no
+      historical NBBO or greeks exist) - from about 10-27, two weeks. raw/chain_snapshots keeps the front chain every 5
+      minutes; nothing kept each contract's 1-minute bars or its quote candles, so every day not pulled was lost for
+      good. NEW mode `option-candles` (started by the conductor right after candles-recent, dtp r545, and by self_close):
+      the box's own front-expiry chain for each day not yet captured (from the bot's data/chain_snapshots/<day>/,
+      strikes within 15% of that morning's underlying), every series in OPT_SERIES, the most perishable first, at most
+      OPT_CHUNK symbols per stream ("Your subscription size for event type 'Candle' is too big" above about 100, 11-09).
+      Progress is kept per (day, series) in data/option_candles_state.json, so a run the takedown cuts short resumes at
+      the next close. Key pulled=<ET day>_opt.csv.gz: never the `candles` key (the 11-09 backfill wrote
+      pulled=<day>.csv.gz for option symbols) and never `_recent` - gate O3, the CAP.6 lesson.
 v5.5  2026-11-08  OTV5 r102 (CAP.6) — A LIVE MARKET NEVER LET A STREAM END. _candles ended a pull after idle_s with no
       event, but every live update of the forming bar reset that clock: on the SPX box on a Sunday evening (CME futures
       open from 18:00 ET) the stream ran on to max_s (600 s) for EACH of the four lookbacks - 9 minutes and still in the
@@ -68,8 +81,13 @@ conductor and by self_close after the close):
            while either is active): the box's own symbol, plus CONTEXT and the front futures on the SPX box.
            -> raw/candles_full/interval=<1d|1d_eth|1h|5m>/sym=<SYM>/pulled=<ET day>_recent.csv.gz (v5.3: never the
               `candles` key, which r98-r99 shared and so overwrote the backfill)
+  option-candles  (v5.6) every Candle field for each contract of the box's front-expiry chain, strikes within 15% of
+           spot, for each day not yet captured: 1m quote candles (bid / ask / mark), then 1m, 5m, 1h, 1d trade candles,
+           with the bot and the feed stopped (refuses like candles-recent).
+           -> raw/candles_full/interval=<1m_bid|1m_ask|1m_mark|1m|5m|1h|1d>/sym=.<ROOT><YYMMDD><C|P><strike>/
+              pulled=<ET day>_opt.csv.gz, and one run manifest -> raw/option_candles_runs/dt=<ET day>/sym=<box>/HHMMSS.json.gz
 
-Usage:  python3 tools/capture_all.py metrics|chain|events|candles-recent [--symbols A,B] [--max-dte N] [--dry-run] [--force]
+Usage:  python3 tools/capture_all.py metrics|chain|events|candles-recent|option-candles [--symbols A,B] [--max-dte N] [--dry-run] [--force]
         python3 tools/capture_all.py candles --symbols SPX,VIX --interval 1d --since 2015-01-01
 """
 from __future__ import annotations
@@ -107,6 +125,17 @@ CONTEXT = ["VIX", "VIX9D", "VVIX", "VIX3M", "SPY", "QQQ", "IWM", "DIA", "TLT", "
 RECENT = (("1d", 21, False, "1d"), ("1d", 21, True, "1d_eth"), ("1h", 5, False, "1h"), ("5m", 3, False, "5m"))
 # Front-month futures the SPX box pulls (the 11-08 backfill's set), resolved to streamer symbols each run.
 FUT_PRODUCTS = ("ES", "NQ", "RTY", "YM", "ZN", "ZB", "CL", "GC", "6E", "VX")
+# option-candles (v5.6): (interval string asked, stored label), most perishable first - the quote candles keep about two
+# weeks, 1m about six, 5m about ninety days, 1h and 1d longer (measured 11-09).
+OPT_SERIES = (("1m,price=bid", "1m_bid"), ("1m,price=ask", "1m_ask"), ("1m,price=mark", "1m_mark"),
+              ("1m", "1m"), ("5m", "5m"), ("1h", "1h"), ("1d", "1d"))
+OPT_CHUNK = 60                  # symbols per stream: above about 100 dxFeed refuses the subscription (11-09)
+OPT_BAND = 0.15                 # strikes within 15% of the morning's underlying
+OPT_CATCHUP_DAYS = 12           # a day missed is retried for this many calendar days (the quote candles keep about 14)
+OPT_IDLE_S = 8.0                # history arrives in one burst; a closed contract has no live updates
+OPT_STREAMS = 2                 # streams at once: the bot and the feed hold two sessions per box all day; both are stopped
+OPT_STATE = os.path.join(ROOT, "data", "option_candles_state.json")
+CHAIN_DIR = os.path.join(ROOT, "data", "chain_snapshots")
 
 
 def _load_service_env() -> int:
@@ -181,7 +210,7 @@ def gz_json(obj) -> bytes:
 
 def meta(mode: str, **kw) -> dict:
     return {"source": "tastytrade", "mode": mode, "captured_at": datetime.now(timezone.utc).isoformat(),
-            "box": box_symbol(), "tool": "tools/capture_all.py v5.5", **kw}
+            "box": box_symbol(), "tool": "tools/capture_all.py v5.6", **kw}
 
 
 # ── REST modes ─────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -402,9 +431,131 @@ def do_candles_recent(session, symbols, dry, futures=False):
                                 sink=lambda label, g: _write_candles(g, label, dry, suffix="_recent")))
 
 
+# ── option candles (v5.6) ──────────────────────────────────────────────────────────────────────────────────────────
+def occ_to_streamer(occ: str) -> str:
+    """'UNH   261113C00395000' -> '.UNH261113C395'; 'SPXW  261109P07402500' -> '.SPXW261109P7402.5'."""
+    root, ymd, cp, k = occ[:6].strip(), occ[6:12], occ[12], int(occ[13:]) / 1000
+    return f".{root}{ymd}{cp}{int(k) if k == int(k) else ('%g' % k)}"
+
+
+def front_chain(day, chain_dir=None, band=OPT_BAND):
+    """(expiry, [streamer symbols]) of the box's front-expiry chain on `day`, from the first snapshot the bot wrote
+    that day (data/chain_snapshots/<day>/<SYM>.jsonl.gz), strikes within `band` of its underlying. None when the day
+    has no snapshot (no session, or the box was down) - never guessed."""
+    d = os.path.join(chain_dir or CHAIN_DIR, str(day))
+    try:
+        files = sorted(f for f in os.listdir(d) if f.endswith(".jsonl.gz"))
+    except OSError:
+        return None
+    for f in files:
+        try:
+            with gzip.open(os.path.join(d, f), "rt") as fh:
+                for line in fh:
+                    rec = json.loads(line)
+                    u = float(rec.get("underlying") or 0)
+                    if not u or not rec.get("contracts"):
+                        continue
+                    syms = sorted({occ_to_streamer(c["occ"]) for c in rec["contracts"]
+                                   if c.get("occ") and abs(float(c.get("strike") or int(c["occ"][13:]) / 1000) - u)
+                                   <= band * u})
+                    return rec.get("expiry"), syms
+        except (OSError, ValueError, KeyError, EOFError):
+            continue
+    return None
+
+
+def _opt_state(path=None) -> dict:
+    try:
+        with open(path or OPT_STATE) as fh:
+            st = json.load(fh)
+        return st if isinstance(st.get("done"), dict) else {"done": {}}
+    except (OSError, ValueError, AttributeError):
+        return {"done": {}}
+
+
+def _opt_save(st, path=None):
+    path = path or OPT_STATE
+    st["done"] = {d: v for d, v in st["done"].items()
+                  if d >= str(et_now().date() - timedelta(days=OPT_CATCHUP_DAYS + 7))}
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path + ".tmp", "w") as fh:
+        json.dump(st, fh, indent=1, sort_keys=True)
+    os.replace(path + ".tmp", path)
+
+
+def option_plan(today, st, chain_dir=None):
+    """[(label, interval, since_day, [symbols], [days])] for every series still owed on a day in the catch-up window,
+    most perishable first. A contract on several owed days is asked ONCE from the earliest (one key per contract)."""
+    plan = []
+    chains = {}
+    for i in range(OPT_CATCHUP_DAYS, -1, -1):
+        day = str(today - timedelta(days=i))
+        fc = front_chain(day, chain_dir)
+        if fc:
+            chains[day] = fc[1]
+    for interval, label in OPT_SERIES:
+        owed = [d for d in sorted(chains) if label not in st["done"].get(d, [])]
+        if not owed:
+            continue
+        syms = sorted({s for d in owed for s in chains[d]})
+        if syms:
+            plan.append((label, interval, owed[0], syms, owed))
+    return plan
+
+
+async def _option_candles(session, plan, dry, st, state_path, streams=OPT_STREAMS):
+    """Every stream in ONE event loop (v5.2's lesson: a second asyncio.run binds the session's HTTP pool to a new loop
+    and the next stream fails). `streams` chunks at a time - never more sessions than the bot and the feed hold all day.
+    Each chunk is written as its stream ends; a series is marked done for its days only once every chunk is written."""
+    n = 0
+    summary = []
+    for label, interval, since_day, syms, days in plan:
+        t0 = time.time()
+        since = datetime.combine(date.fromisoformat(since_day), datetime.min.time(), tzinfo=timezone.utc)
+        parts = [syms[i:i + OPT_CHUNK] for i in range(0, len(syms), OPT_CHUNK)]
+        for j in range(0, len(parts), streams):
+            for got in await asyncio.gather(*(_candles(session, part, interval, since, idle_s=OPT_IDLE_S)
+                                              for part in parts[j:j + streams])):
+                _write_candles(got, label, dry, suffix="_opt")
+                n += sum(1 for v in got.values() if v)
+        if not dry:
+            for d in days:
+                st["done"].setdefault(d, [])
+                if label not in st["done"][d]:
+                    st["done"][d].append(label)
+            _opt_save(st, state_path)
+        summary.append({"label": label, "days": days, "contracts": len(syms), "seconds": round(time.time() - t0)})
+        print(f"OPTION-CANDLES {label} days={','.join(days)} contracts={len(syms)} s={time.time() - t0:.0f}", flush=True)
+    return n, summary
+
+
+def _opt_manifest(plan_summary, served, dry):
+    """One small object per run, so a reader (dtp morning_check) can tell a night that ran from one that never started
+    - the CAP.6 failure (11-09: candles-recent never started on any box, and nothing said so)."""
+    now = et_now()
+    key = f"raw/option_candles_runs/dt={now.date()}/sym={box_symbol()}/{now:%H%M%S}.json.gz"
+    return spool_put(key, gz_json({"meta": meta("option-candles"), "series": plan_summary,
+                                   "contracts_served": served}), dry)
+
+
+def do_option_candles(session, dry, today=None, chain_dir=None, state_path=None):
+    today = today or et_now().date()
+    st = _opt_state(state_path)
+    plan = option_plan(today, st, chain_dir)
+    if not plan:
+        print("OPTION-CANDLES nothing owed (no unsent day with a chain snapshot in the window)", flush=True)
+        _opt_manifest([], 0, dry)
+        return 0
+    served, summary = asyncio.run(_option_candles(session, plan, dry, st, state_path))
+    print(f"OPTION-CANDLES {_opt_manifest(summary, served, dry)} manifest series={len(summary)} served={served}",
+          flush=True)
+    return served
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("mode", choices=["metrics", "chain", "events", "candles", "candles-recent", "flush"])
+    ap.add_argument("mode", choices=["metrics", "chain", "events", "candles", "candles-recent", "option-candles",
+                                         "flush"])
     ap.add_argument("--force", action="store_true", help="candles-recent: run even while optionsbot / candle-feed run")
     ap.add_argument("--symbols", default="")
     ap.add_argument("--max-dte", type=int, default=None)
@@ -426,8 +577,8 @@ def main(argv=None) -> int:
         print(f"FLUSH re-put {flushed} spooled object(s)", flush=True)
     if a.mode == "flush":
         return 0
-    if a.mode == "candles-recent" and not a.force and streams_active():
-        print("CANDLES-RECENT SKIP optionsbot or candle-feed is active - no extra DXLink session beside them; a later "
+    if a.mode in ("candles-recent", "option-candles") and not a.force and streams_active():
+        print(f"{a.mode.upper()} SKIP optionsbot or candle-feed is active - no extra DXLink session beside them; a later "
               "run's lookback covers today", flush=True)
         return 0
     from data.tasty_client import get_session
@@ -446,6 +597,8 @@ def main(argv=None) -> int:
         if spx:
             syms = syms + [c for c in CONTEXT if c not in syms]
         do_candles_recent(session, syms, a.dry_run, futures=spx)
+    elif a.mode == "option-candles":
+        do_option_candles(session, a.dry_run)
     return 0
 
 

@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """
-warehouse/self_close.py  v5.4
+warehouse/self_close.py  v5.5
+v5.5  2026-11-09  OTV5 r104 (CAP.7) — STEP 2d: tools/capture_all.py option-candles, right after candles-recent, on a box
+      that closes itself (the conductor starts it on the boxes it closes, dtp r545). Bounded at 900 s; it never blocks
+      the halt past that, and a run cut short resumes at the next close (progress per day and series on the box).
 v5.4  2026-11-08  OTV5 r99 (CAP.6) — step 2c's reason restated: candles-recent needs optionsbot AND candle-feed stopped
       (measured: with the feed up, 10 of 13 boxes were refused at the user-session limit), and the r98 timer is gone; the
       conductor starts it on the boxes it closes (dtp r543), this step on a box that closes itself. No code change here.
@@ -223,6 +226,17 @@ def main(argv=None) -> int:
         _log("candles-recent: " + " | ".join(((r.stdout or "") + (r.stderr or "")).strip().splitlines()[-2:])[:300])
     except Exception as exc:                                    # noqa: BLE001
         _log(f"candles-recent skipped: {exc}")
+
+    # ── 2d. THE DAY'S OPTION CANDLES (r104 CAP.7) ──────────────────────────
+    # The same stopped-units moment; bounded, never blocks the halt past its bound. Progress is kept per day and series
+    # on the box, so a run cut short resumes at the next close.
+    try:
+        r = subprocess.run(["timeout", "--kill-after=10", "900", sys.executable,
+                            os.path.join(HERE, "tools", "capture_all.py"), "option-candles"],
+                           capture_output=True, text=True, timeout=930)
+        _log("option-candles: " + " | ".join(((r.stdout or "") + (r.stderr or "")).strip().splitlines()[-2:])[:300])
+    except Exception as exc:                                    # noqa: BLE001
+        _log(f"option-candles skipped: {exc}")
 
     # ── 3. trim expired local data ──────────────────────────────────────────
     # 🔑 HERE, AND NOWHERE ELSE, BECAUSE VERIFICATION HAS JUST SUCCEEDED. The

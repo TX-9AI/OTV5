@@ -1,6 +1,13 @@
 #!/usr/bin/env python3
 """
-tests/check_capture_all.py  v5.5
+tests/check_capture_all.py  v5.6
+v5.6  2026-11-09  OTV5 r104 (CAP.7) — option-candles: O1 OCC -> streamer symbols; O2 the front chain from the bot's own
+      snapshot, strikes within 15%, a day with none skipped; O3 NO-OVERWRITE: it writes pulled=<day>_opt only, never the
+      backfill's pulled=<day> or candles-recent's _recent (a backfill object in the store survives byte-identical);
+      O4 CHUNKING: never more than OPT_CHUNK symbols per stream and never more than OPT_STREAMS streams at once; O5 the
+      series in perishability order, the quote candles asked as "1m,price=bid/ask/mark"; O6 resume per (day, series):
+      a run killed mid-series keeps the finished series done and the next run asks only what is owed; O7 refuses while
+      a unit is active, and writes a run manifest; O8 every stream of a run in ONE event loop.
 v5.5  2026-11-08  OTV5 r102 (CAP.6) — I1: a live market's endless updates of the forming bar do not hold a pull open (the
       real _candles against a fake streamer: 3 history bars then updates of the last one forever -> ends after idle_s).
 v5.4  2026-11-08  OTV5 r101 (CAP.6) — L3: each lookback is written as soon as its stream ends (a run killed during the 5m
@@ -42,6 +49,7 @@ v5.0  2026-11-08  OTV5 r94 (CAP.1) — new. tools/capture_all.py records everyth
       market), with the newest version of that bar kept
   F1  pick_front / _front_futures: the active-month contract per product, else the nearest; none -> skipped, not guessed
   W1  on the SPX box candles-recent adds CONTEXT and the front futures (looked up in the same loop); elsewhere only its own
+  O1-O8  option-candles (v5.6): see the v5.6 line above
   R1  retention_purge: spool files older than 3 days are counted (dry) / removed (apply); fresh files and dirs untouched
 """
 from __future__ import annotations
@@ -87,7 +95,7 @@ def main() -> int:
                                                 "warehouse/self_close.py",
                                                 "tests/check_bootstrap.py")}
     pat = re.compile(r"capture_all|capture_spool|raw/market_metrics|raw/chain_rest|raw/chain_listing|"
-                     r"raw/corporate_events|raw/candles_full")
+                     r"raw/corporate_events|raw/candles_full|raw/option_candles_runs")
     hits = [os.path.relpath(p, ROOT) for p in _py_files() if p not in allowed and pat.search(open(p, errors="ignore").read())]
     check("C1 recording only: nothing else in the tree names capture_all, its spool or its prefixes", not hits, str(hits))
     src = open(os.path.join(ROOT, "tools", "capture_all.py")).read()
@@ -357,6 +365,122 @@ def main() -> int:
     bars = g.get("ES", {})
     check("I1 a live market's updates of a known bar do not hold the pull open (ends ~idle_s after the last new bar)",
           took < 3.0 and len(bars) == 3 and bars[1_900_000]["close"] > 3, f"took={took:.1f}s bars={sorted(bars)}")
+
+    # ── O1-O8 option-candles (v5.6) ──
+    o1 = (ca.occ_to_streamer("UNH   261113C00395000") == ".UNH261113C395"
+          and ca.occ_to_streamer("SPXW  261109P07402500") == ".SPXW261109P7402.5"
+          and ca.occ_to_streamer("AMD   260731C00367500") == ".AMD260731C367.5")
+    check("O1 OCC -> streamer symbol (whole, half and fractional strikes; SPXW root)", o1)
+    cdir = os.path.join(tmp, "chain_snapshots")
+    today_o = ca.et_now().date()
+    import datetime as _dt
+    d1, d2 = str(today_o - _dt.timedelta(days=3)), str(today_o)
+
+    def snap(day, expiry, under, strikes):
+        os.makedirs(os.path.join(cdir, day), exist_ok=True)
+        rec = {"expiry": expiry, "underlying": under,
+               "contracts": [{"occ": "UNH   %sC%08d" % (expiry[2:].replace("-", ""), int(k * 1000)), "strike": k}
+                             for k in strikes]
+                            + [{"occ": "UNH   %sP%08d" % (expiry[2:].replace("-", ""), int(k * 1000)), "strike": k}
+                               for k in strikes]}
+        with gzip.open(os.path.join(cdir, day, "UNH.jsonl.gz"), "wt") as fh:
+            fh.write(json.dumps(rec) + "\n")
+
+    e1 = str(today_o + _dt.timedelta(days=1))
+    snap(d1, e1, 100.0, [80, 86, 100, 114, 120])            # 80 and 120 are outside 15%
+    many = [100 + 0.25 * i for i in range(-56, 57)]          # 113 strikes x 2 = 226 contracts on d2 -> 4 chunks
+    snap(d2, e1, 100.0, many)
+    fc1 = ca.front_chain(d1, cdir)
+    tag = e1[2:].replace("-", "")
+    o2 = (fc1 == (e1, sorted([f".UNH{tag}{cp}{k}" for k in (86, 100, 114) for cp in "CP"]))
+          and ca.front_chain(str(today_o - _dt.timedelta(days=1)), cdir) is None)
+    check("O2 front chain from the bot's own first snapshot, strikes within 15%; a day with none -> None", o2, str(fc1))
+
+    oplog, loops_seen, live = [], set(), {"now": 0, "max": 0}
+
+    async def fake_opt_candles(_s, symbols, interval, since, idle_s=20.0, max_s=600.0, eth=False):
+        loops_seen.add(id(asyncio.get_running_loop()))
+        live["now"] += 1
+        live["max"] = max(live["max"], live["now"])
+        await asyncio.sleep(0.01)
+        live["now"] -= 1
+        oplog.append((interval, len(symbols), since.date()))
+        if kill_at and interval == kill_at:
+            raise RuntimeError("takedown")
+        return {sym: {1793836800000: {k: (sym if k == "event_symbol" else 1793836800000 if k == "time" else 1.0)
+                                      for k in ca.CANDLE_FIELDS}} for sym in symbols}
+
+    ca._candles = fake_opt_candles
+    store = {}
+
+    class KeepO:
+        def put_object(self, **kw):
+            store[kw["Key"]] = kw["Body"]
+
+    fake.client = lambda *_a, **_k: KeepO()
+    any_sym = f".UNH{tag}C100"
+    backfill_key = f"raw/candles_full/interval=1m/sym={any_sym}/pulled={today_o}.csv.gz"
+    recent_key = f"raw/candles_full/interval=1m/sym={any_sym}/pulled={today_o}_recent.csv.gz"
+    store[backfill_key], store[recent_key] = b"BACKFILL", b"RECENT"
+    spath = os.path.join(tmp, "optstate.json")
+    real_cd, real_sp = ca.CHAIN_DIR, ca.OPT_STATE
+    ca.CHAIN_DIR, ca.OPT_STATE = cdir, spath
+    kill_at = None
+    ca.streams_active = lambda: False
+    rc_o = ca.main(["option-candles"])
+    opt_keys = [k for k in store if k not in (backfill_key, recent_key)]
+    data_keys = [k for k in opt_keys if k.startswith("raw/candles_full/")]
+    o3 = (rc_o == 0 and store[backfill_key] == b"BACKFILL" and store[recent_key] == b"RECENT" and data_keys
+          and all(k.endswith(f"/pulled={today_o}_opt.csv.gz") for k in data_keys))
+    check("O3 NO-OVERWRITE: option-candles writes only pulled=<day>_opt; a same-day backfill and _recent object survive",
+          o3, str(data_keys[:2]))
+    sizes = [n for _iv, n, _d in oplog]
+    check("O4 CHUNKING: at most OPT_CHUNK (60) symbols per stream, at most OPT_STREAMS (2) streams at once "
+          "(226 owed contracts -> 60+60+60+46, never more than 2 streams live)",
+          bool(sizes) and max(sizes) <= 60 and live["max"] == 2 and sorted(sizes[:4]) == [46, 60, 60, 60], f"sizes={sizes[:6]} max_live={live['max']}")
+    order = list(dict.fromkeys(iv for iv, _n, _d in oplog))
+    check("O5 series in perishability order; quote candles asked as 1m,price=bid/ask/mark; since = the earliest owed day",
+          order == ["1m,price=bid", "1m,price=ask", "1m,price=mark", "1m", "5m", "1h", "1d"]
+          and all(d == _dt.date.fromisoformat(d1) for _iv, _n, d in oplog)
+          and sorted({re.search(r"interval=([^/]+)/", k).group(1) for k in data_keys})
+          == sorted(["1m_bid", "1m_ask", "1m_mark", "1m", "5m", "1h", "1d"]), str(order))
+    st1 = json.load(open(spath))
+    # O6: a fresh state, killed in the 1m stream -> bid/ask/mark done; next run asks only 1m..1d; then nothing
+    os.remove(spath)
+    oplog.clear()
+    kill_at = "1m"
+    try:
+        ca.main(["option-candles"])
+        killed = False
+    except RuntimeError:
+        killed = True
+    st_k = json.load(open(spath))
+    kill_at = None
+    oplog.clear()
+    ca.main(["option-candles"])
+    second = list(dict.fromkeys(iv for iv, _n, _d in oplog))
+    oplog.clear()
+    store.clear()
+    ca.main(["option-candles"])
+    third = list(oplog)
+    o6 = (killed and all(sorted(st_k["done"][d]) == ["1m_ask", "1m_bid", "1m_mark"] for d in (d1, d2))
+          and second == ["1m", "5m", "1h", "1d"] and third == []
+          and all(len(st1["done"][d]) == 7 for d in (d1, d2)))
+    check("O6 resume per (day, series): killed in 1m keeps bid/ask/mark done; the next run asks 1m..1d only; then nothing",
+          o6, f"killed={killed} st={st_k} second={second} third={len(third)}")
+    man = [k for k in store if k.startswith("raw/option_candles_runs/")]
+    ca.streams_active = lambda: True
+    oplog.clear()
+    rc_r = ca.main(["option-candles"])
+    check("O7 refuses (no stream) while optionsbot or candle-feed is active; a run with nothing owed still writes its "
+          "manifest raw/option_candles_runs/dt=<day>/sym=<box>/",
+          rc_r == 0 and oplog == [] and len(man) == 1 and f"raw/option_candles_runs/dt={today_o}/sym={ca.box_symbol()}/" in man[0],
+          f"rc={rc_r} oplog={oplog} man={man}")
+    check("O8 every stream of a run in ONE event loop (no second asyncio.run)",
+          len(loops_seen) <= 4 and "asyncio.run(_option_candles(" in src
+          and src.count("asyncio.run(", src.index("def front_chain"), src.index("def main(")) == 1, str(len(loops_seen)))
+    ca.CHAIN_DIR, ca.OPT_STATE = real_cd, real_sp
+    ca._candles = real_candles
 
     # ── R1 ──
     import warehouse.retention_purge as rp
