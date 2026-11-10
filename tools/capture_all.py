@@ -1,6 +1,14 @@
 #!/usr/bin/env python3
 """
-tools/capture_all.py  v5.7 — EVERYTHING TASTYTRADE SERVES THAT THE FEED DOES NOT ALREADY KEEP, INTO THE WAREHOUSE.
+tools/capture_all.py  v5.8 — EVERYTHING TASTYTRADE SERVES THAT THE FEED DOES NOT ALREADY KEEP, INTO THE WAREHOUSE.
+v5.8  2026-11-10  OTV5 r106 (CAP.8) — A FAILED CHAIN BATCH IS ASKED AGAIN, AND WHY IT FAILED IS KEPT. Measured in the
+      warehouse 11-09 and 11-10: every box, every chain run (09:42 / 12:30 / 16:15) lost 2-21 of its by-type batches of
+      100 (UNH 4-10 of 19; AMD 12-21 of 69; CVX 300 of 1,188 options at 12:30 on 11-10), a different count each run on the
+      same symbol list, so not a bad symbol: transient refusals, with all 14 boxes asking one account's REST budget in the
+      same minute beside the bots' own calls. do_chain caught every exception, counted it and moved on - no retry, no
+      record of what it was. Now a failed batch waits CHAIN_RETRY_S x attempt and is asked again up to CHAIN_RETRIES
+      times; the chain_rest meta keeps batches_failed (after retries), batches_retried and errors (exception text -> count,
+      200 chars). The timers are unchanged.
 v5.7  2026-11-09  OTV5 r105 (CAP.7) — ONE STREAM PER BOX, AND A REFUSED SESSION WAITS ITS TURN. Measured on the fleet the
       night r104 landed: with 8 boxes running option-candles at OPT_STREAMS = 2 beside 6 backfill streams, NVDA's run
       died "The number of user sessions has exceeded the configured limit" - the account's DXLink sessions are shared by
@@ -121,6 +129,8 @@ BUCKET = os.environ.get("OT_S3_BUCKET", "vertigo-warehouse-tx9ai")
 SPOOL = os.path.join(ROOT, "data", "capture_spool")
 BATCH = 100                     # /market-data/by-type: combined limit across all types is 100
 PAUSE_S = 0.5                   # between REST batches: the bot's own REST calls share the account's rate budget
+CHAIN_RETRIES = 4               # v5.8: a failed by-type batch is asked again up to this many times ...
+CHAIN_RETRY_S = 2.0             # ... after CHAIN_RETRY_S x attempt seconds (2, 4, 6, 8: 20 s at most per batch)
 
 # Index underlyings are fetched as "index" in /market-data/by-type and have no earnings / dividends.
 INDEXES = {"SPX", "VIX", "VIX9D", "VVIX", "VIX3M", "NDX", "RUT", "XSP"}
@@ -219,7 +229,7 @@ def gz_json(obj) -> bytes:
 
 def meta(mode: str, **kw) -> dict:
     return {"source": "tastytrade", "mode": mode, "captured_at": datetime.now(timezone.utc).isoformat(),
-            "box": box_symbol(), "tool": "tools/capture_all.py v5.7", **kw}
+            "box": box_symbol(), "tool": "tools/capture_all.py v5.8", **kw}
 
 
 # ── REST modes ─────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -270,14 +280,22 @@ def do_chain(session, symbols, max_dte, dry):
         lkey = f"raw/chain_listing/dt={now.date()}/sym={sym}/chain.json.gz"
         spool_put(lkey, gz_json({"meta": meta("chain_listing", symbol=sym), "response": chain}), dry)
         opts = _option_symbols(chain, max_dte)
-        rows, fails = [], 0
+        rows, fails, retried, errors = [], 0, 0, {}
         for i in range(0, len(opts), BATCH):
             part = opts[i:i + BATCH]
-            try:
-                d = _get(session, "/market-data/by-type", {"equity-option": part})
-                rows.extend((d or {}).get("items", []))
-            except Exception:
-                fails += 1
+            for attempt in range(CHAIN_RETRIES + 1):
+                try:
+                    d = _get(session, "/market-data/by-type", {"equity-option": part})
+                    rows.extend((d or {}).get("items", []))
+                    break
+                except Exception as e:
+                    why = f"{type(e).__name__}: {e}"[:200]
+                    errors[why] = errors.get(why, 0) + 1
+                    if attempt == CHAIN_RETRIES:
+                        fails += 1
+                        break
+                    retried += 1
+                    time.sleep(CHAIN_RETRY_S * (attempt + 1))
             time.sleep(PAUSE_S)
         # the underlying's own quote rides along
         try:
@@ -288,11 +306,12 @@ def do_chain(session, symbols, max_dte, dry):
             under = []
         key = f"raw/chain_rest/dt={now.date()}/sym={sym}/{now:%H%M%S}.json.gz"
         body = gz_json({"meta": meta("chain", symbol=sym, max_dte=max_dte, asked=len(opts), batches_failed=fails,
+                                     batches_retried=retried, errors=errors,
                                      seconds=round(time.time() - t0, 1)),
                         "underlying": under, "options": rows})
         r = spool_put(key, body, dry)
         total += len(rows)
-        print(f"CHAIN {r} {sym} asked={len(opts)} got={len(rows)} failed_batches={fails} "
+        print(f"CHAIN {r} {sym} asked={len(opts)} got={len(rows)} failed_batches={fails} retried={retried} "
               f"bytes={len(body)} s={time.time() - t0:.1f}", flush=True)
     return total
 

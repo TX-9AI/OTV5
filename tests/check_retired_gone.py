@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """
-tests/check_retired_gone.py  v5.3
+tests/check_retired_gone.py  v5.4
+v5.4  2026-11-10  OTV5 r106 - G13/G13b: tools/strip_retired_env.sh v5.4 on a unit the caller cannot read: with sudo refused it
+      says "UNREADABLE" and exits 1 (never "clean" / "parse FAILED"); with sudo -n it reads the unit and counts the key.
 v5.3  2026-11-09  OTV5 r103 (RETIRE.5 step 2) - THE GEX PIN BUTTERFLY IS GONE TOO. The operator, 2026-11-08: "I concur on both, in that
       order". G1/G2 add strategy/gex_pin_butterfly.py and its names (GEXPinButterflyStrategy, _gex_bfly_strategy,
       _attempt_butterfly, mark_pin_played); G3 moves GEXPinButterfly to the removed trades; G4 adds GEX_BFLY_* /
@@ -320,6 +322,30 @@ b5 = [l for l in open(unit5).read().split("\n") if l]
 check("G12 the GEX fly keys (OT_GEX_BUTTERFLY, OT_BFLY_*, OT_GEX_BFLY_*) are stripped; OT_TR_BFLY_* and the rest kept",
       run7.returncode == 0 and b5 == KEEP5 + ["ExecStart=/bin/true"] and "removed 4 retired line(s)" in run7.stdout,
       run7.stdout.strip())
+
+# ── G13 (r106): a unit the caller cannot read is read through sudo -n; a refused sudo is said loudly and exits 1 ─────
+unit6 = os.path.join(_SCR, "optionsbot_root.service")
+open(unit6, "w").write('[Service]\nEnvironment="OT_GEX_BUTTERFLY=0"\nEnvironment="OT_RISK_USD=1050"\nExecStart=/bin/true\n')
+_shim = os.path.join(_SCR, "shim_nosudo"); os.makedirs(_shim, exist_ok=True)
+open(os.path.join(_shim, "sudo"), "w").write("#!/bin/sh\nexit 1\n"); os.chmod(os.path.join(_shim, "sudo"), 0o755)
+_shim2 = os.path.join(_SCR, "shim_sudo"); os.makedirs(_shim2, exist_ok=True)
+# a sudo that runs its command after dropping -n (stands in for root: the test user owns the file and restores read)
+open(os.path.join(_shim2, "sudo"), "w").write('#!/bin/sh\n[ "$1" = "-n" ] && shift\nchmod u+r "$2" 2>/dev/null; "$@"; r=$?; '
+                                              'chmod 000 "$2" 2>/dev/null; exit $r\n')
+os.chmod(os.path.join(_shim2, "sudo"), 0o755)
+os.chmod(unit6, 0o000)
+_unreadable = not os.access(unit6, os.R_OK)          # root (or CAP_DAC_OVERRIDE) reads anything: then G13 cannot be posed
+envn = dict(env, PATH=_shim + os.pathsep + env.get("PATH", os.environ.get("PATH", "")))
+run8 = subprocess.run(["bash", tool, "--check", unit6], capture_output=True, text=True, env=envn)
+check("G13 an unreadable unit with sudo refused: 'UNREADABLE' and rc 1, never 'clean' or 'parse FAILED'",
+      (not _unreadable) or (run8.returncode == 1 and "UNREADABLE as" in run8.stdout and "clean" not in run8.stdout
+                            and "parse FAILED" not in run8.stdout), run8.stdout.strip())
+envs = dict(env, PATH=_shim2 + os.pathsep + env.get("PATH", os.environ.get("PATH", "")))
+run9 = subprocess.run(["bash", tool, "--check", unit6], capture_output=True, text=True, env=envs)
+check("G13b an unreadable unit is read through sudo -n: the retired key is counted, rc 0",
+      (not _unreadable) or (run9.returncode == 0 and "1 retired line(s) would go: OT_GEX_BUTTERFLY" in run9.stdout),
+      run9.stdout.strip())
+os.chmod(unit6, 0o600)
 
 print()
 if FAIL:

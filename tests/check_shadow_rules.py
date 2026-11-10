@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """
-tests/check_shadow_rules.py  v5.1
+tests/check_shadow_rules.py  v5.2
+v5.2  2026-11-10  OTV5 r106 - S2: decisions and shadow rows are counted over settled ticks (a tick committed between the
+      two SELECTs no longer reads as a missing row, 11-09 AVGO 49/48); S1 reads yesterday so it passes at any hour.
 v5.1  2026-11-08  OTV5 r95 (CHK.13) - G1: shadow_rules.GATES names every frozen constant FOUNDATIONAL (check_gates was red
       r90-r94 because the module declared none).
 v5.0  2026-11-08  OTV5 r90 (SHADOW.1) - THE TWO LOG-ONLY RULES RECORD ON EVERY DECISION, MATCH THEIR STUDIES, AND
@@ -23,6 +25,7 @@ v5.0  2026-11-08  OTV5 r90 (SHADOW.1) - THE TWO LOG-ONLY RULES RECORD ON EVERY D
       row; a first hour refused at gate_g still carries it; signal / verdict / reason identical on, raising, removed
   L1  PARK logs one line per day and direction (a repeated tick writes its row but no second line)
   S1  tools/shadow_rule_status.py: GREEN when every decision has its row and line; RED when a decision's row is missing
+  S2  tools/shadow_rule_status.py v5.1: an unsettled tick (younger than SETTLE_S) is not a missing row; a settled one is RED
   G1  shadow_rules.GATES declares HUNT_OR_EM_THRESHOLD, OR_BARS, SMA_N, SMA_LAG, SMA_MIN_CLOSES, each FOUNDATIONAL
   C1  no env knob and no configure item: shadow_rules.py reads no os.environ; config.py names no SHADOW key
 Run:  python3 tests/check_shadow_rules.py
@@ -36,7 +39,7 @@ import sys
 import tempfile
 import time
 import types
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -315,7 +318,11 @@ def main():
     c = sqlite3.connect(sd)
     c.execute("CREATE TABLE plan_tick (ts_epoch REAL, symbol TEXT, strategy TEXT, verdict TEXT)")
     c.execute("CREATE TABLE plan_check (ts_epoch REAL, symbol TEXT, strategy TEXT, check_name TEXT, note TEXT)")
-    t0 = datetime.now(ET).replace(hour=9, minute=40, second=0, microsecond=0).timestamp()
+    # v5.1: yesterday, so every row is settled whatever time of day the gate runs (the tool counts only ticks
+    # older than SETTLE_S; today's 10:40 row is still in the future before 10:40)
+    _yd = datetime.now(ET) - timedelta(days=1)
+    _day = _yd.strftime("%Y-%m-%d")
+    t0 = _yd.replace(hour=9, minute=40, second=0, microsecond=0).timestamp()
     c.execute("INSERT INTO plan_tick VALUES (?,?,?,?)", (t0, "NVDA", "LiquidityHunt", "TAKE"))
     c.execute("INSERT INTO plan_check VALUES (?,?,?,?,?)", (t0, "NVDA", "LiquidityHunt", "shadow_hunt_or_em", "keep ratio=1"))
     c.execute("INSERT INTO plan_check VALUES (?,?,?,?,?)", (t0 + 3600, "NVDA", "PARK", "gap", ""))
@@ -326,14 +333,42 @@ def main():
     open(lg, "w").write(f"{stamp} [INFO ] strategy.shadow_rules: [shadow-rule] HUNT_OR_EM NVDA A1 long keep x\n"
                         f"{stamp} [INFO ] strategy.shadow_rules: [shadow-rule] PARK_SMA50 NVDA long would_skip x\n")
     tool = os.path.join(ROOT, "tools", "shadow_rule_status.py")
-    g = subprocess.run([sys.executable, tool, "--derived", sd, "--log", lg], capture_output=True, text=True)
+    g = subprocess.run([sys.executable, tool, "--derived", sd, "--log", lg, "--day", _day], capture_output=True, text=True)
     c.execute("DELETE FROM plan_check WHERE check_name='shadow_park_sma50'")
     c.commit()
     c.close()
-    rr = subprocess.run([sys.executable, tool, "--derived", sd, "--log", lg], capture_output=True, text=True)
+    rr = subprocess.run([sys.executable, tool, "--derived", sd, "--log", lg, "--day", _day], capture_output=True, text=True)
     check("S1 status tool: GREEN (rc 0) when every decision has its row and line; RED (rc 1) when a PARK row is missing",
           g.returncode == 0 and '"status": "GREEN"' in g.stdout and rr.returncode == 1
           and "PARK_SMA50  RED" in rr.stdout, f"{g.returncode} {g.stdout[-300:]} | {rr.returncode} {rr.stdout[-300:]}")
+
+    # ── S2 : an unsettled tick is not a missing row (AVGO 11-09 09:50: 49 decisions / 48 rows, a read between two
+    #         SELECTs while a tick committed); a settled decision without its row is still RED ─────────────────────────
+    sd2 = os.path.join(_TD, "status_race.db")
+    c = sqlite3.connect(sd2)
+    c.execute("CREATE TABLE plan_tick (ts_epoch REAL, symbol TEXT, strategy TEXT, verdict TEXT)")
+    c.execute("CREATE TABLE plan_check (ts_epoch REAL, symbol TEXT, strategy TEXT, check_name TEXT, note TEXT)")
+    _now = time.time()
+    _today = datetime.now(ET).strftime("%Y-%m-%d")
+    _old = _now - 120
+    c.execute("INSERT INTO plan_tick VALUES (?,?,?,?)", (_old, "AVGO", "LiquidityHunt", "TAKE"))
+    c.execute("INSERT INTO plan_check VALUES (?,?,?,?,?)", (_old, "AVGO", "LiquidityHunt", "shadow_hunt_or_em", "keep r=1"))
+    c.execute("INSERT INTO plan_tick VALUES (?,?,?,?)", (_now - 2, "AVGO", "LiquidityHunt", "TAKE"))   # row not yet written
+    c.commit()
+    lg2 = os.path.join(_TD, "status_race.log")
+    _st = datetime.fromtimestamp(_old).strftime("%Y-%m-%d %H:%M:%S")
+    open(lg2, "w").write(f"{_st} [INFO ] strategy.shadow_rules: [shadow-rule] HUNT_OR_EM AVGO A1 long keep x\n")
+    _since = datetime.fromtimestamp(_old - 60, ET).strftime("%H:%M")
+    _a = [sys.executable, tool, "--derived", sd2, "--log", lg2, "--day", _today, "--since", _since]
+    r_fresh = subprocess.run(_a, capture_output=True, text=True)
+    c.execute("INSERT INTO plan_tick VALUES (?,?,?,?)", (_now - 60, "AVGO", "LiquidityHunt", "TAKE"))  # settled, no row
+    c.commit()
+    c.close()
+    r_miss = subprocess.run(_a, capture_output=True, text=True)
+    check("S2 status tool: a decision younger than SETTLE_S without its row is not RED; a settled one is",
+          r_fresh.returncode == 0 and "HUNT_OR_EM  GREEN" in r_fresh.stdout
+          and r_miss.returncode == 1 and "HUNT_OR_EM  RED" in r_miss.stdout,
+          f"{r_fresh.returncode} {r_fresh.stdout[-300:]} | {r_miss.returncode} {r_miss.stdout[-300:]}")
 
     # ── G1 : WA 36 gate declaration ──────────────────────────────────────────────────────────────────────────────
     from strategy import shadow_rules as _SRG

@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
 # ==========================================================================
-# tools/strip_retired_env.sh  v5.3
+# tools/strip_retired_env.sh  v5.4
+# v5.4  2026-11-10  OTV5 r106 - A UNIT THE CALLER CANNOT READ IS READ THROUGH sudo -n, AND IF THAT IS REFUSED THE RUN SAYS SO
+#       AND EXITS 1. Measured 11-09 (r103 fleet update): the boxes' optionsbot.service is root-only (0600), the tool ran as
+#       ubuntu, python's open() failed and the line read "parse FAILED - unit left as it was", which looked like a quoting
+#       problem in the unit and hid that nothing had been read. Now the unit is copied with `sudo -n cat` into a private
+#       temp file (mode 0600, removed after) when it is not readable; a refused sudo prints "UNREADABLE as <user>" and
+#       counts as a failure (rc 1). Still names and counts only, never a value.
 # v5.3  2026-11-09  OTV5 r103 (RETIRE.5 step 2) - THE GEX PIN BUTTERFLY'S KEYS JOIN THE LIST. The operator, 2026-11-08: "I concur
 #       on both, in that order". OT_GEX_BUTTERFLY (its switch), OT_BFLY_* (its debit-gate dials) and OT_GEX_BFLY_* (its wing
 #       dial) are read by nothing after r103. The readiness track's OT_TR_BFLY_* knobs are NOT in the family (still read).
@@ -98,6 +104,14 @@ sys.exit(2 if bad else 0)
 PY
 }
 
+# _read UNIT: print the path of a readable copy of UNIT - UNIT itself when readable, else a 0600 temp copy made through
+# sudo -n (the caller removes it). Exit 1, printing nothing, when the unit cannot be read either way.
+_read() {
+    if [ -r "$1" ]; then echo "$1"; return 0; fi
+    local t; t="$(umask 077; mktemp)" || return 1
+    if sudo -n cat "$1" > "$t" 2>/dev/null; then echo "$t"; return 0; fi
+    rm -f "$t"; return 1
+}
 rc=0
 changed=0
 for unit in "$@"; do
@@ -105,8 +119,12 @@ for unit in "$@"; do
         echo "STRIP $unit: not present - nothing to do"
         continue
     fi
+    if ! src="$(_read "$unit")"; then
+        echo "STRIP $unit: UNREADABLE as $(id -un) and sudo -n refused - NOTHING CHECKED"; rc=1; continue
+    fi
     tmp="$(mktemp)"
-    res="$(_plan "$unit" "$tmp")"; prc=$?
+    res="$(_plan "$src" "$tmp")"; prc=$?
+    [ "$src" != "$unit" ] && rm -f "$src"
     n="${res%% *}"; keys="${res#* }"; [ "$n" = "$res" ] && keys=""
     n="${n:-0}"
     if [ "$prc" = "2" ]; then echo "STRIP $unit: a line could not be parsed - left as it was"; rc=1; fi
@@ -130,7 +148,7 @@ for unit in "$@"; do
         echo "STRIP $unit: edit FAILED - restore from $bk"; rm -f "$tmp"; rc=1; continue
     fi
     rm -f "$tmp"
-    left="$(_plan "$unit" /dev/null)"; left="${left%% *}"
+    left=""; if src="$(_read "$unit")"; then left="$(_plan "$src" /dev/null)"; left="${left%% *}"; [ "$src" != "$unit" ] && rm -f "$src"; fi
     echo "STRIP $unit: removed $n retired line(s): $keys (left ${left:-0}; backup $bk)"
     changed=1
 done

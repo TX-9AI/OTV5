@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 """
-tools/shadow_rule_status.py  v5.0
+tools/shadow_rule_status.py  v5.1
+v5.1  2026-11-09  THE COUNT IS TAKEN OVER SETTLED TICKS. Decisions and shadow rows were counted in separate SELECTs, so a
+      tick committing between them read as a missing row (AVGO 09:50 ET, 49 decisions / 48 rows, 50/50 a minute
+      later). Both counts now stop at now - SETTLE_S (30 s, two ticks); a silent rule is still RED on its first
+      settled decision.
 v5.0  2026-11-08  OTV5 r90 (SHADOW.1) - IS EACH LOG-ONLY RULE REALLY LOGGING? The operator, 2026-11-08: "once we start
       trading on Monday I want immediate feedback that it's really logging" (the TCS shadow wrote nothing for a week).
       ON A BOX (default): reads the derived store and bot.log READ-ONLY and prints, since today's 09:30 ET, per rule
@@ -20,8 +24,10 @@ import os
 import sqlite3
 import subprocess
 import sys
+import time
 from datetime import datetime, timezone
 
+SETTLE_S = 30.0   # v5.1: two ticks; a decision younger than this may not have its row committed yet
 RULES = {"HUNT_OR_EM": "shadow_hunt_or_em", "PARK_SMA50": "shadow_park_sma50"}
 
 
@@ -62,6 +68,10 @@ def _log_path() -> str:
 
 def box_status(day: str, since_hm: str, derived: str, logf: str) -> dict:
     t0 = _since_epoch(day, since_hm)
+    # v5.1: a decision and its shadow row land in the same tick but this reader counts them in separate SELECTs; a
+    # tick committed between the two made decisions = rows + 1 (AVGO 11-09 09:50: 49 vs 48, 50/50 a minute later -
+    # a false RED). Count only what is SETTLED: rows and decisions stamped before now - SETTLE_S (one tick is 15 s).
+    t1 = min(time.time(), _since_epoch(day, "23:59")) - SETTLE_S
     out = {"symbol": "", "day": day, "since": since_hm, "rules": {}, "errors": []}
     rows, decisions = {r: [] for r in RULES}, {r: 0 for r in RULES}
     try:
@@ -69,13 +79,13 @@ def box_status(day: str, since_hm: str, derived: str, logf: str) -> dict:
         try:
             for rule, name in RULES.items():
                 rows[rule] = [r[0] or "" for r in c.execute(
-                    "SELECT note FROM plan_check WHERE check_name=? AND ts_epoch>=?", (name, t0))]
+                    "SELECT note FROM plan_check WHERE check_name=? AND ts_epoch>=? AND ts_epoch<?", (name, t0, t1))]
             decisions["HUNT_OR_EM"] = c.execute(
                 "SELECT COUNT(*) FROM plan_tick WHERE strategy='LiquidityHunt' AND verdict IN ('TAKE','LOG-ONLY') "
-                "AND ts_epoch>=?", (t0,)).fetchone()[0]
+                "AND ts_epoch>=? AND ts_epoch<?", (t0, t1)).fetchone()[0]
             decisions["PARK_SMA50"] = c.execute(
-                "SELECT COUNT(*) FROM plan_check WHERE strategy='PARK' AND check_name='gap' AND ts_epoch>=?",
-                (t0,)).fetchone()[0]
+                "SELECT COUNT(*) FROM plan_check WHERE strategy='PARK' AND check_name='gap' AND ts_epoch>=? "
+                "AND ts_epoch<?", (t0, t1)).fetchone()[0]
             s = c.execute("SELECT symbol FROM plan_tick WHERE ts_epoch>=? LIMIT 1", (t0,)).fetchone()
             out["symbol"] = s[0] if s else ""
         finally:

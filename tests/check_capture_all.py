@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """
-tests/check_capture_all.py  v5.7
+tests/check_capture_all.py  v5.8
+v5.8  2026-11-10  OTV5 r106 (CAP.8) — B2 a by-type chain batch refused twice is asked again and served (batches_retried,
+      errors kept); B3 a batch failing every attempt counts once in batches_failed, the rest kept.
 v5.7  2026-11-09  OTV5 r105 (CAP.7) — O4 one stream per box (OPT_STREAMS = 1: the session limit is shared by 14 boxes);
       O9 a stream refused for the user-session limit (nested in an ExceptionGroup, as the streamer raises it) is retried
       and the run completes; any other error is not retried.
@@ -39,6 +41,8 @@ v5.0  2026-11-08  OTV5 r94 (CAP.1) — new. tools/capture_all.py records everyth
       listing -> raw/chain_listing/...; events -> raw/corporate_events/kind=/sym=/pulled=
   K2  the RAW response is stored whole: a field TastyTrade adds tomorrow survives the round trip (no model, no column list)
   B1  chain batches are at most 100 symbols (the by-type combined limit) and every option of every expiry is asked
+  B2  (r106) a by-type batch refused (here twice) is asked again after CHAIN_RETRY_S x attempt; meta keeps batches_retried
+      and errors (text -> count). B3 a batch failing every attempt counts once in batches_failed; the others are kept.
       when --max-dte is not given; --max-dte drops only the later expiries
   T1  the installer writes three timers at the documented times (REST modes), MemoryMax and idle IO set, and removes
       r98's optbot-capture-candles-recent unit where present
@@ -204,6 +208,45 @@ def main() -> int:
     asked45 = [s for path, p in calls if path == "/market-data/by-type" and "equity-option" in p for s in p["equity-option"]]
     check("B1b --max-dte 45 drops only the 2027 expiry", len(asked45) == 240 and not any(s.startswith("L") for s in asked45),
           str(len(asked45)))
+
+    # ── B2 / B3 (r106, CAP.8): a failed by-type batch is asked again; one that keeps failing is counted and its error kept ──
+    ca.CHAIN_RETRY_S = 0
+    _base_get = ca._get
+    _seen = {}
+
+    def flaky_get(session, path, params=None):
+        if path == "/market-data/by-type" and "equity-option" in (params or {}):
+            first = params["equity-option"][0]
+            _seen[first] = _seen.get(first, 0) + 1
+            if _seen[first] <= 2:                                     # every batch refused twice, then served
+                raise RuntimeError("429 Too Many Requests")
+        return _base_get(session, path, params)
+
+    ca._get = flaky_get
+    stored.clear()
+    ca.do_chain(None, ["SPX"], None, False)
+    chf = next(v for k, v in stored.items() if "chain_rest" in k)
+    check("B2 a batch refused twice is asked again and served: all 300 options kept, batches_failed 0, the retries and the "
+          "error text recorded",
+          len(chf["options"]) == 300 and chf["meta"]["batches_failed"] == 0 and chf["meta"]["batches_retried"] == 6
+          and chf["meta"]["errors"] == {"RuntimeError: 429 Too Many Requests": 6},
+          json.dumps(chf["meta"])[:300])
+
+    def dead_get(session, path, params=None):
+        if path == "/market-data/by-type" and "equity-option" in (params or {}) and params["equity-option"][0] == _first:
+            raise RuntimeError("400 bad batch")
+        return _base_get(session, path, params)
+
+    _first = sorted(_seen)[0]
+    ca._get = dead_get
+    stored.clear()
+    ca.do_chain(None, ["SPX"], None, False)
+    chd = next(v for k, v in stored.items() if "chain_rest" in k)
+    check("B3 a batch that fails every attempt is counted once in batches_failed after CHAIN_RETRIES retries; the rest kept",
+          chd["meta"]["batches_failed"] == 1 and chd["meta"]["batches_retried"] == ca.CHAIN_RETRIES
+          and chd["meta"]["errors"] == {"RuntimeError: 400 bad batch": ca.CHAIN_RETRIES + 1} and len(chd["options"]) == 200,
+          json.dumps(chd["meta"])[:300])
+    ca._get = _base_get
 
     # ── T1 ──
     cal = re.findall(r"([\w-]+)\)\s+printf '([^']*)'", inst)
