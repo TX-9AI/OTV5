@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """
-tests/check_capture_all.py  v5.6
+tests/check_capture_all.py  v5.7
+v5.7  2026-11-09  OTV5 r105 (CAP.7) — O4 one stream per box (OPT_STREAMS = 1: the session limit is shared by 14 boxes);
+      O9 a stream refused for the user-session limit (nested in an ExceptionGroup, as the streamer raises it) is retried
+      and the run completes; any other error is not retried.
 v5.6  2026-11-09  OTV5 r104 (CAP.7) — option-candles: O1 OCC -> streamer symbols; O2 the front chain from the bot's own
       snapshot, strikes within 15%, a day with none skipped; O3 NO-OVERWRITE: it writes pulled=<day>_opt only, never the
       backfill's pulled=<day> or candles-recent's _recent (a backfill object in the store survives byte-identical);
@@ -435,9 +438,10 @@ def main() -> int:
     check("O3 NO-OVERWRITE: option-candles writes only pulled=<day>_opt; a same-day backfill and _recent object survive",
           o3, str(data_keys[:2]))
     sizes = [n for _iv, n, _d in oplog]
-    check("O4 CHUNKING: at most OPT_CHUNK (60) symbols per stream, at most OPT_STREAMS (2) streams at once "
-          "(226 owed contracts -> 60+60+60+46, never more than 2 streams live)",
-          bool(sizes) and max(sizes) <= 60 and live["max"] == 2 and sorted(sizes[:4]) == [46, 60, 60, 60], f"sizes={sizes[:6]} max_live={live['max']}")
+    check("O4 CHUNKING: at most OPT_CHUNK (60) symbols per stream, ONE stream at a time per box (the account's session "
+          "limit is shared by 14 boxes) (226 owed contracts -> 60+60+60+46)",
+          bool(sizes) and max(sizes) <= 60 and live["max"] == 1 and ca.OPT_STREAMS == 1
+          and sorted(sizes[:4]) == [46, 60, 60, 60], f"sizes={sizes[:6]} max_live={live['max']}")
     order = list(dict.fromkeys(iv for iv, _n, _d in oplog))
     check("O5 series in perishability order; quote candles asked as 1m,price=bid/ask/mark; since = the earliest owed day",
           order == ["1m,price=bid", "1m,price=ask", "1m,price=mark", "1m", "5m", "1h", "1d"]
@@ -479,6 +483,36 @@ def main() -> int:
     check("O8 every stream of a run in ONE event loop (no second asyncio.run)",
           len(loops_seen) <= 4 and "asyncio.run(_option_candles(" in src
           and src.count("asyncio.run(", src.index("def front_chain"), src.index("def main(")) == 1, str(len(loops_seen)))
+    # O9 — the session limit is retried; anything else is not
+    refusals = {"n": 0}
+    naps = []
+
+    class TTErr(Exception):
+        pass
+
+    async def refused_twice(_s, symbols, interval, since, idle_s=20.0, max_s=600.0, eth=False):
+        if refusals["n"] < 2:
+            refusals["n"] += 1
+            raise ExceptionGroup("unhandled errors in a TaskGroup", [TTErr(
+                "Fatal streamer error: The number of user sessions has exceeded the configured limit, user=x")])
+        return {sym: {1: {k: 1 for k in ca.CANDLE_FIELDS}} for sym in symbols}
+
+    async def nap(sec):
+        naps.append(sec)
+    ca._candles = refused_twice
+    got9 = asyncio.run(ca._pull_retrying(None, [".X1"], "1m", None, sleep=nap))
+
+    async def other(_s, symbols, interval, since, idle_s=20.0, max_s=600.0, eth=False):
+        raise ValueError("bad symbol")
+    ca._candles = other
+    try:
+        asyncio.run(ca._pull_retrying(None, [".X1"], "1m", None, sleep=nap))
+        other_raised = False
+    except ValueError:
+        other_raised = True
+    check("O9 a session-limit refusal (nested in an ExceptionGroup) is retried with a growing wait and the pull completes;"
+          " any other error is raised at once",
+          ".X1" in got9 and naps == [ca.OPT_RETRY_S, 2 * ca.OPT_RETRY_S] and other_raised, f"naps={naps}")
     ca.CHAIN_DIR, ca.OPT_STATE = real_cd, real_sp
     ca._candles = real_candles
 

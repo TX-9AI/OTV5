@@ -1,6 +1,13 @@
 #!/usr/bin/env python3
 """
-tools/capture_all.py  v5.6 — EVERYTHING TASTYTRADE SERVES THAT THE FEED DOES NOT ALREADY KEEP, INTO THE WAREHOUSE.
+tools/capture_all.py  v5.7 — EVERYTHING TASTYTRADE SERVES THAT THE FEED DOES NOT ALREADY KEEP, INTO THE WAREHOUSE.
+v5.7  2026-11-09  OTV5 r105 (CAP.7) — ONE STREAM PER BOX, AND A REFUSED SESSION WAITS ITS TURN. Measured on the fleet the
+      night r104 landed: with 8 boxes running option-candles at OPT_STREAMS = 2 beside 6 backfill streams, NVDA's run
+      died "The number of user sessions has exceeded the configured limit" - the account's DXLink sessions are shared by
+      all 14 boxes (the limit sits near 15: r99 measured 10 of 13 refused with the feed up), so 14 boxes x 2 streams
+      breaches it at the close. OPT_STREAMS = 1; and a stream refused for the session limit is retried after
+      OPT_RETRY_S x attempt (up to OPT_RETRIES), so a box that starts while another still holds a session waits rather
+      than abandoning the night. Any other error still ends the run (the state keeps every finished series).
 v5.6  2026-11-09  OTV5 r104 (CAP.7) — THE DAY'S OPTION CANDLES, EVERY NIGHT, BEFORE TASTYTRADE ROLLS THEM OFF. dxFeed serves
       option Candle history for expired contracts, but only for a rolling window (measured 11-09 on the AMD/UNH boxes):
       1m from 09-27 (about 6 weeks), 5m from 08-11 (about 90 days), 1h from 07-01 or earlier, 1d the contract's life;
@@ -133,7 +140,9 @@ OPT_CHUNK = 60                  # symbols per stream: above about 100 dxFeed ref
 OPT_BAND = 0.15                 # strikes within 15% of the morning's underlying
 OPT_CATCHUP_DAYS = 12           # a day missed is retried for this many calendar days (the quote candles keep about 14)
 OPT_IDLE_S = 8.0                # history arrives in one burst; a closed contract has no live updates
-OPT_STREAMS = 2                 # streams at once: the bot and the feed hold two sessions per box all day; both are stopped
+OPT_STREAMS = 1                 # streams at once per box: the account's session limit (~15) is shared by all 14 boxes (v5.7)
+OPT_RETRIES = 6                 # a stream refused for the session limit is retried this many times ...
+OPT_RETRY_S = 20.0              # ... after OPT_RETRY_S x attempt seconds
 OPT_STATE = os.path.join(ROOT, "data", "option_candles_state.json")
 CHAIN_DIR = os.path.join(ROOT, "data", "chain_snapshots")
 
@@ -210,7 +219,7 @@ def gz_json(obj) -> bytes:
 
 def meta(mode: str, **kw) -> dict:
     return {"source": "tastytrade", "mode": mode, "captured_at": datetime.now(timezone.utc).isoformat(),
-            "box": box_symbol(), "tool": "tools/capture_all.py v5.6", **kw}
+            "box": box_symbol(), "tool": "tools/capture_all.py v5.7", **kw}
 
 
 # ── REST modes ─────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -503,10 +512,29 @@ def option_plan(today, st, chain_dir=None):
     return plan
 
 
-async def _option_candles(session, plan, dry, st, state_path, streams=OPT_STREAMS):
+def _session_limited(exc) -> bool:
+    """True when `exc` (or anything nested in an ExceptionGroup) is dxFeed's user-session-limit refusal."""
+    if "number of user sessions has exceeded" in str(exc):
+        return True
+    return any(_session_limited(e) for e in getattr(exc, "exceptions", ()) or ())
+
+
+async def _pull_retrying(session, part, interval, since, sleep=asyncio.sleep):
+    for attempt in range(1, OPT_RETRIES + 1):
+        try:
+            return await _candles(session, part, interval, since, idle_s=OPT_IDLE_S)
+        except Exception as exc:                                  # noqa: BLE001 - only the session limit is retried
+            if not _session_limited(exc) or attempt == OPT_RETRIES:
+                raise
+            print(f"OPTION-CANDLES session limit - retry {attempt} in {OPT_RETRY_S * attempt:.0f}s", flush=True)
+            await sleep(OPT_RETRY_S * attempt)
+
+
+async def _option_candles(session, plan, dry, st, state_path, streams=None):
     """Every stream in ONE event loop (v5.2's lesson: a second asyncio.run binds the session's HTTP pool to a new loop
     and the next stream fails). `streams` chunks at a time - never more sessions than the bot and the feed hold all day.
     Each chunk is written as its stream ends; a series is marked done for its days only once every chunk is written."""
+    streams = streams or OPT_STREAMS
     n = 0
     summary = []
     for label, interval, since_day, syms, days in plan:
@@ -514,7 +542,7 @@ async def _option_candles(session, plan, dry, st, state_path, streams=OPT_STREAM
         since = datetime.combine(date.fromisoformat(since_day), datetime.min.time(), tzinfo=timezone.utc)
         parts = [syms[i:i + OPT_CHUNK] for i in range(0, len(syms), OPT_CHUNK)]
         for j in range(0, len(parts), streams):
-            for got in await asyncio.gather(*(_candles(session, part, interval, since, idle_s=OPT_IDLE_S)
+            for got in await asyncio.gather(*(_pull_retrying(session, part, interval, since)
                                               for part in parts[j:j + streams])):
                 _write_candles(got, label, dry, suffix="_opt")
                 n += sum(1 for v in got.values() if v)
