@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """
-tests/check_fly_entry_quote.py  v5.2
+tests/check_fly_entry_quote.py  v5.3
+v5.3  2026-11-11  OTV5 r107 (RETIRE.5 follow-up) — F1-F5 (the butterfly's composite entry quote) go with the generic fly path; F1 now
+      pins main._fly_entry_contract gone. F6 (single leg) and F7 (credit vertical) unchanged.
 v5.2  2026-10-31  OTV5 r68 (CFG.5) — OT_RESTING_STOP_STATE leaves the scratch env: the resting stop and its state file are deleted
       (the operator, 2026-10-31: "Resting stop was a study. It failed. Get this the fuck out of here"). No check changed.
 v5.1  2026-10-31  OTV5 r67 (PARC.4) — F7's credit vertical is a SweepCreditSpread lone vertical
@@ -128,42 +130,10 @@ def run(rec, ch):
     return ok, dict(zip(COLS, row)) if row else {}
 
 
-# ── F1-F3 the NVDA fly ────────────────────────────────────────────────────────
-ok, got = run(fly_record(), chain([OTHER, LO, CE, UP]))
-check("F1a the write is reported (True)", ok is True, f"{ok!r}")
-check("F1b entry_bid 0.56 = 0.96 + 0.04 - 2 x 0.22", near(got.get("entry_bid"), 0.56), f"{got.get('entry_bid')}")
-check("F1c entry_ask 0.61 = 0.98 + 0.05 - 2 x 0.21", near(got.get("entry_ask"), 0.61), f"{got.get('entry_ask')}")
-check("F1d they bracket entry_premium 0.58",
-      got.get("entry_bid") is not None and got["entry_bid"] <= 0.58 <= (got.get("entry_ask") or 0), f"{got}")
-check("F2a entry_delta = 0.52 + 0.0283 - 2 x 0.1642", near(got.get("entry_delta"), 0.52 + 0.0283 - 2 * 0.1642),
-      f"{got.get('entry_delta')}")
-check("F2b entry_gamma = 0.082 + 0.029 - 2 x 0.0994", near(got.get("entry_gamma"), 0.082 + 0.029 - 2 * 0.0994),
-      f"{got.get('entry_gamma')}")
-check("F2c entry_theta = -0.45 - 0.07 + 2 x 0.2153", near(got.get("entry_theta"), -0.45 - 0.07 + 2 * 0.2153),
-      f"{got.get('entry_theta')}")
-check("F2d entry_iv is the BODY's IV (0.621) and chain_iv_rank 37.5 is kept",
-      near(got.get("entry_iv"), 0.621) and near(got.get("chain_iv_rank"), 37.5), f"{got}")
-check("F3 not the center leg's 0.21/0.22, delta 0.1642 (the 2026-10-28 row)",
-      not (near(got.get("entry_bid"), 0.21) or near(got.get("entry_ask"), 0.22) or near(got.get("entry_delta"), 0.1642)),
-      f"{got}")
-
-# ── F4 legs by strike when the symbols are absent ─────────────────────────────
-ok, got4 = run(fly_record(lower_symbol="", center_symbol="", upper_symbol=""), chain([OTHER, LO, CE, UP]))
-check("F4 legs found by strike on the call side give the same fly values (0.56/0.61, as F1-F2)",
-      ok is True and near(got4.get("entry_bid"), 0.56) and near(got4.get("entry_ask"), 0.61)
-      and all(near(got4.get(k), got.get(k)) for k in COLS), f"{ok!r} {got4}")
-
-# ── F5 a missing leg writes nothing ───────────────────────────────────────────
-cap.msgs.clear()
-M._contract_warned.discard("fly-leg-not-found:upper")
-ok5, got5 = run(fly_record(), chain([OTHER, LO, CE]))
-ok5b, got5b = run(fly_record(), chain([OTHER, LO, CE]))
-warn = [m for m in cap.msgs if "entry_contract NOT captured" in m and "fly-leg-not-found:upper" in m]
-check("F5a a missing upper leg writes nothing (all columns NULL, no center-leg fallback)",
-      ok5 is False and got5 and all(got5[k] is None for k in COLS), f"{ok5!r} {got5}")
-check("F5b the second miss writes nothing either", ok5b is False and all(got5b[k] is None for k in COLS),
-      f"{ok5b!r} {got5b}")
-check("F5c warned once for the reason fly-leg-not-found:upper", len(warn) == 1, f"{cap.msgs}")
+# ── F1 (r107) the fly's composite capture is removed with the generic fly path ─────────────────────────
+# F1-F5 drove main._fly_entry_contract (the NVDA fly's composite quote and net greeks). No butterfly can be entered since
+# r107, so the function and its branch are gone; F6 / F7 (what every live entry writes) are unchanged.
+check("F1 r107: main._fly_entry_contract is removed (no fly can be entered)", not hasattr(M, "_fly_entry_contract"))
 
 # ── F6 single-leg unchanged ───────────────────────────────────────────────────
 single = {"trade_id": str(uuid.uuid4()), "symbol": "NVDA", "strategy": "PARK", "setup_type": "park",

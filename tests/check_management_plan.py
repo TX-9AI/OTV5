@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_management_plan.py  v5.4  (2026-11-09)
+tests/check_management_plan.py  v5.5  (2026-11-11)
+v5.5  2026-11-11  OTV5 r107 (RETIRE.5 follow-up) — D12c re-pointed (WA 38.4): the engine's butterfly exit is removed, so D12c pins it gone.
 v5.4  2026-11-09  OTV5 r103 (RETIRE.5 step 2) — the GEX pin fly leaves the management plan: M5, D12 and D12a pin that a GEXPinButterfly record is no longer the plan's (decide -> None, no row); M7's ids drop bf1; M11 pins its EXIT_CONDITIONS row absent and Breakout's present. D12c (the engine's generic butterfly path) unchanged.
 v5.3  2026-11-08  OTV5 r88 (RETIRE.3) — M4, M8, D8 and D9 (the TCS's narration, vector, hold and breach) go with the TCS; M7 drops its id and M11 pins it absent; D10's formed condor is two IronCondorStrategy legs (were TCS). Every other check unchanged.
 v5.2  2026-11-08  OTV5 r76 (RETIRE.1) — RE-POINTED (WA 38.4): the sweep and the ATP fly are removed from the management plan, so M3, D5-D7 (the
@@ -275,11 +276,9 @@ def main():
     it = MP.decide(dict(bf, current_premium=0.13), 0.13, df_1m=_df([100.9, 101.0]), exit_engine=eng)
     check("D12a (r103) ...and below its old floor: still None (the fly's hold-to-close row is removed)",
           it is None, str(it and (it.action, it.reason)))
-    bfb = next(n for n in ast.walk(ast.parse(esrc if 'esrc' in dir() else open(os.path.join(_root, "execution", "exit_engine.py"), encoding="utf-8").read()))
-               if isinstance(n, ast.FunctionDef) and n.name == "_evaluate_butterfly")
-    bfs = "\n".join(l for l in ast.unparse(bfb).split("\n") if not l.strip().startswith("#"))
-    check("D12c the engine's butterfly path acts on neither a target nor a max hold any more",
-          "target_hit" not in bfs and "butterfly_max_hold" not in bfs and "stop_hit" in bfs)
+    _xsrc = open(os.path.join(_root, "execution", "exit_engine.py"), encoding="utf-8").read()
+    check("D12c (r107) the engine has no butterfly path at all (the generic fly exit is removed)",
+          "def _evaluate_butterfly(" not in _xsrc and "def _close_butterfly(" not in _xsrc)
     # D12b/D12d (OTV4TEST r25) — the plan's OWN breach close must spend the level it
     # sold against, read back from trades.db the way the TCS/sweep plans read it.
     # r76: D12b/D12d read the sweep module's is_spent, whose only consumer (the sweep plan) is removed with the sweep.

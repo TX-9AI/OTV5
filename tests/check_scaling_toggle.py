@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_scaling_toggle.py  v5.3
+tests/check_scaling_toggle.py  v5.4
+v5.4  2026-11-11  OTV5 r107 (RETIRE.5 follow-up) — size() mirrors main's size_for call, which no longer passes net_debit / butterfly_half_size (removed with the fly path). Checks unchanged.
 v5.3  2026-11-08  OTV5 r76 (RETIRE.1) — RE-POINTED ONTO THE ONE SWITCH LEFT (section 38.4). The ORB trade and VOLT are REMOVED,
       and with them SCALE_ORB / SCALE_VOLT; Breakout's switch (main.SCALE_BREAKOUT, fixed ON in config since r68) is the
       only scaled trade in _SCALING_SWITCH. S1/S2/S6/S10 drive Breakout OFF where they drove ORB OFF; S3 pins that every
@@ -120,7 +121,7 @@ def size(signal, noise_floor=0.0):
     w, d = main._geometry_inputs(signal)
     kw = dict(premium=signal.entry_premium,
               stop_premium=main._sizing_stop_premium(signal),
-              grade="UNGRADED", net_debit=0.0, butterfly_half_size=False,
+              grade="UNGRADED",
               orb_width=w, orb_stop_distance=d, noise_floor=noise_floor)
     if _HAS:
         kw["scaled"] = main._scaling_on(signal)

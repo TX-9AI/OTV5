@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""tests/check_eod_schedule.py — v5.2
+"""tests/check_eod_schedule.py — v5.3
+v5.3  2026-11-11  OTV5 r107 (RETIRE.5 follow-up) — E4 / E10 / E11 drop their butterfly rows: the fly's EOD legs and close are
+      removed with the generic fly path (exit_engine v5.18). Every vertical, single and short row is unchanged. E3 keeps the
+      fly record: has_assignment_risk still reads a fly body as risk (structure labels are kept).
 v5.2  2026-11-08  OTV5 r88 (RETIRE.3) — E1 reads the credit end from config.CREDIT_ENTRY_END_ET where it read the removed TCS row; VERT and the tent fixture are IronCondorStrategy rows (were TCS). Every assertion unchanged.
 v5.1  2026-11-08  OTV5 r76 (RETIRE.1) — E1/E3 RE-POINTED (WA 38.4): the ORB, VOLT and sweep windows are removed, so E1 reads the four live
       windows; E3's long singles are a Runaway and a Hunt (the classifier is structural, the names were incidental).
@@ -183,9 +186,9 @@ def main() -> int:
             rr = dict(rec); rr["_eod_spot"] = spot
             got = B(rr)
             return None if got is None else (got[0], got[1])
-        got = [bc(VERT, 745.0), bc(VERT, 750.60), bc(FLY, 742.0), bc(ORB, 745.0), bc(SHORT, 738.0), bc(VERT, 0)]
-        want = [(0.05, "buy"), (0.60, "buy"), (1.99, "sell"), (14.99, "sell"), (2.00, "buy"), None]
-        check("E4 best case: nickel, expiry cost, fly-1 tick, parity-1 tick, short buy-back, no spot->None",
+        got = [bc(VERT, 745.0), bc(VERT, 750.60), bc(ORB, 745.0), bc(SHORT, 738.0), bc(VERT, 0)]
+        want = [(0.05, "buy"), (0.60, "buy"), (14.99, "sell"), (2.00, "buy"), None]
+        check("E4 best case: nickel, expiry cost, parity-1 tick, short buy-back, no spot->None (r107: the fly's row gone)",
               got == want, f"got {got} want {want}")
     except Exception as exc:                                  # noqa: BLE001
         check("E4 (did not run)", False, f"raised {type(exc).__name__}: {exc}")
@@ -311,9 +314,7 @@ def main() -> int:
         got = []
         try:
             for hm, rec, spot, mark, why in (((15, 46), VERT, 745.0, 0.20, "hard_close_resting_15:45_ET"),
-                                             ((15, 46), FLY, 742.0, 1.50, "hard_close_resting_15:45_ET"),
                                              ((15, 55), VERT, 745.0, 0.20, "hard_close_resting_15:45_ET"),
-                                             ((15, 55), FLY, 742.0, 1.50, "hard_close_resting_15:45_ET"),
                                              ((15, 55), ORB, 745.0, 15.0, "hard_close_ladder_15:50_ET")):
                 EE.now_et = (lambda h=hm: at(*h))
                 r = dict(rec); r["_eod_spot"] = spot
@@ -324,7 +325,7 @@ def main() -> int:
                                                    None if getattr(o, "price", None) is None else float(o.price)))
         finally:
             EE.get_session, EE.get_account, EE.now_et = _gs, _ga, _real
-        want = [("LIMIT", -0.05), ("LIMIT", 1.99), ("LIMIT", -1.0), ("LIMIT", 0.01), ("MARKET", None)]
+        want = [("LIMIT", -0.05), ("LIMIT", -1.0), ("MARKET", None)]
         check("E10 live orders: resting best case at 15:46, every structure crosses at 15:55", got == want,
               f"got {got} want {want}")
     except Exception as exc:                                  # noqa: BLE001
@@ -340,10 +341,10 @@ def main() -> int:
             got = B(rr)
             return None if got is None else (got[0], got[1])
         vlegs = {VERT["short_symbol"]: 0.15, VERT["long_symbol"]: 0.15}
-        got = [bc2(FLY, 742.0, atm=0.15), bc2(VERT, 749.90, legiv=vlegs), bc2(VERT, 749.90, legiv=vlegs, atm=0.60),
+        got = [bc2(VERT, 749.90, legiv=vlegs), bc2(VERT, 749.90, legiv=vlegs, atm=0.60),
                bc2(VERT, 749.90, atm=0.60)]
-        want = [(1.72, "sell"), (0.09, "buy"), (0.09, "buy")]
-        ok_px = got[:3] == want and got[3] is not None and got[3][0] > 0.09
+        want = [(0.09, "buy"), (0.09, "buy")]
+        ok_px = got[:2] == want and got[2] is not None and got[2][0] > 0.09
         import types as _ty
         from execution import position_manager as PM
         pm = PM.PositionManager.__new__(PM.PositionManager)
@@ -365,7 +366,7 @@ def main() -> int:
         finally:
             T.now_et = _real_t
         want_stamp = [({VERT["short_symbol"]: 0.15, VERT["long_symbol"]: 0.16}, 0.16)]   # ATM = the real property's median
-        check("E11 rest at the 15:55 estimate: fly 1.72 < 1.99, vertical 0.09 > nickel, leg IV wins, flatten_all stamps IVs",
+        check("E11 rest at the 15:55 estimate: vertical 0.09 > nickel, leg IV wins, flatten_all stamps IVs (r107: the fly's row gone)",
               ok_px and seen == want_stamp, f"prices {got} want {want} (+4th > 0.09); stamp {seen} want {want_stamp}")
     except Exception as exc:                                  # noqa: BLE001
         check("E11 (did not run)", False, f"raised {type(exc).__name__}: {exc}")

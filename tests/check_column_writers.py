@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """
-tests/check_column_writers.py  v5.3
+tests/check_column_writers.py  v5.4
+v5.4  2026-11-11  OTV5 r107 (RETIRE.5 follow-up) — the generic fly entry is removed: lower_strike / lower_symbol are written by the
+      tent (condor_roll._execute_tent, off), is_butterfly by _execute_condor_leg (0, off), and six fly-only columns become
+      HISTORY (kept, written by nothing, decoded by query.py). W1 counts them; new W5 pins it.
 v5.3  2026-11-08  OTV5 r88 (RETIRE.3) — W3 / W4 (the shadow store) go with the TCS shadow: execution/shadow_book.py is deleted. W1 / W2 unchanged.
 v5.2  2026-10-30  OTV5 r57 (TCS.LOG1) — W3 / W4: THE SHADOW STORE (shadow_trades.db, execution/shadow_book.py) has every trades
       column (the same TradeLogger code builds it, so WRITERS covers them - a shadow row is written by the same writers
@@ -57,19 +60,19 @@ _XLAT = (TL, "TradeLogger.set_exit_latency")
 _LOG = (TL, "TradeLogger.log_entry")
 _LEG = (MAIN, "_execute_condor_leg")                # off: no live credit entry (r88: the TCS removed)
 _ROLL = (CR, "_execute_roll")                       # off: needs condor legs
+_TENT = (CR, "_execute_tent")                       # off: the tent's hedge leg (r106), needs condor legs
 _SUPP = (XE, "ExitEngine._sync_stop_suppression")   # off: needs condor legs
 
 WRITERS = {
     "trade_id": _ENTER, "symbol": _RKW, "option_symbol": _RKW, "strategy": _RKW, "setup_type": _RKW,
     "direction": _RKW, "underlying_entry": _RKW, "underlying_stop": _RKW, "underlying_target": _RKW,
     "vix_at_entry": _RKW, "is_fed_day": _RKW,
-    "setup_grade": _ENTER, "setup_score": _ENTER, "option_side": _ENTER, "is_butterfly": _ENTER, "is_liquidity_hunt": _ENTER, "strike": _ENTER,
+    "setup_grade": _ENTER, "setup_score": _ENTER, "option_side": _ENTER, "is_butterfly": _LEG, "is_liquidity_hunt": _ENTER, "strike": _ENTER,
     "expiry": _ENTER, "contracts": _ENTER, "entry_premium": _ENTER, "total_cost": _ENTER, "max_loss": _ENTER,
     "stop_premium": _ENTER, "trail_activation": _ENTER, "target_premium": _ENTER, "adx_at_entry": _ENTER,
     "flat_angle_deg": _ENTER, "swept_level_name": _ENTER, "level_strength": _ENTER, "order_id": _ENTER,
-    "paper_trade": _ENTER, "relaxed_entry": _ENTER, "notes": _ENTER, "lower_strike": _ENTER,
-    "center_strike": _ENTER, "upper_strike": _ENTER, "net_debit": _ENTER, "max_profit": _ENTER,
-    "lower_symbol": _ENTER, "center_symbol": _ENTER, "upper_symbol": _ENTER, "orb_range_high": _ENTER,
+    "paper_trade": _ENTER, "relaxed_entry": _ENTER, "notes": _ENTER, "lower_strike": _TENT,
+    "lower_symbol": _TENT, "orb_range_high": _ENTER,
     "orb_range_low": _ENTER, "stop_width_pct": _ENTER, "planned_r": _ENTER,
     "tape_vol_at_level": _TAPE, "tape_prints_at_level": _TAPE, "tape_band": _TAPE, "tape_buy_frac_at_level": _TAPE,
     "entry_time": _LOG, "status": _LOG, "lineage": _LOG,
@@ -94,6 +97,11 @@ WRITERS = {
     "stop_suppressed_ts": _SUPP, "stop_suppressed_by": _SUPP,
 }
 
+# r107 (RETIRE.5 follow-up) — HISTORY COLUMNS. The generic butterfly entry (EntryEngine.enter's fly block) is removed, so
+# these columns have no writer any more. They are KEPT (no column is ever dropped): old fly rows carry them and query.py
+# decodes them. W1 counts them as columns; W5 pins that nothing writes them and that the decoder still reads them.
+HISTORY = ("center_strike", "upper_strike", "center_symbol", "upper_symbol", "net_debit", "max_profit")
+
 from database import trade_logger as tl                         # noqa: E402
 
 db = os.path.join(_tmp, "fresh.db")
@@ -102,7 +110,9 @@ c = sqlite3.connect(db)
 cols = {r[1] for r in c.execute("PRAGMA table_info(trades)")}
 c.close()
 check("W1 every column has a named writer, and every named writer's column exists",
-      cols == set(WRITERS), "no writer: %s; no column: %s" % (sorted(cols - set(WRITERS)), sorted(set(WRITERS) - cols)))
+      cols == set(WRITERS) | set(HISTORY) and not set(WRITERS) & set(HISTORY),
+      "no writer: %s; no column: %s" % (sorted(cols - set(WRITERS) - set(HISTORY)),
+                                        sorted((set(WRITERS) | set(HISTORY)) - cols)))
 
 _src_cache = {}
 
@@ -134,6 +144,12 @@ for col, (path, qual) in sorted(WRITERS.items()):
 check("W2 every named writer exists and its own source names its column", not bad, "; ".join(bad[:8]))
 
 # r88 (RETIRE.3): W3 / W4 (the shadow store, execution/shadow_book.py) go with the TCS shadow.
+
+_ee_enter = _func_src(EE, "EntryEngine.enter") or ""
+_q = open(os.path.join(ROOT, "query.py"), encoding="utf-8").read()
+_w5 = [c for c in HISTORY if re.search(r"\b%s\b" % c, _ee_enter)]
+check("W5 the history columns (the removed fly's) are written by nothing and still decoded by query.py (r107)",
+      not _w5 and all(c in _q for c in ("center_strike", "upper_strike", "lower_strike")), "still written: %s" % _w5)
 
 print("\n%s — %d checks, %d failed" % ("GREEN" if not FAILED else "RED", len(RAN), len(FAILED)))
 if FAILED:

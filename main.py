@@ -1,5 +1,6 @@
 """
-main.py  v5.17
+main.py  v5.18
+v5.18  2026-11-11  OTV5 r107 (RETIRE.5 follow-up) — THE GENERIC BUTTERFLY PATH LEAVES THE TICK: the fly branch of the entry-contract capture and _fly_entry_contract, the net_debit / butterfly_half_size sizing arguments (only a fly passed them) and the executor's now-unread macro local, and _describe_position's fly line (it describes OPEN rows; no fly can be open since r103). Every live entry captures, sizes and describes exactly as before. The operator, 2026-11-07: "Running dead code and logging dead code activity is unnecessary drag."
 v5.17  2026-11-09  OTV5 r103 (RETIRE.5 step 2) — THE GEX PIN BUTTERFLY LEAVES THE TICK: its import and singleton, _attempt_butterfly and its two call sites (the capped branch now asks PARK alone; the dispatch asks PARK, then the directionals), its _STRUCTURE_BY_NAME row and the admission tries loop that named only it are removed. pin_proximity_verdict reads the expected move from analysis.volatility_measures.expected_move_session (the function the fly's wrapper called since r223; identical value). The generic multi-leg execution (_place_butterfly, the leg capture, the exits) stays for any butterfly record still on a book. Runaway, Hunt, Breakout and PARK dispatch exactly as before. The operator, 2026-11-08: "I concur on both, in that order" (cut 11-09; code removed after that close).
 v5.16  2026-11-08  OTV5 r97 (RETIRE.5) — THE CUT GEX PIN BUTTERFLY IS NOT ASKED AND WRITES NOTHING: _attempt_butterfly returns first when plan_state reads GEXPinButterfly DORMANT, before its one-per-session and no-chain skip rows (which ran ahead of _safe_strategy's dormant check). Exits and management of any fly are untouched. The operator, 2026-11-08: "I concur on both, in that order" (cut from 11-09; code removed after that close).
 v5.15  2026-11-08  OTV5 r88 (RETIRE.3) — THE TCS SHADOW LEAVES THE TICK. The TrendCreditSpread import, singleton and TC.6 dispatch; _retired_reason (it served only the TCS); _execute_condor_leg's shadow branch, its TCS identity (_is_tcs: strategy, stop_premium, remainder stop, alert) and _credit_window_end's TCS plan window (now 14:00 for every vertical, as for every non-TCS one); _shadow_manage / _shadow_eod / _shadow_resume and their three call sites; the condor-auth TCS skip; and the now-unused macro read. Every live setup's dispatch, admission, management and exits are unchanged (parity on QQQ/SPX/NVDA). The operator, 2026-11-08: "Delete" (the TCS shadow, which never fired: its own gates declined every candidate 11-02..11-06).
@@ -2511,31 +2512,25 @@ def _capture_entry_contract(ctx: dict, record: dict, tl=None) -> bool:
     try:
         chain = (ctx or {}).get("chain")
         payload = None
-        if (record or {}).get("is_butterfly"):
-            # v5.7 (FLY.3) — a fly's option_symbol is its CENTER leg; matching it
-            # recorded the body's quote and greeks as the fly's. The fly's own
-            # values from its three legs, or nothing - never the body's.
-            payload, reason = _fly_entry_contract(chain, record)
+        con = None
+        if chain is not None and occ:
+            for c in list(getattr(chain, "calls", []) or []) + \
+                     list(getattr(chain, "puts", []) or []):
+                if getattr(c, "symbol", "") == occ:
+                    con = c
+                    break
+        if con is None:
+            reason = "contract-not-found"
         else:
-            con = None
-            if chain is not None and occ:
-                for c in list(getattr(chain, "calls", []) or []) + \
-                         list(getattr(chain, "puts", []) or []):
-                    if getattr(c, "symbol", "") == occ:
-                        con = c
-                        break
-            if con is None:
-                reason = "contract-not-found"
-            else:
-                payload = {
-                    "entry_delta": getattr(con, "delta", None),
-                    "entry_gamma": getattr(con, "gamma", None),
-                    "entry_theta": getattr(con, "theta", None),
-                    "entry_iv":    getattr(con, "iv", None),
-                    "entry_bid":   getattr(con, "bid", None),
-                    "entry_ask":   getattr(con, "ask", None),
-                    "chain_iv_rank": getattr(chain, "iv_rank", None),
-                }
+            payload = {
+                "entry_delta": getattr(con, "delta", None),
+                "entry_gamma": getattr(con, "gamma", None),
+                "entry_theta": getattr(con, "theta", None),
+                "entry_iv":    getattr(con, "iv", None),
+                "entry_bid":   getattr(con, "bid", None),
+                "entry_ask":   getattr(con, "ask", None),
+                "chain_iv_rank": getattr(chain, "iv_rank", None),
+            }
         if payload is not None:
             if (tl or get_trade_logger()).set_entry_contract(trade_id, payload):   # r57: tl = the shadow store
                 return True
@@ -2554,60 +2549,6 @@ def _capture_entry_contract(ctx: dict, record: dict, tl=None) -> bool:
             "the premium-decomposition read (direction vs theta vs IV); logged "
             "once per reason per process.", reason, trade_id[:8])
     return False
-
-
-def _fly_entry_contract(chain, record: dict):
-    """v5.7 (FLY.3) — the BUTTERFLY's entry quote and greeks, built from its legs.
-
-    Returns (payload, "") or (None, reason). The same composite
-    execution/position_manager builds for a fly's exit record (r195): sell the
-    wings at their bids and buy the body back at its ask for the bid, the
-    reverse for the ask, each floored at 0. Greeks are the position's net,
-    lower + upper - 2 x center, per one fly. entry_iv is the BODY's IV, as
-    _note_quote records a fly - a fly has no IV of its own and the body is
-    the leg its value turns on.
-
-    Legs are found by their OCC symbols (lower/center/upper_symbol, persisted
-    since entry_engine v3.7), else by strike on the fly's side of the chain.
-    A leg not found writes NOTHING: three legs or no row, never the body's
-    values under the fly's name (the 2026-10-26/28 defect).
-    """
-    if chain is None:
-        return None, "fly-no-chain"
-    side = str(record.get("option_side", "") or "").lower()
-    calls = list(getattr(chain, "calls", []) or [])
-    puts = list(getattr(chain, "puts", []) or [])
-    by_sym = {getattr(c, "symbol", ""): c for c in calls + puts if getattr(c, "symbol", "")}
-    pool = calls if side == "call" else puts if side == "put" else []
-    legs = {}
-    for leg in ("lower", "center", "upper"):
-        con = by_sym.get(record.get(f"{leg}_symbol") or "")
-        if con is None:
-            k = record.get(f"{leg}_strike")
-            con = next((c for c in pool if k and getattr(c, "strike", None) == k), None)
-        if con is None:
-            return None, f"fly-leg-not-found:{leg}"
-        legs[leg] = con
-    lo, ce, up = legs["lower"], legs["center"], legs["upper"]
-
-    def _f(c, k):
-        v = getattr(c, k, None)
-        return None if v is None else float(v)
-
-    def _net(k):
-        a, b, m = _f(lo, k), _f(up, k), _f(ce, k)
-        return None if None in (a, b, m) else a + b - 2.0 * m
-
-    g = lambda c, k: float(getattr(c, k, 0.0) or 0.0)
-    return {
-        "entry_delta": _net("delta"),
-        "entry_gamma": _net("gamma"),
-        "entry_theta": _net("theta"),
-        "entry_iv":    getattr(ce, "iv", None),            # the BODY's IV
-        "entry_bid":   max(0.0, g(lo, "bid") + g(up, "bid") - 2.0 * g(ce, "ask")),
-        "entry_ask":   max(0.0, g(lo, "ask") + g(up, "ask") - 2.0 * g(ce, "bid")),
-        "chain_iv_rank": getattr(chain, "iv_rank", None),
-    }, ""
 
 
 def _capture_fire_snapshot(ctx: dict, record: dict, link_plan: bool = True) -> None:
@@ -5148,7 +5089,6 @@ def _execute_entry_signal(signal, ctx, ms, state, _sigj=None, *, additive: bool 
     # refuse an observed signal; this one means no path added later can carry one further.
     if _log_only(signal, ctx):
         return
-    macro = ctx["macro"]
     risk_mgr = get_risk_manager()
     entry_eng = get_entry_engine(state.paper_trading)
     if not signal.is_valid:
@@ -5356,8 +5296,6 @@ def _execute_entry_signal(signal, ctx, ms, state, _sigj=None, *, additive: bool 
         # stop_premium() — what the row records and exits read — is untouched.
         stop_premium        = _sizing_stop_premium(signal),
         grade               = "UNGRADED",
-        net_debit           = signal.net_debit if signal.is_butterfly else 0.0,
-        butterfly_half_size = macro.butterfly_half_size if signal.is_butterfly else False,
         orb_width           = _orb_w,
         orb_stop_distance   = _orb_d,
         noise_floor         = _noise_floor,
@@ -6346,13 +6284,6 @@ def _describe_position(record: dict) -> str:
     """One-line, self-identifying description of an open row (used by both the
     recovery alert and the stale-orphan sweep alert)."""
     side = str(record.get("option_side", "")).upper()
-    if bool(record.get("is_butterfly", 0)):
-        return (
-            f"BUTTERFLY {side} "
-            f"{record.get('lower_strike',0):.0f}/"
-            f"{record.get('center_strike',0):.0f}/"
-            f"{record.get('upper_strike',0):.0f}"
-        )
     if record.get("is_condor_leg") or record.get("strategy") == "IronCondorStrategy":
         return (f"CONDOR {side} "
                 f"{record.get('short_strike',0):.0f}/{record.get('long_strike',0):.0f}")

@@ -1,5 +1,6 @@
 """
-risk/risk_manager.py  v5.2
+risk/risk_manager.py  v5.3
+v5.3  2026-11-11  OTV5 r107 (RETIRE.5 follow-up) — size_for("butterfly") and its net_debit / butterfly_half_size arguments go, with _size_budget's is_butterfly / net_debit / butterfly_half_size and the r122 VIX half-size (a fly-only rule). No live strategy declares the butterfly structure since r103; an unknown structure still falls to the budget rule. Every live size is unchanged. The operator, 2026-11-07: "Running dead code and logging dead code activity is unnecessary drag."
 v5.2  2026-10-31  OTV5 r67 (PARC.4) — size_for("parc") and _size_parc (rule parc_ramp) are removed,
       with size_for's value_at_stop argument (PARC's only). The CAP_EXCLUDED_STRATEGIES getattr defaults name
       ("PARK",), config's value again. The operator, 2026-10-31: "On PARC, no. It was an idea. It failed. It's done." and "Yes" to removing its code. Every other
@@ -205,7 +206,7 @@ repo-wide v3.0 bump: Yahoo-Finance purge & data stream
 Sizing model:
   - Fixed dollar risk per trade (operator-set at startup)
   - Contracts = floor(risk_usd × grade_multiplier / cost_per_contract)
-  - cost_per_contract = mark × 100 (single leg) or net_debit × 100 (butterfly)
+  - cost_per_contract = mark × 100 (single leg)
   - Always whole contracts; minimum 1 if affordable
   - EVERY losing trade sets a one-shot reassessment request (v1.4). A loss is
     count threshold — the old SESSION_LOSS_LIMIT count was deleted in config
@@ -346,8 +347,6 @@ class RiskManager:
                  grade: str = "B",
                  premium: float = 0.0,
                  stop_premium: float = 0.0,
-                 net_debit: float = 0.0,
-                 butterfly_half_size: bool = False,
                  spread_width: float = 0.0,
                  credit: float = 0.0,
                  orb_width: float = 0.0,
@@ -376,10 +375,6 @@ class RiskManager:
         st = (structure or "").strip().lower()
         if st == "vertical":
             return self._size_vertical(spread_width, credit, grade)
-        if st == "butterfly":
-            return self._size_budget(premium=0.0, grade=grade, is_butterfly=True,
-                                     net_debit=net_debit,
-                                     butterfly_half_size=butterfly_half_size)
         if st == "long_debit" and (orb_width or orb_stop_distance) and not scaled:
             # r161 (SIZE.2) — SCALING OFF: the r93 floor, then FLAT. The
             # operator: *"retain the original structure stop ... but just use
@@ -602,9 +597,6 @@ class RiskManager:
     def _size_budget(self,
                      premium: float,
                      grade: str = "B",
-                     is_butterfly: bool = False,
-                     net_debit: float = 0.0,
-                     butterfly_half_size: bool = False,
                      stop_premium: float = 0.0) -> SizingResult:
         """
         Calculate whole contract count.
@@ -612,14 +604,11 @@ class RiskManager:
         Args:
             premium:             Option mark price (single leg)
             grade:               Setup grade (A or B — C is rejected upstream)
-            is_butterfly:        True for butterfly (use net_debit)
-            net_debit:           Net debit for butterfly (per share)
-            butterfly_half_size: True when VIX 15-20 (halve butterfly size)
         """
         result = SizingResult(grade=grade)
-        result.rule = "butterfly" if is_butterfly else "budget"
+        result.rule = "budget"
 
-        cost_per_share = net_debit if is_butterfly else premium
+        cost_per_share = premium
         # ── r121 — THE DENOMINATOR IS THE RISK, WHEN ENABLED ──────────────
         # Premium is what the position COSTS; (premium - stop) is what it can
         # LOSE. Dividing the budget by cost sizes the position; dividing by
@@ -641,18 +630,6 @@ class RiskManager:
         cost_per_contract = cost_per_share * CONTRACT_MULTIPLIER
         risk_per_contract = risk_per_share * CONTRACT_MULTIPLIER
         grade_mult        = GRADE_SIZE_MULTIPLIER.get(grade, 1.0)
-
-        # ⚠️ r122 — THE BUTTERFLY HALF-SIZE SURVIVES THE GRADE FLATTENING, and
-        # deliberately. It is a VOLATILITY rule (VIX 15-20), not a grade rule,
-        # so it is not the mechanism the operator retired. Operator, 2026-08-25:
-        # "the butterfly is a debit, but I think we will need to see a few
-        # trades before it earns a 1.0 sizing trait. The current is ok for that
-        # one." AVGO has ONE butterfly all-time; the strategy has not earned
-        # full size, and half-size is the conservative default while it proves
-        # itself. Left multiplying grade_mult (now always 1.0) rather than
-        # rewritten, so the two rules stay visibly separate.
-        if is_butterfly and butterfly_half_size:
-            grade_mult = grade_mult * 0.5
 
         count = contracts_from_risk(
             self._risk_per_trade, risk_per_contract, grade_mult
@@ -699,7 +676,6 @@ class RiskManager:
             f"Position size: {count} contract(s) × ${cost_per_contract:.2f} "
             f"= ${total_cost:.2f} total "
             f"grade={grade} mult={grade_mult}x "
-            f"{'[BUTTERFLY HALF-SIZE]' if is_butterfly and butterfly_half_size else ''}"
         )
         return result
 

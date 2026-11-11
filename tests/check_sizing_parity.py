@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""tests/check_sizing_parity.py  v5.0
+"""tests/check_sizing_parity.py  v5.1
+v5.1  2026-11-11  OTV5 r107 (RETIRE.5 follow-up) — the eight butterfly rows and the butterfly rule name go with size_for("butterfly") (removed with the generic fly path); every long_debit and vertical row is unchanged.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 THE REFACTOR MOVED THREE RULES. IT MUST NOT HAVE MOVED THEIR ARITHMETIC.
 
@@ -53,14 +54,6 @@ GOLD = [
     ("long_debit", (2.4, 0.0),   (0, 0.0, 0.0, 0.0, False)),
     ("long_debit", (2.4, 0.2),   (0, 0.0, 0.0, 0.0, False)),
     ("long_debit", (2.4, 0.9),   (0, 0.0, 0.0, 0.0, False)),
-    ("butterfly",  (0.4, False), (5, 40.0, 200.0, 200.0, True)),
-    ("butterfly",  (0.4, True),  (2, 40.0, 80.0, 80.0, True)),
-    ("butterfly",  (0.9, False), (2, 90.0, 180.0, 180.0, True)),
-    ("butterfly",  (0.9, True),  (1, 90.0, 90.0, 90.0, True)),
-    ("butterfly",  (1.1, False), (1, 110.0, 110.0, 110.0, True)),
-    ("butterfly",  (1.1, True),  (0, 0.0, 0.0, 0.0, False)),
-    ("butterfly",  (2.75, False), (0, 0.0, 0.0, 0.0, False)),
-    ("butterfly",  (2.75, True),  (0, 0.0, 0.0, 0.0, False)),
     ("vertical",   (1.0, 0.3),   (2, 70.0, 140.0, 140.0, True)),
     ("vertical",   (2.0, 0.6),   (1, 140.0, 140.0, 140.0, True)),
     ("vertical",   (2.0, 1.2),   (2, 80.0, 160.0, 160.0, True)),
@@ -83,9 +76,6 @@ def main():
     for rule, inp, exp in GOLD:
         if rule == "long_debit":
             r = rm.size_for("long_debit", premium=inp[0], stop_premium=inp[1])
-        elif rule == "butterfly":
-            r = rm.size_for("butterfly", net_debit=inp[0],
-                            butterfly_half_size=inp[1])
         else:
             r = rm.size_for("vertical", spread_width=inp[0], credit=inp[1])
         got = (r.contracts, round(r.cost_per_contract, 2),
@@ -103,12 +93,11 @@ def main():
     # for two days precisely because nothing on the row said.
     rules = {
         rm.size_for("long_debit", premium=0.35).rule,
-        rm.size_for("butterfly", net_debit=0.4).rule,
         rm.size_for("vertical", spread_width=1.0, credit=0.3).rule,
         rm.size_for("long_debit", premium=1.2, orb_width=6.35,
                     orb_stop_distance=0.61).rule,
     }
-    ok2 = rules == {"budget", "butterfly", "vertical", "orb_geometry"}
+    ok2 = rules == {"budget", "vertical", "orb_geometry"}
     print(f"  {'PASS' if ok2 else 'FAIL'}  P2 each rule stamps its name on the "
           f"result  — {sorted(rules)}")
 

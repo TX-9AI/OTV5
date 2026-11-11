@@ -1,5 +1,6 @@
 """
-execution/entry_engine.py  v5.1
+execution/entry_engine.py  v5.2
+v5.2  2026-11-11  OTV5 r107 (RETIRE.5 follow-up) — THE GENERIC BUTTERFLY ENTRY GOES with the fly strategy removed at r103: the enter() butterfly branch, the fly record fields (lower/center/upper strike and symbol, net_debit, max_profit), _place_butterfly, _paper_fill_butterfly and the fly-only _mark_cap. No live strategy emits a butterfly signal since r103; every entry takes the single-leg path, unchanged. The trades schema keeps its fly columns (history). The operator, 2026-11-07: "Running dead code and logging dead code activity is unnecessary drag."
 v5.1  2026-11-08  OTV5 r76 (RETIRE.1) — THE ORB STANDING OFFER IS REMOVED with the ORB trade: _is_standing_offer, _place_standing_offer, _record_offer, _mark_orb_confirmation_spent, _session_date and the ORB latch after _place_single_leg. Every live single-leg entry already took the default path (paper fill / the ladder), unchanged. The operator, 2026-11-07: "Running dead code and logging dead code activity is unnecessary drag. Yes, I want all of those things fixed."
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v4.16 2026-10-14  OTV4TEST r283 (LIVE.1 F5, MIRROR OF otv4 r473 bfb0991, WA 38.2) — every live entry checks
@@ -176,9 +177,6 @@ repo-wide v3.0 bump: Yahoo-Finance purge & data stream
 Order types:
   - Single-leg (ORB, SweepReversal): MARKET order, fill price read back from
     the broker's fills (bounded confirmation poll).
-  - Multi-leg butterfly: signed-DEBIT limit at MID; if confirmed dead unfilled,
-    ONE retry improved by LIMIT_IMPROVE_TICKS. Never pays worse than
-    mid + 1 tick; never places attempt 2 while attempt 1 might still fill.
 Paper mode: books limit_ladder.paper_fill_price (the mark by default;
 mark ± PAPER_FILL_SLIPPAGE_PCT when the stress knob is set). No real order.
 """
@@ -265,29 +263,15 @@ class EntryEngine:
                 "it re-signals next tick.", mode, signal.strategy_name, _h, _m)
             return None
 
-        if signal.is_butterfly:
-            logger.info(
-                f"[{mode}] BUTTERFLY ENTRY: "
-                f"{signal.butterfly_direction.upper()} "
-                f"{sizing.contracts} × "
-                f"{signal.lower_contract.strike}/"
-                f"{signal.center_contract.strike}/"
-                f"{signal.upper_contract.strike} "
-                f"net_debit=${signal.net_debit:.2f} "
-                ""
-            )
-            fill_premium, order_id, filled_qty = self._place_butterfly(
-                signal, sizing.contracts)
-        else:
-            logger.info(
-                f"[{mode}] DIRECTIONAL ENTRY: "
-                f"{signal.option_side.upper()} {signal.strike} "
-                f"{sizing.contracts} contract(s) "
-                f"mark=${signal.entry_premium:.2f} "
-                ""
-            )
-            fill_premium, order_id, filled_qty = self._place_single_leg(
-                signal, sizing.contracts)
+        logger.info(
+            f"[{mode}] DIRECTIONAL ENTRY: "
+            f"{signal.option_side.upper()} {signal.strike} "
+            f"{sizing.contracts} contract(s) "
+            f"mark=${signal.entry_premium:.2f} "
+            ""
+        )
+        fill_premium, order_id, filled_qty = self._place_single_leg(
+            signal, sizing.contracts)
 
         if fill_premium is None or filled_qty <= 0:
             logger.error("Entry order failed — no confirmed fill, no position recorded")
@@ -307,11 +291,10 @@ class EntryEngine:
             # marker, not a verdict.
             setup_grade       = "UNGRADED",
             setup_score       = None,
-            option_side       = signal.option_side if not signal.is_butterfly else signal.butterfly_direction,
-            is_butterfly      = signal.is_butterfly,
+            option_side       = signal.option_side,
             is_liquidity_hunt = bool(getattr(signal, "is_liquidity_hunt", False)),   # r12 (hunt)
-            strike            = signal.strike if not signal.is_butterfly else signal.center_contract.strike,
-            expiry            = signal.expiry if not signal.is_butterfly else signal.center_contract.expiry,
+            strike            = signal.strike,
+            expiry            = signal.expiry,
             contracts         = filled_qty,
             entry_premium     = fill_premium,
             total_cost        = total_cost,
@@ -337,18 +320,6 @@ class EntryEngine:
             status            = "open",
             notes             = signal.notes,
         )
-
-        if signal.is_butterfly:
-            record["lower_strike"]  = signal.lower_contract.strike
-            record["center_strike"] = signal.center_contract.strike
-            record["upper_strike"]  = signal.upper_contract.strike
-            record["net_debit"]     = signal.net_debit
-            record["max_profit"]    = signal.max_profit
-            # v3.7: leg SYMBOLS persisted — the live close (exit_engine v3.5
-            # _close_butterfly) and reconcile leg-matching both require them.
-            record["lower_symbol"]  = signal.lower_contract.symbol
-            record["center_symbol"] = signal.center_contract.symbol
-            record["upper_symbol"]  = signal.upper_contract.symbol
 
         # ── ORB range boundaries — persisted for exit_engine range violation ──
         # exit_engine checks if 1-min close goes back inside the ORB range
@@ -496,16 +467,6 @@ class EntryEngine:
                     float(getattr(contract, "ask", 0.0) or 0.0))
         except (TypeError, ValueError):
             return (0.0, 0.0)
-
-    @staticmethod
-    def _mark_cap(mark) -> Optional[float]:
-        """r224 (FLY.1) — the most a BUY may post: the mark, floored to the cent. None when
-        even one cent would exceed it (no valid price at or under the mark exists)."""
-        try:
-            cap = int(float(mark) * 100.0 + 1e-9) / 100.0
-        except (TypeError, ValueError):
-            return None
-        return cap if cap >= 0.01 else None
 
     def _walk_price(self, key: str, side: str, bid: float, ask: float,
                     symbol: str, mark_fallback: float) -> Tuple[float, str]:
@@ -663,126 +624,6 @@ class EntryEngine:
             is_fed_day        = signal.is_fed_day,
         )
 
-    def _place_butterfly(self, signal: OptionsSignal,
-                          contracts: int) -> Tuple[Optional[float], str, int]:
-        """Returns (net_debit_fill, order_id, filled_qty). v3.7 rebuild:
-
-        - debit priced NEGATIVE (SDK signed convention — the old positive
-          price demanded a CREDIT to open a debit fly and could never fill);
-        - each attempt is confirmed via a bounded poll, not an instant
-          status peek;
-        - attempt 2 (r224: RE-POSTED AT THE MARK, never above it - it was mid + LIMIT_IMPROVE_TICKS) is placed ONLY
-          after attempt 1 is confirmed DEAD with ZERO fills. A partial fill
-          on attempt 1 is booked as the position (no re-place — that would
-          risk overfilling). An uncancellable order stops the ladder, pages,
-          and reconcile adopts any late fill. Never pays worse than
-          mid + LIMIT_IMPROVE_TICKS ticks."""
-        if self.paper_trading:
-            return self._paper_fill_butterfly(signal, contracts)
-
-        _fly_placed = _fly_key = limit_price = session = account = None   # B2
-        try:
-            from execution import ladder_registry as _lr_bf
-            session = get_session()
-            account = get_account()
-            mid     = signal.net_debit
-            basis   = [(signal.lower_contract.symbol,  1, +1),
-                       (signal.center_contract.symbol, 2, -1),
-                       (signal.upper_contract.symbol,  1, +1)]
-
-            # r104 — THE STRUCTURE'S OWN QUOTE, BUILT CONSERVATIVELY. A fly's
-            # debit is `lower + upper - 2*center`; the price WE would pay uses
-            # the ask on what we buy and the bid on what we sell, and the price
-            # we could receive mirrors it. Anything looser prices a fill the
-            # book would not give.
-            _lo_b, _lo_a = self._quote_of(signal.lower_contract)
-            _ce_b, _ce_a = self._quote_of(signal.center_contract)
-            _up_b, _up_a = self._quote_of(signal.upper_contract)
-            _fly_ask = (_lo_a + _up_a) - 2.0 * _ce_b      # worst: pay up
-            _fly_bid = (_lo_b + _up_b) - 2.0 * _ce_a      # best: paid down
-            _fly_key = _lr_bf.intent_key(
-                getattr(signal.center_contract, "symbol", "fly"),
-                "open", "butterfly")
-            _ok, _gwhy = _guard.clear_to_post(_fly_key, session, account)   # B2
-            if not _ok:
-                logger.warning("[guard] butterfly not posted: %s", _gwhy)
-                return None, "", 0
-            # r224 (FLY.1) — THE CAP: the mark, floored to the cent. No attempt posts above it.
-            _cap = self._mark_cap(mid)
-            if _cap is None:
-                logger.info("[ladder] BUTTERFLY not posted: mark %.4f is under one cent - "
-                            "any valid limit would exceed it", float(mid or 0.0))
-                return None, "", 0
-            _bok, _bwhy = _bp.affordable(float(_cap) * int(contracts) * 100.0,
-                                         session, account, "butterfly")      # F5
-            if not _bok:
-                logger.warning("[bp] butterfly not posted: %s", _bwhy)
-                return None, "", 0
-            for attempt in range(2):
-                if attempt == 0 and _fly_ask > 0:
-                    limit_price, _bwhy = self._walk_price(
-                        _fly_key, "buy", max(0.0, _fly_bid), _fly_ask,
-                        getattr(signal.center_contract, "symbol", ""), mid)
-                    logger.info("[ladder] BUTTERFLY @ %.2f — %s (structure "
-                                "%.2f / %.2f, mark %.2f)", limit_price, _bwhy,
-                                _fly_bid, _fly_ask, mid)
-                else:
-                    limit_price = _cap                 # r224: the retry RE-POSTS at the mark; it was mid + a tick
-                if limit_price > _cap:
-                    logger.info("[ladder] BUTTERFLY capped at the mark: %.2f -> %.2f", limit_price, _cap)
-                    limit_price = _cap                 # r224: never above the mark, whatever the walk said
-                legs = [
-                    Leg(instrument_type=InstrumentType.EQUITY_OPTION,
-                        symbol=signal.lower_contract.symbol,
-                        action=OrderAction.BUY_TO_OPEN, quantity=contracts),
-                    Leg(instrument_type=InstrumentType.EQUITY_OPTION,
-                        symbol=signal.center_contract.symbol,
-                        action=OrderAction.SELL_TO_OPEN, quantity=contracts * 2),
-                    Leg(instrument_type=InstrumentType.EQUITY_OPTION,
-                        symbol=signal.upper_contract.symbol,
-                        action=OrderAction.BUY_TO_OPEN, quantity=contracts),
-                ]
-                order = NewOrder(
-                    time_in_force = OrderTimeInForce.DAY,
-                    order_type    = OrderType.LIMIT,
-                    price         = Decimal(str(-limit_price)),  # − = DEBIT paid
-                    legs          = legs,
-                )
-                response = sdk_result(account.place_order(session, order, dry_run=False))   # B0
-                if response.errors:
-                    logger.error(f"Butterfly attempt {attempt+1} order errors: "
-                                 f"{response.errors}")
-                    if attempt == 1:
-                        return None, "", 0
-                    continue
-                _fly_placed = response.order                            # B2
-
-                fill = confirm_order_fill(session, account, response.order,
-                                          basis, what=f"butterfly entry #{attempt+1}")
-                if fill.filled and fill.net_price is not None and fill.quantity > 0:
-                    self._walk_done(_fly_key)
-                    return fill.net_price, fill.order_id or "", fill.quantity
-                if attempt == 0:
-                    self._walk_refused(_fly_key, limit_price)
-                if fill.working_order_id:
-                    # Attempt 1 may still fill — placing attempt 2 now is the
-                    # double-position race. STOP the ladder; page; reconcile
-                    # adopts whatever lands.
-                    self._page_if_working(fill, "butterfly entry")
-                    return None, "", 0
-                logger.info(f"Butterfly attempt {attempt+1} confirmed dead "
-                            f"unfilled ({fill.detail})"
-                            + (" — re-posting at the mark" if attempt == 0
-                               else " — giving up"))
-            return None, "", 0
-
-        except Exception as e:
-            logger.error(f"Butterfly order failed: {e}")
-            if _fly_placed is not None and _fly_key is not None:        # B2
-                self._walk_refused(_fly_key, limit_price)
-                _guard.after_failure(_fly_key, _fly_placed, session, account, "butterfly entry")
-            return None, "", 0
-
     @staticmethod
     def _page_if_working(fill, what: str):
         """An entry order that could not be cancelled may still fill — page
@@ -810,12 +651,6 @@ class EntryEngine:
         execution/limit_ladder.paper_fill_price."""
         fill_price = paper_fill_price(float(signal.entry_premium or 0.0), floor=0.01)
         return fill_price, f"PAPER-{uuid.uuid4().hex[:8].upper()}", contracts
-
-    def _paper_fill_butterfly(self, signal: OptionsSignal,
-                              contracts: int) -> Tuple[float, str, int]:
-        """v3.8: books the MARK — see _paper_fill_single."""
-        fill_price = paper_fill_price(float(signal.net_debit or 0.0), floor=0.01)
-        return fill_price, f"PAPER-BF-{uuid.uuid4().hex[:8].upper()}", contracts
 
 
 _entry_engine: Optional[EntryEngine] = None

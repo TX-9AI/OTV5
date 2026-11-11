@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_unrealized_sign.py  v5.0
+tests/check_unrealized_sign.py  v5.1
+v5.1  2026-11-11  OTV5 r107 (RETIRE.5 follow-up) — S3 reads the debit sign on _evaluate_orb alone: _evaluate_butterfly is removed with the generic fly path.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.0  2026-09-01  r214 — THE UNREALIZED LINE, SIGNED BY STRUCTURE.
 
@@ -141,7 +142,7 @@ def main():
             fn[n.name] = ast.get_source_segment(esrc, n) or ""
     credit_ok = "(entry_prem - current_premium)" in fn.get("_evaluate_condor_leg", "")
     debit_ok = all("(current_premium - entry_prem)" in fn.get(f, "")
-                   for f in ("_evaluate_orb", "_evaluate_butterfly"))
+                   for f in ("_evaluate_orb",))             # r107: _evaluate_butterfly removed with the fly path
     check("S3 the exit engine keeps a credit sign on credits, debit on debits",
           credit_ok and debit_ok,
           f"condor_leg={credit_ok} debit_evaluators={debit_ok}")

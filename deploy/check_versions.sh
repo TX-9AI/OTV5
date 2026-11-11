@@ -1,6 +1,8 @@
 #!/bin/bash
 # ==========================================================================
-# deploy/check_versions.sh  v5.3
+# deploy/check_versions.sh  v5.4
+# v5.4  2026-11-11  OTV5 r107 (RETIRE.5 follow-up) — the two trade_readiness butterfly-track canaries (W_BFLY_PIN, the track's
+#       "dir": "neutral" stamp) go with the track.
 # v5.3  2026-11-09  OTV5 r103 (RETIRE.5 step 2) — the two config.py butterfly canaries (BUTTERFLY_WING_SPX,
 #       BUTTERFLY_ENTRY_START_ET) go with the GEX pin butterfly's keys (the operator, 2026-11-08: "I concur on both, in that order").
 # v5.2  2026-11-08  OTV5 r88 (RETIRE.3) — the two TC.6 canaries (exit_engine's is_trend_participation binding, main.py's
@@ -600,10 +602,8 @@ check "tests/readiness_digest.py"        "npeg = len(fits)"             "v1.2 he
 check "analysis/trade_readiness.py"      "def _market_snapshot"         "v1.5 VWAP context helper"
 check "analysis/trade_readiness.py"      '"market": self._mkt'          "v1.5 the journal actually EMITS it (a computed value never written is the bug)"
 check "analysis/trade_readiness.py"      '"dir": ("short" if side == "call" else "long")' "v1.6 condor dir is EXPOSURE not option type (call credit = short; the buyer's-eye reading inverts every condor row and still renders cleanly)"
-check "analysis/trade_readiness.py"      '"dir": "neutral"'             "v1.6 butterfly sideless BY DESIGN, stamped so it cannot be confused with a missing field"
 check "analysis/trade_readiness.py"      '_kind == "high_sweep"'        "v1.6 sweep dir from the LIVE liq_map — the field no offline tool could recover"
 check "tests/test_readiness_direction_stamp.py" "test_every_track_stamps_a_direction" "v1.0 all six tracks carry dir (one writer made it look optional for weeks)"
-check "analysis/trade_readiness.py"      "W_BFLY_PIN, W_BFLY_FIRM"     "v1.8 the butterfly scores the PIN, not the label"
 check "analysis/trade_readiness.py"      "pin_dist_unit"               "v1.8 em and atr2 are different scales — the unit must be recorded, never pooled"
 check "tests/test_butterfly_pin_readiness.py" "test_the_coil_is_not_in_hard_vetoes" "v1.0 the only test that can see the veto come back"
 check "analysis/trade_readiness.py"      "W_SWEEP_APPR, appr_val"       "v1.7 approach factor present; a label hard-veto would return this track to a silent permanent zero — restoring one is a silent permanent zero"

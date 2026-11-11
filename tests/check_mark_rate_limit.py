@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""tests/check_mark_rate_limit.py  v5.0
+"""tests/check_mark_rate_limit.py  v5.1
+v5.1  2026-11-11  OTV5 r107 (RETIRE.5 follow-up) — the butterfly fixture goes with the generic fly path (position_manager v5.35
+      prices no fly): R1/R4/R5/R10 ride the credit vertical (two legs, still one request), R2 becomes the vertical's
+      one-retry case. The retry, backoff, heartbeat and cooldown rules checked are unchanged.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.0  2026-10-20  r496 / F4.2 — THE LIVE MARK FALLBACK SURVIVES THE BROKER'S RATE LIMIT.
 
@@ -13,10 +16,10 @@ against a stub broker that answers BOTH SDK calls (get_market_data, the old per-
 call, and get_market_data_by_type, the batch call) and 429s on a schedule. Sleeps
 and heartbeat touches are recorded, not performed.
 
-  R1  a butterfly against a broker that 429s every OTHER request -> priced
-  R2  a credit vertical, same broker -> priced (short minus long)
+  R1  a credit vertical (two legs) against a broker that 429s every OTHER request -> priced (short minus long)
+  R2  a credit vertical whose first request 429s -> priced after one retry
   R3  a single leg whose first request 429s -> priced after one retry
-  R4  a butterfly with a calm broker costs ONE request, not one per leg
+  R4  a credit vertical with a calm broker costs ONE request, not one per leg
   R5  a broker that always 429s -> None after exactly 4 requests, backoff 0.5/1/2 s
       (3.5 s in all), the heartbeat touched before every request
   R6  a non-429 failure is NOT retried: one request, None
@@ -123,26 +126,24 @@ def main():
         return m._fetch_current_premium(rec, chain=None)
 
     near = lambda a, b: a is not None and abs(a - b) < 1e-9              # noqa: E731
-    fly = {"trade_id": "F", "strategy": "GEXPinButterfly", "is_butterfly": 1,
-           "lower_symbol": "SYN 1C95", "center_symbol": "SYN 1C100", "upper_symbol": "SYN 1C105"}
     vert = {"trade_id": "V", "strategy": "SweepCreditSpread", "is_condor_leg": 1,
             "option_symbol": "SYN 1P90", "short_symbol": "SYN 1P90", "long_symbol": "SYN 1P85"}
     single = {"trade_id": "S", "strategy": "RunawayContinuation", "option_symbol": "SYN 1C100"}
     every_other = lambda n: n % 2 == 0                                  # noqa: E731
 
-    v = price(fly, every_other)
-    check("R1 butterfly, a broker that 429s every other request -> priced 1.40",
-          near(v, 1.40), f"got {v!r} requests={broker['n']}")
     v = price(vert, every_other)
-    check("R2 credit vertical, same broker -> priced 1.50", near(v, 1.50),
+    check("R1 a two-leg structure (credit vertical), a broker that 429s every other request -> priced 1.50",
+          near(v, 1.50), f"got {v!r} requests={broker['n']}")
+    v = price(vert, lambda n: n == 1)
+    check("R2 credit vertical, first request 429s -> priced 1.50 after one retry", near(v, 1.50) and broker["n"] == 2,
           f"got {v!r} requests={broker['n']}")
     v = price(single, lambda n: n == 1)
     check("R3 single leg, first request 429s -> priced 2.10 after one retry",
           near(v, 2.10) and broker["n"] == 2, f"got {v!r} requests={broker['n']}")
-    v = price(fly)
-    check("R4 a calm broker: a butterfly costs ONE request", near(v, 1.40) and broker["n"] == 1,
+    v = price(vert)
+    check("R4 a calm broker: a credit vertical (two legs) costs ONE request", near(v, 1.50) and broker["n"] == 1,
           f"got {v!r} requests={broker['n']}")
-    v = price(fly, lambda n: True)
+    v = price(vert, lambda n: True)
     check("R5 always 429: None after 4 requests, backoff 0.5/1/2 s, heartbeat before each",
           v is None and broker["n"] == 4 and sleeps == [0.5, 1.0, 2.0] and len(touches) == 4,
           f"got {v!r} requests={broker['n']} sleeps={sleeps} touches={len(touches)}")
@@ -161,8 +162,8 @@ def main():
     check("R9 a respaced answer ('SPXW261020C07545000') still prices 3.10", near(v, 3.10),
           f"got {v!r}")
 
-    price(fly, lambda n: True)                     # spends the retries: cooldown starts
-    v = price(vert, lambda n: True, cool=None)     # the next position, same tick
+    price(vert, lambda n: True)                    # spends the retries: cooldown starts
+    v = price(single, lambda n: True, cool=None)   # the next position, same tick
     check("R10 after a spent retry, the next position tries ONCE and sleeps nothing",
           v is None and broker["n"] == 1 and sleeps == [], f"requests={broker['n']} sleeps={sleeps}")
     PM.PositionManager._mark_cool_until = 0.0

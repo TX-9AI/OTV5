@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_no_parc.py  v5.2
+tests/check_no_parc.py  v5.3
+v5.3  2026-11-11  OTV5 r107 (RETIRE.5 follow-up) — N5 strips the seven butterfly signal fields from the golden (asserting they were the defaults): OptionsSignal no longer has them. PARK's prepare and signal are otherwise unchanged.
 v5.2  2026-11-08  OTV5 r93 (C8.1) — N5 strips exactly PARK's new C8 condition and its rows, and r90's shadow_park_sma50
       row (red since r90), after asserting C8 fails open on the fixture (no 10:59 bar); the rest equals 93c7f93's.
 v5.1  2026-10-31  OTV5 r68 (CFG.5) — N4 RE-POINTED, NOT DROPPED (section 38.4): seven more items left configure.sh's menu, TCS's
@@ -308,6 +309,17 @@ def main():
         for k in ("checks", "conditions"):
             for ck in c8_keys:
                 (pp.get(k) or {}).pop(ck, None)
+    # r107 (RETIRE.5 follow-up): OptionsSignal loses its butterfly fields (is_butterfly, lower/center/upper_contract,
+    # butterfly_direction, net_debit, max_profit). The golden's PARK signals carried them at their defaults; strip exactly
+    # those keys from the golden (after asserting they were the defaults) and the rest must still be equal.
+    _fly_defaults = {"is_butterfly": False, "lower_contract": None, "center_contract": None, "upper_contract": None,
+                     "butterfly_direction": "", "net_debit": 0.0, "max_profit": 0.0}
+    for case in want:
+        _sg = want[case].get("signal") if isinstance(want.get(case), dict) else None
+        if isinstance(_sg, dict):
+            for fk, fv in _fly_defaults.items():
+                if fk in _sg and _sg.pop(fk) != fv:
+                    c8_open = False
     diff = sorted(k for k in set(want) | set(got) if want.get(k) != got.get(k))
     if not c8_open:
         diff.append("c8_not_fail_open")

@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """
-tests/check_retired_gone.py  v5.4
+tests/check_retired_gone.py  v5.5
+v5.5  2026-11-11  OTV5 r107 (RETIRE.5 follow-up) - G12 flips: OT_TR_BFLY_* is now stripped too (the butterfly readiness track is
+      removed); new G14 pins the generic butterfly execution, management, sizing and readiness names gone from the runtime.
 v5.4  2026-11-10  OTV5 r106 - G13/G13b: tools/strip_retired_env.sh v5.4 on a unit the caller cannot read: with sudo refused it
       says "UNREADABLE" and exits 1 (never "clean" / "parse FAILED"); with sudo -n it reads the unit and counts the key.
 v5.3  2026-11-09  OTV5 r103 (RETIRE.5 step 2) - THE GEX PIN BUTTERFLY IS GONE TOO. The operator, 2026-11-08: "I concur on both, in that
@@ -310,17 +312,18 @@ check("G11b an existing .bak-retire1 is kept as it was; the new backup is .bak-r
       open(unit4 + ".bak-retire1").read() == "THE FIRST BACKUP\n" and os.path.exists(unit4 + ".bak-retire2")
       and "OT_TCS_ACTIVE" in open(unit4 + ".bak-retire2").read(), run6.stdout.strip())
 
-# ── G12 (r103): the strip tool takes the GEX fly's keys off a unit; the readiness knobs OT_TR_BFLY_* stay ──────
+# ── G12 (r103, r107): the strip tool takes the GEX fly's keys off a unit, and (r107) the readiness knobs OT_TR_BFLY_* ──
 unit5 = os.path.join(_SCR, "optionsbot_bfly.service")
-KEEP5 = ["[Service]", 'Environment="OT_PARK=log"', 'Environment="OT_TR_BFLY_PIN_NEAR=0.25"',
+KEEP5 = ["[Service]", 'Environment="OT_PARK=log"', 'Environment="OT_TR_CONV_LO=0.25"',
          'Environment="OT_RISK_USD=1050"']
 DROP5 = ['Environment="OT_GEX_BUTTERFLY=0"', 'Environment="OT_BFLY_DEBIT_CEILING=0.5"',
-         'Environment="OT_BFLY_DISC_CONV_LO=0.3"', 'Environment="OT_GEX_BFLY_WING_EM_FRAC=0.25"']
+         'Environment="OT_BFLY_DISC_CONV_LO=0.3"', 'Environment="OT_GEX_BFLY_WING_EM_FRAC=0.25"',
+         'Environment="OT_TR_BFLY_PIN_NEAR=0.25"']
 open(unit5, "w").write("\n".join(KEEP5[:2] + DROP5 + KEEP5[2:] + ["ExecStart=/bin/true"]) + "\n")
 run7 = subprocess.run(["bash", tool, unit5], capture_output=True, text=True, env=env)
 b5 = [l for l in open(unit5).read().split("\n") if l]
-check("G12 the GEX fly keys (OT_GEX_BUTTERFLY, OT_BFLY_*, OT_GEX_BFLY_*) are stripped; OT_TR_BFLY_* and the rest kept",
-      run7.returncode == 0 and b5 == KEEP5 + ["ExecStart=/bin/true"] and "removed 4 retired line(s)" in run7.stdout,
+check("G12 the GEX fly keys (OT_GEX_BUTTERFLY, OT_BFLY_*, OT_GEX_BFLY_*) and OT_TR_BFLY_* are stripped; the rest kept",
+      run7.returncode == 0 and b5 == KEEP5 + ["ExecStart=/bin/true"] and "removed 5 retired line(s)" in run7.stdout,
       run7.stdout.strip())
 
 # ── G13 (r106): a unit the caller cannot read is read through sudo -n; a refused sudo is said loudly and exits 1 ─────
@@ -346,6 +349,33 @@ check("G13b an unreadable unit is read through sudo -n: the retired key is count
       (not _unreadable) or (run9.returncode == 0 and "1 retired line(s) would go: OT_GEX_BUTTERFLY" in run9.stdout),
       run9.stdout.strip())
 os.chmod(unit6, 0o600)
+
+# ── G14 (r107): the generic butterfly path is gone from the runtime; the history labels stay ─────────────────────
+def _src(*parts):
+    return open(os.path.join(ROOT, *parts), encoding="utf-8").read()
+_ee, _xe2, _pm, _rm = (_src("execution", "entry_engine.py"), _src("execution", "exit_engine.py"),
+                       _src("execution", "position_manager.py"), _src("risk", "risk_manager.py"))
+_bs, _mn, _tr = _src("strategy", "base_strategy.py"), _src("main.py"), _src("analysis", "trade_readiness.py")
+_gone14 = {
+    "entry _place_butterfly / _paper_fill_butterfly / _mark_cap": any(f"def {n}(" in _ee for n in
+                                                                    ("_place_butterfly", "_paper_fill_butterfly", "_mark_cap")),
+    "exit _evaluate_butterfly / _close_butterfly": any(f"def {n}(" in _xe2 for n in ("_evaluate_butterfly", "_close_butterfly")),
+    "position_manager _stash_fly_quote / _is_butterfly": any(f"def {n}(" in _pm for n in ("_stash_fly_quote", "_is_butterfly")),
+    "risk size_for('butterfly') / butterfly_half_size": ('st == "butterfly"' in _rm or "butterfly_half_size: bool" in _rm),
+    "OptionsSignal butterfly fields": any(f"    {n}:" in _bs for n in ("is_butterfly", "center_contract", "net_debit")),
+    "main _fly_entry_contract": "def _fly_entry_contract(" in _mn,
+    "readiness butterfly track": ("butterfly" in TR.TradeReadinessEngine.STRATEGIES or "def _butterfly(" in _tr),
+}
+_kept14 = {
+    "trades schema keeps is_butterfly / leg columns": all(k in _src("database", "trade_logger.py") for k in
+                                                         ("is_butterfly", "lower_symbol", "center_symbol", "upper_symbol")),
+    "query.py still decodes old fly rows": "is_butterfly" in _src("query.py"),
+    "structure still labels a butterfly row": 'BUTTERFLY = "butterfly"' in _src("strategy", "structure.py"),
+}
+check("G14 the generic butterfly execution, management, sizing and readiness are gone (r107)",
+      not any(_gone14.values()), str([k for k, v in _gone14.items() if v]))
+check("G14b the history labels that decode old fly trades are kept (schema, query, structure)",
+      all(_kept14.values()), str([k for k, v in _kept14.items() if not v]))
 
 print()
 if FAIL:

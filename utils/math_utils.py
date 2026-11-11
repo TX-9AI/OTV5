@@ -1,5 +1,6 @@
 """
-utils/math_utils.py  v5.0
+utils/math_utils.py  v5.1
+v5.1  2026-11-11  OTV5 r107 (RETIRE.5 follow-up) — butterfly_max_profit (a placeholder with zero callers) goes. Nothing else changes.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v4.2  2026-10-03  OTV4TEST r221 (UTIL.1) — find_fvgs: the one Fair Value Gap finder (structure_analyzer and exit_engine each carried the same loop).
 Shared numeric helpers.
@@ -143,19 +144,6 @@ def option_pnl_usd(entry_premium: float, current_premium: float,
                     contracts: int, multiplier: int = 100) -> float:
     """Unrealized P&L in USD."""
     return (current_premium - entry_premium) * contracts * multiplier
-
-
-def butterfly_max_profit(long_wing_premium: float, short_body_premium: float,
-                          multiplier: int = 100) -> float:
-    """
-    Max profit for a debit butterfly:
-    = (short body premium × 2 - long wing premium × 2) × multiplier
-    Simplified: wing_width - net_debit
-    """
-    net_debit = long_wing_premium - (2 * short_body_premium)
-    # Max profit = wing_width (in strike $) - net_debit, expressed as $ per point
-    # We compute this from the actual prices in butterfly_strategy.py
-    return net_debit * multiplier   # placeholder — override in strategy
 
 
 # ─── TECHNICAL INDICATORS ─────────────────────────────────────────────────────

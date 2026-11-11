@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""tests/check_buying_power.py  v5.1
+"""tests/check_buying_power.py  v5.2
+v5.2  2026-11-11  OTV5 r107 (RETIRE.5 follow-up) — P3 RE-POINTED (WA 38.4): _place_butterfly is removed with the generic fly entry, so P3 pins it gone; P2, P4-P6 unchanged.
 v5.1  2026-11-08  OTV5 r76 (RETIRE.1) — P5 RE-POINTED (WA 38.4): the ORB standing offer (_place_standing_offer) is removed with the ORB trade, so P5 pins
       it gone; P2-P4 and P6 (single leg, fly, credit vertical, paper) unchanged.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
@@ -16,8 +17,7 @@ derivative_buying_power (or raises); no network. Drives the REAL entry paths.
       re-armed by a good read
   P2  the REAL _place_single_leg: buying power below limit x n x 100 -> NOTHING
       placed; ample -> placed (control)
-  P3  the REAL _place_butterfly: buying power below cap x n x 100 -> nothing
-      placed; ample -> placed (control)
+  P3  r107: the generic butterfly entry is removed - nothing left to guard
   P4  the REAL main._post_credit_vertical: needs (width - credit) x n x 100;
       short -> nothing placed; ample -> placed (control)
   P5  r76: the ORB standing offer is removed with the ORB trade - nothing left to guard
@@ -130,17 +130,8 @@ def main():
               a_short.placed == [] and a_short.balance_reads == 1 and len(a_ok.placed) >= 1,
               f"short placed={a_short.placed} reads={a_short.balance_reads}; ample placed={a_ok.placed}")
 
-        def fly(bp):
-            LR.reset_all(); G.reset(); BP.reset()
-            a = _Acct(bp); EE.get_account = lambda: a
-            sig = types.SimpleNamespace(lower_contract=_c("L", 5.00, 5.02), center_contract=_c("C", 2.60, 2.62),
-                                        upper_contract=_c("U", 1.00, 1.02), net_debit=0.80)
-            eng._place_butterfly(sig, 5)            # cap 0.80 x 5 x 100 = $400
-            return a
-        f_short, f_ok = fly(300.0), fly(50_000.0)
-        check("P3 butterfly: $300 for a $400 cap -> nothing placed; ample -> placed",
-              f_short.placed == [] and len(f_ok.placed) >= 1,
-              f"short placed={f_short.placed}; ample placed={f_ok.placed}")
+        check("P3 r107: the generic butterfly entry is removed (no _place_butterfly to guard)",
+              not hasattr(EE.EntryEngine, "_place_butterfly"))
 
         check("P5 the ORB standing offer is removed with the ORB trade (r76): no _place_standing_offer to guard",
               not hasattr(EE.EntryEngine, "_place_standing_offer"))

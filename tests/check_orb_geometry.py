@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_orb_geometry.py  v5.0
+tests/check_orb_geometry.py  v5.1
+v5.1  2026-11-11  OTV5 r107 (RETIRE.5 follow-up) — G8c re-pointed (WA 38.4): the butterfly VIX half-size is removed with size_for("butterfly").
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 
 r119 — THE ORB SETUP'S GEOMETRY IS RECORDED, AND RECORDED ONLY.
@@ -185,8 +186,8 @@ check("G8b an A and a B size identically",
 # the butterfly VIX halving is a DIFFERENT rule and stays — operator: "the
 # current is ok for that one" until it has more than one trade behind it.
 _rsrc = open(os.path.join(ROOT, "risk/risk_manager.py")).read()
-check("G8c the butterfly VIX half-size is deliberately untouched",
-      "if is_butterfly and butterfly_half_size:" in _rsrc)
+check("G8c (r107) the butterfly VIX half-size is gone with the generic fly path (it was a fly-only rule)",
+      "butterfly_half_size: bool" not in _rsrc and "if is_butterfly and butterfly_half_size:" not in _rsrc)
 
 print(f"\n{'PASS' if not FAILURES else 'FAIL'}: {len(FAILURES)} problem(s) {FAILURES}")
 sys.exit(1 if FAILURES else 0)

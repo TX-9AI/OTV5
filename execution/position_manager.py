@@ -1,5 +1,6 @@
 """
-execution/position_manager.py  v5.34
+execution/position_manager.py  v5.35
+v5.35  2026-11-11  OTV5 r107 (RETIRE.5 follow-up) — THE GENERIC BUTTERFLY MANAGEMENT GOES: _stash_fly_quote, _is_butterfly (has_blocking_position now exempts only the liquidity hunt, as the fly can no longer be open), and the fly arms of the chain pricing and of _rest_premium. Every live structure (single leg, credit vertical, tent) prices exactly as before. The operator, 2026-11-07: "Running dead code and logging dead code activity is unnecessary drag."
 v5.34  2026-11-09  OTV5 r103 (RETIRE.5 step 2) — the GEX pin butterfly's admission row and its GEXFLY name constant go. PARK keeps its own row (one per session, cap-exempt); every live row is unchanged. The generic multi-leg record handling (is_butterfly) stays for any butterfly record still on a book. The operator, 2026-11-08: "I concur on both, in that order".
 v5.33  2026-11-08  OTV5 r88 (RETIRE.3) — the TCS admission row and name, the SHADOW flag and the r57 shadow seams (_exit_engine / _management and the four SHADOW branches) go with the TCS shadow; every real path is unchanged. The operator, 2026-11-08: "Delete" (the TCS shadow, which never fired: its own gates declined every candidate 11-02..11-06).
 v5.32  2026-11-08  OTV5 r76 (RETIRE.1) — the admission table loses the removed trades' rows (ORB, VOLT, SWEEP, ATPFLY, ORCS) and their name constants; the ORB-trade close hook (standing-offer remainder cancel + engine re-arm, keyed on "ORB" in the strategy) is removed; get_open_record (no caller) is removed. The live rows are unchanged. The operator, 2026-11-07: "Running dead code and logging dead code activity is unnecessary drag. Yes, I want all of those things fixed."
@@ -362,20 +363,6 @@ def _stash_quote(record, bid: float, ask: float) -> None:
         pass
 
 
-def _stash_fly_quote(record, bid: float, ask: float) -> None:
-    """r48 (LIVE.7) — the butterfly's composite quote FOR THE EXIT LADDER, under its own
-    keys (r195's _q_* stay record-only and _exit_bid/_exit_ask stay absent on a fly, so no
-    other reader changes). Read only by exit_engine._close_butterfly for a close whose
-    pricing is declared `walk`; same stamp and freshness rule as _stash_quote."""
-    try:
-        if ask and float(ask) > 0:
-            record["_exit_fly_bid"] = round(float(bid), 4)
-            record["_exit_fly_ask"] = round(float(ask), 4)
-            _quote_stamp(record)
-    except (TypeError, ValueError):
-        pass
-
-
 def _note_quote(record, bid, ask, iv=None) -> None:
     """r195 (AUD.4) — the structure's two-sided quote and IV at this tick, FOR THE
     RECORD ONLY: `_execute_exit` writes them to trades.exit_bid / exit_ask / exit_iv
@@ -713,19 +700,6 @@ class PositionManager:
         except Exception:                                       # noqa: BLE001
             return False
 
-    @staticmethod
-    def _is_butterfly(record) -> bool:
-        """A GEX pin butterfly. Reads the ROW, not the strategy name.
-
-        ⚠️ The column is the fact; `strategy` is a label that has been
-        rewritten before. `is_butterfly` is set at the record builder and is
-        what every other consumer keys on.
-        """
-        try:
-            return bool(record.get("is_butterfly", 0))
-        except Exception:                                       # noqa: BLE001
-            return False
-
     # ══ ADMISSION, ANSWERED FROM THE STATE THIS OBJECT ALREADY HOLDS ══════
     def open_by_strategy(self) -> dict:
         """{strategy: open count} across the records this manager holds.
@@ -885,7 +859,7 @@ class PositionManager:
         # would answer "nothing blocks" on a box that restarted holding an ORB
         # position — and let a credit trade open against it.
         self.has_open_position()
-        return any(not (self._is_butterfly(r) or self._is_liquidity_hunt(r))
+        return any(not self._is_liquidity_hunt(r)
                    for r in self._open_records)
 
     def has_open_position(self) -> bool:
@@ -1136,7 +1110,6 @@ class PositionManager:
         applies the same ceiling. Fail direction: None → tick skipped →
         no decision on garbage.
         """
-        is_butterfly = bool(record.get("is_butterfly", False))
         # r48 (LIVE.7 c) — one pricing pass: a stash written below carries this number; one from an earlier pass
         # (or a pass that stashed nothing, e.g. the live REST fallback) is ignored by exit_engine._exit_quote.
         try:
@@ -1208,29 +1181,6 @@ class PositionManager:
                         _note_quote(record, record.get("_exit_bid"), record.get("_exit_ask"),
                                     getattr(_sc, "iv", None))        # r195: the SHORT leg's IV
                         return short_m - long_m   # current spread value (credit basis)
-                elif is_butterfly:
-                    lower_s  = record.get("lower_strike",  0)
-                    center_s = record.get("center_strike", 0)
-                    upper_s  = record.get("upper_strike",  0)
-                    lower_m  = next((c.mark for c in contracts_list if c.strike == lower_s  and 0 < c.mark < 1e6), None)
-                    center_m = next((c.mark for c in contracts_list if c.strike == center_s and 0 < c.mark < 1e6), None)
-                    upper_m  = next((c.mark for c in contracts_list if c.strike == upper_s  and 0 < c.mark < 1e6), None)
-                    if None not in (lower_m, center_m, upper_m):
-                        # r195: a composite quote FOR THE RECORD ONLY (see _note_quote) -
-                        # sell the wings at their bids, buy the body back at its ask.
-                        try:
-                            _w = {c.strike: c for c in contracts_list}
-                            _lo, _ce, _up = _w.get(lower_s), _w.get(center_s), _w.get(upper_s)
-                            if None not in (_lo, _ce, _up):
-                                _g = lambda c, k: float(getattr(c, k, 0.0) or 0.0)
-                                _fb = max(0.0, _g(_lo, "bid") + _g(_up, "bid") - 2 * _g(_ce, "ask"))
-                                _fa = max(0.0, _g(_lo, "ask") + _g(_up, "ask") - 2 * _g(_ce, "bid"))
-                                _note_quote(record, _fb, _fa,
-                                            getattr(_ce, "iv", None))   # the BODY's IV
-                                _stash_fly_quote(record, _fb, _fa)      # r48: the walk's quote, own keys
-                        except Exception as _qe:                  # noqa: BLE001
-                            logger.debug("fly quote not recorded: %s", _qe)
-                        return lower_m + upper_m - 2 * center_m
                 else:
                     strike = record.get("strike", 0)
                     match  = next(
@@ -1307,7 +1257,6 @@ class PositionManager:
     def _rest_premium(self, record: TradeRecord) -> Optional[float]:
         """The no-chain REST pricing (the live branch of _fetch_current_premium, moved here unchanged by r74 so a
         blind paper box can ask it too). None when a leg cannot be priced."""
-        is_butterfly = bool(record.get("is_butterfly", False))
         client = get_client()
         try:
             # r468 / F4 — dispatch like the chain path above: a leg we cannot
@@ -1326,22 +1275,8 @@ class PositionManager:
                 if short_m is None or long_m is None:
                     return None
                 return short_m - long_m           # current spread value (credit basis)
-            if is_butterfly:
-                lower_sym  = record.get("lower_symbol",  "")
-                center_sym = record.get("center_symbol", "")
-                upper_sym  = record.get("upper_symbol",  "")
-
-                m = self._get_option_marks(client, [lower_sym, center_sym, upper_sym])   # r496
-                lower_mark  = m.get(lower_sym) if lower_sym else None
-                center_mark = m.get(center_sym) if center_sym else None
-                upper_mark  = m.get(upper_sym) if upper_sym else None
-
-                if None in (lower_mark, center_mark, upper_mark):
-                    return None
-                return lower_mark + upper_mark - 2 * center_mark
-            else:
-                symbol = record.get("option_symbol", "")
-                return self._get_option_mark(client, symbol)
+            symbol = record.get("option_symbol", "")
+            return self._get_option_mark(client, symbol)
 
         except Exception as e:
             logger.error(f"Premium fetch error: {e}")

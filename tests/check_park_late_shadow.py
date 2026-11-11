@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """
-tests/check_park_late_shadow.py  v5.3
+tests/check_park_late_shadow.py  v5.4
+v5.4  2026-11-11  OTV5 r107 (RETIRE.5 follow-up) — B1's _evaluate_route pin RE-POINTED (WA section 38.4): 1855505efa2e697f -> 1127111d9e2e2b11,
+      the butterfly arm removed with the generic fly path (the diff is that arm and the elif that followed it becoming if);
+      _evaluate_park, _park_cf and _decay_read keep their hashes.
 v5.3  2026-11-08  OTV5 r76 (RETIRE.1) — B1's _evaluate_route pin RE-POINTED (WA section 38.4): ad64d87edd0b44fa -> 1855505efa2e697f,
       the ORBStrategy and VOLT arms removed with those trades (the diff is those two arms and nothing else); _evaluate_park,
       _park_cf and _decay_read keep their 0e4d240 hashes and D1 is unchanged.
@@ -173,7 +176,7 @@ check("C1 config: on / (14, 30) / 0.50 / 0.20 by default; OT_PARK_LATE_SHADOW=0 
 
 # ── B byte-for-byte ──────────────────────────────────────────────────────────────────────────────────
 PINNED = {"_evaluate_park": "11f87bb5bfe16b82", "_park_cf": "af8d04371db47fb8",
-          "_decay_read": "e2379a457c018f91", "_evaluate_route": "1855505efa2e697f"}       # 0e4d240; route: r67 (PARC arm removed), r76 (ORB / VOLT arms removed)
+          "_decay_read": "e2379a457c018f91", "_evaluate_route": "1127111d9e2e2b11"}       # 0e4d240; route: r67 (PARC arm removed), r76 (ORB / VOLT arms removed), r107 (fly arm removed)
 got = {n: h16(getattr(XE.ExitEngine, n)) for n in PINNED}
 check("B1 PARK's exits, the decay read and the route are byte-for-byte 0e4d240's; PARK stays decay-exempt; PARK knobs",
       got == PINNED and tuple(config.DECAY_STOP_EXEMPT) == ("RunawayContinuation", "PARK")

@@ -1,5 +1,6 @@
 """
-strategy/plan.py  v5.3
+strategy/plan.py  v5.4
+v5.4  2026-11-11  OTV5 r107 (RETIRE.5 follow-up) — PlanTick.butterfly (the fly's economics) goes: no plan calls it since the fly strategy was removed at r103. debit_directional and credit_spread are unchanged.
 v5.3  2026-11-08  OTV5 r76 (RETIRE.1) — DISPATCH_ALIAS drops ORB and SweepForLeg2; OWN_LEDGER drops ORBStrategy. Nothing a live plan reads changes. The operator, 2026-11-07: "Running dead code and logging dead code activity is unnecessary drag. Yes, I want all of those things fixed."
 v5.2  2026-10-26  OTV5 r35 (PLN.3) — A CLOSED POSITION'S MANAGE VERDICT LEAVES THE [plans] LINE. A /manage plan runs
       only while its position is open (r303's condition gate), so after the close nothing reset its last verdict and
@@ -661,22 +662,6 @@ class PlanTick:
         self.check("delta", d or None, None if not d else d > 0)
         self.check("stop_distance", ds or None, None if not ds else ds > 0)
         self.check("target_distance", dt or None, None if not dt else dt > 0)
-        self._economics_r()
-        return self
-
-    def butterfly(self, debit, width, invalidation=None, trigger=None) -> "PlanTick":
-        """A debit fly: max profit = width - debit. R = (width - debit)/debit."""
-        try:
-            dbt, w = float(debit), float(width)
-        except (TypeError, ValueError):
-            dbt, w = 0.0, 0.0
-        self.anchor(trigger, invalidation)
-        self.debit = dbt if dbt > 0 else None
-        if dbt > 0 and w > dbt:
-            self.risk, self.reward = round(dbt, 4), round(w - dbt, 4)
-            self.r = round((w - dbt) / dbt, 4)
-        self.check("debit", self.debit, None if self.debit is None else True)
-        self.check("width", w or None, None if not w else w > 0)
         self._economics_r()
         return self
 

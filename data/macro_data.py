@@ -1,5 +1,6 @@
 """
-data/macro_data.py  v5.2
+data/macro_data.py  v5.3
+v5.3  2026-11-11  OTV5 r107 (RETIRE.5 follow-up) — MacroSnapshot.butterfly_half_size goes: its one reader (main's butterfly sizing argument) is removed with the generic fly path. The VIX bands, butterfly_allowed, macro_context and new_entries_allowed are unchanged.
 v5.2  2026-10-27  OTV5 r43 (MACRO.1) — A RATE-LIMITED VIX FETCH IS RETRIED, AND A DEFAULTED SNAPSHOT IS RE-FETCHED SOON.
       At the 09:15 ET wake on 2026-10-27 all 14 boxes asked TastyTrade GET /market-data/Index/VIX in the same second;
       CRM, GOOGL and NFLX got HTTP 429 at 13:15:36 UTC and logged "Could not fetch VIX — defaulting to 20
@@ -93,7 +94,6 @@ class MacroSnapshot:
 
     # Derived gates
     butterfly_allowed:  bool = True
-    butterfly_half_size: bool = False
     new_entries_allowed: bool = True
 
     fetched_at: float = 0.0
@@ -141,12 +141,10 @@ class MacroManager:
             snap.macro_context       = "RISK_OFF"
         elif snap.vix >= 15:
             snap.butterfly_allowed      = True
-            snap.butterfly_half_size    = True   # Half size butterfly
             snap.new_entries_allowed    = True
             snap.macro_context          = "NEUTRAL"
         else:
             snap.butterfly_allowed      = True
-            snap.butterfly_half_size    = False
             snap.new_entries_allowed    = True
             snap.macro_context          = "RISK_ON"
 

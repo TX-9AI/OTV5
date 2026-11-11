@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""tests/check_plan_r_owner.py — v5.0
+"""tests/check_plan_r_owner.py — v5.1
+v5.1  2026-11-11  OTV5 r107 (RETIRE.5 follow-up) — P5 drops the butterfly half: PlanTick.butterfly is removed with the fly path.
 v5.0  2026-10-25  (PLN.R) — A STRATEGY'S OWN R VERDICT SURVIVES THE PLAN'S ECONOMICS. debit_directional /
       credit_spread / butterfly overwrote check("r") and self.r after Breakout judged its own price R, so the
       stored row showed the premium R with no verdict.
@@ -9,7 +10,7 @@ Drives the real PlanTick (strategy/plan.py).
   P2  ...and the premium R is kept as checks["r_premium"] (value == the economics R, verdict None)
   P3  a refused R (verdict False) also stands
   P4  a plan that never judged R is unchanged: checks["r"] is (economics R, None), no r_premium, executable() decides
-  P5  credit_spread and butterfly obey the same rule
+  P5  credit_spread obeys the same rule
 
 Born red on 4d4942b (OTV5 r24) at P1 P2 P3 P5.
 Run:  python3 tests/check_plan_r_owner.py
@@ -63,12 +64,8 @@ def main():
         t1.credit_spread(100.0, 99.0, 0.40)
     except TypeError:
         t1.credit_spread(100.0, 99.0, 0.40, invalidation=101.0)
-    t2 = tick()
-    t2.check("r", 2.0, True)
-    t2.butterfly(1.00, 5.0)
-    ck("P5", t1.checks.get("r") == (2.0, True) and t2.checks.get("r") == (2.0, True)
-       and "r_premium" in t1.checks and "r_premium" in t2.checks,
-       f"credit {t1.checks.get('r')} fly {t2.checks.get('r')}")
+    ck("P5", t1.checks.get("r") == (2.0, True) and "r_premium" in t1.checks,
+       f"credit {t1.checks.get('r')}")
 
 
 if __name__ == "__main__":

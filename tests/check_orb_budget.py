@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""tests/check_orb_budget.py  v5.0
+"""tests/check_orb_budget.py  v5.1
+v5.1  2026-11-11  OTV5 r107 (RETIRE.5 follow-up) — B7 re-pointed (WA 38.4) from the removed butterfly rule to the vertical: no other rule gained a budget.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 ORB SIZES TO min(GEOMETRY, BUDGET), AND A CONTRACT DEARER THAN THE BUDGET IS
 REFUSED RATHER THAN FLOORED TO ONE.
@@ -114,10 +115,11 @@ def main():
     # ⚠️ The budget is ORB's. Butterfly stays on regular position sizing and
     # keeps firing alongside an open trade (r197) — the operator's ruling, and
     # the reason ORB "owning the budget" does not starve it.
-    bf = rm.size_for("butterfly", net_debit=0.40, budget_usd=1)
-    check("B7 the butterfly ignores the ORB budget entirely",
-          bf.rule == "butterfly" and bf.contracts > 0,
-          f"rule={bf.rule} n={bf.contracts}")
+    # r107: size_for("butterfly") is removed with the generic fly path; the vertical is the other rule left.
+    vt = rm.size_for("vertical", spread_width=1.0, credit=0.3, budget_usd=1)
+    check("B7 the credit vertical ignores the ORB budget entirely",
+          vt.rule == "vertical" and vt.contracts > 0,
+          f"rule={vt.rule} n={vt.contracts}")
 
     print()
     if _fails:

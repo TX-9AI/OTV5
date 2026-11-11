@@ -1,5 +1,6 @@
 """
-analysis/signal_journal.py  v5.1
+analysis/signal_journal.py  v5.2
+v5.2  2026-11-11  OTV5 r107 (RETIRE.5 follow-up) — signal_ctx loses its butterfly legs block: OptionsSignal has no butterfly fields since this revision. Every other field is unchanged.
 v5.1  2026-11-08  OTV5 r76 (RETIRE.1) — vol_ctx and macro_ctx (no caller anywhere) are removed. Nothing else changes. The operator, 2026-11-07: "Running dead code and logging dead code activity is unnecessary drag. Yes, I want all of those things fixed."
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v4.4  2026-09-25  OTV4TEST r144 — THE JOURNAL DIRECTORY IS OVERRIDABLE: OT_SIGNAL_JOURNAL_DIR.
@@ -212,14 +213,6 @@ def signal_ctx(signal) -> dict:
             "notes":            getattr(signal, "notes", ""),
             "contract":         contract_ctx(getattr(signal, "contract", None)),
         }
-        if getattr(signal, "is_butterfly", False):
-            d["is_butterfly"] = True
-            d["net_debit"] = _round(getattr(signal, "net_debit", 0.0), 4)
-            d["legs"] = {
-                "lower":  contract_ctx(getattr(signal, "lower_contract", None)),
-                "center": contract_ctx(getattr(signal, "center_contract", None)),
-                "upper":  contract_ctx(getattr(signal, "upper_contract", None)),
-            }
         return d
     except Exception:
         return None

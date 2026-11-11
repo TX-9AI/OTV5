@@ -1,5 +1,6 @@
 """
-data/gex_data.py  v5.1
+data/gex_data.py  v5.2
+v5.2  2026-11-11  OTV5 r107 (RETIRE.5 follow-up) — butterfly_gex_grade and best_butterfly_center go: zero callers (the fly strategy, their last reader, went at r103). compute_gex and every snapshot field are unchanged.
 v5.1  2026-10-30  OTV5 r56 (GEX.4) — THE FLIP AND THE WALLS SAY SOMETHING ABOUT TODAY'S PRICE. TELEMETRY ONLY: NO DECISION READS
       flip_strike, call_wall or put_wall (main, strategy/, derived/, status.py, dtp: none; sweep_gex_confluence has zero
       callers), and pin / pin_strike_raw / pin_dist_pct / pin_concentration / net_gex_ratio / gex_environment / orb_bias /
@@ -445,38 +446,6 @@ def compute_gex(chain: OptionsChain, spot_price: float) -> GEXSnapshot:
     return snapshot
 
 
-def butterfly_gex_grade(snapshot: GEXSnapshot,
-                         center_strike: float,
-                         tolerance: float = 2.0) -> str:
-    """
-    Grade a butterfly entry based on GEX confluence.
-
-    Args:
-        snapshot:       Current GEX snapshot
-        center_strike:  Proposed butterfly center strike
-        tolerance:      Max distance from pin strike for Grade A (default $2)
-
-    Returns:
-        "A" — pin strike within tolerance AND PINNING environment
-        "B" — PINNING environment but pin strike further away
-        "C" — NEUTRAL or TRENDING — skip or heavily reduce size
-    """
-    if not snapshot.valid:
-        return "B"   # No GEX data — default to B, don't block
-
-    if snapshot.gex_environment == "TRENDING":
-        return "C"   # Dealers short gamma — butterflies will get run over
-
-    pin_distance = abs(center_strike - snapshot.pin_strike)
-
-    if snapshot.gex_environment == "PINNING" and pin_distance <= tolerance:
-        return "A"
-    elif snapshot.gex_environment == "PINNING":
-        return "B"
-    else:
-        return "B"   # NEUTRAL — allow but don't boost
-
-
 def sweep_gex_confluence(snapshot: GEXSnapshot,
                           sweep_price: float,
                           tolerance: float = 2.0) -> bool:
@@ -505,38 +474,3 @@ def sweep_gex_confluence(snapshot: GEXSnapshot,
         )
         return True
     return False
-
-
-def best_butterfly_center(snapshot: GEXSnapshot,
-                           current_price: float,
-                           max_distance: float = 5.0) -> float:
-    """
-    Return the best center strike for a butterfly.
-    Uses GEX pin strike if within max_distance of current price,
-    otherwise falls back to current price (ATM).
-
-    Args:
-        snapshot:       Current GEX snapshot
-        current_price:  Current underlying price
-        max_distance:   Max distance pin strike can be from price
-
-    Returns:
-        Optimal center strike price
-    """
-    if not snapshot.valid or snapshot.pin_strike == 0:
-        return current_price
-
-    pin_distance = abs(current_price - snapshot.pin_strike)
-
-    if pin_distance <= max_distance:
-        logger.info(
-            f"GEX pin center: ${snapshot.pin_strike:.0f} "
-            f"(price=${current_price:.2f} distance=${pin_distance:.1f})"
-        )
-        return snapshot.pin_strike
-
-    logger.debug(
-        f"GEX pin ${snapshot.pin_strike:.0f} too far from price "
-        f"${current_price:.2f} ({pin_distance:.1f} > {max_distance}) — using ATM"
-    )
-    return current_price

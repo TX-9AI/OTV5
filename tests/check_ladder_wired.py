@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_ladder_wired.py  v5.1
+tests/check_ladder_wired.py  v5.2
+v5.2  2026-11-11  OTV5 r107 (RETIRE.5 follow-up) — L1b and L5's butterfly path go with the generic fly entry (entry_engine v5.2). L1a, L1c and L5 on the single leg unchanged.
 v5.1  2026-11-08  OTV5 r76 (RETIRE.1) — L10 RE-POINTED (WA 38.4): the second-leg sweep is removed, so the condor still authorizes a side and no
       SweepForLeg2 is asked; the three direct-fire tags stay absent.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
@@ -59,8 +60,7 @@ fns = {n.name: ast.unparse(n) for n in ast.walk(tree)
        if isinstance(n, ast.FunctionDef)}
 check("L1a _place_single_leg prices through the walk",
       "_walk_price" in fns.get("_place_single_leg", ""))
-check("L1b _place_butterfly prices through the walk",
-      "_walk_price" in fns.get("_place_butterfly", ""))
+# r107: L1b (_place_butterfly prices through the walk) goes - the generic fly entry is removed.
 check("L1c single-leg no longer posts a bare limit_at_mark",
       "limit_at_mark" not in fns.get("_place_single_leg", ""))
 
@@ -97,7 +97,7 @@ lr.clear(K3)
 check("L4b a filled walk is cleared (no stale ratchet)", lr.active() == 0)
 
 # ── L5 — paper is untouched ──────────────────────────────────────────────────
-paper_fns = [n for n in ("_paper_fill_single", "_paper_fill_butterfly")]
+paper_fns = [n for n in ("_paper_fill_single",)]                  # r107: _paper_fill_butterfly removed
 leaked = [f for f in paper_fns
           if "ladder_registry" in fns.get(f, "") or "_walk_price" in fns.get(f, "")]
 check("L5 no PAPER path touches the ladder", not leaked, f"{leaked}")

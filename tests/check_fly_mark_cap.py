@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """
-tests/check_fly_mark_cap.py  v5.0
+tests/check_fly_mark_cap.py  v5.1
+v5.1  2026-11-11  OTV5 r107 (RETIRE.5 follow-up) — C1-C4 (the REAL _place_butterfly and _mark_cap) go with the generic fly entry;
+      C1 now pins both gone. C5 (single legs never post past the mark, 32 quotes) unchanged.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.2  2026-10-20  otv4 r495 (B4) — the fake account answers get_live_orders with an empty
       book. B4 posts no live entry until one working-order sweep is clean, so a fake
@@ -63,55 +65,11 @@ def _leg(sym, bid, ask):
 
 
 def main():
+    # r107 (RETIRE.5 follow-up): C1-C4 drove the REAL EntryEngine._place_butterfly / _mark_cap, both removed with the
+    # generic fly entry. C5 (single legs never post past the mark) is the property that remains.
     import execution.entry_engine as EE
-    from execution import ladder_registry as LR
-    posted = []
-
-    class _Acct:
-        def place_order(self, session, order, dry_run=False):
-            posted.append(round(-float(order.price), 2))
-            return types.SimpleNamespace(errors=None, order=types.SimpleNamespace(id="X"))
-
-        def get_balances(self, session, currency="USD"):              # F5 (r473)
-            return types.SimpleNamespace(derivative_buying_power=1_000_000.0)
-
-        def get_live_orders(self, session):                            # B4 (r495)
-            return []
-    sv = (EE.get_session, EE.get_account, EE.confirm_order_fill)
-    EE.get_session = lambda: object()
-    EE.get_account = lambda: _Acct()
-    EE.confirm_order_fill = lambda *a, **k: types.SimpleNamespace(
-        filled=False, net_price=None, quantity=0, working_order_id=None, detail="dead", order_id="")
-
-    def fly(lo, ce, up, mark, tag):
-        LR.reset_all()
-        del posted[:]
-        eng = EE.EntryEngine.__new__(EE.EntryEngine)
-        eng.paper_trading = False
-        sig = types.SimpleNamespace(lower_contract=_leg(f"L{tag}", *lo), center_contract=_leg(f"C{tag}", *ce),
-                                    upper_contract=_leg(f"U{tag}", *up), net_debit=mark)
-        out = eng._place_butterfly(sig, 1)
-        return list(posted), out
-    try:
-        cap = getattr(EE.EntryEngine, "_mark_cap", None)
-        check("C1 the cap is the mark floored to the cent: 0.25, 0.257 -> 0.25; 0.009 and None -> no cap",
-              cap is not None and (cap(0.25), cap(0.257), cap(0.009), cap(None)) == (0.25, 0.25, None, None),
-              "EntryEngine._mark_cap absent" if cap is None else str((cap(0.25), cap(0.257), cap(0.009), cap(None))))
-    except Exception as exc:                                  # noqa: BLE001
-        check("C1 (did not run)", False, f"{type(exc).__name__}: {exc}")
-    try:
-        p2, _o = fly((4.90, 5.10), (2.50, 2.80), (0.00, 0.90), 0.15, "a")
-        check("C2 a no-bid wing, true mark 0.15: both attempts post 0.15 - nothing above the mark",
-              len(p2) == 2 and max(p2) <= 0.15 + 1e-9 and p2 == [0.15, 0.15], f"posted {p2}")
-        p3, _o = fly((5.00, 5.02), (2.60, 2.62), (1.00, 1.02), 0.80, "b")
-        check("C3 a tight fly, mark 0.80: the first rung stays below the mark; the retry is 0.80, not 0.81",
-              len(p3) == 2 and p3[0] < 0.80 and p3[1] == 0.80, f"posted {p3}")
-        p4, o4 = fly((0.02, 0.03), (0.01, 0.02), (0.00, 0.01), 0.004, "c")
-        check("C4 a mark under one cent posts nothing", p4 == [] and o4 == (None, "", 0), f"posted {p4}, returned {o4}")
-    except Exception as exc:                                  # noqa: BLE001
-        check("C2 (did not run)", False, f"{type(exc).__name__}: {exc}")
-    finally:
-        EE.get_session, EE.get_account, EE.confirm_order_fill = sv
+    check("C1 r107: the fly-only entry pieces are gone (_place_butterfly, _mark_cap)",
+          not hasattr(EE.EntryEngine, "_place_butterfly") and not hasattr(EE.EntryEngine, "_mark_cap"))
     try:
         from execution.entry_ladder import LadderState
         worst, n = 0.0, 0
@@ -134,7 +92,7 @@ def main():
     if FAILED:
         print(f"\nRED — {len(FAILED)} check(s): {FAILED}")
         return 1
-    print("\nGREEN — no butterfly entry posts above its mark; single legs never did")
+    print("\nGREEN — single legs never post above the mark (the fly entry is removed, r107)")
     return 0
 
 

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""tests/check_live_mark_fallback.py  v5.0
+"""tests/check_live_mark_fallback.py  v5.1
+v5.1  2026-11-11  OTV5 r107 (RETIRE.5 follow-up) — L3 (the butterfly's REST composite) goes with the generic fly path. Every other check unchanged.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 F4 — THE LIVE MARK FALLBACK WORKS, AND PRICES THE WHOLE STRUCTURE.
 
@@ -24,7 +25,6 @@ network, no database (the manager is built without __init__).
   L1  single leg, two-sided quote 1.00/1.20 -> 1.10
   L2  credit vertical: short 2.00/2.20, long 0.50/0.70 -> 1.50 (short minus long),
       never the short leg's 2.10
-  L3  butterfly: lower + upper - 2 x center
   L4  tent -> None, and no quote is requested
   L5  credit vertical with no long_symbol -> None (one leg is not a price)
   L6  a finite-absurd mark (1e12) -> None (AUDIT F9's ceiling)
@@ -131,11 +131,7 @@ def main():
     check("L2 credit vertical -> short minus long 1.50, never the short leg's 2.10",
           near(v, 1.50), f"got {v!r}")
 
-    fly = {"trade_id": "L3", "strategy": "GEXPinButterfly", "is_butterfly": 1,
-           "lower_symbol": "SYN 1C95", "center_symbol": "SYN 1C100B", "upper_symbol": "SYN 1C105"}
-    v = price(fly)
-    check("L3 butterfly -> lower + upper - 2 x center (5.10 + 0.50 - 4.20 = 1.40)",
-          near(v, 1.40), f"got {v!r}")
+    # r107: L3 (the butterfly composite) goes with the generic fly path (position_manager v5.35 prices no fly).
 
     tent = dict(vert, trade_id="L4", setup_type="tent")
     v = price(tent)

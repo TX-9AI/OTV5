@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_decay_stop.py  v5.4
+tests/check_decay_stop.py  v5.5
+v5.5  2026-11-11  OTV5 r107 (RETIRE.5 follow-up) — B1/B2 (the butterfly's net pricing and decay) go with the generic fly path (position_manager v5.35 no longer prices a fly). Every other check unchanged.
 v5.4  2026-11-09  OTV5 r103 (RETIRE.5 step 2) — B2 re-pointed (WA 38.4): HOLD_TO_CLOSE_STRATEGIES is removed with the GEX fly, so B2 pins that a record under the fly's name now decays exactly as B1. Every other check unchanged.
 v5.3  2026-11-08  OTV5 r88 (RETIRE.3) — H1 (a shadow TCS through execution/shadow_book) goes with the TCS shadow; every other check unchanged.
 v5.2  2026-11-03  OTV5 r73 (BFLY.17) — THE GEX PIN FLY HOLDS TO THE CLOSE. The operator, 2026-11-03: "For the GEX fly, I want
@@ -32,9 +33,6 @@ v5.0  2026-10-30  OTV5 r58 (DECAY.1) — THE PEAK-DECAY PROFIT STOP. A TRADING C
       armed at 10:05:00 pnl=7.0%"; condition parsers read "decay"; ExitDecision pnl = p / entry and p x contracts x 100
   K1  credit vertical: mark = cost to close, p = entry - mark: a FALLING cost arms and a rebound of 30% of the
       captured credit closes; a RISING cost (a loss) never arms
-  B1  butterfly: position_manager prices the net lower + upper - 2 x center, and the decay p is that net - entry;
-      the 29% / 30% boundary on the butterfly (ATPButterfly since r73)
-  B2  r103: HOLD_TO_CLOSE_STRATEGIES is removed with the GEX fly, so a record under that name decays exactly as B1
   R1  RunawayContinuation: the same path that closes a Breakout does not close it, and no reading is kept
   R2  PARK is exempt by default (no decay close, no reading); with DECAY_STOP_EXEMPT = ("RunawayContinuation",) (what
       OT_DECAY_STOP_EXEMPT=RunawayContinuation sets) the same PARK path closes on decay
@@ -124,13 +122,6 @@ def credit_rec(tid, **kw):
     return r
 
 
-def fly_rec(tid, strategy="ATPButterfly", **kw):
-    r = rec(tid, strategy, is_butterfly=1, direction="neutral", lower_strike=715.0, center_strike=720.0,
-            upper_strike=725.0, entry_premium=1.00, stop_premium=0.50)
-    r.update(kw)
-    return r
-
-
 def run(r, marks, eng=None):
     eng = eng or XE.ExitEngine(paper_trading=True)
     out = []
@@ -197,37 +188,6 @@ check("K1 credit: cost to close falling arms; the 30% rebound (cost 0.86, p 0.14
       and not any(is_decay(d) for d, _ in k2) and not any((rd or {}).get("armed") for _, rd in k2)
       and bool((k1[5][1] or {}).get("credit")),
       f"{closes(k1)} {k1[5][0].exit_reason!r} rising {[d.exit_reason for d, _ in k2]}")
-
-# ── B butterfly net ──────────────────────────────────────────────────────────────────────────────────
-try:
-    from execution.position_manager import PositionManager
-
-    class _C:
-        def __init__(self, k, m):
-            self.strike, self.mark, self.bid, self.ask, self.iv = k, m, m - 0.01, m + 0.01, 0.2
-
-    class _Chain:
-        def __init__(self, lo, ce, up):
-            self.calls = [_C(715.0, lo), _C(720.0, ce), _C(725.0, up)]
-            self.puts = []
-            self.spot_price = 720.0
-    _pm = PositionManager.__new__(PositionManager)
-    _nets = [PositionManager._fetch_current_premium(_pm, fly_rec("bq"), _Chain(lo, ce, up))
-             for lo, ce, up in ((6.0, 2.6, 0.3), (6.2, 2.6, 0.2), (6.2, 2.629, 0.2), (6.2, 2.63, 0.2))]
-except Exception as exc:                                     # noqa: BLE001
-    _nets = [None]
-    print(f"    (butterfly pricing not reachable: {exc})")
-_nets_r = [round(x, 4) if x is not None else None for x in _nets]
-b1 = run(fly_rec("b1"), _nets_r) if None not in _nets_r else []
-check("B1 butterfly: the mark is the net lower + upper - 2 x center; p = net - entry; 29% holds, 30% closes",
-      _nets_r == [1.10, 1.20, 1.142, 1.14] and [is_decay(d) for d, _ in b1] == [False, False, False, True]
-      and abs((b1[2][1] or {}).get("p", 9) - 0.142) < 1e-9 and abs((b1[2][1] or {}).get("peak_p", 9) - 0.20) < 1e-9,
-      f"nets {_nets_r} decays {[is_decay(d) for d, _ in b1]} reading {b1[2][1] if b1 else None}")
-
-b2 = run(fly_rec("b2", strategy="GEXPinButterfly", stop_premium=0.0), _nets_r) if None not in _nets_r else []
-check("B2 r103: nothing holds to the close any more - a GEXPinButterfly-named record decays on the B1 marks exactly as B1",
-      b2 and b1 and [is_decay(d) for d, _ in b2] == [is_decay(d) for d, _ in b1] and any(is_decay(d) for d, _ in b2),
-      f"b2 {[is_decay(d) for d, _ in b2]} b1 {[is_decay(d) for d, _ in b1]}")
 
 # ── R exempt, O off ──────────────────────────────────────────────────────────────────────────────────
 r1 = run(rec("r1", "RunawayContinuation", stop_premium=1.0), [2.10, 2.20, 2.15, 2.14, 2.10])

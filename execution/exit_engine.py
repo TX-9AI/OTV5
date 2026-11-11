@@ -1,5 +1,6 @@
 """
-execution/exit_engine.py  v5.17
+execution/exit_engine.py  v5.18
+v5.18  2026-11-11  OTV5 r107 (RETIRE.5 follow-up) — THE GENERIC BUTTERFLY EXIT GOES with the fly strategy removed at r103: the evaluate() fly route and _evaluate_butterfly, the fly EOD legs, the _close_order fly route and _close_butterfly, and the fly arm of _net_fill_price (with the unread BUTTERFLY_MAX_HOLD_MIN import). No butterfly can be opened since this revision and none is open (no overnight positions), so nothing reaches them. Runaway, Hunt, Breakout, PARK and the tent and vertical routes decide and close exactly as before. The operator, 2026-11-07: "Running dead code and logging dead code activity is unnecessary drag."
 v5.17  2026-11-09  OTV5 r103 (RETIRE.5 step 2) — THE GEX PIN BUTTERFLY IS REMOVED: r73's two HOLD_TO_CLOSE_STRATEGIES reads go (the fly was the only member; config no longer carries the key), so evaluate() asks _decay_read and _evaluate_butterfly checks its hard stop exactly as for any record. KEPT, said plainly: _evaluate_butterfly, _close_butterfly and the multi-leg pricing stay - they close any butterfly record still on a book (the startup sweep, the reconcile, the 15:45 flatten); no live strategy opens one. The live setups route and decide exactly as before. The operator, 2026-11-08: "I concur on both, in that order".
 v5.16  2026-11-08  OTV5 r88 (RETIRE.3) — the TC.6 branch (the 15%-of-credit stop and the breach backstop, answering only a TrendCreditSpread row) and its TCS_STOP_PCT_OF_CREDIT / is_trend_participation imports go with the TCS. The operator, 2026-11-08: "Delete" (the TCS shadow, which never fired: its own gates declined every candidate 11-02..11-06).
 v5.15  2026-11-08  OTV5 r76 (RETIRE.1) — THE REMOVED TRADES' EXITS GO: the ORBStrategy and VOLT routes, _evaluate_volt, _sweep_breach_accepted (sweep verticals only), the velocity stall (it measured only the ORB trade and never cut anything else - _velocity_stall, its call, VELOCITY_* import), the Hunt's handoff GRANT to the sweep (its hunt_target_wicked exit is unchanged; the reason text loses "; handoff granted to the sweep"), and three uncalled helpers (_get_bos_tracker, _held_minutes, _underlying_from_5m). STRUCTURE_TRAIL_STRATEGIES is ("Breakout",). Runaway, Hunt, Breakout, PARK and the GEX fly route and decide exactly as before. The operator, 2026-11-07: "Running dead code and logging dead code activity is unnecessary drag. Yes, I want all of those things fixed."
@@ -949,7 +950,7 @@ from data.tasty_client import get_session, get_account, TastyClientError, sdk_re
 from config import (
     BOS_MIN_DIST_ATR,                          # v4.15
     PAPER_TRADING, CONTRACT_MULTIPLIER,
-    BUTTERFLY_MAX_HOLD_MIN, TRAIL_LOCK_PCT, TRAIL_ACTIVATION_PCT, FVG_MIN_SIZE_PCT,
+    TRAIL_LOCK_PCT, TRAIL_ACTIVATION_PCT, FVG_MIN_SIZE_PCT,
     THETA_LOOKAHEAD_MIN, RTH_MINUTES, FVG_TRAIL_ARM_PCT, FVG_TRAIL_LOCK_PCT,
     THESIS_BAND_WICKS, THESIS_BAND_LOOKBACK, TRAIL_GAIN_LOCK,
     HARD_CLOSE_ET,
@@ -1656,9 +1657,7 @@ class ExitEngine:
         if is_tent(record):
             return self._evaluate_tent(record, current_premium)
 
-        if record.get("is_butterfly"):
-            return self._evaluate_butterfly(record, current_premium)
-        elif strategy == "IronCondorStrategy" or is_credit_vertical(record):
+        if strategy == "IronCondorStrategy" or is_credit_vertical(record):
             # v4.21 (AUDIT F2): route on the STRUCTURE, not one strategy string.
             # main v6.8 writes strategy="TrendCreditSpread"; the old test sent
             # every new TC.6 record to _evaluate_sweep (the DEBIT evaluator) —
@@ -2543,68 +2542,6 @@ class ExitEngine:
                 decision.exit_reason = f"trail_stop_hit pnl={pnl_pct:.1%}"
                 return decision
             decision.new_trail_stop = trail_stop
-
-        return decision
-
-    # \u2500\u2500\u2500 Butterfly Exit \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
-
-    def _evaluate_butterfly(self, record: TradeRecord,
-                             current_premium: float) -> ExitDecision:
-        """
-        Butterfly exit logic:
-        - Max hold: 2.5 hours
-        - Hard stop: net value <= 25% loss   (SL: 25% of net debit)
-        - Target: BUTTERFLY_TP_PCT = 20% of max profit  (was documented as 25%)
-        - No BOS, no trail
-        """
-        decision     = ExitDecision()
-        trade_id     = record["trade_id"]
-        entry_prem   = record["entry_premium"]
-        stop_prem    = record["stop_premium"]
-        target       = record["target_premium"]
-        entry_time   = record["entry_time"]
-
-        pnl_pct = (current_premium - entry_prem) / entry_prem if entry_prem > 0 else 0
-        pnl_usd = (current_premium - entry_prem) * record["contracts"] * CONTRACT_MULTIPLIER
-        decision.current_pnl_pct = pnl_pct
-        decision.current_pnl_usd = pnl_usd
-
-        # 1. HARD CLOSE
-        if _eod_due(record):                                   # r149: per-position EOD clock
-            decision.should_exit = True
-            decision.exit_reason = _eod_label(record)
-            return decision
-
-        # "BREAKOUT_VOLATILE"}`. v4 hardcodes the label to UNKNOWN, so this
-        # butterfly exit HAS NEVER RUN — not once since the port.
-        #
-        # ⚠️ THIS IS AN EXIT, NOT AN ENTRY, AND THAT IS WHY IT MATTERS. F0 was
-        # "every intraday exit was dead code" because the class was bisected;
-        # these were dead for a quieter reason — a label nothing computes — and
-        # so they were not in F0's blast radius and nobody looked. A butterfly
-        # whose neutral assumption breaks now holds to its stop or its clock.
-        #
-        # ⚠️ IF THIS PROTECTION IS WANTED BACK it must be rebuilt on something
-        # v4 MEASURES — the trend engine's direction and ADX are right there in
-        # the context. Do NOT resurrect it on a label. Operator's direction:
-        # if the idea returns it returns under a different name.
-
-        # 3. MAX HOLD — RETIRED (r169). Operator, 2026-08-27, on the butterfly:
-        #    "I want both adjusted for best case. 1545 flatten or 25% loss.
-        #    Whichever comes first." A pin play pays as the wings die into the
-        #    close; a 150-minute clock sold the thesis before it finished.
-        # 3. HARD STOP (r73's hold-to-close exemption went with the GEX pin fly, RETIRE.5 r103).
-        if current_premium <= stop_prem:
-            decision.should_exit = True
-            decision.exit_reason = f"stop_hit pnl={pnl_pct:.1%}"
-            return decision
-
-        # 4. TARGET — RETIRED (r169), same ruling. A perfectly pinned fly is
-        #    worth the full width at the apex at the close; the 20%-of-max
-        #    target (0.34 on a 1.00-wide fly bought for 0.18) left four
-        #    fifths of that on the table. The fly rides to the 15:45 flatten
-        #    or the 25% floor, whichever comes first. `target` stays on the
-        #    record for the plan's row; nothing acts on it.
 
         return decision
 
@@ -3855,8 +3792,6 @@ class ExitEngine:
     def _eod_legs(cls, record: TradeRecord):
         """r149 — [(occ_symbol, signed qty per unit)], +1 long / -1 short, or None."""
         g = record.get
-        if record.get("is_butterfly"):
-            return [(g("lower_symbol"), 1), (g("center_symbol"), -2), (g("upper_symbol"), 1)]
         if is_tent(record):
             return [(g("short_symbol"), -1), (g("long_symbol"), 1), (g("lower_symbol"), 1)]
         if g("short_symbol") and g("long_symbol"):
@@ -4051,10 +3986,6 @@ class ExitEngine:
             if is_tent(record):
                 return self._close_tent(session, account, record, contracts,
                                         mark_price, reason=reason)
-            if bool(record.get("is_butterfly", False)):
-                return self._close_butterfly(session, account, record,
-                                             contracts, mark_price, force_market,
-                                             reason=reason)
             is_vertical = (bool(record.get("is_condor_leg"))
                            or record.get("strategy") == "IronCondorStrategy"
                            or (record.get("short_symbol") and record.get("long_symbol")))
@@ -4316,73 +4247,6 @@ class ExitEngine:
         return self._place(session, account, order,
                            f"Tent close (LIMIT {limit:.2f})")
 
-    def _close_butterfly(self, session, account, record, contracts,
-                         mark_price: Optional[float],
-                         force_market: bool = False, reason: str = ""):
-        """Close a long butterfly (sell wings, buy back the 2x short body) as
-        one 3-leg order. v3.5: MARKET → marketable LIMIT (tastytrade rejects
-        MARKET on spreads — the old market order would have failed every tick).
-        Selling the fly RECEIVES a credit → price is POSITIVE (signed SDK
-        convention), floored at one tick below mark; no mark → decline this
-        pass rather than guess (retry tick brings a fresh mark)."""
-        lower_sym  = record.get("lower_symbol", "")
-        center_sym = record.get("center_symbol", "")
-        upper_sym  = record.get("upper_symbol", "")
-        if not all([lower_sym, center_sym, upper_sym]):
-            logger.error("Cannot close butterfly: missing leg symbols")
-            return None
-        tick = self._tick_for(record)
-        # v3.8: post AT THE MARK (was mark - a fixed $0.10 buffer — selling the
-        # fly cheap on every close). At 15:45 the flatten must complete and
-        # tastytrade rejects MARKET on spreads, so the cross is a limit at ONE
-        # TICK of credit: the lowest price we can ask, hence maximally
-        # marketable for a sale.
-        _policy = self._exit_policy(record, reason)
-        _why = _policy
-        if force_market:
-            limit = self._round_to_tick(tick, record)
-        elif _policy == "eod_resting":
-            if self._nomark_hold(record, mark_price, center_sym):
-                return None                    # r48 (LIVE.7 b): no mark, no best case, before the cross
-            # r149 (EOD.1) — rest at the fly's value at expiry at current spot, less a tick.
-            limit, _why = self._exit_limit(record, reason, float(mark_price or 0.0), "sell", "butterfly")
-            limit = self._round_to_tick(limit, record)
-        elif mark_price is None or mark_price < 0:
-            logger.warning("Butterfly close: no mark to price the limit — "
-                           "declining this pass, will retry with a fresh mark")
-            return None
-        elif _policy == "walk":
-            # 🔴 r48 (LIVE.7) — THE DECLARATION IS HONOURED. management.EXIT_PRICING declares the fly's
-            # stop `walk` ("Clearly ladder is more advantageous", 2026-10-03) and this branch posted at
-            # the mark regardless. It walks the exit ladder now, the way a single leg does, on the fly's
-            # OWN fresh composite quote (sell the wings at the bid, buy the body at the ask); without one
-            # _exit_limit posts at the mark, as before. The walk never sells below the mark.
-            limit, _why = self._exit_limit(record, reason, float(mark_price), "sell", "butterfly",
-                                           quote=_fresh_quote(record, "_exit_fly_bid", "_exit_fly_ask"))
-            limit = self._round_to_tick(max(limit, tick), record)
-        else:
-            limit = self._round_to_tick(limit_at_mark(mark_price, floor=tick), record)
-        record["_exit_last_limit"] = limit
-        logger.info("[ladder] butterfly CLOSE %s @ %.2f — %s",
-                    str(record.get("trade_id", ""))[:8], limit, _why)
-        legs = [
-            Leg(instrument_type=InstrumentType.EQUITY_OPTION,
-                symbol=lower_sym,  action=OrderAction.SELL_TO_CLOSE, quantity=contracts),
-            Leg(instrument_type=InstrumentType.EQUITY_OPTION,
-                symbol=center_sym, action=OrderAction.BUY_TO_CLOSE,  quantity=contracts * 2),
-            Leg(instrument_type=InstrumentType.EQUITY_OPTION,
-                symbol=upper_sym,  action=OrderAction.SELL_TO_CLOSE, quantity=contracts),
-        ]
-        order = NewOrder(
-            time_in_force = OrderTimeInForce.DAY,
-            order_type    = OrderType.LIMIT,
-            price         = Decimal(str(limit)),   # positive = CREDIT received
-            legs          = legs,
-        )
-        return self._place(session, account, order,
-                           f"Butterfly close ({'MARKET-equiv @ 1 tick' if force_market else 'LIMIT @ mark'} "
-                           f"{limit:.2f})")
-
     # ── Fill readback ─────────────────────────────────────────────────────────
 
     def _net_fill_price(self, record: TradeRecord,
@@ -4391,7 +4255,6 @@ class ExitEngine:
         fills. The net is on the SAME basis as the marks _fetch_current_premium
         produces, so _execute_exit's P&L math is untouched:
           vertical:   short_avg - long_avg          (mark: short_mark - long_mark)
-          butterfly:  lower + upper - 2*center      (mark: same combination)
           single leg: the leg's weighted avg fill
         closed_quantity is the min across legs of (filled / leg ratio) — legs of
         a complex order fill together, min() is the safe floor. Returns None if
@@ -4419,15 +4282,6 @@ class ExitEngine:
             if qty <= 0 or None in (ps, pl, ph):
                 return None
             return qty, round(ps - pl - ph, 4)
-
-        if bool(record.get("is_butterfly", False)):
-            ql, pl = leg_stats(record.get("lower_symbol", ""))
-            qc, pc = leg_stats(record.get("center_symbol", ""))
-            qu, pu = leg_stats(record.get("upper_symbol", ""))
-            qty = min(ql, qu, qc / 2.0)
-            if qty <= 0 or None in (pl, pc, pu):
-                return None
-            return qty, round(pl + pu - 2.0 * pc, 4)
 
         if (record.get("is_condor_leg")
                 or record.get("strategy") == "IronCondorStrategy"

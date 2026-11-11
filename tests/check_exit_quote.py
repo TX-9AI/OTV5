@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_exit_quote.py  v5.0
+tests/check_exit_quote.py  v5.1
+v5.1  2026-11-11  OTV5 r107 (RETIRE.5 follow-up) — Q3/Q4 (the butterfly's composite exit quote) go with the generic fly path (position_manager v5.35). Q1, Q2 and Q5 unchanged.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.0  2026-10-03  OTV4TEST r195 (AUD.4) — THE EXIT QUOTE AND IV REACH THE TRADE ROW.
 
@@ -13,9 +14,6 @@ v1.0  2026-10-03  OTV4TEST r195 (AUD.4) — THE EXIT QUOTE AND IV REACH THE TRAD
   Q1  single leg: the row carries the contract's bid, ask and IV
   Q2  credit vertical: the row carries the spread's bid/ask (short bid - long
       ask, short ask - long bid) and the SHORT leg's IV
-  Q3  butterfly: the row carries the composite quote and the BODY's IV
-  Q4  UNCHANGED: the butterfly record still has NO _exit_bid/_exit_ask - the
-      exit ladder's pricing keys are not what this writes
   Q5  no quote seen this tick -> the close still books; the columns stay NULL
 
 Run:  python3 tests/check_exit_quote.py   (exit 0 green, 1 red)
@@ -117,20 +115,7 @@ def main():
     except Exception as exc:                                  # noqa: BLE001
         check("Q2 (did not run)", False, f"{type(exc).__name__}: {exc}")
 
-    # Q3 / Q4 — butterfly 740 / 742 / 744
-    try:
-        rec = run("q3-fly", strategy="GEXPinButterfly", direction="neutral", is_butterfly=1,
-                  lower_strike=740.0, center_strike=742.0, upper_strike=744.0, entry_premium=0.40)
-        ok, row = close(rec)
-        # bid = 5.10 + 2.00 - 2*3.60 = -0.10 -> 0.0 ; ask = 5.30 + 2.20 - 2*3.40 = 0.70 ; body IV 0.20
-        check("Q3 butterfly: composite bid 0.00, ask 0.70, the BODY's IV 0.20",
-              ok and row and row[0] == "closed" and near(row[1], 0.0) and near(row[2], 0.70) and near(row[3], 0.20),
-              f"closed={ok} row={row}")
-        check("Q4 UNCHANGED: the butterfly record has no _exit_bid/_exit_ask (ladder pricing keys untouched)",
-              "_exit_bid" not in rec and "_exit_ask" not in rec,
-              f"_exit_bid={rec.get('_exit_bid')!r} _exit_ask={rec.get('_exit_ask')!r}")
-    except Exception as exc:                                  # noqa: BLE001
-        check("Q3 (did not run)", False, f"{type(exc).__name__}: {exc}")
+    # r107: Q3 / Q4 (the butterfly's composite exit quote) go with the generic fly path.
 
     # Q5 — no chain this tick: the close books, the columns stay NULL
     try:

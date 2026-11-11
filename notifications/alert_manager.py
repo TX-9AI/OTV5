@@ -1,5 +1,6 @@
 """
-notifications/alert_manager.py  v5.4
+notifications/alert_manager.py  v5.5
+v5.5  2026-11-11  OTV5 r107 (RETIRE.5 follow-up) — send_entry_alert loses its butterfly line: no butterfly can be entered since r103 (the generic fly entry is removed). Every live entry page reads as before.
 v5.4  2026-11-04  OTV5 r74 (BLIND.1) — ONE PAGE PER BLIND EPISODE. send_blind_alert(..., managing=None): when the bot
       is in a blind episode (main._blind_tick: it stays up and manages from REST marks) the caller passes the open
       count and the BOT IS BLIND page carries "bot STAYS UP, managing N open position(s) from TastyTrade REST marks;
@@ -542,27 +543,15 @@ class AlertManager:
     def send_entry_alert(self, record: dict):
         mode   = "PAPER" if record.get("paper_trade") else "LIVE"
         ticker = record.get("symbol", INSTRUMENT)
-        if record.get("is_butterfly"):
-            self._send(
-                f"\U0001F98B [{mode}] {ticker} BUTTERFLY {record.get('option_side','').upper()} "
-                f"{record.get('center_strike','')} "
-                f"\u00b1{int((record.get('upper_strike',0) - record.get('center_strike',0)))} "
-                f"\u00d7{record.get('contracts',0)} "
-                f"debit=${record.get('net_debit',0):.2f} "
-                f"total=${record.get('total_cost',0):.0f} | "
-                f"{fmt_et_short()}",
-                code="ENT", ref=str(record.get("trade_id") or ""),
-            )
-        else:
-            self._send(
-                f"\U0001F4C8 [{mode}] {ticker} {record.get('option_side','').upper()} "
-                f"{record.get('strike','')} "
-                f"\u00d7{record.get('contracts',0)} "
-                f"@ ${record.get('entry_premium',0):.2f} "
-                f"total=${record.get('total_cost',0):.0f} | "
-                f"{fmt_et_short()}",
-                code="ENT", ref=str(record.get("trade_id") or ""),
-            )
+        self._send(
+            f"\U0001F4C8 [{mode}] {ticker} {record.get('option_side','').upper()} "
+            f"{record.get('strike','')} "
+            f"\u00d7{record.get('contracts',0)} "
+            f"@ ${record.get('entry_premium',0):.2f} "
+            f"total=${record.get('total_cost',0):.0f} | "
+            f"{fmt_et_short()}",
+            code="ENT", ref=str(record.get("trade_id") or ""),
+        )
 
     # ── 4. Trade closed — win/loss ───────────────────────────────────────────
 

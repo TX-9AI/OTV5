@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
-"""tests/check_butterfly_nonblocking.py  v5.0
+"""tests/check_butterfly_nonblocking.py  v5.1
+v5.1  2026-11-11  OTV5 r107 (RETIRE.5 follow-up) — B2 RE-POINTED (WA 38.4): the butterfly exemption from has_blocking_position is
+      removed with the generic fly path, so a fly-flagged row now blocks like any other. B1, B3-B5b unchanged.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 A BUTTERFLY BLOCKS NOTHING. AN ORB OR RUNAWAY DEBIT STILL BLOCKS CREDIT.
 
@@ -86,10 +88,12 @@ def main():
     check("B1 an empty box blocks nothing",
           not pm.has_blocking_position() and not pm.has_open_position())
 
-    # ── B2: a butterfly alone ─────────────────────────────────────────────
+    # ── B2 (r107): the butterfly exemption is REMOVED with the generic fly path ──
+    # No butterfly can be opened any more, so has_blocking_position exempts only the liquidity hunt; a row that
+    # still carried is_butterfly would block like any other record (fails toward blocking, never away from it).
     pm._open_records = [rec("bf1", "GEXPinButterfly", butterfly=1)]
-    check("B2 a butterfly alone is OPEN but does NOT block",
-          pm.has_open_position() and not pm.has_blocking_position(),
+    check("B2 (r107) a butterfly-flagged row is OPEN and now BLOCKS like any other record (the exemption is gone)",
+          pm.has_open_position() and pm.has_blocking_position(),
           "open=%s blocking=%s" % (pm.has_open_position(),
                                    pm.has_blocking_position()))
 

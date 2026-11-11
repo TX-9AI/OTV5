@@ -1,5 +1,6 @@
 """
-strategy/base_strategy.py  v5.1
+strategy/base_strategy.py  v5.2
+v5.2  2026-11-11  OTV5 r107 (RETIRE.5 follow-up) — THE BUTTERFLY SIGNAL FIELDS GO (is_butterfly, lower/center/upper_contract, butterfly_direction, net_debit, max_profit) and their four branches in is_valid / stop_premium / trail_activation_premium / target_premium. Nothing has built a butterfly signal since r103 removed the fly strategy. Every live signal takes the same arms as before. The operator, 2026-11-07: "Running dead code and logging dead code activity is unnecessary drag."
 v5.1  2026-11-08  OTV5 r76 (RETIRE.1) — is_orb (the removed trade's identity) is removed; sizes_on_structure reads sizes_on_geometry alone (Breakout), as it already did for every live signal. The operator, 2026-11-07: "Running dead code and logging dead code activity is unnecessary drag. Yes, I want all of those things fixed."
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v4.6  2026-09-22  OTV4TEST r91 — THE OPERATOR'S 1-R, RESTORED. `stop_premium()`
@@ -125,15 +126,6 @@ class OptionsSignal:
     entry_premium:  float = 0.0
     contract:       Optional[OptionContract] = None
 
-    # ── Butterfly legs (3-leg) ─────────────────────────────────────────
-    is_butterfly:        bool  = False
-    lower_contract:      Optional[OptionContract] = None
-    center_contract:     Optional[OptionContract] = None
-    upper_contract:      Optional[OptionContract] = None
-    butterfly_direction: str   = ""
-    net_debit:           float = 0.0
-    max_profit:          float = 0.0
-
     # ── Iron Condor legs (4-leg) ─────────────────────────────────────
     # Credit spread: sell short put + buy long put (lower side)
     #                sell short call + buy long call (upper side)
@@ -201,14 +193,6 @@ class OptionsSignal:
 
     @property
     def is_valid(self) -> bool:
-        if self.is_butterfly:
-            return (
-                self.butterfly_direction in ("call", "put") and
-                self.net_debit > 0 and
-                self.lower_contract is not None and
-                self.center_contract is not None and
-                self.upper_contract is not None
-            )
         if self.is_credit_vertical:
             # r99 — A VERTICAL IS VALID WHEN THE SIDE IT HAS IS COMPLETE. The
             # old arm demanded all four contracts, written when this dataclass
@@ -363,8 +347,6 @@ class OptionsSignal:
         percentage stop would have silently reinstated it and looked like the
         change worked (§23). It is re-anchored, not deleted.
         """
-        if self.is_butterfly:
-            return self.net_debit * (1 - self.stop_loss_pct)
         if self.is_credit_vertical:
             # For a credit spread, "loss" means the spread VALUE rises
             # (we sold it, so rising value = losing money). Stop level
@@ -377,8 +359,6 @@ class OptionsSignal:
 
     def trail_activation_premium(self) -> float:
         """Premium level at which trailing stop activates (50% TP)."""
-        if self.is_butterfly:
-            return self.net_debit + self.max_profit * 0.5
         if self.is_credit_vertical:
             # Condor profits as the spread value DECAYS toward zero.
             # 50% TP = spread value has decayed to 50% of credit received.
@@ -399,8 +379,6 @@ class OptionsSignal:
 
     def target_premium(self) -> float:
         """Full TP premium target."""
-        if self.is_butterfly:
-            return self.net_debit + self.max_profit * self.tp_pct
         if self.is_credit_vertical:
             # TP = spread value has decayed to (1 - tp_pct) of credit.
             # e.g. tp_pct=0.50 means close at 50% of max profit captured,

@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """
-tests/check_live_exit_paths.py  v5.2
+tests/check_live_exit_paths.py  v5.3
+v5.3  2026-11-11  OTV5 r107 (RETIRE.5 follow-up) — L3b-L3d and L5a (the butterfly's live and paper close) go with the generic fly path
+      (exit_engine v5.18, position_manager v5.35). L3a (the stop is declared walk) and every single / vertical / tent check unchanged.
 v5.2  2026-10-31  OTV5 r68 (CFG.5) — OT_RESTING_STOP_STATE leaves the scratch env: the resting stop and its state file are deleted
       (the operator, 2026-10-31: "Resting stop was a study. It failed. Get this the fuck out of here"), and so does the
       PM._rs.active_mode stub (it pinned the rest OFF, now the only path). No check changed.
@@ -26,10 +28,7 @@ v5.0  2026-10-28  OTV5 r48 (LIVE.7, PARC.1 nickel) — THE LIVE EXIT PATH'S THRE
   L2b LIVE: a stash from this pass but older than EXIT_QUOTE_MAX_AGE_S is not used either
   L2c UNCHANGED: a fresh stash from this pass still walks (the ladder's opener, inside the quote, above the mark)
   L3a the fly's stop is declared `walk` (management.EXIT_PRICING["stop"])
-  L3b LIVE: a fly stop posts the walk's opener on the fly's fresh composite quote, not the mark
-  L3c LIVE: a fly FLOOR reason (hard_stop) still posts at the mark
-  L3d LIVE: the fly's 15:45 resting best case and 15:55 one-tick cross are unchanged
-  L5a PAPER: the fly stop books the mark; L5b PAPER: a stale stash changes nothing, the single books the mark;
+  L5b PAPER: a stale stash changes nothing, the single books the mark;
       L5c PAPER: the no-mark flatten's ledger P&L is $0 at entry (as on base)
 
 Born red on b78fc8f at L1a, L1c, L2a, L2b, L3b. Run both ways (base vs fix).
@@ -277,59 +276,11 @@ def main():
     # ── L3 — the fly honours its declared pricing ────────────────────────────────────────────
     check("L3a the fly's stop is declared walk", MG.EXIT_PRICING.get("stop") == "walk",
           f"EXIT_PRICING['stop']={MG.EXIT_PRICING.get('stop')!r}")
-    fsym = {700.0: "QQQ   261028C00700000", 702.0: "QQQ   261028C00702000", 704.0: "QQQ   261028C00704000"}
-    chainf = types.SimpleNamespace(calls=[_c(700.0, 2.50, 2.40, 2.60, fsym[700.0]),
-                                          _c(702.0, 1.20, 1.10, 1.30, fsym[702.0]),
-                                          _c(704.0, 0.40, 0.30, 0.50, fsym[704.0])],
-                                   puts=[], spot_price=701.0, atm_iv=0.0)
-
-    def fly(tid):
-        return TL.make_record(trade_id=tid, symbol="QQQ", strategy="GEXPinButterfly", setup_type="fly",
-                              direction="long", option_side="call", contracts=1, entry_premium=1.00,
-                              total_cost=100.0, max_loss=100.0, is_butterfly=1,
-                              lower_strike=700.0, center_strike=702.0, upper_strike=704.0,
-                              lower_symbol=fsym[700.0], center_symbol=fsym[702.0], upper_symbol=fsym[704.0],
-                              expiry="2026-10-28")
-    STOP = "stop_40% pnl=-50.0%"
-    pm = mgr(False)
-    r3 = fly("L3b-fly")
-    m3 = pm._fetch_current_premium(r3, chain=chainf)                # 2.50 + 0.40 - 2.40 = 0.50
-    r3["_exit_pricing"] = (STOP, MG.EXIT_PRICING["stop"])           # what _manage_one writes for the intent
-    acct["a"] = _Acct(); LR.reset_all()
-    live._submit_live_close(r3, 1, m3, reason=STOP)
-    px3 = [float(o.price) for o in acct["a"].orders if getattr(o, "price", None) is not None]
-    # composite: bid 2.40 + 0.30 - 2*1.30 = 0.10, ask 2.60 + 0.50 - 2*1.10 = 0.90 -> the sell opener sits above the mark
-    check("L3b LIVE fly stop walks: posts the ladder's opener above the mark, inside the composite quote",
-          len(px3) == 1 and m3 is not None and abs(m3 - 0.50) < 1e-9 and 0.50 < px3[0] <= 0.90,
-          f"mark={m3} posted={px3}")
-    r3c = fly("L3c-fly")
-    pm._fetch_current_premium(r3c, chain=chainf)
-    acct["a"] = _Acct(); LR.reset_all()
-    live._submit_live_close(r3c, 1, 0.50, reason="hard_stop pnl=-50%")
-    px3c = [float(o.price) for o in acct["a"].orders if getattr(o, "price", None) is not None]
-    check("L3c LIVE fly floor reason (hard_stop) still posts at the mark 0.50", px3c == [0.50], f"posted={px3c}")
-
-    clock["t"] = at(15, 47)
-    r3d = fly("L3d-fly"); pm._fetch_current_premium(r3d, chain=chainf); r3d["_eod_spot"] = 701.0
-    acct["a"] = _Acct(); LR.reset_all()
-    live._submit_live_close(r3d, 1, 0.50, reason="hard_close_resting_15:45_ET")
-    best = EE.ExitEngine._eod_best_case(r3d)
-    want = live._round_to_tick(best[0], r3d) if best else None
-    rest = [float(o.price) for o in acct["a"].orders if getattr(o, "price", None) is not None]
-    clock["t"] = at(15, 56)
-    acct["a"] = _Acct(); LR.reset_all()
-    live._submit_live_close(r3d, 1, 0.50, reason="hard_close_resting_15:45_ET")
-    cross = [float(o.price) for o in acct["a"].orders if getattr(o, "price", None) is not None]
-    check("L3d LIVE fly EOD unchanged: 15:47 rests at its best case, 15:56 crosses at one tick",
-          want is not None and rest == [want] and cross == [0.01], f"best={best} rest={rest} cross={cross}")
+    # r107: L3b-L3d (the fly's live close) go with the generic fly path (exit_engine v5.18 has no _close_butterfly).
 
     # ── L5 — paper books exactly what it booked before ───────────────────────────────────────
     clock["t"] = at(10, 30)
-    r5 = fly("L5a-fly"); m5 = mgr(True)._fetch_current_premium(r5, chain=chainf)
-    r5["_exit_pricing"] = (STOP, "walk")
-    f5 = paper.place_exit_order(r5, STOP, mark_price=m5)
-    check("L5a PAPER fly stop books the mark", f5.confirmed and abs(f5.fill_price - 0.50) < 1e-9,
-          f"fill={f5.fill_price} ({f5.detail})")
+    # r107: L5a (the paper fly stop) goes with the fly path.
     r5b = single("L5b-single"); pmp = mgr(True)
     pmp._fetch_current_premium(r5b, chain=chain1)
     f5b = paper.place_exit_order(r5b, "target_hit pnl=100%", mark_price=2.00)

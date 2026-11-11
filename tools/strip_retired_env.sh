@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # ==========================================================================
-# tools/strip_retired_env.sh  v5.4
+# tools/strip_retired_env.sh  v5.5
+# v5.5  2026-11-11  OTV5 r107 (RETIRE.5 follow-up) - THE BUTTERFLY READINESS KNOBS JOIN THE LIST. analysis/trade_readiness.py v5.2
+#       removes the butterfly track, so OT_TR_BFLY_* (PIN_NEAR / PIN_FAR / GEX_LO / GEX_HI / WARM_MIN) is read by nothing.
 # v5.4  2026-11-10  OTV5 r106 - A UNIT THE CALLER CANNOT READ IS READ THROUGH sudo -n, AND IF THAT IS REFUSED THE RUN SAYS SO
 #       AND EXITS 1. Measured 11-09 (r103 fleet update): the boxes' optionsbot.service is root-only (0600), the tool ran as
 #       ubuntu, python's open() failed and the line read "parse FAILED - unit left as it was", which looked like a quoting
@@ -41,7 +43,8 @@
 set -u
 
 EXACT="OT_SCALE_ORB OT_SCALE_VOLT OT_VOLT OT_ORB_TRADE OT_ATP_BUTTERFLY OT_ORCS OT_SWEEP_CS OT_CONTRACT_SCALE OT_SHADOW_TRADES_DB OT_GEX_BUTTERFLY"
-FAMILIES="OT_VOLT_ OT_SWEEP_CS_ OT_VELOCITY_ OT_TCS_ OT_TR_TCS_ OT_TR_W_TCS_ OT_BFLY_ OT_GEX_BFLY_"
+FAMILIES="OT_VOLT_ OT_SWEEP_CS_ OT_VELOCITY_ OT_TCS_ OT_TR_TCS_ OT_TR_W_TCS_ OT_BFLY_ OT_GEX_BFLY_ OT_TR_BFLY_"
+# r107 (RETIRE.5 follow-up): the butterfly readiness track's OT_TR_BFLY_* knobs are read by nothing once the track is removed.
 # r103 (RETIRE.5 step 2): the GEX pin butterfly - its switch OT_GEX_BUTTERFLY, OT_BFLY_DEBIT_* / OT_BFLY_DISC_CONV_* and
 # OT_GEX_BFLY_WING_EM_FRAC are read by nothing once the fly is removed.
 # r88 (RETIRE.3): the TCS shadow - OT_TCS_ACTIVE and every OT_TCS_* dial, its readiness knobs (OT_TR_TCS_*, OT_TR_W_TCS_*)
