@@ -1843,7 +1843,7 @@ Change these with the most care; a break here reaches everything downstream.
 
 ### `tests/fees.py`
 - **calls:** `strategy/structure.py`
-- **called by:** (not imported) — referenced in `docs/BACKLOG.md`
+- **called by:** (not imported) — referenced in `docs/BACKLOG.md`, `docs/HANDOFF.md`
 
 ### `tests/fork_respect_study.py`
 - **calls:** (none)
