@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_decay_stop.py  v5.5
+tests/check_decay_stop.py  v5.6
+v5.6  2026-11-14  OTV5 (OGAP.1) — C1 pins DECAY_STOP_EXEMPT = (Runaway, PARK, OGAP): OGAP joins the default exempt set (its own exits). Every other check unchanged.
 v5.5  2026-11-11  OTV5 r107 (RETIRE.5 follow-up) — B1/B2 (the butterfly's net pricing and decay) go with the generic fly path (position_manager v5.35 no longer prices a fly). Every other check unchanged.
 v5.4  2026-11-09  OTV5 r103 (RETIRE.5 step 2) — B2 re-pointed (WA 38.4): HOLD_TO_CLOSE_STRATEGIES is removed with the GEX fly, so B2 pins that a record under the fly's name now decays exactly as B1. Every other check unchanged.
 v5.3  2026-11-08  OTV5 r88 (RETIRE.3) — H1 (a shadow TCS through execution/shadow_book) goes with the TCS shadow; every other check unchanged.
@@ -22,7 +23,7 @@ v5.0  2026-10-30  OTV5 r58 (DECAY.1) — THE PEAK-DECAY PROFIT STOP. A TRADING C
       and exit_engine.datetime; as tests/check_tcs_shadow.py pins its manage ticks): the lander runs CHECKs at whatever time it is, and after 15:45 ET
       the real hard close would pre-empt every decay tick here.
 
-  C1  config: DECAY_STOP on, DECAY_STOP_X 0.30, DECAY_STOP_ARM 0.05, DECAY_STOP_EXEMPT ("RunawayContinuation", "PARK");
+  C1  config: DECAY_STOP on, DECAY_STOP_X 0.30, DECAY_STOP_ARM 0.05, DECAY_STOP_EXEMPT ("RunawayContinuation", "PARK", "OGAP");
       OT_DECAY_STOP=0 / OT_DECAY_STOP_X / OT_DECAY_STOP_ARM / OT_DECAY_STOP_EXEMPT read from the environment (a fresh
       interpreter; OT_DECAY_STOP_EXEMPT=RunawayContinuation -> ("RunawayContinuation",))
   A1  a debit peaking at +4.5% of entry never arms, and a full fade from there never fires
@@ -151,7 +152,7 @@ _p = subprocess.run([sys.executable, "-c", "import config as c; print(c.DECAY_ST
 check("C1 config: defaults on / 0.30 / 0.05 / Runaway + PARK exempt, and OT_DECAY_STOP=0 / _X / _ARM / _EXEMPT from the env",
       getattr(config, "DECAY_STOP", None) is True and getattr(config, "DECAY_STOP_X", None) == 0.30
       and getattr(config, "DECAY_STOP_ARM", None) == 0.05
-      and tuple(getattr(config, "DECAY_STOP_EXEMPT", ()) or ()) == ("RunawayContinuation", "PARK")
+      and tuple(getattr(config, "DECAY_STOP_EXEMPT", ()) or ()) == ("RunawayContinuation", "PARK", "OGAP")
       and _p.stdout.split() == ["False", "0.25", "0.1", "RunawayContinuation"],
       f"defaults {getattr(config, 'DECAY_STOP', None)} {getattr(config, 'DECAY_STOP_X', None)} "
       f"{getattr(config, 'DECAY_STOP_ARM', None)}; env -> {_p.stdout.strip() or _p.stderr.strip()[-200:]}")

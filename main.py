@@ -1,5 +1,6 @@
 """
-main.py  v5.19
+main.py  v5.20
+v5.20  2026-11-14  OTV5 (OGAP.1) — OGAP IS ASKED: _attempt_ogap beside _attempt_park in the normal dispatch and the capped branch (cap-exempt; its plan is dormant outside 09:46-10:32 and off the QQQ box), one per session (DB-backed, fails closed); _STRUCTURE_BY_NAME["OGAP"] = long_debit; PIN_EXEMPT gains OGAP (Park's book was measured without the pin gate; the counterfactual row is still written); the sizer is asked on the ASK with OGAP_BUDGET_USD (size_for budget_usd); the Service line adds " · ogap=on|not this symbol". Every other strategy dispatches and sizes exactly as before.
 v5.19  2026-11-14  OTV5 r112 (AM.3) — the Service mode line no longer says "(LIVE: refused - logs only)" after commit_gate=trade: analysis/commitment v5.2 refuses an ABANDONED side on a live box exactly as on paper. The comment at the gate call says so. The operator, 2026-11-14: "Let's fix the top 10 today" (amnesty bucket AM.3).
 v5.18  2026-11-11  OTV5 r107 (RETIRE.5 follow-up) — THE GENERIC BUTTERFLY PATH LEAVES THE TICK: the fly branch of the entry-contract capture and _fly_entry_contract, the net_debit / butterfly_half_size sizing arguments (only a fly passed them) and the executor's now-unread macro local, and _describe_position's fly line (it describes OPEN rows; no fly can be open since r103). Every live entry captures, sizes and describes exactly as before. The operator, 2026-11-07: "Running dead code and logging dead code activity is unnecessary drag."
 v5.17  2026-11-09  OTV5 r103 (RETIRE.5 step 2) — THE GEX PIN BUTTERFLY LEAVES THE TICK: its import and singleton, _attempt_butterfly and its two call sites (the capped branch now asks PARK alone; the dispatch asks PARK, then the directionals), its _STRUCTURE_BY_NAME row and the admission tries loop that named only it are removed. pin_proximity_verdict reads the expected move from analysis.volatility_measures.expected_move_session (the function the fly's wrapper called since r223; identical value). The generic multi-leg execution (_place_butterfly, the leg capture, the exits) stays for any butterfly record still on a book. Runaway, Hunt, Breakout and PARK dispatch exactly as before. The operator, 2026-11-08: "I concur on both, in that order" (cut 11-09; code removed after that close).
@@ -1748,6 +1749,8 @@ _runaway_strategy = RunawayContinuationStrategy()
 _liquidity_hunt = LiquidityHunt()                                      # OTV4TEST r12
 from strategy.park import Park as _Park                                 # r288 (PARK.1)
 _park_strategy = _Park()
+from strategy.ogap import Ogap as _Ogap                                 # OGAP.1
+_ogap_strategy = _Ogap()
 from strategy.breakout import Breakout as _BreakoutStrategy            # OTV4TEST r51
 _breakout = _BreakoutStrategy()                                        # BRK.1
 _iron_condor_strategy = IronCondorStrategy()
@@ -3957,6 +3960,8 @@ _STRUCTURE_BY_NAME = {
     "Breakout":             "long_debit",
     # r288 (PARK.1) — a long single option bought at 11:01; declared, not defaulted.
     "PARK":                 "long_debit",
+    # OGAP.1 — a long single option bought 09:46-10:31; declared, not defaulted.
+    "OGAP":                 "long_debit",
 }
 
 
@@ -4284,6 +4289,7 @@ def attempt_new_entry(ctx: dict, ms: MarketState, state: BotState):
                            "unavailable — nothing is asked", gate="catastrophic_cap")
             return
         _attempt_park(ctx, ms, state)                    # r288 (PARK.1): cap-exempt, its own budget
+        _attempt_ogap(ctx, ms, state)                    # OGAP.1: cap-exempt, its own $500 budget
         return
 
     # ── Fetch options chain (shared across strategies) ────────────────────────
@@ -4558,6 +4564,7 @@ def attempt_new_entry(ctx: dict, ms: MarketState, state: BotState):
 
     # RETIRE.5 (r103): the GEX pin butterfly's slot here (_attempt_butterfly) is removed with the fly.
     _attempt_park(ctx, ms, state, chain=chain)          # r288 (PARK.1)
+    _attempt_ogap(ctx, ms, state, chain=chain)          # OGAP.1
 
 
     # Priority 2 (was sweep): Trend Continuation.
@@ -4779,6 +4786,34 @@ def _attempt_park(ctx, ms, state, chain=None) -> None:
         _execute_entry_signal(sig, ctx, ms, state, None, additive=True)
 
 
+def _attempt_ogap(ctx, ms, state, chain=None) -> None:
+    """OGAP.1 — ask OGAP (its plan is dormant outside 09:46-10:32 and on every box but OGAP_SYMBOLS) and, on a fire,
+    execute it ADDITIVE. Called from the normal dispatch AND the capped branch: OGAP is cap-exempt (admission) and its
+    P&L is outside the cap (config.CAP_EXCLUDED_STRATEGIES). One per session on this box, DB-backed (fails closed)."""
+    if _one_per_session_used("OGAP"):
+        _plan_skip("OGAP", "one per session on this box — already traded today", gate="tries_per_session")
+        return
+    _ch, _hhmm = chain, ""
+    try:
+        _t = now_et()
+        _hhmm = _t.strftime("%H:%M")
+        from config import ENTRY_WINDOWS as _EW
+        _w0, _w1 = _EW["OGAP"]
+        if _ch is None and tuple(_w0) <= (_t.hour, _t.minute) < tuple(_w1):   # the capped branch has no chain
+            _ch = ctx.get("chain") or get_chain_fetcher().fetch_chain()
+    except Exception:                                   # noqa: BLE001
+        _ch = chain
+    sig = _safe_strategy("OGAP",
+                         lambda: _ogap_strategy.generate_signal(
+                             price_now   = ctx.get("price"),
+                             now_et      = _hhmm,
+                             chain       = _ch,
+                             prior_close = (ctx.get("gap") or {}).get("prior_close"),
+                         ), ctx)
+    if sig is not None:
+        _execute_entry_signal(sig, ctx, ms, state, None, additive=True)
+
+
 def _one_per_session_used(strategy: str) -> bool:
     """r179 — the durable session cap. True when this strategy has already
     entered a trade this ET session on this box (open OR closed), read from
@@ -4901,7 +4936,7 @@ def _noise_floor_of(df_1m) -> float:
 # r161 (SIZE.2) — WHICH TRADES SCALE. Keyed on the strategy's OWN name, the
 # same names _STRUCTURE_BY_NAME carries; a strategy not listed here never
 # supplied geometry in the first place, so True for it changes nothing.
-PIN_EXEMPT = ("PARK",)          # r288 (PARK.1): measured without the pin-proximity gate; logged, never refused
+PIN_EXEMPT = ("PARK", "OGAP")   # r288 (PARK.1): measured without the pin-proximity gate; logged, never refused (OGAP.1: same)
 
 
 def _record_pin_counterfactual(signal, ctx, verdict, error: str = "") -> None:
@@ -4986,6 +5021,8 @@ def _banner_dials() -> str:
     if BRK_DFLOOR_ENV_REFUSED:
         brk += f" (OT_BRK_DFLOOR={BRK_DFLOOR_ENV_REFUSED!r} REFUSED)"
     brk += f" · park={PARK_MODE}"                                          # r288 (PARK.1)
+    from config import OGAP_SYMBOLS as _OGS, INSTRUMENT as _OG_INS          # OGAP.1
+    brk += " · ogap=" + ("on" if str(_OG_INS or "").upper() in tuple(x.upper() for x in _OGS) else "not this symbol")
     if PARK_ENV_REFUSED:
         brk += f" (OT_PARK={PARK_ENV_REFUSED!r} REFUSED)"
     # r293 (DIAL.2) — the three dials whose refusal was recorded by config and read by NOTHING: a typo on
@@ -5286,9 +5323,13 @@ def _execute_entry_signal(signal, ctx, ms, state, _sigj=None, *, additive: bool 
     # the caution log's scaling-off count is THIS call repeated with scaled=False - never a re-derivation.
     from analysis import commitment as _cm
     _size_rec = _cm.SizeCall(risk_mgr)
+    # OGAP.1 - Park's book sizes on the ASK with its own budget: floor(OGAP_BUDGET_USD / (ask x 100)).
+    _ogap_ask = getattr(signal, "ogap_ask", None) if signal.strategy_name == "OGAP" else None
+    from config import OGAP_BUDGET_USD as _OGAP_BUDGET
     sizing = _size_rec.size_for(
         _struct,
-        premium             = signal.entry_premium,
+        premium             = float(_ogap_ask) if _ogap_ask else signal.entry_premium,
+        budget_usd          = _OGAP_BUDGET if _ogap_ask else None,
         # r131 option 2 — SIZING-ONLY stop premium for a signal carrying
         # `sizing_distance` (VOLT); every other signal gets exactly
         # `_sig_num(signal, "stop_premium")`, as before. The signal's own

@@ -1,5 +1,6 @@
 """
-risk/risk_manager.py  v5.4
+risk/risk_manager.py  v5.5
+v5.5  2026-11-14  OTV5 (OGAP.1) — size_for passes budget_usd through to the BUDGET rule (_size_budget(budget_usd=...)): None (every existing caller) keeps self._risk_per_trade; OGAP passes OGAP_BUDGET_USD. The geometry rule's budget_usd is unchanged.
 v5.4  2026-11-14  OTV5 r113 (AM.8) — the cap-episode stamp's day comes from utils.time_utils.now_et(), the one ET owner. _et_date() fell back to the UTC date when zoneinfo could not load (after 19:00 ET that is tomorrow, so the once-per-episode page would key on the wrong day); an unreadable clock now returns "" (no stamp matches, so a page is never silenced). The operator, 2026-11-14: "Let's fix the top 10 today" (amnesty bucket AM.8). Gate tests/check_cap_page_once.py v5.2 P10-P11.
 v5.3  2026-11-11  OTV5 r107 (RETIRE.5 follow-up) — size_for("butterfly") and its net_debit / butterfly_half_size arguments go, with _size_budget's is_butterfly / net_debit / butterfly_half_size and the r122 VIX half-size (a fly-only rule). No live strategy declares the butterfly structure since r103; an unknown structure still falls to the budget rule. Every live size is unchanged. The operator, 2026-11-07: "Running dead code and logging dead code activity is unnecessary drag."
 v5.2  2026-10-31  OTV5 r67 (PARC.4) — size_for("parc") and _size_parc (rule parc_ramp) are removed,
@@ -402,7 +403,7 @@ class RiskManager:
                                        stop_premium=stop_premium,
                                        noise_floor=noise_floor)
         return self._size_budget(premium=premium, grade=grade,
-                                 stop_premium=stop_premium)
+                                 stop_premium=stop_premium, budget_usd=budget_usd)
 
     def _noise_floor_refusal(self, distance, noise_floor,
                              grade: str = "B"):
@@ -598,7 +599,8 @@ class RiskManager:
     def _size_budget(self,
                      premium: float,
                      grade: str = "B",
-                     stop_premium: float = 0.0) -> SizingResult:
+                     stop_premium: float = 0.0,
+                     budget_usd=None) -> SizingResult:
         """
         Calculate whole contract count.
 
@@ -608,6 +610,8 @@ class RiskManager:
         """
         result = SizingResult(grade=grade)
         result.rule = "budget"
+        # OGAP.1 - a strategy with its own budget passes it; None (every other caller) is the box's own risk.
+        _budget = float(budget_usd) if budget_usd is not None else self._risk_per_trade
 
         cost_per_share = premium
         # ── r121 — THE DENOMINATOR IS THE RISK, WHEN ENABLED ──────────────
@@ -633,7 +637,7 @@ class RiskManager:
         grade_mult        = GRADE_SIZE_MULTIPLIER.get(grade, 1.0)
 
         count = contracts_from_risk(
-            self._risk_per_trade, risk_per_contract, grade_mult
+            _budget, risk_per_contract, grade_mult
         )
         # ── r121 — THE DEPLOYMENT CEILING ────────────────────────────────
         # Applied AFTER the risk sizing so the intent is visible in the log:
@@ -642,7 +646,7 @@ class RiskManager:
         # thing the operator should see, since it means the stop is tight
         # enough that risk-sizing has run past what he is willing to own.
         if SIZE_ON_RISK_TO_STOP and count > 0 and cost_per_contract > 0:
-            _cap = int((self._risk_per_trade * DEPLOY_CAP_MULT) // cost_per_contract)
+            _cap = int((_budget * DEPLOY_CAP_MULT) // cost_per_contract)
             if _cap < count:
                 logger.info(
                     "Deploy cap binds: risk wanted %d contract(s) ($%.0f "
@@ -656,7 +660,7 @@ class RiskManager:
             result.allowed       = False
             result.reject_reason = (
                 f"insufficient_capital: need ${cost_per_contract:.2f}/contract, "
-                f"risk=${self._risk_per_trade * grade_mult:.2f}"
+                f"risk=${_budget * grade_mult:.2f}"
             )
             return result
 

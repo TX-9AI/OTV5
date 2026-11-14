@@ -1,5 +1,7 @@
 # PLAN_SPEC.md — every strategy declares its intent BEFORE the trigger
 
+**`PLAN_SPEC.md` v5.6 · 2026-11-14 · OTV5 (OGAP.1) — §44 OGAP, the plan contract of Park's friend's ORB-GAP on QQQ paper.**
+
 **`PLAN_SPEC.md` v5.5 · 2026-11-14 · OTV5 r109 (the Saturday brief 2026-11-14 §4, item 4) — §4's sub-sections carry their state: §4.1, §4.3, §4.4 and §4.6 a REMOVED line (r76 / r88 / r103), §4.5 and §4.7 ENTRY DORMANT (r249). A reader who starts at §4 no longer finds five trades that do not exist. Docs only.**
 
 **`PLAN_SPEC.md` v5.4 · 2026-11-09 · OTV5 r103 (RETIRE.5 step 2) — §32 (the GEX pin butterfly) is REMOVED from the code; the section keeps its heading and points to the history. The operator, 2026-11-08: "I concur on both, in that order".**
@@ -1393,3 +1395,15 @@ did). Its own limits (one per break, any exit; r179/r281) are unchanged.
 adjustment).** data/counterfactual/breakout_refire.jsonl (every signal bar where the two re-fire rules disagree, both
 verdicts, which decided, whether it fired), hunt_after_breakout.jsonl (every held or would-be-held Hunt with the losing
 Breakout). Scored on Saturdays. (reentry_gate.jsonl is no longer written: 43.3.)
+
+## 44. OTV5 OGAP.1 — OGAP: THE PLAN CONTRACT (the operator, 2026-11-14: "let's design & paper trade the OGAP on QQQ")
+
+`strategy/ogap.py` declares the conditions; `strategy/ogap_plan.py` reads the store's RTH 1m bars (closed bars only:
+a bar labelled m is read once the clock is at m+1) and the prior RTH close, and the pure `ogap_read()` returns the range,
+the gap, the allowed sides, the breaks, the retests, the signal and the shadows. Every check row is named `ogap_*`
+(`ogap_range_w`, `ogap_gap`, `ogap_allowed`, `ogap_break_c/p`, `ogap_signal_c/p`, `ogap_gateg_shadow`) and every
+terminal is one of: DORMANT `ogap_not_this_symbol` (every box but `OGAP_SYMBOLS`) / `ogap_entry_window`; DECLINE
+`ogap_no_range`, `ogap_stale`, `ogap_no_0dte`, `ogap_contract`, `ogap_ask_floor`, `ogap_ask_band`; HOLD
+`ogap_no_signal: <no break | break, no retest | gate-refused only>`; NO PLAN `ogap_bars` / `chain` / `spot`; TAKE.
+Invalidation: none on the underlying (its exits are premium-only, TRADES section 10). Window 09:46-10:32 ET. The full
+rule and its provenance: `docs/OGAP_SPEC.md`.

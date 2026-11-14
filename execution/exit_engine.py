@@ -1,5 +1,6 @@
 """
-execution/exit_engine.py  v5.20
+execution/exit_engine.py  v5.21
+v5.21  2026-11-14  OTV5 (OGAP.1) — OGAP GETS ITS OWN EXIT ROUTE: evaluate() routes strategy OGAP to _evaluate_ogap, Park's walk on the BID against the entry ASK (ogap_exit_step, pure: 2.0x -> floor 0.60 x peak, 1.6x -> floor 1.2x, the 14:00 sweep once, the 15:45 bell; the EOD schedule a backstop), every exit written once to data/counterfactual/ogap_exit.jsonl. Every other route is unchanged. The operator, 2026-11-14: "let's design & paper trade the OGAP on QQQ".
 v5.20  2026-11-14  OTV5 r113 (AM.7) — _track_excursion counts ONE tick per pricing pass and takes the best and worst
       mark from every call: position_manager now calls it BEFORE the management plan decides (the plan's CLOSE skipped
       evaluate(), so the tick a target or plan stop exits on was never seen - NFLX 11-13 booked target_hit at 0.245
@@ -1365,6 +1366,54 @@ def _bars_in_session(df) -> Optional[int]:
             return None
 
 
+
+def ogap_fill_of(record) -> float:
+    """OGAP's decision basis: the entry ASK. The persisted entry_ask column when present, else the `ask=` the plan
+    wrote into notes, else the booked mark (stated: a mark basis is looser than Park's). 0.0 when none is readable."""
+    try:
+        a = record.get("entry_ask")
+        if a not in (None, "", 0, 0.0):
+            return float(a)
+    except (TypeError, ValueError, AttributeError):
+        pass
+    try:
+        import re as _re
+        m = _re.search(r"\bask=([0-9]+(?:\.[0-9]+)?)", str(record.get("notes", "") or ""))
+        if m:
+            return float(m.group(1))
+    except Exception:                                           # noqa: BLE001
+        pass
+    try:
+        return float(record.get("entry_premium") or 0.0)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def ogap_exit_step(st: dict, fill: float, bid: float, hm) -> str:
+    """ONE look of Park's exit walk (orbgap.walk), PURE: updates `st` {"peak", "floor", "swept"} and returns the exit
+    reason or "". `hm` = (hour, minute) ET of this look. The order is his: peak, the 2.0x trail, the 1.6x lock, the
+    floor, the 14:00 sweep (once), the 15:45 bell."""
+    from config import (OGAP_TRAIL_ARM, OGAP_TRAIL_KEEP, OGAP_LOCK_ARM, OGAP_LOCK_FLOOR, OGAP_SWEEP_ET,
+                        OGAP_SWEEP_BELOW, OGAP_CLOSE_ET)
+    if bid is None or not fill > 0:
+        return ""
+    st["peak"] = max(float(st.get("peak") or 0.0), float(bid))
+    peak = st["peak"]
+    if peak >= OGAP_TRAIL_ARM * fill:
+        st["floor"] = max(st.get("floor") or 0.0, OGAP_TRAIL_KEEP * peak)
+    if peak >= OGAP_LOCK_ARM * fill:
+        st["floor"] = max(st.get("floor") or 0.0, OGAP_LOCK_FLOOR * fill)
+    if st.get("floor") is not None and bid <= st["floor"]:
+        return ("ogap_trail" if peak >= OGAP_TRAIL_ARM * fill else "ogap_lock") + \
+            f": bid {bid:.2f} <= floor {st['floor']:.2f} (fill {fill:.2f}, peak {peak:.2f})"
+    if tuple(hm) >= tuple(OGAP_SWEEP_ET) and not st.get("swept"):
+        st["swept"] = True
+        if peak < OGAP_LOCK_ARM * fill and bid < OGAP_SWEEP_BELOW * fill:
+            return f"ogap_sweep_1400: bid {bid:.2f} < {OGAP_SWEEP_BELOW:.2f} x fill {fill:.2f}, peak {peak:.2f}"
+    if tuple(hm) >= tuple(OGAP_CLOSE_ET):
+        return "ogap_close_%02d%02d" % tuple(OGAP_CLOSE_ET)
+    return ""
+
 class ExitEngine:
     """Evaluates every open options trade on each tick."""
 
@@ -1700,6 +1749,9 @@ class ExitEngine:
         elif strategy == "PARK":
             # r288 (PARK.1) — its own exits; none of the sweep defaults (25% stop, trail) apply.
             return self._evaluate_park(record, current_premium)
+        elif strategy == "OGAP":
+            # OGAP.1 — Park's friend's ORB-GAP: its own exits on the BID vs the entry ASK; none of the defaults apply.
+            return self._evaluate_ogap(record, current_premium)
         else:
             # Unknown directional strategies take the sweep rules (25% stop,
             # hard close — survivable defaults), but NEVER silently: an
@@ -1789,6 +1841,74 @@ class ExitEngine:
             self._park_cf(record, why, bid, current_premium, d)
             logger.info("[park] %s EXIT %s", str(record.get("trade_id", ""))[:8], why)
         return decision
+
+    _OGAP_CF_SAID: set = set()
+
+    def _evaluate_ogap(self, record: TradeRecord, current_premium: float) -> ExitDecision:
+        """OGAP exits (OGAP.1, Park's spec of record §5), FIRST MATCH WINS, on the BID against `fill` = the entry ASK
+        (Park's decision basis; ogap_fill_of reads it off the record):
+          1. peak >= OGAP_TRAIL_ARM x fill -> floor = max(floor, OGAP_TRAIL_KEEP x peak), ratcheting
+          2. peak >= OGAP_LOCK_ARM x fill  -> floor = max(floor, OGAP_LOCK_FLOOR x fill)
+          3. bid <= floor                  -> ogap_trail (step 1 armed) / ogap_lock
+          4. the first tick at/after OGAP_SWEEP_ET (once): peak never >= 1.6x and bid < OGAP_SWEEP_BELOW x fill
+          5. OGAP_CLOSE_ET                 -> ogap_close_1545
+          6. EOD                           -> the schedule's backstop only
+        No stop before 1.6x, no take-profit, no decay stop (DECAY_STOP_EXEMPT), no management plan. After a restart the
+        persisted best MARK (max_premium_seen) seeds the peak once - slightly looser than the bid, stated (PARK r291's
+        rule). The bid is the r105 stash (_exit_bid); without one the mark stands in."""
+        from utils.time_utils import ET as _ET
+        decision = ExitDecision()
+        e = float(record.get("entry_premium", 0.0) or 0.0)
+        n = float(record.get("contracts", 0) or 0)
+        if e > 0:
+            decision.current_pnl_pct = (current_premium - e) / e
+            decision.current_pnl_usd = (current_premium - e) * n * CONTRACT_MULTIPLIER
+        bid = record.get("_exit_bid")
+        bid = float(bid) if bid not in (None, 0, 0.0) else float(current_premium or 0.0)
+        fill = ogap_fill_of(record)
+        now = datetime.now(_ET)
+        st = record.get("_ogap_state")
+        if not isinstance(st, dict):
+            st = {"peak": 0.0, "floor": None, "swept": False}
+            try:
+                best = float(record.get("max_premium_seen") or 0.0)
+            except (TypeError, ValueError):
+                best = 0.0
+            if best > 0:
+                st["peak"] = best
+                logger.info("[ogap] %s peak SEEDED from the persisted best mark %.2f (restart)",
+                            str(record.get("trade_id", ""))[:8], best)
+            record["_ogap_state"] = st
+        why = ogap_exit_step(st, fill, bid, (now.hour, now.minute)) if fill > 0 else ""
+        if not why and _eod_due(record):
+            why = _eod_label(record)
+        if why:
+            decision.should_exit = True
+            decision.exit_reason = why
+            self._ogap_cf(record, why, bid, current_premium, fill, st)
+            logger.info("[ogap] %s EXIT %s", str(record.get("trade_id", ""))[:8], why)
+        return decision
+
+    def _ogap_cf(self, record, why, bid, mark, fill, st) -> None:
+        """Once per trade per process: data/counterfactual/ogap_exit.jsonl (the tick bid, the floor, the peak - so the
+        tick-vs-minute difference with Park's book is recorded, not hidden). Never raises."""
+        tid = str(record.get("trade_id", "") or "")
+        if not tid or tid in ExitEngine._OGAP_CF_SAID:
+            return
+        ExitEngine._OGAP_CF_SAID.add(tid)
+        try:
+            import json as _json, os as _os, time as _time
+            d = _os.environ.get("OT_COUNTERFACTUAL_DIR") or _os.path.join(
+                _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))), "data", "counterfactual")
+            _os.makedirs(d, exist_ok=True)
+            out = {"ts_epoch": _time.time(), "trade_id": tid, "symbol": record.get("symbol"), "rule": "ogap_exit",
+                   "reason": why, "bid": bid, "mark": mark, "fill_ask": fill, "peak": (st or {}).get("peak"),
+                   "floor": (st or {}).get("floor"), "entry_premium": record.get("entry_premium"),
+                   "contracts": record.get("contracts"), "option_symbol": record.get("option_symbol")}
+            with open(_os.path.join(d, "ogap_exit.jsonl"), "a") as fh:
+                fh.write(_json.dumps(out) + "\n")
+        except Exception as exc:                                # noqa: BLE001
+            logger.warning("[ogap] exit counterfactual row NOT written for %s: %s", tid[:8], exc)
 
     def _park_cf(self, record, why, bid, mark, delta) -> None:
         """Once per trade per process: data/counterfactual/park_exit.jsonl. Never raises."""

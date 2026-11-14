@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_plan_states.py  v5.11
+tests/check_plan_states.py  v5.12
+v5.12  2026-11-14  OTV5 (OGAP.1) — S1's ruled-active list gains OGAP (ACTIVE, no switch key). Every other check unchanged.
 v5.11  2026-11-14  OTV5 r110 (WS.3 TRIM) — RE-POINTED (WA 38.4): Breakout is DORMANT with no switch, so S1's ruled roster moves it to dormant, S3's three OT_BREAKOUT cases read dormant for "1", "active" and "log" (no env turns it back on), and D1/D2/D5's ACTIVE exemplar is LiquidityHunt. What each check pins is unchanged.
 v5.10  2026-11-09  OTV5 r103 (RETIRE.5 step 2) — RE-POINTED (WA 38.4): the GEX fly's plan_state row is removed, so S1's ruled roster drops it (and pins it absent) and S3's three OT_GEX_BUTTERFLY cases go. S2, S4+ unchanged.
 v5.9  2026-11-08  OTV5 r97 (RETIRE.5) — RE-POINTED (WA section 38.4): the GEX pin butterfly is cut, so S1's ruled roster moves GEXPinButterfly to dormant and S3's two OT_GEX_BUTTERFLY cases read dormant for "0", "1" and "log" (a cut plan has no LOG state). What each check pins is unchanged. The operator, 2026-11-08: "I concur on both, in that order".
@@ -152,7 +153,7 @@ def main():
 
     # ── S1-S3: the states, read in fresh interpreters (config reads several switches at import) ──
     ruled_active = ["CondorManagement", "CreditRoll", "LiquidityHunt",
-                    "PARK", "RunawayContinuation"]          # r110 (WS.3 TRIM): Breakout is dormant
+                    "OGAP", "PARK", "RunawayContinuation"]  # r110 (WS.3 TRIM): Breakout is dormant; OGAP.1: OGAP ACTIVE
     ruled_log = []                                         # r88 (RETIRE.3): the TCS, the last LOG plan, is removed
     ruled_dormant = ["Breakout", "IronCondorStrategy"]   # r97/r103: the GEX fly; r110: Breakout dormant
     st = fresh("import json\nfrom strategy import plan_state as S\n"

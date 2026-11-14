@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_park.py  v5.3
+tests/check_park.py  v5.4
+v5.4  2026-11-14  OTV5 (OGAP.1) — K13 pins PIN_EXEMPT = (PARK, OGAP): OGAP is measured without the pin gate, as PARK. Every PARK check unchanged.
 v5.3  2026-11-09  OTV5 r103 (RETIRE.5 step 2) — K13a intercepts _attempt_park alone: _attempt_butterfly is removed with the GEX fly. Every check unchanged.
 v5.2  2026-10-30  OTV5 r60 (PARK.4) — K1 PINS THE MARK, NOT THE ASK. The operator, 2026-10-30: "That's not my spec… you
       know park is a borrowed trade. To match my spec, we ladder in from aggressive to mark & never worse than mark".
@@ -348,7 +349,7 @@ def main():
     capped = src[src.index("    if _cap_hit:\n        if not _adm_ok:"):]
     capped = capped[:capped.index("        return\n\n")]
     check("K13 main: PARK declared long_debit, PIN_EXEMPT names it, the capped branch asks _attempt_park",
-          '"PARK":                 "long_debit"' in src and 'PIN_EXEMPT = ("PARK",)' in src
+          '"PARK":                 "long_debit"' in src and 'PIN_EXEMPT = ("PARK", "OGAP")' in src
           and "_attempt_park(ctx, ms, state)" in capped and "def _attempt_park(" in src, capped[-300:])
 
     # r292 (GATE.1) — K13a DRIVES THE NORMAL-DAY DISPATCH. K13 pinned the capped branch by text and nothing pinned

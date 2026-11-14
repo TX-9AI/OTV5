@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_admission.py  v5.5
+tests/check_admission.py  v5.6
+v5.6  2026-11-14  OTV5 (OGAP.1) — OGAP joins SPEC and ALL: 09:46-10:32, one open, one try per session, cap-exempt (the operator, 2026-11-14). Every other row unchanged.
 v5.5  2026-11-09  OTV5 r103 (RETIRE.5 step 2) — the GEX fly row is removed: SPEC/ALL lose it; A8/A9 pin PARK's 11:01-11:02 window where they pinned the fly's; B9, C, D2/D3, D6, F1-F3, G1-G3 and H1-H2 (which used the fly as their one-per-session, cap-1 example) are re-pointed to PARK, the other rule of that shape. Every other check unchanged.
 v5.4  2026-11-08  OTV5 r88 (RETIRE.3) — the TCS row is removed: SPEC/ALL lose it, A8 drops its window, and B9, D2/D3, D6 and F1-F3 (which used the TCS as their example) are re-pointed to the GEX fly beside Runaway / PARK / Breakout with the same assertions.
 v5.3  2026-11-08  OTV5 r76 (RETIRE.1) — RE-POINTED (section 38.4): the ORB trade, VOLT, the sweep, the ATP fly and ORCS are
@@ -108,6 +109,7 @@ def main():
     from execution.position_manager import decide, Facts, rules, gates, AdmissionRule
     from execution.position_manager import RUNAWAY, HUNT, BREAKOUT       # r88: TCS removed; r103: the GEX fly removed
     PARK = "PARK"
+    OGAP = "OGAP"                          # OGAP.1
 
     T = rules()
     # ⚠️ r78 — BREAKOUT WAS IN SPEC BUT NOT IN `ALL`, so every B-section cap
@@ -115,7 +117,7 @@ def main():
     #    stacked — 19 positions off one opening range — was the one this
     #    checker never asked about. Added; it is not a new belief, it is the
     #    belief SPEC already held going unexercised since r51.
-    ALL = [RUNAWAY, HUNT, BREAKOUT, PARK]   # r103: the GEX fly removed;   # r88: the TCS removed   # r292: PARK was in SPEC, not here (the r78 defect again); r76: the retired five removed
+    ALL = [RUNAWAY, HUNT, BREAKOUT, PARK, OGAP]   # OGAP.1: OGAP added; r103: the GEX fly removed;   # r88: the TCS removed   # r292: PARK was in SPEC, not here (the r78 defect again); r76: the retired five removed
 
     def ok(strategy, hhmm, **kw):
         return decide(Facts(strategy=strategy, now_et=hhmm, orb_established=True, **kw))
@@ -139,6 +141,7 @@ def main():
         # at 15:00 because a debit is flattened by the 15:40 ladder and an entry
         # inside its own flatten window is an entry with no hold time at all.
         "PARK":  (((11, 1), (11, 3)), 1, 1),      # r288 (PARK.1): the ask 11:01-11:02, one per session
+        "OGAP":  (((9, 46), (10, 32)), 1, 1),     # OGAP.1 (2026-11-14): 09:46-10:31, one open, one try a session
     }
     # ⚠️ r76 — CAPS RESTATED FROM THE OPERATOR'S RULING, 2026-09-21: *"With
     # rare exception, there are no blocking TRADES and no maximum number of

@@ -1,5 +1,6 @@
 """
-strategy/plan_state.py  v5.8
+strategy/plan_state.py  v5.9
+v5.9  2026-11-14  OTV5 (OGAP.1) — the OGAP row: ACTIVE, an hour plan, no switch key (no study toggle; OGAP_SYMBOLS keeps it to QQQ).
 v5.8  2026-11-14  OTV5 r110 (WS.3 TRIM) — BREAKOUT IS DORMANT, WITH NO SWITCH: its row is ("", DORMANT, HOUR), like the condor's, so it is never asked, writes nothing, and no env value turns it back on (OT_BREAKOUT is no longer read). Its code stays for a revisit. The operator, 2026-11-14: "Concur" (WS.3: the fitted gates failed blind; window EV -$11.73/trade [-59.33, +41.68], n=120).
 v5.7  2026-11-09  OTV5 r103 (RETIRE.5 step 2) — the GEXPinButterfly row, its OT_GEX_BUTTERFLY read and the _FLAG table (the fly was its last entry) with its config-flag branch go with the GEX pin butterfly. The live rows read exactly as before. The operator, 2026-11-08: "I concur on both, in that order".
 v5.6  2026-11-08  OTV5 r97 (RETIRE.5) — GEXPinButterfly defaults DORMANT and a flag-read plan whose default is DORMANT has no LOG state: with config.GEX_BUTTERFLY_ENABLED False (code) it is DORMANT whatever OT_GEX_BUTTERFLY says, so the cut fly is never asked and writes nothing. The operator, 2026-11-08: "I concur on both, in that order" (cut from 11-09; code removed after that close).
@@ -76,6 +77,7 @@ TABLE: Dict[str, Tuple[str, str, str]] = {
     "Breakout":                 ("",                  DORMANT, HOUR),        # r110 (WS.3 TRIM): off the roster
     "LiquidityHunt":            ("OT_HUNT",           ACTIVE,  HOUR),
     "PARK":                     ("OT_PARK",           ACTIVE,  HOUR),
+    "OGAP":                     ("",                  ACTIVE,  HOUR),    # OGAP.1: no switch (QQQ only, in code)
     "IronCondorStrategy":       ("",                  DORMANT, CONDITION),   # no entry of its own (r249)
     "CondorManagement":         ("",                  ACTIVE,  CONDITION),
     "CreditRoll":               ("",                  ACTIVE,  CONDITION),

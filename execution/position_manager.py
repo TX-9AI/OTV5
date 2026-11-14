@@ -1,5 +1,6 @@
 """
-execution/position_manager.py  v5.37
+execution/position_manager.py  v5.38
+v5.38  2026-11-14  OTV5 (OGAP.1) — OGAP joins the admission table: its window (config.ENTRY_WINDOWS["OGAP"], 09:46-10:32), one open, one try per session, cap-exempt (its own $500 budget), as PARK. Every other row is unchanged.
 v5.37  2026-11-14  OTV5 r113 (AM.7) — the excursion (mfe/mae and their bars) sees EVERY priced tick, including the one
       the management plan exits on: _manage_one calls exit_engine._track_excursion before decide() (a plan CLOSE skipped
       evaluate(), which was the only caller). Telemetry only. The operator, 2026-11-14: "Let's fix the top 10 today"
@@ -409,6 +410,7 @@ RUNAWAY = "RunawayContinuation"
 HUNT = "LiquidityHunt"
 BREAKOUT = "Breakout"
 PARK = "PARK"                         # r288 (PARK.1): the 11:00 first-hour continuation
+OGAP = "OGAP"                         # OGAP.1: Park's friend's ORB-GAP (QQQ paper)
 
 
 def _delta_readable(record, ok: bool, why: str = "") -> None:
@@ -520,6 +522,8 @@ _DEFAULT_RULES = {
     # r288 (PARK.1) — one per session, and its own budget: the cap neither refuses it nor counts its P&L
     # (config.CAP_EXCLUDED_STRATEGIES).
     PARK:    AdmissionRule(config.ENTRY_WINDOWS[PARK], max_open_of_type=1, max_tries_per_session=1, cap_exempt=True),
+    # OGAP.1 — one per session, its own $500 budget: the cap neither refuses it nor counts its P&L.
+    OGAP:    AdmissionRule(config.ENTRY_WINDOWS[OGAP], max_open_of_type=1, max_tries_per_session=1, cap_exempt=True),
 }
 
 

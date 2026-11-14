@@ -1,5 +1,6 @@
 """
-config.py  v5.19
+config.py  v5.20
+v5.20  2026-11-14  OTV5 (OGAP.1) — OGAP, PARK'S FRIEND'S ORB-GAP ON QQQ PAPER: ENTRY_WINDOWS["OGAP"] = 09:46-10:32, the OGAP_* constants (no env key), OGAP joins CAP_EXCLUDED_STRATEGIES and _DECAY_EXEMPT_DEFAULT. The operator, 2026-11-14: "let's design & paper trade the OGAP on QQQ". Every other value is unchanged.
 v5.19  2026-11-14  OTV5 r112 (AM.2 / LIVE.6) — LIVE_STOP_AT_BID_AFTER = 2 and LIVE_STOP_MARKET_AFTER = 3: a live stop that has not filled at the mark steps to the bid, then crosses (execution/exit_engine v5.19). Constants, no env key. Paper unchanged. The operator, 2026-11-14: "Let's fix the top 10 today" (amnesty bucket AM.2).
 v5.18  2026-11-14  OTV5 r110 (WS.3 TRIM) — BREAKOUT LEAVES THE ROSTER. ENTRY_WINDOWS loses "Breakout" (three live setups and PARK remain); its window moves to BREAKOUT_WINDOW = ((9, 35), BREAKOUT_END), read only by the dormant strategy's own code (BREAKOUT_EARLIEST_ET / BREAKOUT_LATEST_ET), and its admission row (execution/position_manager v5.36), so the code stays importable for a revisit. strategy/plan_state v5.8 makes it DORMANT with no switch, so it is never asked and writes nothing. Every other value is unchanged. The operator, 2026-11-14: "Concur" (WS.3, Breakout: the fitted gates failed blind; window EV -$11.73/trade [-59.33, +41.68], n=120, fees $1,572.62).
 v5.17  2026-11-09  OTV5 r103 (RETIRE.5 step 2) — THE GEX PIN BUTTERFLY'S KEYS GO: ENTRY_WINDOWS loses GEXPinButterfly; GEX_BUTTERFLY_ENABLED, HOLD_TO_CLOSE_STRATEGIES, every GEX_BFLY_* dial (PIN_CONC_MIN, EM_MIN/MAX_FRAC, SMOOTH_WINDOW, PERSIST_TICKS, VWAP_BAND_EM_FRAC, EARLIEST_ET, LATEST_ET, WING_EM_FRAC and its OT_GEX_BFLY_WING_EM_FRAC read), the debit gates (BUTTERFLY_MAX/MIN_DEBIT_PCT_WIDTH, _HICONV, BUTTERFLY_DEBIT_CEILING, BUTTERFLY_DISC_CONV_LO/HI and their OT_BFLY_* reads), BUTTERFLY_ENTRY_START_ET, BUTTERFLY_ENTRY_CUTOFF_ET (it gated nothing since r209), BUTTERFLY_WING_SPX/QQQ, BUTTERFLY_GEX_PIN_PROXIMITY_MULT and VIX_BUTTERFLY_HALF_SIZE are deleted. KEPT: BUTTERFLY_STOP_LOSS_PCT / _TP_PCT / _MAX_HOLD_MIN (exit_engine prices any butterfly record still on a book) and VIX_BUTTERFLY_DISABLE (macro_data's regime and the condor read it). Every live value is identical (diffed). The operator, 2026-11-08: "I concur on both, in that order".
@@ -1061,7 +1062,32 @@ PARK_LATE_X = float(os.environ.get("OT_PARK_LATE_X", "0.20"))                   
 # a PARK close never counts toward the cap's realized P&L, and the cap never refuses
 # PARK (position_manager: cap_exempt). Sizing is the box's own RISK_PER_TRADE_USD,
 # flat: floor(risk / (mark x 100)) (r60 PARK.4: the mark, was the ask).
-CAP_EXCLUDED_STRATEGIES = ("PARK",)           # r67 (PARC.4): PARC removed (r46 had added it)
+CAP_EXCLUDED_STRATEGIES = ("PARK", "OGAP")   # r67 (PARC.4): PARC removed (r46 had added it); OGAP.1: its own $500 budget
+# ── OGAP.1 — PARK'S FRIEND'S ORB-GAP, A FAITHFUL PAPER COPY (docs/OGAP_SPEC.md) ─────────────────────────────────────
+# The operator, 2026-11-14: "let's design & paper trade the OGAP on QQQ". Constants only, no env key, no configure.sh item
+# (the operator, 2026-10-31: no study toggles). Signal: the 09:30-09:44 1m range (>= OGAP_RANGE_MIN_BARS bars, W > 0);
+# gate-G at |gap| >= OGAP_GATE_G_W x W (gap = 09:30 open - prior RTH close), the refused side a shadow; the first 1m CLOSE
+# beyond the range 09:45-10:30, then a retest within OGAP_RETEST_BARS bars (low <= level + 0.10W and close > level for a
+# call; mirrored for a put); fill the minute after the signal bar or never (stale). ATM 0DTE, ask >= OGAP_MIN_ASK,
+# contracts = floor(OGAP_BUDGET_USD / (ask x 100)) on the ASK. Exits on the BID vs the entry ask (exit_engine._evaluate_ogap):
+# peak >= 2.0x -> floor 0.60 x peak (ratchets); peak >= 1.6x -> floor 1.2x; bid <= floor sells; the first tick at/after
+# 14:00 with peak never 1.6x and bid < 0.75x sells; 15:45 sells. QQQ only (ogap_equities_20261113: equities FAILED sealed).
+OGAP_SYMBOLS = ("QQQ",)
+OGAP_RANGE_ET = ((9, 30), (9, 44))
+OGAP_RANGE_MIN_BARS = 10
+OGAP_BREAK_ET = ((9, 45), (10, 30))
+OGAP_RETEST_BARS = 20
+OGAP_RETEST_W = 0.10
+OGAP_GATE_G_W = 0.25
+OGAP_BUDGET_USD = 500.0
+OGAP_MIN_ASK = 0.50
+OGAP_LOCK_ARM = 1.6
+OGAP_LOCK_FLOOR = 1.2
+OGAP_TRAIL_ARM = 2.0
+OGAP_TRAIL_KEEP = 0.60
+OGAP_SWEEP_ET = (14, 0)
+OGAP_SWEEP_BELOW = 0.75
+OGAP_CLOSE_ET = (15, 45)
 # ── r288 (BRK.13) — BREAKOUT'S DELTA FLOOR ──────────────────────────────────────
 # trade | log | off, UNSET = trade (the operator, 2026-10-17 19:12 ET: "A is fine", to
 # "trade it on QQQ-TEST with a counterfactual"). Breakout exits when |delta| <=
@@ -1133,7 +1159,7 @@ DECAY_STOP_ARM = float(os.environ.get("OT_DECAY_STOP_ARM", "0.05"))         # th
 # default below (set but empty = nothing exempt). PARK is exempt by default: the 10-30 scoring had the decay stop cutting
 # PARK's all-afternoon winners (-$19.3k on 6 PARK trades); the 48-day replay of V0 X30 with Runaway + PARK exempt is
 # +$18.8k / +$20.0k (trigger / next-tick fill) vs Runaway-only +$4.7k / +$6.2k.
-_DECAY_EXEMPT_DEFAULT = ("RunawayContinuation", "PARK")
+_DECAY_EXEMPT_DEFAULT = ("RunawayContinuation", "PARK", "OGAP")   # OGAP.1: its own exits only
 _dx_raw = os.environ.get("OT_DECAY_STOP_EXEMPT")
 DECAY_STOP_EXEMPT = (_DECAY_EXEMPT_DEFAULT if _dx_raw is None
                      else tuple(x.strip() for x in _dx_raw.split(",") if x.strip()))
@@ -1148,6 +1174,7 @@ ENTRY_WINDOWS = {
     "RunawayContinuation":  ((9, 35),  RUNAWAY_END),   # r187: 10:29 last entry (r68: fixed, no per-box key)
     "LiquidityHunt":        ((9, 35),  (10, 30)),   # r187
     "PARK":                 ((11, 1),  (11, 3)),   # r288 (PARK.1): 11:01-11:02 after the 11:00 bar closes; r60 (PARK.4): at the mark, laddered live
+    "OGAP":                 ((9, 46),  (10, 32)),  # OGAP.1: the last signal bar 10:30, the last fill 10:31 (half-open)
 }
 
 

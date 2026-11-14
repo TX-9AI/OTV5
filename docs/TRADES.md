@@ -1,5 +1,7 @@
 # TRADES — the specs
 
+**`TRADES.md` v5.17 · 2026-11-14 · OTV5 (OGAP.1) — OGAP joins the roster: Park's friend's ORB-GAP, a faithful paper copy on the QQQ box only (section 10; docs/OGAP_SPEC.md). The operator, 2026-11-14: "let's design & paper trade the OGAP on QQQ".**
+
 **`TRADES.md` v5.16 · 2026-11-14 · OTV5 r110 (WS.3 TRIM) — Breakout is DORMANT from 2026-11-16 and leaves the roster: its §0 row goes (three trades and PARK remain), section 7 is marked DORMANT. Its code is kept for a revisit (strategy/breakout.py, its plan and exits), with no switch: no env value turns it back on (strategy/plan_state v5.8). The operator, 2026-11-14: "Concur" (WS.3: the fitted gates failed blind; window EV -$11.73/trade [-59.33, +41.68], n=120, fees $1,572.62 beside).**
 
 **`TRADES.md` v5.15 · 2026-11-14 · OTV5 r109 (the Saturday brief 2026-11-14 §4, items 3 and 10) — §5 opens with the condor's ENTRY DORMANT state (r249: management and the roll only; the sweep and fly comparisons are gone with those trades), and the stops line says `BUTTERFLY_STOP_LOSS_PCT` is read by nothing since r107. Docs only.**
@@ -51,6 +53,7 @@ is its `docs/PLAN_SPEC.md` section.
 | Runaway | `RunawayContinuation` | ON | none (its end is fixed; r68) | 09:35-10:30 | PLAN_SPEC §30 |
 | Liquidity hunt | `LiquidityHunt` | ON | none | 09:35-10:30 | PLAN_SPEC §37 |
 | PARK | `PARK` | ON | none (`OT_PARK=log` records it, `off` stops it) | 11:01-11:03 | section 9 below |
+| OGAP | `OGAP` | ON | none (QQQ only, `config.OGAP_SYMBOLS`; no study toggle) | 09:46-10:32 | section 10 below |
 
 A window's end is exclusive: 10:30 means the last entry is 10:29. A switch is ACTIVE at
 `1` or `active` (r303 below). The ORB trade, VOLT, the sweep credit spread, the ATP butterfly and ORCS are REMOVED (r76,
@@ -642,6 +645,38 @@ operator's order (2026-11-08) though it failed blind. The Hunt records the openi
 +10,550 at $1,050 (+1,590 without the fit week); SPX 39 days n14 +13,320 at $2,500. PARK.X (picks
 sha 85dca420): the delta floor +11,786 on QQQ, +16,370 on SPX, every winner kept; take-profit and
 time exits cut the big days. Small n: the book rests on two or three days a month.
+
+## 10. OGAP — `ogap.py` (the spec) + `ogap_plan.py` (the plan)
+
+**OTV5 OGAP.1, 2026-11-14.** Park's friend's ORB-GAP (his spec of record 2026-11-13), a faithful PAPER copy: his
+signal, sizing and exits, unchanged; only the plumbing is ours (`docs/OGAP_SPEC.md`). The operator, 2026-11-14: *"let's
+design & paper trade the OGAP on QQQ"*. **QQQ only** (`config.OGAP_SYMBOLS`): his rule run unchanged on every fleet
+symbol failed the sealed bar on the equities (`~/reviews/studies/ogap_equities_20261113`: T1 −$96/row [−160, −22]) and
+SPX is refused by his $5.00 ask band on every row; every other box writes one `ogap_not_this_symbol` row a day.
+
+**Entry, once per session, 09:46-10:32 ET:**
+- the range: the 09:30-09:44 1m bars, at least 10 of them, W = high − low > 0;
+- gate-G: gap = (09:30 open − the prior RTH close) / W; |gap| >= 0.25: only the gap's side (up = calls, down = puts),
+  else both; an unreadable gap fails open. A retest on the refused side is a SHADOW (`ogap_shadow.jsonl`, the
+  `ogap_gateg_shadow` check row), never traded, never blocking, never in EV;
+- the break: per side, the first 1m CLOSE strictly beyond the range, 09:45-10:30; it never re-arms;
+- the retest: within the 20 bars after the break (and by 10:30): a call's low <= high + 0.10W closing above the high
+  (a put mirrored). The earliest allowed retest is the signal bar; the fill is the NEXT minute or never (`ogap_stale`);
+- the contract: today's expiry only (`ogap_no_0dte`), the strike nearest the fill-minute open (a tie goes lower), ask >=
+  $0.50 (`ogap_ask_floor`), contracts = floor($500 / (ask x 100)) on the ASK with its own `OGAP_BUDGET_USD` (an ask
+  over $5.00 buys none: `ogap_ask_band`). Paper books the mark, like every setup; the ask and the bid are on the row.
+
+**Exits (`exit_engine._evaluate_ogap`), on the bid against the entry ASK, first match wins:** peak >= 2.0x -> floor
+0.60 x peak (ratchets); peak >= 1.6x -> floor 1.2x; bid <= floor sells (`ogap_trail` / `ogap_lock`); the first tick at
+or after 14:00, if the peak never reached 1.6x and the bid is under 0.75x, sells (`ogap_sweep_1400`); 15:45 sells
+(`ogap_close_1545`); the EOD schedule is only a backstop. No stop before 1.6x, no take-profit, no decay stop, no
+management plan, no pin gate (PIN_EXEMPT, the counterfactual row still written). Cap-exempt and out of the cap's day
+P&L. One look per tick (his book looks once a minute): every exit is written to `ogap_exit.jsonl` with the tick bid,
+the floor and the peak. A restart seeds the peak from the persisted best mark once (PARK r291's rule).
+
+**Measured** (`~/reviews/studies/park_orbgap_20261113`): QQQ T1 real quotes n=7 +$148/row [−124, +454]; T2 n=32
++$137 [−87, +421]. Gate `tests/check_ogap.py` (O1-O11 and the five-day replay R1-R5, which reproduces his backtest's
+QQQ rows on 10-30, 11-02, 11-04, 11-05 and 11-09 to the dollar).
 
 ## Not specced, deliberately
 
