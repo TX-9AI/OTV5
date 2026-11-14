@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_trade_switches.py  v5.5
+tests/check_trade_switches.py  v5.6
+v5.6  2026-11-14  OTV5 r110 (WS.3 TRIM) — Breakout left ENTRY_WINDOWS (dormant, off the roster): S8 reads its end from config.BREAKOUT_WINDOW (still 10:30, read by its own module) and pins it absent from ENTRY_WINDOWS; S11 reads Breakout's end from BREAKOUT_WINDOW too. What each check pins is unchanged.
 v5.5  2026-11-09  OTV5 r103 (RETIRE.5 step 2) — S0 adds the GEX fly (strategy.gex_pin_butterfly, OT_GEX_BUTTERFLY); S9 pins PARK's window and the fly's row removed (was the fly's 13:00-15:00). Every other check unchanged.
 v5.4  2026-11-08  OTV5 r88 (RETIRE.3) — S9 pins the GEX fly's window and that the TCS row is removed (r88).
 v5.3  2026-11-08  OTV5 r84 (VENV.1) — a bare run (control's /usr/bin/python3 3.14, no pandas) stops with one
@@ -135,11 +136,13 @@ def main():
     # S8 — the table and the modules that act on it
     import strategy.runaway_plan as RP, strategy.liquidity_hunt as LH, strategy.breakout as BR
     want = (10, 30)
-    ends = {k: tuple(C.ENTRY_WINDOWS[k][1]) for k in ("RunawayContinuation", "LiquidityHunt", "Breakout")}
+    ends = {k: tuple(C.ENTRY_WINDOWS[k][1]) for k in ("RunawayContinuation", "LiquidityHunt")}
+    ends["Breakout"] = tuple(C.BREAKOUT_WINDOW[1])                  # r110: dormant, off the roster
+    ends_ok_brk = "Breakout" not in C.ENTRY_WINDOWS
     acts = {"runaway": tuple(RP._cutoff_hm()), "hunt": tuple(LH.CUTOFF_ET), "breakout": str(BR.LATEST_ET)}
-    check("S8 Runaway/Hunt/Breakout windows end at 10:30 and their modules read it",
+    check("S8 Runaway/Hunt/Breakout windows end at 10:30 and their modules read it (Breakout off ENTRY_WINDOWS, r110)",
           all(v == want for v in ends.values()) and acts["runaway"] == want and acts["hunt"] == want
-          and acts["breakout"] == "10:30", f"{ends} {acts}")
+          and acts["breakout"] == "10:30" and ends_ok_brk, f"{ends} {acts} brk_off_roster={ends_ok_brk}")
     # S9 — unchanged rows
     keep = {k: tuple(map(tuple, C.ENTRY_WINDOWS[k])) for k in ("PARK",)}
     check("S9 PARK keeps its window (11:01-11:03); the TCS row (r88) and the GEX fly row (r103) are removed",
@@ -156,7 +159,8 @@ def main():
               "rules = PM._DEFAULT_RULES; adm = [r for k, r in rules.items() if 'Runaway' in str(k)]; "
               "a = adm[0].window[1] if adm else None; "
               "print('|'.join([w('RunawayContinuation'), '%%d:%%02d' %% tuple(a), str(C.RUNAWAY_CUTOFF_ET), "
-              "str(RC.CUTOFF_ET), '%%d:%%02d' %% tuple(RP._cutoff_hm()), w('LiquidityHunt'), w('Breakout'), "
+              "str(RC.CUTOFF_ET), '%%d:%%02d' %% tuple(RP._cutoff_hm()), w('LiquidityHunt'), "
+              "'%%d:%%02d' %% tuple(C.BREAKOUT_WINDOW[1]), "
               "repr(getattr(C, 'RUNAWAY_END_ENV_REFUSED', '<absent>'))]))" % (sps, _root))
     got11 = {}
     for val in (None, "11:30", "1130", "16:30", "09:30", "11:75"):

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""tests/check_one_window_table.py — v5.3
+"""tests/check_one_window_table.py — v5.4
+v5.4  2026-11-14  OTV5 r110 (WS.3 TRIM) — Breakout leaves ENTRY_WINDOWS and the admission table (dormant, off the roster): W1 compares the live rows and allows Breakout's dormant admission row on config.BREAKOUT_WINDOW; W2 compares its module's end with BREAKOUT_WINDOW (its code is kept); W4 uses the Runaway row; W6 (new) pins Breakout absent from ENTRY_WINDOWS and its admission row on BREAKOUT_WINDOW; its admission pin now reads BREAKOUT_WINDOW (still 09:35-10:30). Every live pin is unchanged.
 v5.3  2026-11-09  OTV5 r103 (RETIRE.5 step 2) — the GEX fly row is removed with the fly, so its admission pin, the three config pins (BUTTERFLY_ENTRY_START_ET, GEX_BFLY_EARLIEST_ET, BUTTERFLY_ENTRY_CUTOFF_ET - the last gated nothing since r209), session_guard's _BUTTERFLY_CUTOFF, the two gex_pin_butterfly pins and its two W2 pairs go with it. Every live pin is unchanged.
 v5.2  2026-11-08  OTV5 r88 (RETIRE.3) — the TCS row is removed with the TCS, so its admission pin, the two config pins, the two
       tcs_plan pins and its two W2 pairs go with it. Every live pin is unchanged.
@@ -74,7 +75,7 @@ def hhmm(t) -> str:
 
 
 PIN = {   # measured on the r148 build; identical to r147 except the TrendCreditSpread admission row
-    "admission.Breakout.window": ((9, 35), (10, 30)),   # r187
+    "admission.Breakout.window": ((9, 35), (10, 30)),   # r187; r110: dormant, on config.BREAKOUT_WINDOW
     "admission.LiquidityHunt.window": ((9, 35), (10, 30)),   # r187
     "admission.RunawayContinuation.window": ((9, 35), (10, 30)),   # r187
     "config.CONDOR_ENTRY_CUTOFF_ET": (15, 40),
@@ -147,13 +148,14 @@ def main() -> int:
     from execution.position_manager import rules
     R = rules()
     bad = [n for n in EW if tuple(tuple(x) for x in R[n].window) != tuple(tuple(x) for x in EW[n])]
-    check("W1 admission windows == config.ENTRY_WINDOWS", not bad and set(R) == set(EW), f"differ: {bad}, keys {sorted(set(R) ^ set(EW))}")
+    check("W1 admission windows == config.ENTRY_WINDOWS (+ Breakout's dormant row, r110)",
+          not bad and set(R) == set(EW) | {"Breakout"}, f"differ: {bad}, keys {sorted(set(R) ^ (set(EW) | {'Breakout'}))}")
 
     from strategy import runaway_continuation, liquidity_hunt, breakout   # r103: gex_pin_butterfly removed
     pairs = [
         ("RunawayContinuation end", runaway_continuation.CUTOFF_ET, hhmm(EW["RunawayContinuation"][1])),
         ("LiquidityHunt end", liquidity_hunt.CUTOFF_ET, EW["LiquidityHunt"][1]),
-        ("Breakout end", breakout.LATEST_ET, hhmm(EW["Breakout"][1])),
+        ("Breakout end (dormant, BREAKOUT_WINDOW)", breakout.LATEST_ET, hhmm(config.BREAKOUT_WINDOW[1])),
     ]
     norm = lambda v: tuple(v) if isinstance(v, (tuple, list)) else v
     mism = [f"{n}: plan {norm(a)!r} vs table {norm(b)!r}" for n, a, b in pairs if norm(a) != norm(b)]
@@ -161,14 +163,19 @@ def main() -> int:
 
     saved = getattr(config, "ADMISSION_RULES", None)
     try:
-        config.ADMISSION_RULES = {"Breakout": {"window": ((1, 0), (2, 0))}}
-        w = tuple(tuple(x) for x in rules()["Breakout"].window)
-        check("W4 ADMISSION_RULES cannot override a window", w == tuple(tuple(x) for x in EW["Breakout"]), f"got {w}")
+        config.ADMISSION_RULES = {"RunawayContinuation": {"window": ((1, 0), (2, 0))}}
+        w = tuple(tuple(x) for x in rules()["RunawayContinuation"].window)
+        check("W4 ADMISSION_RULES cannot override a window",
+              w == tuple(tuple(x) for x in EW["RunawayContinuation"]), f"got {w}")
     finally:
         if saved is None:
             try: delattr(config, "ADMISSION_RULES")
             except AttributeError: pass
         else: config.ADMISSION_RULES = saved
+
+    check("W6 Breakout (dormant, r110) is off ENTRY_WINDOWS; its admission row is on config.BREAKOUT_WINDOW",
+          "Breakout" not in EW and tuple(tuple(x) for x in rules()["Breakout"].window)
+          == tuple(tuple(x) for x in config.BREAKOUT_WINDOW), f"EW={sorted(EW)}")
 
     got = resolved()
     diff = [f"{k}: {got.get(k)!r} != pinned {v!r}" for k, v in PIN.items() if got.get(k) != v]

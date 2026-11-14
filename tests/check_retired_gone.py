@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_retired_gone.py  v5.5
+tests/check_retired_gone.py  v5.6
+v5.6  2026-11-14  OTV5 r110 (WS.3 TRIM) — G3's live trades are Runaway, the Hunt and PARK; Breakout is DORMANT (plan_state row DORMANT, off ENTRY_WINDOWS, its admission row kept on BREAKOUT_WINDOW) and G3c pins that. Its code stays, so G6/G9 still exercise it.
 v5.5  2026-11-11  OTV5 r107 (RETIRE.5 follow-up) - G12 flips: OT_TR_BFLY_* is now stripped too (the butterfly readiness track is
       removed); new G14 pins the generic butterfly execution, management, sizing and readiness names gone from the runtime.
 v5.4  2026-11-10  OTV5 r106 - G13/G13b: tools/strip_retired_env.sh v5.4 on a unit the caller cannot read: with sudo refused it
@@ -77,7 +78,7 @@ REMOVED_MODULES = ("strategy/orb_strategy.py", "strategy/volt_strategy.py", "str
 REMOVED_TRADES = ("ORBStrategy", "VOLT", "ATPButterfly", "OpeningRangeCreditSpread", "SweepCreditSpread",
                   "TrendCreditSpread",                                                     # r88
                   "GEXPinButterfly")                                                       # r103
-LIVE_TRADES = ("RunawayContinuation", "Breakout", "LiquidityHunt", "PARK")
+LIVE_TRADES = ("RunawayContinuation", "LiquidityHunt", "PARK")      # r110: Breakout dormant (G3b)
 
 # ── G1 ───────────────────────────────────────────────────────────────────────────────────────────────
 sys.path.insert(0, os.path.join(ROOT, "tests"))
@@ -147,6 +148,14 @@ check("G3 plan_state / ENTRY_WINDOWS / admission: every live trade present, no r
       not gone and not missing, f"still present {gone}, missing live {missing}")
 check("G3b a removed name is never ACTIVE through a stale alias (ALIAS holds no removed trade)",
       not any(v in REMOVED_TRADES or k in ("ORB", "SweepForLeg2") for k, v in PS.ALIAS.items()), str(PS.ALIAS))
+
+try:
+    from strategy import plan_state as _ps3b
+    _b3 = (_ps3b.TABLE.get("Breakout", ("", "", ""))[:2] == ("", _ps3b.DORMANT) and "Breakout" not in ew
+           and "Breakout" in adm)
+except Exception as _e3b:                                       # noqa: BLE001
+    _b3 = False
+check("G3c Breakout (r110) is DORMANT with no switch, off ENTRY_WINDOWS, its admission row kept", _b3, "")
 
 # ── G4 ───────────────────────────────────────────────────────────────────────────────────────────────
 bad = sorted(n for n in dir(config) if re.match(

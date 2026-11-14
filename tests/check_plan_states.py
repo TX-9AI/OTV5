@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_plan_states.py  v5.10
+tests/check_plan_states.py  v5.11
+v5.11  2026-11-14  OTV5 r110 (WS.3 TRIM) — RE-POINTED (WA 38.4): Breakout is DORMANT with no switch, so S1's ruled roster moves it to dormant, S3's three OT_BREAKOUT cases read dormant for "1", "active" and "log" (no env turns it back on), and D1/D2/D5's ACTIVE exemplar is LiquidityHunt. What each check pins is unchanged.
 v5.10  2026-11-09  OTV5 r103 (RETIRE.5 step 2) — RE-POINTED (WA 38.4): the GEX fly's plan_state row is removed, so S1's ruled roster drops it (and pins it absent) and S3's three OT_GEX_BUTTERFLY cases go. S2, S4+ unchanged.
 v5.9  2026-11-08  OTV5 r97 (RETIRE.5) — RE-POINTED (WA section 38.4): the GEX pin butterfly is cut, so S1's ruled roster moves GEXPinButterfly to dormant and S3's two OT_GEX_BUTTERFLY cases read dormant for "0", "1" and "log" (a cut plan has no LOG state). What each check pins is unchanged. The operator, 2026-11-08: "I concur on both, in that order".
 v5.8  2026-11-08  OTV5 r88 (RETIRE.3) — the TCS is removed: S1 has no LOG plan, S3 drops its two OT_TCS_ACTIVE cases, D6 pins that main._retired_reason is gone. Every other check unchanged.
@@ -39,7 +40,7 @@ v1.0  2026-10-19  OTV4TEST r303 (PSTATE.1). The operator, 2026-10-19 08:34 ET: "
       08:45 ET: "That looks right to me". ORCS included; CondorManagement / CreditRoll off the [plans] line while
       no credit position is open.
 
-  S1  defaults, fresh interpreter, every switch unset: active = Runaway, Breakout, Hunt, PARK, GEX fly,
+  S1  defaults, fresh interpreter, every switch unset: active = Runaway, Hunt, PARK (r110: Breakout dormant),
       CondorManagement, CreditRoll; log = TCS (r57); dormant = the condor entry (r76: the retired trades are removed)
   S2  every plan the bot registers (import main) has a state and a category (hour / condition)
   S3  the switch values: "1" / "active" = active, "log" = log, "true" on a default-off trade = dormant (and the
@@ -150,10 +151,10 @@ def main():
     dc = store.conn
 
     # ── S1-S3: the states, read in fresh interpreters (config reads several switches at import) ──
-    ruled_active = ["Breakout", "CondorManagement", "CreditRoll", "LiquidityHunt",
-                    "PARK", "RunawayContinuation"]
+    ruled_active = ["CondorManagement", "CreditRoll", "LiquidityHunt",
+                    "PARK", "RunawayContinuation"]          # r110 (WS.3 TRIM): Breakout is dormant
     ruled_log = []                                         # r88 (RETIRE.3): the TCS, the last LOG plan, is removed
-    ruled_dormant = ["IronCondorStrategy"]   # r97 (RETIRE.5): the GEX fly cut; r103: its row removed
+    ruled_dormant = ["Breakout", "IronCondorStrategy"]   # r97/r103: the GEX fly; r110: Breakout dormant
     st = fresh("import json\nfrom strategy import plan_state as S\n"
                "print(json.dumps({n: S.state(n) for n in S.TABLE}))")
     act = sorted(k for k, v in st.items() if v == "active")
@@ -172,8 +173,9 @@ def main():
 
     probe = ("import json\nfrom strategy import plan_state as S\n"
              "print(json.dumps([S.state(%r), S.refused()]))")
-    cases = [("Breakout", {"OT_BREAKOUT": "1"}, "active"), ("Breakout", {"OT_BREAKOUT": "active"}, "active"),
-             ("Breakout", {"OT_BREAKOUT": "log"}, "log"), ("LiquidityHunt", {"OT_HUNT": "true"}, "active"),
+    cases = [("Breakout", {"OT_BREAKOUT": "1"}, "dormant"), ("Breakout", {"OT_BREAKOUT": "active"}, "dormant"),
+             ("Breakout", {"OT_BREAKOUT": "log"}, "dormant"),          # r110: no switch, no env turns it back on
+             ("LiquidityHunt", {"OT_HUNT": "true"}, "active"),
              ("LiquidityHunt", {"OT_HUNT": "off"}, "dormant"),
              ("PARK", {"OT_PARK": "off"}, "dormant"), ("PARK", {"OT_PARK": "log"}, "log"),
              ("RunawayContinuation", {"OT_RUNAWAY": "off"}, "dormant"),
@@ -197,14 +199,14 @@ def main():
     n_hb = len(rows(dc, "SELECT 1 FROM plan_heartbeat WHERE plan=?", (DORM,)))
     line = P.board_line()
     check("D1 a DORMANT plan writes no plan_tick / plan_heartbeat row and is not on the [plans] line",
-          n_tick == 0 and n_hb == 0 and f"{DORM}=" not in line and "Breakout=" in line,
+          n_tick == 0 and n_hb == 0 and f"{DORM}=" not in line and "LiquidityHunt=" in line,
           f"plan_tick {n_tick}, heartbeat {n_hb}, line has {DORM}={f'{DORM}=' in line}")
 
     # ── D2: a dormant plan is never asked ──
     called = []
     M._set_admission(None)
     M._safe_strategy(DORM, lambda: called.append(1))
-    M._safe_strategy("Breakout", lambda: called.append(2))
+    M._safe_strategy("LiquidityHunt", lambda: called.append(2))     # r110: the active exemplar
     check("D2 main._safe_strategy never asks a DORMANT plan (an active one still is)",
           called == [2], f"called {called}")
 
@@ -230,13 +232,13 @@ def main():
 
     # ── D5: ACTIVE unchanged ──
     P.begin_tick(time.time())
-    bplan = P.REGISTRY.get("Breakout")
+    bplan = P.REGISTRY.get("LiquidityHunt")                         # r110: the active exemplar
     if bplan is not None:
-        bplan.tick(700.0, "long").take(_Sig("Breakout"))
-    b_rows = rows(dc, "SELECT verdict FROM plan_tick WHERE strategy='Breakout' AND verdict IN ('TAKE','LOG-ONLY')")
-    b_led = len(rows(dc, "SELECT 1 FROM plan_ledger WHERE strategy='Breakout'"))
+        bplan.tick(700.0, "long").take(_Sig("LiquidityHunt"))
+    b_rows = rows(dc, "SELECT verdict FROM plan_tick WHERE strategy='LiquidityHunt' AND verdict IN ('TAKE','LOG-ONLY')")
+    b_led = len(rows(dc, "SELECT 1 FROM plan_ledger WHERE strategy='LiquidityHunt'"))
     check("D5 ACTIVE: take() writes TAKE and opens the plan_ledger row; main._log_only lets it through",
-          [v for (v,) in b_rows] == ["TAKE"] and b_led == 1 and not M._log_only(_Sig("Breakout"), {}),
+          [v for (v,) in b_rows] == ["TAKE"] and b_led == 1 and not M._log_only(_Sig("LiquidityHunt"), {}),
           f"rows {b_rows}, ledger {b_led}")
 
     # ── D6: the credit door (a LOG plan's vertical; OT_RUNAWAY=log is still set from D4) ──

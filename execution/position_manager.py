@@ -1,5 +1,6 @@
 """
-execution/position_manager.py  v5.35
+execution/position_manager.py  v5.36
+v5.36  2026-11-14  OTV5 r110 (WS.3 TRIM) — Breakout's admission row reads config.BREAKOUT_WINDOW (it left ENTRY_WINDOWS with the roster); it is DORMANT (strategy/plan_state v5.8), never asked, so the row admits nothing it is ever asked for; it stays for the code kept for a revisit. The operator, 2026-11-14: "Concur".
 v5.35  2026-11-11  OTV5 r107 (RETIRE.5 follow-up) — THE GENERIC BUTTERFLY MANAGEMENT GOES: _stash_fly_quote, _is_butterfly (has_blocking_position now exempts only the liquidity hunt, as the fly can no longer be open), and the fly arms of the chain pricing and of _rest_premium. Every live structure (single leg, credit vertical, tent) prices exactly as before. The operator, 2026-11-07: "Running dead code and logging dead code activity is unnecessary drag."
 v5.34  2026-11-09  OTV5 r103 (RETIRE.5 step 2) — the GEX pin butterfly's admission row and its GEXFLY name constant go. PARK keeps its own row (one per session, cap-exempt); every live row is unchanged. The generic multi-leg record handling (is_butterfly) stays for any butterfly record still on a book. The operator, 2026-11-08: "I concur on both, in that order".
 v5.33  2026-11-08  OTV5 r88 (RETIRE.3) — the TCS admission row and name, the SHADOW flag and the r57 shadow seams (_exit_engine / _management and the four SHADOW branches) go with the TCS shadow; every real path is unchanged. The operator, 2026-11-08: "Delete" (the TCS shadow, which never fired: its own gates declined every candidate 11-02..11-06).
@@ -485,7 +486,9 @@ _DEFAULT_RULES = {
     # opposite of an existing open trade."* The head-to-head against ORB and the
     # hunt is the POINT, and hierarchy would destroy the counterfactual that
     # makes it readable.
-    BREAKOUT: AdmissionRule(config.ENTRY_WINDOWS[BREAKOUT], max_open_of_type=1),
+    # r110 (WS.3 TRIM): Breakout is DORMANT (strategy/plan_state) and off the roster, so it is never asked; its row
+    # stays, on its own window (config.BREAKOUT_WINDOW, read by its kept code), for a revisit.
+    BREAKOUT: AdmissionRule(config.BREAKOUT_WINDOW, max_open_of_type=1),
     # the credit window was widened to 15:00 by the operator on 2026-09-17
     # 🔴 r71 — AND TO 15:40 ON 2026-09-20, FOR THE LATE-DAY MOVE. Operator:
     # *"I've seen multiple end of day moves now that I'm convinced smart money

@@ -1,5 +1,7 @@
 # TRADES — the specs
 
+**`TRADES.md` v5.16 · 2026-11-14 · OTV5 r110 (WS.3 TRIM) — Breakout is DORMANT from 2026-11-16 and leaves the roster: its §0 row goes (three trades and PARK remain), section 7 is marked DORMANT. Its code is kept for a revisit (strategy/breakout.py, its plan and exits), with no switch: no env value turns it back on (strategy/plan_state v5.8). The operator, 2026-11-14: "Concur" (WS.3: the fitted gates failed blind; window EV -$11.73/trade [-59.33, +41.68], n=120, fees $1,572.62 beside).**
+
 **`TRADES.md` v5.15 · 2026-11-14 · OTV5 r109 (the Saturday brief 2026-11-14 §4, items 3 and 10) — §5 opens with the condor's ENTRY DORMANT state (r249: management and the roll only; the sweep and fly comparisons are gone with those trades), and the stops line says `BUTTERFLY_STOP_LOSS_PCT` is read by nothing since r107. Docs only.**
 
 **`TRADES.md` v5.14 · 2026-11-09 · OTV5 r103 (RETIRE.5 step 2) — the GEX pin butterfly is REMOVED with its code: its roster row and section 3 are gone, OT_GEX_BUTTERFLY is read by nothing. The operator, 2026-11-08: "I concur on both, in that order" (cut 11-09, code removed after that close).**
@@ -47,13 +49,12 @@ is its `docs/PLAN_SPEC.md` section.
 | trade | key | default | switch | entries (ET) | spec |
 |---|---|---|---|---|---|
 | Runaway | `RunawayContinuation` | ON | none (its end is fixed; r68) | 09:35-10:30 | PLAN_SPEC §30 |
-| Breakout | `Breakout` | ON | none (its end is fixed; r68) | 09:35-10:30 | section 7 below |
 | Liquidity hunt | `LiquidityHunt` | ON | none | 09:35-10:30 | PLAN_SPEC §37 |
 | PARK | `PARK` | ON | none (`OT_PARK=log` records it, `off` stops it) | 11:01-11:03 | section 9 below |
 
 A window's end is exclusive: 10:30 means the last entry is 10:29. A switch is ACTIVE at
 `1` or `active` (r303 below). The ORB trade, VOLT, the sweep credit spread, the ATP butterfly and ORCS are REMOVED (r76,
-RETIRE.1), the trend credit spread with its shadow (r88, RETIRE.3) and the GEX pin butterfly (r103, RETIRE.5); the opening-range ENGINE is not removed: Runaway, Breakout and the Hunt read it, and since r222 its
+RETIRE.1), the trend credit spread with its shadow (r88, RETIRE.3) and the GEX pin butterfly (r103, RETIRE.5); Breakout is DORMANT from 2026-11-16 (r110, WS.3 TRIM; its code kept, section 7); the opening-range ENGINE is not removed: Runaway and the Hunt read it, and since r222 its
 range is checked against the official print. The condor is a management plan with no entry
 of its own; with every credit entry removed it has nothing to manage.
 
@@ -532,7 +533,10 @@ column, and WORKING_AGREEMENT 22 says state that must survive a restart does.
 
 ## 7. Breakout — `breakout.py` (the spec) + `breakout_plan.py` (the plan)
 
-**Written 2026-10-03 (OTV4TEST r227) from the code as it runs. ON.**
+**DORMANT from 2026-11-16 (OTV5 r110, WS.3 TRIM; the operator, 2026-11-14: "Concur").** Never asked, writes nothing,
+no switch; the code below is kept for a revisit, and its trades to 2026-11-13 are window history.
+
+**Written 2026-10-03 (OTV4TEST r227) from the code as it runs. ON until r110.**
 
 **What it is.** The ORB without the retest (operator, 2026-09-19: *"Make it follow the orb
 structurally, but without a retest. And with better informers."*). It buys a call on a break

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_brk_noprog.py  v5.1
+tests/check_brk_noprog.py  v5.2
+v5.2  2026-11-14  OTV5 r110 (WS.3 TRIM) — N11 reads Breakout's end from config.BREAKOUT_WINDOW (Breakout is dormant and off ENTRY_WINDOWS; its code and its 10:30 end are kept). What N11 pins is unchanged.
 v5.1  2026-10-31  OTV5 r68 (CFG.5) — N11-N13 RE-POINTED, NOT DROPPED (section 38.4). The operator, 2026-10-31: "10&11–defaults are
       fine, take them out"; "12, same thing. Trade it—I don't want this toggled". config v5.10 reads neither OT_BREAKOUT_END
       nor OT_BRK_NOPROG: N11 pins Breakout's end at 10:30 with the key unset, 15:40 or junk; N12 pins trade with it unset,
@@ -87,7 +88,7 @@ def _rows():
 def _cfg_probe(env):
     e = {k: v for k, v in os.environ.items() if k not in ("OT_BREAKOUT_END", "OT_BRK_NOPROG")}
     e.update(env)
-    code = ("import config,json;print(json.dumps([config.ENTRY_WINDOWS['Breakout'][1], None,"
+    code = ("import config,json;print(json.dumps([config.BREAKOUT_WINDOW[1], None,"
             " config.ENTRY_WINDOWS['RunawayContinuation'][1], config.BRK_NOPROG_MODE, None]))")
     p = subprocess.run([sys.executable, "-c", code], cwd=ROOT, env=e, capture_output=True, text=True, timeout=120)
     return json.loads(p.stdout.strip().splitlines()[-1]) if p.returncode == 0 and p.stdout.strip() else p.stderr[-300:]

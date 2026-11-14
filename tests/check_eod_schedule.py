@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""tests/check_eod_schedule.py — v5.3
+"""tests/check_eod_schedule.py — v5.4
+v5.4  2026-11-14  OTV5 r110 (WS.3 TRIM) — E1 checks Runaway and the Hunt in ENTRY_WINDOWS and Breakout's dormant window (config.BREAKOUT_WINDOW), all 10:30. What E1 pins is unchanged.
 v5.3  2026-11-11  OTV5 r107 (RETIRE.5 follow-up) — E4 / E10 / E11 drop their butterfly rows: the fly's EOD legs and close are
       removed with the generic fly path (exit_engine v5.18). Every vertical, single and short row is unchanged. E3 keeps the
       fly record: has_assignment_risk still reads a fly body as risk (structure labels are kept).
@@ -127,14 +128,15 @@ def main() -> int:
     # E1
     try:
         EW, ES = config.ENTRY_WINDOWS, getattr(config, "EOD_SCHEDULE", {})
-        six = ("RunawayContinuation", "LiquidityHunt", "Breakout")   # r76: the retired trades' rows are gone; r88: the TCS row
+        six = ("RunawayContinuation", "LiquidityHunt")   # r76/r88: retired rows gone; r110: Breakout dormant (BREAKOUT_WINDOW)
         env = dict(os.environ, OT_DEBIT_CUTOFF_ET="11:30")
         r = subprocess.run([sys.executable, "-c", "import config; print(tuple(config.DEBIT_DIRECTIONAL_CUTOFF_ET))"],
                            cwd=ROOT, env=env, capture_output=True, text=True)
         check("E1 schedule 15:40/15:45/15:50/15:55, the credit window ends 15:40, the three directional debits 10:30 (r187), afternoon cutoff 15:40 and not env-movable",
               ES == {"entries_stop": (15, 40), "resting_at": (15, 45), "ladder_at": (15, 50), "cross_at": (15, 55)}
-              and all(tuple(EW[n][1]) == ((10, 30) if n in ("RunawayContinuation", "LiquidityHunt", "Breakout")
+              and all(tuple(EW[n][1]) == ((10, 30) if n in ("RunawayContinuation", "LiquidityHunt")
                                           else (15, 40)) for n in six)
+              and tuple(config.BREAKOUT_WINDOW[1]) == (10, 30) and "Breakout" not in EW
               and tuple(config.CREDIT_ENTRY_END_ET) == (15, 40)        # r88: the credit end, read where the TCS row was
               and tuple(config.DEBIT_DIRECTIONAL_CUTOFF_ET) == (15, 40) and r.stdout.strip() == "(15, 40)",
               f"ES={ES} ends={[EW[n][1] for n in six]} cutoff={config.DEBIT_DIRECTIONAL_CUTOFF_ET} env-run={r.stdout.strip() or r.stderr[-120:]}")

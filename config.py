@@ -1,5 +1,6 @@
 """
-config.py  v5.17
+config.py  v5.18
+v5.18  2026-11-14  OTV5 r110 (WS.3 TRIM) — BREAKOUT LEAVES THE ROSTER. ENTRY_WINDOWS loses "Breakout" (three live setups and PARK remain); its window moves to BREAKOUT_WINDOW = ((9, 35), BREAKOUT_END), read only by the dormant strategy's own code (BREAKOUT_EARLIEST_ET / BREAKOUT_LATEST_ET), and its admission row (execution/position_manager v5.36), so the code stays importable for a revisit. strategy/plan_state v5.8 makes it DORMANT with no switch, so it is never asked and writes nothing. Every other value is unchanged. The operator, 2026-11-14: "Concur" (WS.3, Breakout: the fitted gates failed blind; window EV -$11.73/trade [-59.33, +41.68], n=120, fees $1,572.62).
 v5.17  2026-11-09  OTV5 r103 (RETIRE.5 step 2) — THE GEX PIN BUTTERFLY'S KEYS GO: ENTRY_WINDOWS loses GEXPinButterfly; GEX_BUTTERFLY_ENABLED, HOLD_TO_CLOSE_STRATEGIES, every GEX_BFLY_* dial (PIN_CONC_MIN, EM_MIN/MAX_FRAC, SMOOTH_WINDOW, PERSIST_TICKS, VWAP_BAND_EM_FRAC, EARLIEST_ET, LATEST_ET, WING_EM_FRAC and its OT_GEX_BFLY_WING_EM_FRAC read), the debit gates (BUTTERFLY_MAX/MIN_DEBIT_PCT_WIDTH, _HICONV, BUTTERFLY_DEBIT_CEILING, BUTTERFLY_DISC_CONV_LO/HI and their OT_BFLY_* reads), BUTTERFLY_ENTRY_START_ET, BUTTERFLY_ENTRY_CUTOFF_ET (it gated nothing since r209), BUTTERFLY_WING_SPX/QQQ, BUTTERFLY_GEX_PIN_PROXIMITY_MULT and VIX_BUTTERFLY_HALF_SIZE are deleted. KEPT: BUTTERFLY_STOP_LOSS_PCT / _TP_PCT / _MAX_HOLD_MIN (exit_engine prices any butterfly record still on a book) and VIX_BUTTERFLY_DISABLE (macro_data's regime and the condor read it). Every live value is identical (diffed). The operator, 2026-11-08: "I concur on both, in that order".
 v5.16  2026-11-08  OTV5 r97 (RETIRE.5) — THE GEX PIN BUTTERFLY IS CUT: GEX_BUTTERFLY_ENABLED is False in code and OT_GEX_BUTTERFLY no longer turns it on. The operator, 2026-11-08: "I agree that our GEX fly may be on the chopping block ... I'm considering cutting it starting tomorrow" / "I concur on both, in that order" (no new fly from 11-09; the code is removed after the 11-09 close). Evidence: window EV -$6,482 [-19.2k, +3.2k], lunch entries lose, no fly since 11-03 (research r2). Its exits and management are untouched.
 v5.15  2026-11-08  OTV5 r88 (RETIRE.3) — THE TCS KEYS GO: ENTRY_WINDOWS loses TrendCreditSpread; TREND_CREDIT_ACTIVE, TCS_MODE, TCS_ENV_REFUSED and every TCS_* dial are deleted. CREDIT_ENTRY_START_ET = (11, 31) and CONDOR_ENTRY_CUTOFF_ET = EOD_SCHEDULE['entries_stop'] are now written directly (they read the TCS row; the values are identical). The operator, 2026-11-08: "Delete" (the TCS shadow, which never fired: its own gates declined every candidate 11-02..11-06).
@@ -1136,12 +1137,15 @@ _dx_raw = os.environ.get("OT_DECAY_STOP_EXEMPT")
 DECAY_STOP_EXEMPT = (_DECAY_EXEMPT_DEFAULT if _dx_raw is None
                      else tuple(x.strip() for x in _dx_raw.split(",") if x.strip()))
 
+# r110 (WS.3 TRIM) — Breakout is DORMANT (strategy/plan_state) and off the roster; its window lives here, read only by
+# its own code (strategy/breakout via BREAKOUT_EARLIEST_ET / BREAKOUT_LATEST_ET) and its admission row.
+BREAKOUT_WINDOW = ((9, 35), BREAKOUT_END)
+
 ENTRY_WINDOWS = {
     # r149: directional debits run ALL DAY to the entries stop (operator: "A").
     # Supersedes criteria.py's 2026-08-29 "Debit entries are finished at 1130".
     "RunawayContinuation":  ((9, 35),  RUNAWAY_END),   # r187: 10:29 last entry (r68: fixed, no per-box key)
     "LiquidityHunt":        ((9, 35),  (10, 30)),   # r187
-    "Breakout":             ((9, 35),  BREAKOUT_END),   # r187: 10:29 last entry (r68: fixed, no per-box key)
     "PARK":                 ((11, 1),  (11, 3)),   # r288 (PARK.1): 11:01-11:02 after the 11:00 bar closes; r60 (PARK.4): at the mark, laddered live
 }
 
@@ -1686,8 +1690,8 @@ DEBIT_BLOCK_ACTIVE          = os.environ.get("OT_DEBIT_BLOCK_ACTIVE", "1") == "1
 # daylight between the two. Defined here so the pair cannot drift apart.
 RUNAWAY_CUTOFF_ET           = _hhmm(ENTRY_WINDOWS["RunawayContinuation"][1])
 HUNT_CUTOFF_ET              = ENTRY_WINDOWS["LiquidityHunt"][1]        # r148: read by liquidity_hunt; never existed before
-BREAKOUT_LATEST_ET          = _hhmm(ENTRY_WINDOWS["Breakout"][1])      # r148: read by breakout; never existed before
-BREAKOUT_EARLIEST_ET        = "%02d:%02d" % ENTRY_WINDOWS["Breakout"][0]  # r148: never existed; zero-padded "09:35" exactly as the literal was
+BREAKOUT_LATEST_ET          = _hhmm(BREAKOUT_WINDOW[1])      # r148: read by breakout; r110: from BREAKOUT_WINDOW (off the roster)
+BREAKOUT_EARLIEST_ET        = "%02d:%02d" % BREAKOUT_WINDOW[0]  # r148: zero-padded "09:35" exactly as the literal was; r110: BREAKOUT_WINDOW
 ORB_WINDOW_MINUTES          = 5
 
 # ─── ORB STRATEGY ─────────────────────────────────────────────────────────────

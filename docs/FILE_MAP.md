@@ -6,7 +6,7 @@ the canary fails on drift (WORKING_AGREEMENT 33).
 
 518 Python modules across 12 local packages.
 
-**Reached by:** 127 imported · 25 declared entry points · 269 referenced from a script, unit or doc but never imported · **97 by nothing here**.
+**Reached by:** 127 imported · 25 declared entry points · 270 referenced from a script, unit or doc but never imported · **96 by nothing here**.
 
 ⚠️ The last group is a REVIEW LIST, not a delete list. A
 `land.spec CHECK` line ships inside a tarball and is never
@@ -427,7 +427,7 @@ Change these with the most care; a break here reaches everything downstream.
 
 ### `strategy/breakout.py`
 - **calls:** `config.py`, `strategy/breakout_plan.py`
-- **called by:** `main.py`, `strategy/breakout_plan.py`, `tests/check_breakout.py`, `tests/check_breakout_new_extreme.py`, `tests/check_breakout_rearm.py`, `tests/check_breakout_research.py`, `tests/check_brk_cash_index.py`, `tests/check_brk_spec_1029.py`, `tests/check_brk_stop5m.py`, `tests/check_brk_strike_inside.py`, `tests/check_brk_zero_risk.py`, `tests/check_chain_ordering.py`, `tests/check_last_closed_bar.py`, `tests/check_one_window_table.py`, `tests/check_plan_observe.py`, `tests/check_trade_switches.py`
+- **called by:** `main.py`, `strategy/breakout_plan.py`, `tests/check_breakout.py`, `tests/check_breakout_new_extreme.py`, `tests/check_breakout_rearm.py`, `tests/check_breakout_research.py`, `tests/check_brk_cash_index.py`, `tests/check_brk_spec_1029.py`, `tests/check_brk_stop5m.py`, `tests/check_brk_strike_inside.py`, `tests/check_brk_zero_risk.py`, `tests/check_last_closed_bar.py`, `tests/check_one_window_table.py`, `tests/check_plan_observe.py`, `tests/check_trade_switches.py`
 
 ### `strategy/breakout_plan.py`
 - **calls:** `analysis/order_flow.py`, `config.py`, `data/candle_feed.py`, `data/derived_store.py`, `database/trade_logger.py`, `derived/gamma_regime.py`, `strategy/__init__.py`, `strategy/base_strategy.py`, `strategy/breakout.py`, `strategy/observe.py`, `strategy/orb_plan.py`, `strategy/plan.py`, `utils/time_utils.py`
@@ -451,7 +451,7 @@ Change these with the most care; a break here reaches everything downstream.
 
 ### `strategy/liquidity_hunt.py`
 - **calls:** `analysis/volatility_measures.py`, `config.py`, `data/derived_store.py`, `database/trade_logger.py`, `derived/__init__.py`, `derived/anchors.py`, `derived/levels.py`, `strategy/__init__.py`, `strategy/base_strategy.py`, `strategy/observe.py`, `strategy/plan.py`, `strategy/relaxed.py`, `strategy/runaway_continuation.py`, `strategy/shadow_rules.py`, `strategy/sweep_credit_spread.py`, `utils/math_utils.py`, `utils/time_utils.py`
-- **called by:** `main.py`, `tests/check_breakout_rearm.py`, `tests/check_brk_spec_1029.py`, `tests/check_hunt_runway_sign.py`, `tests/check_liquidity_hunt.py`, `tests/check_one_window_table.py`, `tests/check_plan_observe.py`, `tests/check_shadow_rules.py`, `tests/check_time_parse.py`, `tests/check_trade_switches.py`
+- **called by:** `main.py`, `tests/check_breakout_rearm.py`, `tests/check_brk_spec_1029.py`, `tests/check_chain_ordering.py`, `tests/check_hunt_runway_sign.py`, `tests/check_liquidity_hunt.py`, `tests/check_one_window_table.py`, `tests/check_plan_observe.py`, `tests/check_shadow_rules.py`, `tests/check_time_parse.py`, `tests/check_trade_switches.py`
 
 ### `strategy/management.py`
 - **calls:** `config.py`, `execution/exit_engine.py`, `strategy/plan.py`
@@ -698,7 +698,7 @@ Change these with the most care; a break here reaches everything downstream.
 - **called by:** (nothing — no importer and no mention in any script, unit or doc here)
 
 ### `tests/check_chain_ordering.py`
-- **calls:** `derived/character_engine.py`, `derived/plans.py`, `main.py`, `strategy/__init__.py`, `strategy/breakout.py`, `strategy/plan.py`, `strategy/runaway_continuation.py`
+- **calls:** `derived/character_engine.py`, `derived/plans.py`, `main.py`, `strategy/__init__.py`, `strategy/liquidity_hunt.py`, `strategy/plan.py`, `strategy/runaway_continuation.py`
 - **called by:** (not imported) — referenced in `docs/BACKLOG.md`, `docs/ENV.md`
 
 ### `tests/check_claude_boot.py`
@@ -1315,7 +1315,7 @@ Change these with the most care; a break here reaches everything downstream.
 
 ### `tests/check_one_window_table.py`
 - **calls:** `config.py`, `execution/position_manager.py`, `strategy/__init__.py`, `strategy/breakout.py`, `strategy/liquidity_hunt.py`, `strategy/runaway_continuation.py`, `strategy/runaway_plan.py`
-- **called by:** (nothing — no importer and no mention in any script, unit or doc here)
+- **called by:** (not imported) — referenced in `docs/BACKLOG.md`
 
 ### `tests/check_open_scan.py`
 - **calls:** (none)
@@ -1843,7 +1843,7 @@ Change these with the most care; a break here reaches everything downstream.
 
 ### `tests/fees.py`
 - **calls:** `strategy/structure.py`
-- **called by:** (not imported) — referenced in `docs/BACKLOG.md`, `docs/HANDOFF.md`
+- **called by:** (not imported) — referenced in `docs/BACKLOG.md`, `docs/HANDOFF.md`, `docs/TRADES.md`
 
 ### `tests/fork_respect_study.py`
 - **calls:** (none)

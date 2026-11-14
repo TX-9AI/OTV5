@@ -1,5 +1,6 @@
 """
-strategy/plan_state.py  v5.7
+strategy/plan_state.py  v5.8
+v5.8  2026-11-14  OTV5 r110 (WS.3 TRIM) — BREAKOUT IS DORMANT, WITH NO SWITCH: its row is ("", DORMANT, HOUR), like the condor's, so it is never asked, writes nothing, and no env value turns it back on (OT_BREAKOUT is no longer read). Its code stays for a revisit. The operator, 2026-11-14: "Concur" (WS.3: the fitted gates failed blind; window EV -$11.73/trade [-59.33, +41.68], n=120).
 v5.7  2026-11-09  OTV5 r103 (RETIRE.5 step 2) — the GEXPinButterfly row, its OT_GEX_BUTTERFLY read and the _FLAG table (the fly was its last entry) with its config-flag branch go with the GEX pin butterfly. The live rows read exactly as before. The operator, 2026-11-08: "I concur on both, in that order".
 v5.6  2026-11-08  OTV5 r97 (RETIRE.5) — GEXPinButterfly defaults DORMANT and a flag-read plan whose default is DORMANT has no LOG state: with config.GEX_BUTTERFLY_ENABLED False (code) it is DORMANT whatever OT_GEX_BUTTERFLY says, so the cut fly is never asked and writes nothing. The operator, 2026-11-08: "I concur on both, in that order" (cut from 11-09; code removed after that close).
 v5.5  2026-11-08  OTV5 r88 (RETIRE.3) — the TrendCreditSpread row, its OT_TCS_ACTIVE read and its _FLAG entry go with the TCS. The operator, 2026-11-08: "Delete" (the TCS shadow, which never fired: its own gates declined every candidate 11-02..11-06).
@@ -72,7 +73,7 @@ HOUR, CONDITION = "hour", "condition"
 # name -> (switch key shown to the operator, default state, category)
 TABLE: Dict[str, Tuple[str, str, str]] = {
     "RunawayContinuation":      ("OT_RUNAWAY",        ACTIVE,  HOUR),
-    "Breakout":                 ("OT_BREAKOUT",       ACTIVE,  HOUR),
+    "Breakout":                 ("",                  DORMANT, HOUR),        # r110 (WS.3 TRIM): off the roster
     "LiquidityHunt":            ("OT_HUNT",           ACTIVE,  HOUR),
     "PARK":                     ("OT_PARK",           ACTIVE,  HOUR),
     "IronCondorStrategy":       ("",                  DORMANT, CONDITION),   # no entry of its own (r249)
@@ -93,8 +94,6 @@ def _raw(key: str) -> str:
     documents it where it is read."""
     if key == "OT_RUNAWAY":
         v = os.environ.get("OT_RUNAWAY", "")
-    elif key == "OT_BREAKOUT":
-        v = os.environ.get("OT_BREAKOUT", "")
     elif key == "OT_HUNT":
         v = os.environ.get("OT_HUNT", "")
     else:

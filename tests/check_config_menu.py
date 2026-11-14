@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_config_menu.py  v5.1
+tests/check_config_menu.py  v5.2
+v5.2  2026-11-14  OTV5 r110 (WS.3 TRIM) — M4/M5 read Breakout's end from config.BREAKOUT_WINDOW (Breakout is dormant and off ENTRY_WINDOWS; its kept code still ends 10:30). What they pin is unchanged.
 v5.1  2026-11-08  OTV5 r88 (RETIRE.3) — the probe stops reading config.TCS_MODE (removed with the TCS); every check unchanged.
 v5.0  2026-10-31  OTV5 r68 (CFG.5) — new. THE OPERATOR'S MENU HOLDS WHAT HE SETS, AND NOTHING A STUDY ADDED. The operator,
       2026-10-31, on configure.sh's 17 items: "7. Pin gate, default "on" —remove from the menu"; "9. Scaling, default
@@ -76,7 +77,7 @@ def _probe(env):
     e.update(env)
     code = ("import config,json;W=config.ENTRY_WINDOWS;print(json.dumps({'pin':config.PIN_PROXIMITY_ACTIVE,"
             "'scale_brk':config.SCALE_BREAKOUT,'run_end':list(W['RunawayContinuation'][1]),"
-            "'brk_end':list(W['Breakout'][1]),'run_et':str(config.RUNAWAY_CUTOFF_ET),"
+            "'brk_end':list(config.BREAKOUT_WINDOW[1]),'run_et':str(config.RUNAWAY_CUTOFF_ET),"
             "'brk_et':str(config.BREAKOUT_LATEST_ET),'noprog':config.BRK_NOPROG_MODE}))")   # r88: TCS_MODE removed
     p = subprocess.run([sys.executable, "-c", code], cwd=ROOT, env=e, capture_output=True, text=True, timeout=180)
     if p.returncode != 0 or not p.stdout.strip():

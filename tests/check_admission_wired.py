@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_admission_wired.py  v5.3
+tests/check_admission_wired.py  v5.4
+v5.4  2026-11-14  OTV5 r110 (WS.3 TRIM) — A3 RE-POINTED (WA 38.4): Breakout is DORMANT (never asked by ruling), so A3's live label is RunawayContinuation; what A3 pins is unchanged.
 v5.3  2026-11-09  OTV5 r103 (RETIRE.5 step 2) — the GEX fly is removed, so the r97 flag flip goes and A1, A2 and A4 probe LiquidityHunt (a live plan in the table) where they probed the fly. Every other check unchanged.
 v5.2  2026-11-08  OTV5 r97 (RETIRE.5) — the GEX fly is cut in production (OFF in code); this checker flips it on to exercise its code until step 2 removes it.
 v5.1  2026-11-08  OTV5 r76 (RETIRE.1) — A3 RE-POINTED (WA 38.4): the ORB trade and its "ORB" dispatch alias are removed, so A3 pins
@@ -93,9 +94,9 @@ def main():
           "this is what removes the NOT ASKED rows: no ask, so no refusal to journal")
 
     # ── A3 — the ORB dispatches under a label the table does not use ────────
-    guard("A3 a live dispatch label IS its table key: Breakout asked when admitted, not when only PARK is; no alias map",
-          lambda: probe("Breakout", ["Breakout"])[0] is True
-          and probe("Breakout", ["PARK"])[0] is False and not hasattr(M, "_ADMISSION_ALIAS"),
+    guard("A3 a live dispatch label IS its table key: Runaway asked when admitted, not when only PARK is; no alias map",
+          lambda: probe("RunawayContinuation", ["RunawayContinuation"])[0] is True
+          and probe("RunawayContinuation", ["PARK"])[0] is False and not hasattr(M, "_ADMISSION_ALIAS"),
           "an alias left behind would gate a label nobody dispatches")
 
     # ── A4/A5 — fails OPEN, in both directions ─────────────────────────────

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_not_asked_reasons.py  v5.1
+tests/check_not_asked_reasons.py  v5.2
+v5.2  2026-11-14  OTV5 r110 (WS.3 TRIM) — the subject plan is LiquidityHunt where it was Breakout (dormant from r110); every reason pinned is unchanged.
 v5.1  2026-11-08  OTV5 r88 (RETIRE.3) — the subject plan is Breakout where it was the removed TCS (its OT_TCS_ACTIVE=1 switch goes); every reason pinned is unchanged.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.1  2026-10-19  OTV4TEST r303 (PSTATE.1) — its subjects SweepCreditSpread / TrendCreditSpread are DORMANT by default, and a
@@ -131,7 +132,7 @@ def main():
     # rather than as a status — otherwise it gets scrolled past forever, which
     # is how it survived this long.
     P.REGISTRY.clear()
-    P.Plan("Breakout", ("adx",))
+    P.Plan("LiquidityHunt", ("adx",))
     P.begin_tick(502.0)
     P.close_tick(st, "TST")
     r502 = st.conn.execute("SELECT verdict, reason FROM plan_tick"
