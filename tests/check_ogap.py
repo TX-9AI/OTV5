@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 """
-tests/check_ogap.py  v5.0
+tests/check_ogap.py  v5.1
+v5.1  2026-11-14  OTV5 r117 (HYG §5.3) — O7b NEW: a one-sided quote (bid 0.00 / ask 4.26, and bid 4.23 / ask 0.00) at the
+      fill minute gives no signal. ogap_plan.prepare and ogap.generate_signal each refuse it (`ask >= bid > 0`, two
+      guards by design, so O7b goes red only when both are broken) but nothing pinned it; the zero-bid gate
+      (check_zero_bid_refused Z1-Z6c) covers the other live selectors.
 v5.0  2026-11-14  OTV5 (OGAP.1) — THE OGAP GATE. The operator, 2026-11-14: "let's design & paper trade the OGAP on QQQ".
       O1-O5   the read (strategy/ogap_plan.ogap_read): range bars, gate-G 0.25 vs 0.24 and fail-open, a close ON the edge
               is no break, the 21st bar after the break is no retest, one real row (the earliest allowed side; a
@@ -10,6 +14,7 @@ v5.0  2026-11-14  OTV5 (OGAP.1) — THE OGAP GATE. The operator, 2026-11-14: "le
       O7      the plan end to end on a feed-less fixture: QQQ 11-05 at the fill minute -> a TAKE signal (put, the strike
               nearest the fill-minute open, notes carry ask=, ogap_ask set); one minute later -> ogap_stale, no signal;
               a META box -> ogap_not_this_symbol, no signal; ask 0.49 -> ogap_ask_floor; ask 5.01 -> ogap_ask_band.
+      O7b     a one-sided quote at the fill minute (bid 0.00 / ask 4.26; bid 4.23 / ask 0.00) -> no signal.
       O8      the exit walk (execution/exit_engine.ogap_exit_step) and _evaluate_ogap on a record: the lock, the trail,
               the 14:00 sweep once, the 15:45 bell; a restart seeds the peak from max_premium_seen (1.7x -> the 1.2x
               floor is armed); fill = entry_ask, else notes' ask=, else the mark.
@@ -181,6 +186,12 @@ def main():
           and s_stale is None and s_meta is None and s_floor is None and s_band is None and s_0dte is None,
           f"ok={s_ok and (s_ok.option_side, s_ok.strike, s_ok.notes)} stale={s_stale} meta={s_meta} "
           f"floor={s_floor} band={s_band} 0dte={s_0dte}")
+
+    s_nobid = prep_at(fill, bid=0.0, ask=4.26)
+    s_noask = prep_at(fill, bid=4.23, ask=0.0)
+    check("O7b a one-sided quote at the fill minute -> no signal (bid 0.00 / ask 4.26; bid 4.23 / ask 0.00), while the "
+          "two-sided 4.23/4.26 trades",
+          s_nobid is None and s_noask is None and s_ok is not None, f"nobid={s_nobid} noask={s_noask}")
 
     # ── O8 exits ──
     def walk(fill_ask, ticks):

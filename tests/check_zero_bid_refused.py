@@ -1,5 +1,11 @@
 """
-tests/check_zero_bid_refused.py  v5.0
+tests/check_zero_bid_refused.py  v5.1
+v5.1  2026-11-14  OTV5 r117 (HYG §5.3) — Z6 RUNS EVERY TIME. It was wrapped in find_spec("strategy.volt_plan"), a module
+      r76 deleted, so it printed SKIP on every run and took Z6b (strategy/orb_plan.select_contract, Breakout's selector,
+      still in the tree) down with it. The VOLT half goes; Z6 now drives the AAL chain through orb_plan.select_contract
+      unconditionally (Z6) and adds Z6c: runaway_continuation.gamma_leverage_pick, the selector Runaway and the Hunt
+      share, refuses a zero-bid contract and takes the same strike once it has a bid. A missing selector is a FAIL,
+      never a SKIP. PARK (check_park K7) and OGAP (check_ogap O7b) refuse a one-sided quote in their own gates.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.0  2026-10-02  OTV4TEST r186 (ZBID.1) — SHARED GATE, byte-identical in
       OTV4TEST and otv4 but for this header. A CONTRACT WITH NO BID IS NOT A
@@ -26,15 +32,19 @@ WHAT IT DRIVES (the REAL selectors, never source text):
   Z4  select_sweep_strike skips a zero-bid contract nearest the target delta.
   Z5  UNCHANGED: on a chain where every contract is two-sided, both shared
       selectors pick exactly what the mark floor alone picked.
-  Z6  THIS TREE ONLY when strategy/volt_plan.py and strategy/orb_plan.py
-      exist (SKIP, printed, where they do not): the AAL chain itself - spot
-      13.20, puts 13.0 (0.04/0.06), 12.5 (0.02/0.04), 11.5 (0.00/0.22) -
-      VOLT's nearest-OTM selector and the ORB plan's selector refuse 11.5.
+  Z6  this tree's Breakout selector on the AAL chain itself - spot 13.20, puts
+      13.0 (0.04/0.06), 12.5 (0.02/0.04), 11.5 (0.00/0.22): orb_plan.select_contract
+      refuses 11.5 (nothing else clears the 0.05 floor) - and, on the same chain
+      with 11.5 at 0.18/0.22, picks it (so the refusal is the bid, not the strike).
+  Z6c runaway_continuation.gamma_leverage_pick (Runaway and the Hunt): puts
+      99 (0.00/0.60) and 98 (0.45/0.50), spot 99.5, run 2.0 -> 99P is refused
+      and 98P taken; the same chain with 99P at 0.55/0.60 -> 99P (the best
+      leverage) is picked. Always run; a missing selector
+      is a FAIL, never a SKIP.
 
 Run:  python3 tests/check_zero_bid_refused.py   (exit 0 green, 1 red)
 """
 import glob as _glob
-import importlib.util
 import os
 import sys
 
@@ -111,22 +121,40 @@ def main():
           and float(b.strike) == 98.0,
           f"orb {getattr(a, 'strike', None)} sweep {getattr(b, 'strike', None)}")
 
-    # ── Z6 this tree's own selectors, on the AAL chain ───────────────────
-    have = all(importlib.util.find_spec(m) is not None
-               for m in ("strategy.volt_plan", "strategy.orb_plan"))
-    if not have:
-        print("  SKIP  Z6 strategy.volt_plan / strategy.orb_plan are not in this tree")
-    else:
-        import strategy.volt_plan as VP
+    # ── Z6 this tree's own selectors, on the AAL chain (always run) ──────
+    try:
         import strategy.orb_plan as OP
+    except Exception as e:                                   # a missing selector is RED, never a SKIP
+        OP = None
+        check("Z6 strategy.orb_plan imports", False, repr(e))
+    if OP is not None:
         aal = _chain(puts=[_oc(13.0, 0.04, 0.06, -0.38, "P"), _oc(12.5, 0.02, 0.04, -0.10, "P"),
                            _oc(11.5, 0.00, 0.22, -0.0009, "P")], spot=13.20)
-        v = VP.select_contract(aal, "short", 13.20, otm_from=13.20)
-        check("Z6 VOLT on the AAL chain refuses the zero-bid P11.5 (nothing else clears 0.05)",
-              v is None, f"picked {getattr(v, 'strike', None)}")
         o = OP.select_contract(aal, "short", 11.5)
-        check("Z6b the ORB plan's selector refuses it too",
-              o is None, f"picked {getattr(o, 'strike', None)}")
+        live = _chain(puts=[_oc(13.0, 0.04, 0.06, -0.38, "P"), _oc(12.5, 0.02, 0.04, -0.10, "P"),
+                            _oc(11.5, 0.18, 0.22, -0.0009, "P")], spot=13.20)
+        o2 = OP.select_contract(live, "short", 11.5)
+        check("Z6 Breakout's selector (orb_plan) refuses the AAL zero-bid P11.5; with a bid it takes it",
+              o is None and o2 is not None and float(o2.strike) == 11.5,
+              f"zero-bid picked {getattr(o, 'strike', None)}, two-sided picked {getattr(o2, 'strike', None)}")
+
+    # ── Z6c the Runaway / Hunt selector ──────────────────────────────────
+    try:
+        from strategy.runaway_continuation import gamma_leverage_pick
+    except Exception as e:
+        gamma_leverage_pick = None
+        check("Z6c strategy.runaway_continuation.gamma_leverage_pick imports", False, repr(e))
+    if gamma_leverage_pick is not None:
+        def _puts(bid99):
+            return [_oc(99.0, bid99, 0.60, -0.45, "P"), _oc(98.0, 0.45, 0.50, -0.30, "P")]
+        g0, _, _, rej0 = gamma_leverage_pick(_puts(0.00), "short", 99.5, 2.0)
+        g1, _, _, _ = gamma_leverage_pick(_puts(0.55), "short", 99.5, 2.0)
+        check("Z6c Runaway/Hunt gamma_leverage_pick: the zero-bid 99P (best leverage) is refused and 98P taken; "
+              "with a bid on 99P it takes 99P",
+              g0 is not None and float(g0.strike) == 98.0 and rej0 >= 1
+              and g1 is not None and float(g1.strike) == 99.0,
+              f"zero-bid picked {getattr(g0, 'strike', None)} (spread_rejected {rej0}), "
+              f"two-sided picked {getattr(g1, 'strike', None)}")
 
     if FAILED:
         print(f"\nRED — {len(FAILED)} check(s): {FAILED}")

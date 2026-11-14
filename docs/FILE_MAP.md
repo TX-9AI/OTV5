@@ -495,7 +495,7 @@ Change these with the most care; a break here reaches everything downstream.
 
 ### `strategy/runaway_continuation.py`
 - **calls:** `config.py`, `database/trade_logger.py`, `strategy/__init__.py`, `strategy/base_strategy.py`, `strategy/plan.py`, `strategy/relaxed.py`, `strategy/runaway_plan.py`, `utils/math_utils.py`
-- **called by:** `main.py`, `strategy/liquidity_hunt.py`, `strategy/runaway_plan.py`, `tests/check_atr_units.py`, `tests/check_chain_ordering.py`, `tests/check_dispatch.py`, `tests/check_entry_windows.py`, `tests/check_one_window_table.py`, `tests/check_plan_prepares.py`, `tests/check_plan_wiring.py`, `tests/check_runaway_break_key.py`, `tests/check_runaway_fallback_strike.py`, `tests/check_runaway_handoff.py`, `tests/check_runaway_plan.py`, `tests/check_signal_numeric_tail.py`, `tests/check_stress_entry_path.py`
+- **called by:** `main.py`, `strategy/liquidity_hunt.py`, `strategy/runaway_plan.py`, `tests/check_atr_units.py`, `tests/check_chain_ordering.py`, `tests/check_dispatch.py`, `tests/check_entry_windows.py`, `tests/check_one_window_table.py`, `tests/check_plan_prepares.py`, `tests/check_plan_wiring.py`, `tests/check_runaway_break_key.py`, `tests/check_runaway_fallback_strike.py`, `tests/check_runaway_handoff.py`, `tests/check_runaway_plan.py`, `tests/check_signal_numeric_tail.py`, `tests/check_stress_entry_path.py`, `tests/check_zero_bid_refused.py`
 
 ### `strategy/runaway_plan.py`
 - **calls:** `analysis/trend_strength.py`, `config.py`, `derived/__init__.py`, `derived/anchors.py`, `strategy/__init__.py`, `strategy/observe.py`, `strategy/plan.py`, `strategy/runaway_continuation.py`, `utils/math_utils.py`, `utils/time_utils.py`
@@ -1834,7 +1834,7 @@ Change these with the most care; a break here reaches everything downstream.
 - **called by:** (not imported) — referenced in `docs/BACKLOG.md`
 
 ### `tests/check_zero_bid_refused.py`
-- **calls:** `data/options_chain.py`, `strategy/orb_plan.py`
+- **calls:** `data/options_chain.py`, `strategy/orb_plan.py`, `strategy/runaway_continuation.py`
 - **called by:** (not imported) — referenced in `docs/BACKLOG.md`
 
 ### `tests/check_zones.py`

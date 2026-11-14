@@ -1,5 +1,6 @@
 """
-main.py  v5.20
+main.py  v5.21
+v5.21  2026-11-14  OTV5 r117 (HYG §5.3) — DOCSTRING ONLY: _afternoon_debit_blocked's docstring said the cutoff was 11:30; it has been EOD_SCHEDULE["entries_stop"] 15:40 since OTV4TEST r149. The 08-13/08-20 history is kept, marked superseded. No code changes.
 v5.20  2026-11-14  OTV5 (OGAP.1) — OGAP IS ASKED: _attempt_ogap beside _attempt_park in the normal dispatch and the capped branch (cap-exempt; its plan is dormant outside 09:46-10:32 and off the QQQ box), one per session (DB-backed, fails closed); _STRUCTURE_BY_NAME["OGAP"] = long_debit; PIN_EXEMPT gains OGAP (Park's book was measured without the pin gate; the counterfactual row is still written); the sizer is asked on the ASK with OGAP_BUDGET_USD (size_for budget_usd); the Service line adds " · ogap=on|not this symbol". Every other strategy dispatches and sizes exactly as before.
 v5.19  2026-11-14  OTV5 r112 (AM.3) — the Service mode line no longer says "(LIVE: refused - logs only)" after commit_gate=trade: analysis/commitment v5.2 refuses an ABANDONED side on a live box exactly as on paper. The comment at the gate call says so. The operator, 2026-11-14: "Let's fix the top 10 today" (amnesty bucket AM.3).
 v5.18  2026-11-11  OTV5 r107 (RETIRE.5 follow-up) — THE GENERIC BUTTERFLY PATH LEAVES THE TICK: the fly branch of the entry-contract capture and _fly_entry_contract, the net_debit / butterfly_half_size sizing arguments (only a fly passed them) and the executor's now-unread macro local, and _describe_position's fly line (it describes OPEN rows; no fly can be open since r103). Every live entry captures, sizes and describes exactly as before. The operator, 2026-11-07: "Running dead code and logging dead code activity is unnecessary drag."
@@ -3908,12 +3909,12 @@ def _condor_rails(ctx: dict):
 def _afternoon_debit_blocked(strategy_or_signal, now) -> bool:
     """True when a LONG-PREMIUM DIRECTIONAL entry is refused by the cutoff.
 
-    Operator, 2026-08-13: *"The only other Long that can fire is either part of
-    a butterfly or an iron condor vertical spread from 11 o'clock onwards."*
-    Cutoff extended to **11:30** on 2026-08-20 to resolve a contradiction: ORB
-    armed until 11:00 while RunawayContinuation - which fires on ORB's OWN
-    state - ran to 11:30, so the engine stopped producing the state half an
-    hour before the trade depending on it stopped firing.
+    THE CUTOFF IS 15:40 ET (config.DEBIT_DIRECTIONAL_CUTOFF_ET =
+    EOD_SCHEDULE["entries_stop"], OTV4TEST r149, 2026-09-26: the operator's
+    end-of-day reset). History, superseded: the operator's 2026-08-13 block
+    from 11:00 ("The only other Long that can fire is either part of a
+    butterfly or an iron condor vertical spread from 11 o'clock onwards"),
+    moved to 11:30 on 2026-08-20. See the comment block above the constant.
 
     ⚠️ KEYED ON STRUCTURE, NOT ON A NAME LIST, AND THAT CHANGE FIXED A LIVE
     HOLE. v3 held {"ORBStrategy", "ContinuationStrategy", "SweepReversal"};

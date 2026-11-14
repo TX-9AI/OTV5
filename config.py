@@ -1,5 +1,6 @@
 """
-config.py  v5.21
+config.py  v5.22
+v5.22  2026-11-14  OTV5 r117 (HYG §5.3) — COMMENT ONLY: the long-debit cutoff's comment block still described the 11:00/11:30 afternoon block (and ORB, VOLT, the butterfly and condor as live). It now states the rule in force since OTV4TEST r149 - every long_debit entry may be placed until EOD_SCHEDULE["entries_stop"] 15:40, `>=` - with the 08-13/08-20/08-30 history marked superseded. No value changes.
 v5.21  2026-11-14  OTV5 r115 (HYG §5.1) — BUTTERFLY_STOP_LOSS_PCT is deleted: its last reader (exit_engine._evaluate_butterfly) went at r107, and only tests/check_docs_roster R5 still read it (R5 now checks two stops). The v5.17 line's "exit_engine prices any butterfly record" was true at r103 and false from r107; corrected below. Every live value is unchanged.
 v5.20  2026-11-14  OTV5 (OGAP.1) — OGAP, PARK'S FRIEND'S ORB-GAP ON QQQ PAPER: ENTRY_WINDOWS["OGAP"] = 09:46-10:32, the OGAP_* constants (no env key), OGAP joins CAP_EXCLUDED_STRATEGIES and _DECAY_EXEMPT_DEFAULT. The operator, 2026-11-14: "let's design & paper trade the OGAP on QQQ". Every other value is unchanged.
 v5.19  2026-11-14  OTV5 r112 (AM.2 / LIVE.6) — LIVE_STOP_AT_BID_AFTER = 2 and LIVE_STOP_MARKET_AFTER = 3: a live stop that has not filled at the mark steps to the bid, then crosses (execution/exit_engine v5.19). Constants, no env key. Paper unchanged. The operator, 2026-11-14: "Let's fix the top 10 today" (amnesty bucket AM.2).
@@ -1608,48 +1609,30 @@ EOD_LADDER_AT_ET            = EOD_SCHEDULE["ladder_at"]
 EOD_CROSS_AT_ET             = EOD_SCHEDULE["cross_at"]
 ORB_NO_ENTRY_AFTER_ET       = EOD_SCHEDULE["entries_stop"]  # the opening-range ENGINE's own cutoff (orb_engine); RETIRE.1: the ORB trade's window row is gone, the value (15:40) is not
                                         #   Also the ARM condition for sweep reversal.
-# 🔴 r193 — 11:00 -> 11:30, operator 2026-08-30: "1130 is the cutoff for new
-# orb entries or a single attempt runaway that has not yet fired during the
-# session." It gates PLACING an order, not an offer already resting.
-# 🔑 IT LANDS EXACTLY ON THE DEBIT BLOCK, and that is deliberate rather than a
-# coincidence to be tidied later. `_afternoon_debit_blocked` fires at
-# `>= DEBIT_DIRECTIONAL_CUTOFF_ET` (11:30) for `long_debit`, ORB declares
-# long_debit, and the ORB test is also `>=`. So entries run to 11:29:59 and the
-# block takes over at 11:30:00 — no gap, no overlap. If one test were `>` and
-# the other `>=` there would be a one-minute hole that only ever showed up as a
-# rare fill nobody could explain.
-# ⚠️ NOT ONLY A LATER DEADLINE. This constant also sets `entries_expired` and
-# EXPIRES the ORB engine from ANY state (orb_engine ~441), and r60 made the
-# re-arm check read it too. So the change buys 30 more minutes of breaks,
-# retests and RE-ARMS — more attempts per session, not just a later last entry.
-# ── AFTERNOON DEBIT BLOCK (2026-08-13, operator's directive) ─────────────────
-# "no long contracts in the afternoon unless they're part of a vertical spread
-# or a butterfly."  MECHANISM: on 0DTE, an afternoon debit needs a large move
-# just to clear decay, and the payability ratio (available move / breakeven)
-# falls monotonically from the open in EVERY symbol. Measured cost of the window
-# it closes: 10:00 -$8,715 · 11:00-14:00 -$1,539.50 · 13:00 -$4,138 against a
-# whole-book +$463 (843 trades, 15 sessions).
-# EXEMPT BY DESIGN: IronCondorStrategy (credit verticals) and ButterflyStrategy
-# (a debit, but deliberately crafted OTM at a deep discount toward a GEX pin —
-# it is the operator's named exception, and its own window already starts 12:00).
-# NOT A CUTOFF ON MANAGEMENT: open positions are unaffected, this blocks ENTRIES.
-# OPERATOR, 2026-08-13, verbatim: "The only other Long that can fire is either
-# part of a butterfly or an iron condor vertical spread from 11 o'clock onwards."
-# MEASURED, 843 trades / 15 sessions: open 09:30-10:00 +$10,717.50 against
-# 10:00-11:00 -$8,715 and 11:00-14:00 -$1,539.50, on a whole book of +$463.
-# ⚠️ THE HOLE THIS LEAVES IS DELIBERATE AND NAMED: in a TRENDING afternoon the
-# condor is correctly blocked (it self-gates to RANGING at main.py:1607 and
-# cancels Leg 1 on a directional flip) and the butterfly needs PINNING GEX, so
-# NOTHING fires. That window belongs to the trend credit spread (TC.6), which is
-# NOT BUILT. Until it is, a trending afternoon is dark ON PURPOSE — which is the
-# point: the measured cost of that window is negative.
-# ── LONG-DEBIT CUTOFF (v4.0) ───────────────────────────────────────────────
-# Operator, 2026-08-13: *"The only other Long that can fire is either part of a
-# butterfly or an iron condor vertical spread from 11 o'clock onwards."*
-# Extended to 11:30 on 2026-08-20 to resolve a contradiction: ORB armed until
-# 11:00 while RunawayContinuation - which fires on ORB's OWN state - ran to
-# 11:30, so the engine stopped producing the state half an hour before the
-# trade depending on it stopped firing.
+# ── LONG-DEBIT CUTOFF: 15:40, ONE TIME FOR EVERY ENTRY (OTV4TEST r149, 2026-09-26) ──
+# THE RULE TODAY: a long-premium directional entry (STRUCTURE "long_debit":
+# Runaway, PARK, OGAP and Breakout declare it in main._STRUCTURE_BY_NAME; an
+# undeclared setup such as the Hunt fails closed to it) may be PLACED until 15:40 ET, the
+# end-of-day table's "entries stop" (EOD_SCHEDULE above; check_eod_schedule
+# pins it). It gates PLACING an order, never management of an open position.
+# `main._afternoon_debit_blocked` fires at `>= DEBIT_DIRECTIONAL_CUTOFF_ET`, so
+# entries run to 15:39:59 and the block takes over at 15:40:00 - no gap, no
+# overlap with the EOD schedule (check_stress_entry_path tests at the cutoff,
+# a minute before and a minute after). The OT_DEBIT_CUTOFF_ET override is gone
+# (r149: a second window source); OT_DEBIT_BLOCK_ACTIVE below remains.
+# Each setup's own entry window (ENTRY_WINDOWS) is usually much earlier; this
+# is the outer bound, not the window any setup trades in.
+# HISTORY, SUPERSEDED (kept so the old numbers in the record make sense):
+#   2026-08-13  "no long contracts in the afternoon unless they're part of a
+#               vertical spread or a butterfly" - a block from 11:00 (843
+#               trades / 15 sessions: 09:30-10:00 +$10,717.50, 10:00-11:00
+#               -$8,715, 11:00-14:00 -$1,539.50 on a whole book of +$463).
+#   2026-08-20  11:30, so the ORB engine and Runaway (which fired on ORB's
+#               state) stopped together.
+#   2026-08-30  r193: 11:30 also set ORB's own cutoff and re-arm window.
+#   2026-09-26  r149 (EOD.1): the operator reset the end of day; directional
+#               debits run all day to 15:40. ORB, VOLT, the butterfly and the
+#               condor named above are retired or removed since.
 DEBIT_DIRECTIONAL_CUTOFF_ET = EOD_SCHEDULE["entries_stop"]   # r149: all day; the OT_DEBIT_CUTOFF_ET override is removed
 
 # ⚠️ KEYED ON STRUCTURE, NOT ON A NAME LIST. The v3 version held
