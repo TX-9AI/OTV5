@@ -4,9 +4,9 @@
 Do not edit by hand: the generator runs inside the land command and
 the canary fails on drift (WORKING_AGREEMENT 33).
 
-518 Python modules across 12 local packages.
+520 Python modules across 12 local packages.
 
-**Reached by:** 127 imported · 25 declared entry points · 270 referenced from a script, unit or doc but never imported · **96 by nothing here**.
+**Reached by:** 127 imported · 25 declared entry points · 272 referenced from a script, unit or doc but never imported · **96 by nothing here**.
 
 ⚠️ The last group is a REVIEW LIST, not a delete list. A
 `land.spec CHECK` line ships inside a tarball and is never
@@ -42,7 +42,7 @@ execution.exit_engine); every such edge is listed below like any other.
 - `analysis/market_state.py` - the structural state assembly.
   **Carries the vocabulary, classifies nothing.**
 
-**Where the evidence lives:** `tests/` holds 323 standing
+**Where the evidence lives:** `tests/` holds 324 standing
 checks (`check_*.py`, all run by `tools/boot_sweep.py` at boot)
 plus the studies that produced every threshold in
 `docs/TRADES.md`. **A number in a strategy file should be
@@ -57,7 +57,7 @@ Change these with the most care; a break here reaches everything downstream.
 | `config.py` | 128 | alert_manager.py, alert_route.py, anchors.py, backfill_sma50.py |
 | `strategy/__init__.py` | 64 | breakout_plan.py, check_anchors.py, check_audit_20260823.py, check_breakout_rearm.py |
 | `utils/time_utils.py` | 56 | alert_manager.py, breakout_plan.py, broker_reconcile.py, check_bar_final_grace.py |
-| `database/trade_logger.py` | 50 | breakout_plan.py, check_boot_order_sweep.py, check_breakout_new_extreme.py, check_breakout_rearm.py |
+| `database/trade_logger.py` | 51 | breakout_plan.py, check_boot_order_sweep.py, check_breakout_new_extreme.py, check_breakout_rearm.py |
 | `strategy/plan.py` | 48 | breakout_plan.py, check_anchors.py, check_breakout_rearm.py, check_chain_ordering.py |
 | `execution/exit_engine.py` | 47 | check_blind_stays_up.py, check_boot_order_sweep.py, check_breakout_exit_line.py, check_brk_noprog.py |
 | `data/candle_feed.py` | 35 | breakout_plan.py, candle_logger.py, check_audit_20260823.py, check_bar_referee.py |
@@ -239,7 +239,7 @@ Change these with the most care; a break here reaches everything downstream.
 
 ### `database/trade_logger.py`
 - **calls:** `config.py`, `derived/registry.py`, `strategy/sweep_credit_spread.py`, `utils/time_utils.py`
-- **called by:** `derived/counterfactual.py`, `execution/entry_engine.py`, `execution/exit_engine.py`, `execution/order_guard.py`, `execution/position_manager.py`, `execution/resting_orders.py`, `main.py`, `risk/risk_manager.py`, `strategy/breakout_plan.py`, `strategy/condor_roll.py`, `strategy/liquidity_hunt.py`, `strategy/runaway_continuation.py`, `tests/check_boot_order_sweep.py`, `tests/check_breakout_new_extreme.py`, `tests/check_breakout_rearm.py`, `tests/check_brk_spec_1029.py`, `tests/check_brk_stop5m.py`, `tests/check_cap_counterfactual.py`, `tests/check_cap_page_once.py`, `tests/check_column_writers.py`, `tests/check_condor_mgmt.py`, `tests/check_condor_pairing.py`, `tests/check_condor_sibling_default.py`, `tests/check_condor_stop_suppression.py`, `tests/check_control_contract.py`, `tests/check_counterfactual_reads.py`, `tests/check_credit_remainder.py`, `tests/check_db_handles.py`, `tests/check_exit_deadline.py`, `tests/check_exit_partial_persist.py`, `tests/check_exit_quote.py`, `tests/check_expiry_settlement.py`, `tests/check_last_closed_bar.py`, `tests/check_lineage.py`, `tests/check_liquidity_hunt.py`, `tests/check_live_exit_paths.py`, `tests/check_loss_cap_rearm.py`, `tests/check_no_mark_close.py`, `tests/check_one_per_session.py`, `tests/check_orb_release.py`, `tests/check_orb_resume.py`, `tests/check_park.py`, `tests/check_plan_prepares.py`, `tests/check_pnl_pct_sign.py`, `tests/check_risk_seed_retry.py`, `tests/check_runaway_break_key.py`, `tests/check_runaway_plan.py`, `tests/check_schema_keeps.py`, `tests/check_sma50_record.py`, `tests/check_trade_report.py`
+- **called by:** `derived/counterfactual.py`, `execution/entry_engine.py`, `execution/exit_engine.py`, `execution/order_guard.py`, `execution/position_manager.py`, `execution/resting_orders.py`, `main.py`, `risk/risk_manager.py`, `strategy/breakout_plan.py`, `strategy/condor_roll.py`, `strategy/liquidity_hunt.py`, `strategy/runaway_continuation.py`, `tests/check_boot_order_sweep.py`, `tests/check_breakout_new_extreme.py`, `tests/check_breakout_rearm.py`, `tests/check_brk_spec_1029.py`, `tests/check_brk_stop5m.py`, `tests/check_cap_counterfactual.py`, `tests/check_cap_page_once.py`, `tests/check_column_writers.py`, `tests/check_condor_mgmt.py`, `tests/check_condor_pairing.py`, `tests/check_condor_sibling_default.py`, `tests/check_condor_stop_suppression.py`, `tests/check_control_contract.py`, `tests/check_counterfactual_reads.py`, `tests/check_credit_remainder.py`, `tests/check_db_handles.py`, `tests/check_exec_basis.py`, `tests/check_exit_deadline.py`, `tests/check_exit_partial_persist.py`, `tests/check_exit_quote.py`, `tests/check_expiry_settlement.py`, `tests/check_last_closed_bar.py`, `tests/check_lineage.py`, `tests/check_liquidity_hunt.py`, `tests/check_live_exit_paths.py`, `tests/check_loss_cap_rearm.py`, `tests/check_no_mark_close.py`, `tests/check_one_per_session.py`, `tests/check_orb_release.py`, `tests/check_orb_resume.py`, `tests/check_park.py`, `tests/check_plan_prepares.py`, `tests/check_pnl_pct_sign.py`, `tests/check_risk_seed_retry.py`, `tests/check_runaway_break_key.py`, `tests/check_runaway_plan.py`, `tests/check_schema_keeps.py`, `tests/check_sma50_record.py`, `tests/check_trade_report.py`
 
 ### `derived/__init__.py`
 - **calls:** `derived/base.py`
@@ -896,6 +896,10 @@ Change these with the most care; a break here reaches everything downstream.
 ### `tests/check_excursions_report.py`
 - **calls:** (none)
 - **called by:** (not imported) — referenced in `docs/BACKLOG.md`
+
+### `tests/check_exec_basis.py`
+- **calls:** `database/trade_logger.py`
+- **called by:** (not imported) — referenced in `docs/BACKLOG.md`, `docs/ENV.md`
 
 ### `tests/check_exhaust_evidence.py`
 - **calls:** `config.py`, `execution/__init__.py`, `execution/exit_engine.py`, `strategy/management.py`, `strategy/plan.py`
@@ -1952,6 +1956,10 @@ Change these with the most care; a break here reaches everything downstream.
 ### `tools/agent_watch.py`
 - **calls:** (none)
 - **called by:** (entry point)
+
+### `tools/backfill_exec_basis.py`
+- **calls:** (none)
+- **called by:** (not imported) — referenced in `docs/BACKLOG.md`
 
 ### `tools/backfill_sma50.py`
 - **calls:** `analysis/entry_snapshot.py`, `config.py`

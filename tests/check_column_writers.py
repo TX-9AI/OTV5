@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_column_writers.py  v5.4
+tests/check_column_writers.py  v5.5
+v5.5  2026-11-14  OTV5 r111 (AM.1) — the executable-price basis joins WRITERS: entry_exec_premium and would_fill_live (TradeLogger._write_exec_entry, called by set_entry_contract), exit_exec_premium and pnl_exec_usd (TradeLogger._write_exec_exit, called by set_exit_contract).
 v5.4  2026-11-11  OTV5 r107 (RETIRE.5 follow-up) — the generic fly entry is removed: lower_strike / lower_symbol are written by the
       tent (condor_roll._execute_tent, off), is_butterfly by _execute_condor_leg (0, off), and six fly-only columns become
       HISTORY (kept, written by nothing, decoded by query.py). W1 counts them; new W5 pins it.
@@ -58,6 +59,8 @@ _ECON = (TL, "TradeLogger.set_entry_contract")
 _XCON = (TL, "TradeLogger.set_exit_contract")
 _XLAT = (TL, "TradeLogger.set_exit_latency")
 _LOG = (TL, "TradeLogger.log_entry")
+_XEN = (TL, "TradeLogger._write_exec_entry")         # r111 (AM.1), from set_entry_contract
+_XEX = (TL, "TradeLogger._write_exec_exit")          # r111 (AM.1), from set_exit_contract
 _LEG = (MAIN, "_execute_condor_leg")                # off: no live credit entry (r88: the TCS removed)
 _ROLL = (CR, "_execute_roll")                       # off: needs condor legs
 _TENT = (CR, "_execute_tent")                       # off: the tent's hedge leg (r106), needs condor legs
@@ -85,6 +88,7 @@ WRITERS = {
     "entry_delta": _ECON, "entry_gamma": _ECON, "entry_theta": _ECON, "entry_iv": _ECON, "entry_bid": _ECON,
     "entry_ask": _ECON, "chain_iv_rank": _ECON,
     "exit_bid": _XCON, "exit_ask": _XCON, "exit_iv": _XCON,
+    "entry_exec_premium": _XEN, "would_fill_live": _XEN, "exit_exec_premium": _XEX, "pnl_exec_usd": _XEX,   # r111
     "exit_submit_ts": _XLAT, "exit_fill_ts": _XLAT, "exit_latency_ms": _XLAT, "exit_ladder_steps": _XLAT,
     "exit_escalated": _XLAT, "exit_mark_at_trigger": _XLAT,
     "live_exit_state": (XE, "ExitEngine._exit_state_save"),

@@ -1,5 +1,16 @@
 """
-database/trade_logger.py  v5.5
+database/trade_logger.py  v5.6
+v5.6  2026-11-14  OTV5 r111 (AM.1) — THE EXECUTABLE-PRICE BASIS, BESIDE THE MARK. Paper books the mark in and out (100%
+      fill, no spread), so the EV benchmark and the cash size table carried no spread cost and no fill risk. Four NEW
+      columns, NULL = not captured (rows before r111 stay distinguishable): entry_exec_premium (the ASK a long would pay,
+      the BID a short would take, from the entry tick's contract quote that set_entry_contract already writes as
+      entry_bid/entry_ask), would_fill_live (1 when that executable price was at or inside the live ladder's cap, the
+      mark: an immediate fill; 0 when live would have had to wait for the mark to trade), exit_exec_premium (the BID a
+      long sells at, the ASK a short buys back at, from the exit tick's quote set_exit_contract writes as
+      exit_bid/exit_ask) and pnl_exec_usd ((exit_exec - entry_exec) x contracts x 100, signed for a short). Single legs
+      only (every live setup); a spread or tent stays NULL. pnl_usd is unchanged (the mark, for continuity); no column
+      dropped. The operator, 2026-11-14: "Let's fix the top 10 today" (amnesty bucket AM.1). Gate
+      tests/check_exec_basis.py.
 v5.5  2026-11-08  OTV5 r76 (RETIRE.1) — the spent-level log line no longer names the removed sweep (TrendCredit only); orb_entry_since (its one caller, the ORB trade's missed-row check in main, is removed) is removed. No row changes. The operator, 2026-11-07: "Running dead code and logging dead code activity is unnecessary drag. Yes, I want all of those things fixed."
 v5.4  2026-10-30  OTV5 r57 (TCS.LOG1) — EXTRA_ADDS: a subclass's own column adds, run with the migration adds and counted as
       this tree's shape (so they are never named "outside this tree's shape"). Empty here: the trades store is
@@ -640,6 +651,11 @@ class TradeLogger:
             ("live_exit_state",        "TEXT"),
             # OTV5 r34 (SCHEMA.2) — EntryEngine.enter's hunt flag; backfilled at the add, below.
             ("is_liquidity_hunt",      "INTEGER DEFAULT 0"),
+            # OTV5 r111 (AM.1) — the executable-price basis beside the mark. NO DEFAULTS: NULL = not captured.
+            ("entry_exec_premium",     "REAL"),
+            ("exit_exec_premium",      "REAL"),
+            ("pnl_exec_usd",           "REAL"),
+            ("would_fill_live",        "INTEGER"),
         ]
         _MIGRATION_ADDS = _MIGRATION_ADDS + list(self.EXTRA_ADDS)    # r57: empty on the trades store
         for col, definition in _MIGRATION_ADDS:
@@ -1018,7 +1034,10 @@ class TradeLogger:
                     + ", ".join(f"{k}=?" for k in cols)
                     + " WHERE trade_id=?", (*vals, trade_id))
                 conn.commit()
-                return cur.rowcount > 0
+                ok = cur.rowcount > 0
+            if ok:
+                self._write_exec_entry(trade_id, c.get("entry_bid"), c.get("entry_ask"))   # r111 (AM.1)
+            return ok
         except Exception as exc:                                 # noqa: BLE001
             # v3.13 — logged INLINE. The W.2 swallow census reads the HANDLER
             # BODY, so a bare `return False` here reads as a silent TIER-1
@@ -1029,6 +1048,73 @@ class TradeLogger:
             # "the row was not there".
             logger.debug("set_entry_contract failed (%s: %s) for %s",
                          type(exc).__name__, exc, trade_id[:8])
+            return False
+
+    # ── r111 (AM.1) — THE EXECUTABLE-PRICE BASIS ─────────────────────────────
+    @staticmethod
+    def _px(v):
+        try:
+            x = float(v)
+            return x if x > 0 and x == x and x < 1e6 else None
+        except (TypeError, ValueError):
+            return None
+
+    def _single_leg_row(self, trade_id: str):
+        """(is_short, entry_premium, contracts, entry_exec) for a SINGLE-LEG row, else None."""
+        with self._db() as conn:
+            row = conn.execute(
+                "SELECT is_short_position, entry_premium, contracts, short_symbol, long_symbol, lower_symbol, "
+                "center_symbol, upper_symbol, entry_exec_premium FROM trades WHERE trade_id=?", (trade_id,)).fetchone()
+        if row is None or any(row[k] for k in ("short_symbol", "long_symbol", "lower_symbol", "center_symbol",
+                                               "upper_symbol")):
+            return None
+        return bool(row["is_short_position"]), row["entry_premium"], row["contracts"], row["entry_exec_premium"]
+
+    def _write_exec_entry(self, trade_id: str, bid, ask) -> bool:
+        """entry_exec_premium = the ask (long) / the bid (short); would_fill_live = that price at or inside the mark.
+        Never raises; NULL stays NULL when the quote is missing."""
+        try:
+            leg = self._single_leg_row(trade_id)
+            if leg is None:
+                return False
+            short, mark, _n, _e = leg
+            px = self._px(bid if short else ask)
+            if px is None:
+                return False
+            m = self._px(mark)
+            fill = None if m is None else int((px >= m - 1e-9) if short else (px <= m + 1e-9))
+            with self._db() as conn:
+                conn.execute("UPDATE trades SET entry_exec_premium=?, would_fill_live=? WHERE trade_id=?",
+                             (round(px, 4), fill, trade_id))
+                conn.commit()
+            return True
+        except Exception as exc:                                 # noqa: BLE001
+            logger.debug("exec entry basis not written (%s: %s) for %s", type(exc).__name__, exc, trade_id[:8])
+            return False
+
+    def _write_exec_exit(self, trade_id: str, bid, ask) -> bool:
+        """exit_exec_premium = the bid (long) / the ask (short); pnl_exec_usd from the two executable prices.
+        Never raises."""
+        try:
+            leg = self._single_leg_row(trade_id)
+            if leg is None:
+                return False
+            short, _m, n, entry_exec = leg
+            px = self._px(ask if short else bid)
+            if px is None:
+                return False
+            pnl = None
+            e = self._px(entry_exec)
+            if e is not None and n:
+                per = (e - px) if short else (px - e)
+                pnl = round(per * float(n) * 100.0, 2)
+            with self._db() as conn:
+                conn.execute("UPDATE trades SET exit_exec_premium=?, pnl_exec_usd=? WHERE trade_id=?",
+                             (round(px, 4), pnl, trade_id))
+                conn.commit()
+            return True
+        except Exception as exc:                                 # noqa: BLE001
+            logger.debug("exec exit basis not written (%s: %s) for %s", type(exc).__name__, exc, trade_id[:8])
             return False
 
     def set_exit_contract(self, trade_id: str, c: dict) -> bool:
@@ -1051,7 +1137,10 @@ class TradeLogger:
                     + ", ".join(f"{k}=?" for k in cols)
                     + " WHERE trade_id=?", (*vals, trade_id))
                 conn.commit()
-                return cur.rowcount > 0
+                ok = cur.rowcount > 0
+            if ok:
+                self._write_exec_exit(trade_id, c.get("exit_bid"), c.get("exit_ask"))     # r111 (AM.1)
+            return ok
         except Exception as exc:                                 # noqa: BLE001
             # v3.13 — inline, same reason as set_entry_contract above.
             logger.debug("set_exit_contract failed (%s: %s) for %s",
