@@ -1,5 +1,7 @@
 # PLAN_SPEC.md — every strategy declares its intent BEFORE the trigger
 
+**`PLAN_SPEC.md` v5.5 · 2026-11-14 · OTV5 r109 (the Saturday brief 2026-11-14 §4, item 4) — §4's sub-sections carry their state: §4.1, §4.3, §4.4 and §4.6 a REMOVED line (r76 / r88 / r103), §4.5 and §4.7 ENTRY DORMANT (r249). A reader who starts at §4 no longer finds five trades that do not exist. Docs only.**
+
 **`PLAN_SPEC.md` v5.4 · 2026-11-09 · OTV5 r103 (RETIRE.5 step 2) — §32 (the GEX pin butterfly) is REMOVED from the code; the section keeps its heading and points to the history. The operator, 2026-11-08: "I concur on both, in that order".**
 
 **`PLAN_SPEC.md` v5.3 · 2026-11-08 · OTV5 r88 (RETIRE.3) — §34 (the trend credit spread, and its r57 log-only shadow) is REMOVED from the code; the section keeps its heading and points to the history. The operator, 2026-11-08: "Delete".**
@@ -157,6 +159,8 @@ Each carries: **trigger** (fixed price), **invalidation** (fixed price),
 **instrument** (pre-selected contract), **window**, **declare-when**.
 
 ### 4.1 ORB — `ORBStrategy` — 🔴 **LEAVE IT ALONE**
+
+**REMOVED, OTV5 r76 (RETIRE.1), 2026-11-08** — the ORB trade and its plan are deleted from the code (the ORB *engine* stays: Runaway and Breakout read it); this sub-section is history.
 Operator, 2026-08-25: *"leave orb alone. That one can't get encumbered with
 extra hurdles & it already pretty much plans."*
 **NO CHANGES. ORB IS THE MODEL, NOT A CANDIDATE.** It already declares a range
@@ -177,6 +181,8 @@ Strike selection is a **later, separate** fine-tune and is out of scope here.
 - **window** break → `DEBIT_DIRECTIONAL_CUTOFF_ET` (11:30)
 
 ### 4.3 TREND PARTICIPATION — `TrendCreditSpread` (CREDIT)
+
+**REMOVED, OTV5 r88 (RETIRE.3), 2026-11-08** — the trend credit spread and its shadow are deleted from the code; `TCS_START_ET` is a deleted key; this sub-section is history.
 **This is the one that failed on 2026-08-25 and the changes are the point.**
 - **declare when** 11:31, ORB range known, trend vote directional
 - **trigger** close beyond the ORB boundary (`orb_high` for a PCS)
@@ -199,6 +205,8 @@ Strike selection is a **later, separate** fine-tune and is out of scope here.
   CVX loop.
 
 ### 4.4 SWEEP CREDIT SPREAD — `SweepCreditSpread`
+
+**REMOVED, OTV5 r76 (RETIRE.1), 2026-11-08** — the sweep credit spread's entry and plan are deleted from the code; this sub-section is history.
 🔴 Carries the 2026-08-25 CVX finding, still open and NOT yet built.
 - **declare when** a named level is pierced AND a bar **closes** back on the
   rejected side. Operator: *"a wick can be a pierce. But it takes a close to log
@@ -215,6 +223,8 @@ Strike selection is a **later, separate** fine-tune and is out of scope here.
   a wider stop or no plan at all.
 
 ### 4.5 IRON CONDOR — `IronCondorStrategy`
+
+**ENTRY DORMANT since OTV4TEST r249** — `plan_state` marks IronCondorStrategy DORMANT ("no entry of its own"); only its management and the roll run. No condor is opened.
 - **declare when** RANGING, both boundaries identified
 - **trigger** per side, price travels `CONDOR_TRIGGER_APPROACH` of the way from
   `bb_middle` toward that short strike
@@ -224,12 +234,16 @@ Strike selection is a **later, separate** fine-tune and is out of scope here.
   waiting rather than 406 silent refusals (verified on CRM today).
 
 ### 4.6 GEX PIN BUTTERFLY — `GEXPinButterfly`
+
+**REMOVED, OTV5 r103 (RETIRE.5 step 2), 2026-11-09** — the GEX pin butterfly and its plan are deleted from the code (its execution path at r107); `BUTTERFLY_ENTRY_START_ET` is a deleted key; this sub-section is history.
 - **declare when** a firm pin exists and price is away from it
 - **trigger** ⟨PRIOR⟩ price crosses within `0.5 × EM` of the pin, moving toward it
 - **invalidation** close beyond `1.5 × EM` from the pin
 - **window** `BUTTERFLY_ENTRY_START_ET` (12:00) → 14:00
 
 ### 4.7 DAILY FORK — `DailyForkCreditSpread`
+
+**ENTRY DORMANT since OTV4TEST r249** — no `DailyForkCreditSpread` entry runs; the fork it describes is the condor's, whose entry is dormant (§4.5).
 - **declare when** a 1d fork is BUILT with containment
 - **trigger** price touches the projected tine (rail at the plan's stamped index —
   **the rail is frozen at declaration**, never re-projected)

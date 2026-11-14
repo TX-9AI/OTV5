@@ -1,5 +1,7 @@
 # TRADES — the specs
 
+**`TRADES.md` v5.15 · 2026-11-14 · OTV5 r109 (the Saturday brief 2026-11-14 §4, items 3 and 10) — §5 opens with the condor's ENTRY DORMANT state (r249: management and the roll only; the sweep and fly comparisons are gone with those trades), and the stops line says `BUTTERFLY_STOP_LOSS_PCT` is read by nothing since r107. Docs only.**
+
 **`TRADES.md` v5.14 · 2026-11-09 · OTV5 r103 (RETIRE.5 step 2) — the GEX pin butterfly is REMOVED with its code: its roster row and section 3 are gone, OT_GEX_BUTTERFLY is read by nothing. The operator, 2026-11-08: "I concur on both, in that order" (cut 11-09, code removed after that close).**
 
 **`TRADES.md` v5.13 · 2026-11-08 · OTV5 r97 (RETIRE.5) — the GEX pin butterfly is CUT from 2026-11-09: OFF in code (config.GEX_BUTTERFLY_ENABLED False; OT_GEX_BUTTERFLY no longer turns it on), never asked, writes nothing; exits untouched. Its code is removed after the 11-09 close. The operator, 2026-11-08: "I concur on both, in that order". Evidence: window EV −$6,482 [−19.2k, +3.2k], lunch entries lose, no fly since 11-03.**
@@ -81,8 +83,9 @@ above as EOD_SCHEDULE).
 (`RUNAWAY_MAX_LOSS_PCT`). Hunt: NO premium stop - it RECORDS the same floor
 (`HUNT_MAX_LOSS_PCT`, also used to pick its contract) and the exit engine HOLDS through it,
 logging "would-have-floored" (r209; corrected r227 - r226 wrote this line as if it stopped).
-Other single legs: **25%** (`MAX_LOSS_PCT`). A butterfly record still on a book (none can open since r103): **40%** of the debit
-(`BUTTERFLY_STOP_LOSS_PCT`). Every other exit rule lives in `strategy/management.py` and
+Other single legs: **25%** (`MAX_LOSS_PCT`). `BUTTERFLY_STOP_LOSS_PCT` (**40%**) is still defined in `config.py`,
+but NOTHING READS IT since r107 removed the butterfly exits (no fly can open since r103, and none is on any book); it
+goes with the next code land, and `check_docs_roster` R5 then checks two stops. Every other exit rule lives in `strategy/management.py` and
 `execution/exit_engine.py`, not in a number that can be quoted here.
 
 **The fill observers (r270, PMAP.1 + FILL.2).** Every open single long gets a premium-map row a minute, and the
@@ -183,10 +186,10 @@ structure agree on when the thesis died.**
 Operator: *"Anchor to the rare fork premise and if it gets us a surprise fill
 now and then we can study it."*
 
-**The condor is not load-bearing.** It stays wired, specced and enabled; it fires
-when a fork genuinely qualifies, which is seldom. **Rarity costs nothing while it
-waits** - no position slot, no capital, no competition with the sweep spread -
-and the same opportunity-cost logic as the GEX butterfly applies.
+**ENTRY DORMANT since OTV4TEST r249: condor management and the roll only; no condor is opened.**
+`strategy/plan_state.py` marks IronCondorStrategy DORMANT ("no entry of its own (r249)"), `config.ENTRY_WINDOWS`
+has no condor key, and `main.py` instantiates it for `manage` / `authorize` only. The text below is the trade's
+design, kept for the record; nothing in it fires.
 
 ⚠️ **THE RIDDLE, STATED PLAINLY, BECAUSE IT IS WHY THIS TRADE IS HARD.**
 Operator: *"We want to execute separate vertical spreads at a time and place

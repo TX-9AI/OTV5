@@ -1,5 +1,6 @@
 # WORKING_AGREEMENT.md — how we operate (read this first, every new thread)
 
+**`WORKING_AGREEMENT.md` v5.3 · 2026-11-14 · OTV5 r109 (the Saturday brief 2026-11-14 §4, item 13) — the lander sketch's 09-13 correction gets a note: on OTV5 the ledger is `docs/GENESIS.md`; the GENESIS-TEST sentence is OTV4TEST history. See the CHANGELOG at the foot.**
 **`WORKING_AGREEMENT.md` v5.2 · 2026-11-08 · OTV5 r81 (DOC.36) — §3 and §30 describe the fleet that exists: 14 boxes on OTV5; control holds `~/OTV5`, `~/day_trader_pro` and the frozen `~/options-trader-v4`. See the CHANGELOG at the foot.**
 **v5.1 · 2026-10-25 — §0 through §41, plus §15a, §18a, §36a, §38.9 and §40.1. See the CHANGELOG at the foot.**
 **v5.0 · 2026-10-25 · OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...**
@@ -1124,6 +1125,9 @@ means `docs/GENESIS.md` so mainline is unaffected, and this fork passes
 `docs/GENESIS-TEST.md`), and the subject is `"$rev: $desc"` with **no repo
 prefix** (`tools/land.sh:579`). A new thread writing the sketch's version by
 hand would append to the FROZEN ledger and write a subject no commit here has.
+📌 **ON OTV5 (r109): THE LEDGER IS `docs/GENESIS.md`, THE ONE LEDGER SINCE r0** (BACKLOG header). This tree has no
+`docs/GENESIS-TEST.md` and passes no `LEDGER` field; the "this fork passes `docs/GENESIS-TEST.md`" sentence above is
+OTV4TEST history.
 ⚠️ Same class as §25's four-month-dead `docs/README.md` and §17's citation of a
 test file that did not exist: **a doctrine document naming a path is a path that
 rots**, and this one sat inside the section whose whole subject is the ledger.
@@ -1983,6 +1987,8 @@ r0. Everything it inherited carries the predecessor's own history, and that hist
 ---
 
 ## CHANGELOG
+
+**v5.3 — 2026-11-14 — OTV5 r109 — THE LANDER SKETCH NAMES OTV5'S LEDGER.** The 09-13 correction under the lander sketch said "this fork passes `docs/GENESIS-TEST.md`"; OTV5 has `docs/GENESIS.md` only. A note says so; the OTV4TEST sentence stays as history (the Saturday brief 2026-11-14 section 4 item 13).
 
 **v5.2 — 2026-11-08 — OTV5 r81 — §3 AND §30 DESCRIBE THE FLEET THAT EXISTS (DOC.36).** §3: control holds `~/OTV5` (the live tree), `~/day_trader_pro` and the frozen `~/options-trader-v4`; `~/options-trader-v3` is gone; QQQ-TEST is marked retired. §30: 14 boxes on one lineage. Facts only, no rule changed (the Saturday brief 2026-11-07 section 4 item 5).
 
