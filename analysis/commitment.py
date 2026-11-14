@@ -1,5 +1,6 @@
 """
-analysis/commitment.py  v5.1
+analysis/commitment.py  v5.2
+v5.2  2026-11-14  OTV5 r112 (AM.3) — THE ABANDONED-SIDE GATE REFUSES ON A LIVE BOX EXACTLY AS ON PAPER. gate() made mode "trade" read "log" when the box was not paper (a deliberate OTV4TEST r272 choice, when no box was live), so a cash box would place the entries its paper record refuses and paper would stop predicting cash. effective = mode on every box; the row records paper= as before. The operator, 2026-11-14: "Let's fix the top 10 today" (amnesty bucket AM.3).
 v5.1  2026-11-08  OTV5 r76 (RETIRE.1) — DIRECTIONAL drops the removed VOLT and ORB trades (Breakout, Runaway, Hunt). Same-day reads only, so no live trade is counted differently. The operator, 2026-11-07: "Running dead code and logging dead code activity is unnecessary drag. Yes, I want all of those things fixed."
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.0  2026-10-12  OTV4TEST r272 (COMMIT.1 / COMMIT.2 / COMMIT.3) — WE ENTER ON COMMITMENT AND EXIT ON ABANDONMENT.
@@ -197,8 +198,9 @@ def side_of(signal) -> Optional[str]:
 
 
 def gate(signal, ctx, *, mode: str, paper: bool, contracts=None) -> bool:
-    """COMMIT.2 - True when the entry must NOT be placed: a directional entry whose side is ABANDONED, mode 'trade',
-    on a PAPER box. Records every directional entry it sees. Unreadable -> allowed. NEVER raises (an error allows)."""
+    """COMMIT.2 - True when the entry must NOT be placed: a directional entry whose side is ABANDONED, mode 'trade'.
+    r112 (AM.3): paper and live boxes alike - `paper` is recorded, never a reason to allow. Records every directional
+    entry it sees. Unreadable -> allowed. NEVER raises (an error allows)."""
     try:
         name = str(getattr(signal, "strategy_name", "") or "")
         if mode == "off" or name not in DIRECTIONAL:
@@ -221,11 +223,11 @@ def gate(signal, ctx, *, mode: str, paper: bool, contracts=None) -> bool:
             why = f"no side for direction {getattr(signal, 'direction', None)!r}"
         else:
             st = (snap.get(side) or {}).get("state")
-        effective = mode if (mode != "trade" or paper) else "log"
+        effective = mode                                         # r112 (AM.3): live refuses as paper does
         block = bool(st == "ABANDONED" and effective == "trade")
         _row("commit_gate.jsonl", {
             "at": round(time.time(), 3), "strategy": name, "side": side, "state": st,
-            "why_unread": why or None, "mode": mode, "effective": effective,
+            "why_unread": why or None, "mode": mode, "effective": effective, "paper": bool(paper),
             "decision": ("BLOCKED" if block else ("would_block" if st == "ABANDONED" else "allowed")),
             "bar_ts": (snap or {}).get("bar_ts") if isinstance(snap, dict) else None,
             "detail": (snap or {}).get(side) if isinstance(snap, dict) and side in ("long", "short") else None,

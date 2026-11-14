@@ -1,5 +1,6 @@
 """
-main.py  v5.18
+main.py  v5.19
+v5.19  2026-11-14  OTV5 r112 (AM.3) — the Service mode line no longer says "(LIVE: refused - logs only)" after commit_gate=trade: analysis/commitment v5.2 refuses an ABANDONED side on a live box exactly as on paper. The comment at the gate call says so. The operator, 2026-11-14: "Let's fix the top 10 today" (amnesty bucket AM.3).
 v5.18  2026-11-11  OTV5 r107 (RETIRE.5 follow-up) — THE GENERIC BUTTERFLY PATH LEAVES THE TICK: the fly branch of the entry-contract capture and _fly_entry_contract, the net_debit / butterfly_half_size sizing arguments (only a fly passed them) and the executor's now-unread macro local, and _describe_position's fly line (it describes OPEN rows; no fly can be open since r103). Every live entry captures, sizes and describes exactly as before. The operator, 2026-11-07: "Running dead code and logging dead code activity is unnecessary drag."
 v5.17  2026-11-09  OTV5 r103 (RETIRE.5 step 2) — THE GEX PIN BUTTERFLY LEAVES THE TICK: its import and singleton, _attempt_butterfly and its two call sites (the capped branch now asks PARK alone; the dispatch asks PARK, then the directionals), its _STRUCTURE_BY_NAME row and the admission tries loop that named only it are removed. pin_proximity_verdict reads the expected move from analysis.volatility_measures.expected_move_session (the function the fly's wrapper called since r223; identical value). The generic multi-leg execution (_place_butterfly, the leg capture, the exits) stays for any butterfly record still on a book. Runaway, Hunt, Breakout and PARK dispatch exactly as before. The operator, 2026-11-08: "I concur on both, in that order" (cut 11-09; code removed after that close).
 v5.16  2026-11-08  OTV5 r97 (RETIRE.5) — THE CUT GEX PIN BUTTERFLY IS NOT ASKED AND WRITES NOTHING: _attempt_butterfly returns first when plan_state reads GEXPinButterfly DORMANT, before its one-per-session and no-chain skip rows (which ran ahead of _safe_strategy's dormant check). Exits and management of any fly are untouched. The operator, 2026-11-08: "I concur on both, in that order" (cut from 11-09; code removed after that close).
@@ -5008,9 +5009,7 @@ def _banner_dials() -> str:
         brk += f" (OT_BRK_REARM={BRK_REARM_ENV_REFUSED!r} REFUSED)"
     if HUNT_REARM_ENV_REFUSED:
         brk += f" (OT_HUNT_REARM={HUNT_REARM_ENV_REFUSED!r} REFUSED)"
-    brk += f" · commit_gate={COMMIT_GATE_MODE}"                            # r272 (COMMIT.2)
-    if COMMIT_GATE_MODE == "trade" and not PAPER_TRADING:
-        brk += " (LIVE: refused - logs only)"
+    brk += f" · commit_gate={COMMIT_GATE_MODE}"                            # r272 (COMMIT.2); r112: live refuses too
     if COMMIT_GATE_ENV_REFUSED:
         brk += f" (OT_COMMIT_GATE={COMMIT_GATE_ENV_REFUSED!r} REFUSED)"
     brk += f" · caution={CAUTION_SIZE_MODE}"                               # r272 (COMMIT.3)
@@ -5327,7 +5326,7 @@ def _execute_entry_signal(signal, ctx, ms, state, _sigj=None, *, additive: bool 
     # versa"; 10:35 ET: "we enter on commitment and we exit on abandonment. We go with the market not against
     # it." Here, after sizing (so the would-be order is whole) and before the order: a DIRECTIONAL entry whose
     # side is ABANDONED on this tick's state (ctx["commitment"], analysis/commitment.py) is not placed when
-    # OT_COMMIT_GATE=trade (unset) on a PAPER box. Every directional entry is recorded with its would-be order
+    # OT_COMMIT_GATE=trade (unset), on paper and (r112, AM.3) live boxes alike. Every directional entry is recorded with its would-be order
     # (data/counterfactual/commit_gate.jsonl) so the old rule is replayable. An unreadable state ALLOWS the
     # entry and says why. The caution size (S2) is LOGGED only - it never changes `sizing`.
     if _cm.gate(signal, ctx, mode=COMMIT_GATE_MODE, paper=PAPER_TRADING, contracts=sizing.contracts):

@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 """
-tests/check_reconcile_strict.py  v5.0
+tests/check_reconcile_strict.py  v5.1
+v5.1  2026-11-14  OTV5 r112 (AM.6) — A1 an adopted position's entry_time is the broker's opened_at, not the reconcile
+      time; A2 no opened_at (or a future one) -> the reconcile time and a note that says so; A3
+      get_open_option_positions carries opened_at from the SDK's created_at (UTC ISO), "" when absent. Born red on
+      r108: A1 A2 A3 (entry_time was always now; no opened_at field).
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.0  2026-10-04  r465 / B1 — RECONCILE CHECKS EVERY LEG AT ITS QUANTITY, AND READS
       ONLY THIS BOX'S INSTRUMENT.
@@ -22,6 +26,9 @@ v1.0  2026-10-04  r465 / B1 — RECONCILE CHECKS EVERY LEG AT ITS QUANTITY, AND 
   R6  two rows sharing one leg symbol are judged on the SUM (no false report)
   R7  get_open_option_positions keeps only this box's underlying (QQQ), keeps
       SPXW for an SPX box, and returns the whole account for underlying="*"
+  A1  an adopted position's entry_time is the broker's opened_at (r112 AM.6)
+  A2  no opened_at, or one in the future -> the reconcile time, and the note says so
+  A3  get_open_option_positions returns opened_at from created_at (UTC ISO), "" when the SDK has none
   BORN RED on otv4 a102c05 at R2 R3 R4 R6 R7 (R6 because plan.mismatch did not exist).
 
 Run:  python3 tests/check_reconcile_strict.py
@@ -100,6 +107,7 @@ def main():
             self.quantity_direction = "Long"
             self.symbol, self.underlying_symbol = sym, und
             self.average_open_price = 1.0
+            self.created_at = None
 
     class _Acct:
         def get_positions(self, session):
@@ -119,12 +127,47 @@ def main():
         check("R7 only this box's underlying (QQQ); SPX keeps SPX+SPXW; '*' is the whole account",
               q == ["QQQ "] and s == ["SPX ", "SPXW"] and len(allp) == 4,
               f"qqq={q} spx={s} all={len(allp)}")
+        # ── A3 (r112, AM.6): opened_at rides from the SDK's created_at ──
+        import datetime as _d
+
+        class _Acct2:
+            def get_positions(self, session):
+                a = _P("QQQ   261005C00710000", "QQQ")
+                a.created_at = _d.datetime(2026, 11, 13, 14, 41, 5, tzinfo=_d.timezone.utc)
+                b = _P("QQQ   261005C00715000", "QQQ")
+                return [a, b]
+        tc.get_account = lambda: _Acct2()
+        os.environ["OT_INSTRUMENT"] = "QQQ"
+        got = {x["symbol"]: x.get("opened_at") for x in tc.get_open_option_positions()}
+        check("A3 get_open_option_positions carries opened_at (UTC ISO from created_at; \"\" when absent)",
+              got.get("QQQ   261005C00710000") == "2026-11-13T14:41:05+00:00"
+              and got.get("QQQ   261005C00715000") == "", f"{got}")
     finally:
         tc.get_account, tc.get_session = real[0], real[1]
         if real[2] is None:
             os.environ.pop("OT_INSTRUMENT", None)
         else:
             os.environ["OT_INSTRUMENT"] = real[2]
+
+    # ── A1/A2 (r112, AM.6): the adopted record's entry_time ──
+    from execution.broker_reconcile import _adopt_record
+    pos = bp(SINGLE, 2)
+    pos["opened_at"] = "2026-11-13T14:41:05+00:00"
+    rec = _adopt_record(pos) or {}
+    check("A1 an adopted position's entry_time is the broker's opened_at, not the reconcile time",
+          str(rec.get("entry_time", "")).startswith("2026-11-13T14:41:05"), f"{rec.get('entry_time')!r}")
+    import time as _t
+    p2 = bp(SINGLE, 2)
+    r2 = _adopt_record(p2) or {}
+    p3 = bp(SINGLE, 2)
+    p3["opened_at"] = "2099-01-01T00:00:00+00:00"
+    r3 = _adopt_record(p3) or {}
+    from utils.time_utils import ts_for_db
+    today = ts_for_db()[:10]
+    check("A2 no opened_at (or a future one) -> the reconcile time, and the note says so",
+          str(r2.get("entry_time", ""))[:10] == today and "no open time" in str(r2.get("notes", ""))
+          and str(r3.get("entry_time", ""))[:10] == today and "no open time" in str(r3.get("notes", "")),
+          f"{r2.get('entry_time')!r} {r3.get('entry_time')!r} {r2.get('notes')!r}")
 
     print("=" * 60)
     if PROBLEMS:

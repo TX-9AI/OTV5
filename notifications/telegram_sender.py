@@ -1,5 +1,16 @@
 """
-notifications/telegram_sender.py  v5.1
+notifications/telegram_sender.py  v5.2
+v5.2  2026-11-14  OTV5 r112 (AM.5) — AN ALERT STILL QUEUED AT EXIT IS SPOOLED TO DISK AND SENT AT THE NEXT START, NOT
+      LOST. Measured Fri 2026-11-13 17:15-17:29 ET: 22 alerts on 12 boxes were "NOT delivered at exit" when the study
+      dispatch stopped bots seconds after waking them; in RTH the same 5 s drain would drop the "position open /
+      stopping" page. drain(at_exit=True) now appends every left-over alert's TEXT (never the token or the chat id; they
+      are read from the environment again at the next start) to the spool (OT_ALERT_SPOOL, default
+      data/alert_spool.jsonl beside the trades store - config.DB_PATH, as the cap stamp - git-ignored) and logs ERROR "... SPOOLED for the next start". The first
+      TelegramSender of the next process (enabled) moves the spool aside atomically and queues each alert again with
+      the prefix "HELD FROM BEFORE A RESTART (queued HH:MM ET):"; an alert older than SPOOL_MAX_AGE_S (12 h) is dropped
+      at ERROR instead, and a still-undelivered resend is spooled again at that process's exit. spool_text(text) is the
+      same append for a caller whose own send path failed (execution/order_guard v5.1, AM.4). The operator,
+      2026-11-14: "Let's fix the top 10 today" (amnesty bucket AM.5). Gate tests/check_telegram_queue.py v5.2 T13-T16.
 v5.1  2026-10-26  (TG.1) — TELEGRAM NEVER BLOCKS THE TRADING LOOP, AND A FAILED ALERT IS RETRIED, NOT LOST.
       📊 MEASURED 2026-10-26, the first OTV5 paper session: 14 boxes share one bot and one chat, and at the open burst
       70 of 95 alerts failed between 09:15 and 10:00 ET — "Read timed out. (read timeout=10)" and HTTP 429 "Too Many
@@ -65,6 +76,89 @@ RETRY_AFTER_CAP_S      = 60      # never trust a retry_after past a minute; the 
 BACKOFF_START_S        = 2       # timeout / connection error / 5xx: 2, 4, 8 ... capped
 BACKOFF_CAP_S          = 60
 EXIT_DRAIN_S           = 5       # atexit: a bounded drain so a shutdown alert usually gets out
+SPOOL_MAX_AGE_S        = 12 * 3600   # r112 (AM.5): a spooled alert older than this is dropped at the next start, at ERROR
+HELD_PREFIX            = "HELD FROM BEFORE A RESTART"
+
+
+def spool_path() -> str:
+    """r112 (AM.5): where undelivered alerts wait for the next start. OT_ALERT_SPOOL, else data/alert_spool.jsonl BESIDE
+    THE TRADES STORE (config.DB_PATH, as the cap stamp is), so a checker on a scratch OT_TRADES_DB never spools into the
+    box's real data/ and the next bot start never resends a checker's alert."""
+    p = os.environ.get("OT_ALERT_SPOOL", "").strip()
+    if p:
+        return p
+    try:
+        import config as _c
+        base = os.path.dirname(os.path.abspath(_c.DB_PATH))
+    except Exception:                                               # noqa: BLE001
+        base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    return os.path.join(base, "data", "alert_spool.jsonl")
+
+
+def spool_text(text: str, enq: float = 0.0, why: str = "") -> bool:
+    """Append one alert's TEXT to the spool (no token, no chat id). True when written. Never raises."""
+    try:
+        import json as _json
+        path = spool_path()
+        os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+        with open(path, "a") as f:
+            f.write(_json.dumps({"text": str(text), "enq": float(enq or time.time()), "why": str(why or "")[:120]}) + "\n")
+        return True
+    except Exception as e:                                          # noqa: BLE001
+        logger.error("Telegram spool write FAILED (%s: %s) - alert lost: %s", type(e).__name__, e, str(text)[:80])
+        return False
+
+
+_RESENT = {"done": False}
+
+
+def _resend_spool(sender) -> int:
+    """At the first enabled sender of a process: queue every spooled alert again, once. -> how many were queued."""
+    if _RESENT["done"]:
+        return 0
+    _RESENT["done"] = True
+    path = spool_path()
+    if not os.path.exists(path):
+        return 0
+    import json as _json
+    work = f"{path}.sending.{os.getpid()}"
+    try:
+        os.replace(path, work)                                      # atomic: a second process sees no spool
+    except Exception as e:                                          # noqa: BLE001
+        logger.error("Telegram spool unreadable (%s) - held alerts not resent", e)
+        return 0
+    n = 0
+    try:
+        with open(work) as f:
+            lines = [ln for ln in f.read().splitlines() if ln.strip()]
+        for ln in lines:
+            try:
+                row = _json.loads(ln)
+                text, enq = str(row.get("text", "")), float(row.get("enq") or 0.0)
+            except Exception:                                       # noqa: BLE001
+                logger.error("Telegram spool: an unreadable line was dropped: %s", ln[:80])
+                continue
+            age = time.time() - enq
+            if age > float(SPOOL_MAX_AGE_S):
+                logger.error("Telegram spool: alert held %.1f h (over %.0f h) DROPPED, not resent: %s",
+                             age / 3600, float(SPOOL_MAX_AGE_S) / 3600, text[:80])
+                continue
+            try:
+                import datetime as _d
+                from zoneinfo import ZoneInfo as _Z
+                hhmm = _d.datetime.fromtimestamp(enq, _Z("America/New_York")).strftime("%H:%M ET")
+            except Exception:                                       # noqa: BLE001
+                hhmm = "earlier"
+            if sender.send(f"{HELD_PREFIX} (queued {hhmm}):\n{text}"):
+                n += 1
+        if n:
+            logger.warning("Telegram: %d alert(s) held from before a restart queued again", n)
+    finally:
+        try:
+            os.remove(work)
+        except Exception:                                           # noqa: BLE001
+            pass
+    return n
 
 
 def _scrub(text: str, token: str) -> str:
@@ -164,7 +258,9 @@ class _Courier:
                 self._q.clear()
         n = len(left_over)
         if n and at_exit:
-            logger.error("Telegram: %d alert(s) NOT delivered at exit (%.0fs drain spent)", n, timeout)
+            spooled = sum(1 for it in left_over if spool_text(it.text, it.enq, "undelivered at exit"))
+            logger.error("Telegram: %d alert(s) NOT delivered at exit (%.0fs drain spent); %d SPOOLED for the next "
+                         "start (%s)", n, timeout, spooled, spool_path())
             for it in left_over:
                 _finish(it, False, "undelivered at exit")
         return n == 0
@@ -287,6 +383,11 @@ class TelegramSender:
         self._chat_id  = get_telegram_chat_id()
         if not self._enabled:
             logger.info("Telegram alerts disabled — token or chat ID not configured")
+        else:
+            try:
+                _resend_spool(self)                                 # r112 (AM.5): alerts held from before a restart
+            except Exception as e:                                  # noqa: BLE001
+                logger.error("Telegram spool resend failed: %s", e)
 
     def send(self, message: str, on_result=None) -> bool:
         """QUEUE the message for the courier and return at once. -> True when it was

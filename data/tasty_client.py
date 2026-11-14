@@ -1,5 +1,9 @@
 """
-data/tasty_client.py  v5.1
+data/tasty_client.py  v5.2
+v5.2  2026-11-14  OTV5 r112 (AM.6) — get_open_option_positions also returns opened_at: the broker position's created_at
+      (ISO, UTC) or "" when the SDK has none, so an adopted position keeps the time it was opened, not the reconcile
+      time (execution/broker_reconcile v5.2). Nothing else changes. The operator, 2026-11-14: "Let's fix the top 10
+      today" (amnesty bucket AM.6).
 v5.1  2026-10-25  OTV5 r20 (LIVE.2) — get_account() NO LONGER DEADLOCKS. It held _session_lock (a plain, non-reentrant
       threading.Lock) and, with no account cached, called get_session(), which takes the same lock: the first call blocked
       forever, silently. Every LIVE order path calls it (entry_engine after its paper branch, main.py order confirm and
@@ -152,6 +156,24 @@ def _underlying_family(u: str) -> set:
     return {"SPX", "SPXW"} if u in ("SPX", "SPXW") else {u}
 
 
+def _iso_or_blank(v) -> str:
+    """r112 (AM.6): a broker timestamp as UTC ISO, or "" when absent or unreadable. Never raises."""
+    try:
+        if v is None or v == "":
+            return ""
+        import datetime as _d
+        if isinstance(v, _d.datetime):
+            if v.tzinfo is None:
+                v = v.replace(tzinfo=_d.timezone.utc)
+            return v.astimezone(_d.timezone.utc).isoformat()
+        x = _d.datetime.fromisoformat(str(v).replace("Z", "+00:00"))
+        if x.tzinfo is None:
+            x = x.replace(tzinfo=_d.timezone.utc)
+        return x.astimezone(_d.timezone.utc).isoformat()
+    except Exception:                                           # noqa: BLE001
+        return ""
+
+
 def get_open_option_positions(underlying: str = None) -> list:
     """
     LIVE broker option positions, normalized for reconciliation (see
@@ -196,6 +218,7 @@ def get_open_option_positions(underlying: str = None) -> list:
                 "quantity":           qty,
                 "direction":          direction,             # 'Long' / 'Short'
                 "average_open_price": float(getattr(p, "average_open_price", 0) or 0),
+                "opened_at":          _iso_or_blank(getattr(p, "created_at", None)),   # r112 (AM.6)
             })
         except Exception as e:
             logger.error(

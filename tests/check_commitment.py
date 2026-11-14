@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""tests/check_commitment.py — v5.0
+"""tests/check_commitment.py — v5.1
+v5.1  2026-11-14  OTV5 r112 (AM.3) — G4 flips: a LIVE box with mode trade REFUSES an ABANDONED side (row BLOCKED, effective=trade, paper=false), exactly as paper does (G1). RED on r108 (it placed, effective=log).
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 WE ENTER ON COMMITMENT (COMMIT.1 / COMMIT.2 / COMMIT.3, OTV4TEST r272).
 
@@ -21,7 +22,7 @@ Every case's fixture fires when the gate has no reason to refuse it (C0-style co
   G1  ABANDONED + trade + paper -> NOT placed, row BLOCKED with the would-be order (contracts)
   G2  ABANDONED + log -> placed, row would_block
   G3  off -> placed, no row
-  G4  LIVE box + trade -> placed (refused), row effective=log
+  G4  LIVE box + trade -> NOT placed, row BLOCKED effective=trade paper=false (r112 AM.3: live refuses as paper)
   G5  COMMITTED -> placed          G6  NEUTRAL -> placed
   G7  unreadable (state None / err) -> placed, row names why
   G7b no commitment key on ctx (not a tick, e.g. another checker) -> placed, NO row
@@ -266,9 +267,10 @@ def g3():
 
 
 guard("G3 off -> placed, no row", g3)
-guard("G4 LIVE + trade -> placed, row effective=log",
-      lambda: bool(_fire(_sig(), _state("COMMITTED", "ABANDONED"), paper=False))
-      and _last_gate().get("effective") == "log")
+guard("G4 LIVE + trade -> NOT placed, row BLOCKED effective=trade paper=false (AM.3)",
+      lambda: (not _fire(_sig(), _state("COMMITTED", "ABANDONED"), paper=False))
+      and _last_gate().get("effective") == "trade" and _last_gate().get("decision") == "BLOCKED"
+      and _last_gate().get("paper") is False, lambda: json.dumps(_last_gate()))
 guard("G5 COMMITTED -> placed", lambda: bool(_fire(_sig(), _state("ABANDONED", "COMMITTED"))))
 guard("G6 NEUTRAL -> placed", lambda: bool(_fire(_sig(), _state("ABANDONED", "NEUTRAL"))))
 guard("G7 unreadable -> placed, row names why",

@@ -1,5 +1,10 @@
 """
-execution/order_guard.py  v5.0
+execution/order_guard.py  v5.1
+v5.1  2026-11-14  OTV5 r112 (AM.4) — THE SUSPECT-ORDER PAGE NO LONGER SWALLOWS ITS OWN FAILURE. _page() was
+      try: send except: pass, so when the alert manager raised, the one page that says "a live order may be working"
+      vanished without a line. A failure now logs ERROR with the page's text and spools it (notifications.
+      telegram_sender.spool_text, AM.5), so the next start sends it. The operator, 2026-11-14: "Let's fix the top 10
+      today" (amnesty bucket AM.4). Gate tests/check_telegram_queue.py v5.2 T16.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.1  2026-10-20  r495 / B4 — A RESTART CANCELS ITS INSTRUMENT'S LEFTOVER WORKING ORDERS BEFORE IT
       POSTS. The suspects below are in memory, and B1 adopts POSITIONS, not working orders, so a
@@ -57,11 +62,17 @@ _BOOT: dict = {"state": None, "why": "", "paged": False}   # r495 B4: None = not
 
 
 def _page(text: str) -> None:
+    """Never raises. r112 (AM.4): a failed page is logged at ERROR and spooled for the next start, never silent."""
     try:
         from notifications.alert_manager import get_alert_manager
         get_alert_manager()._send(text)
-    except Exception:                                          # noqa: BLE001
-        pass
+    except Exception as exc:                                   # noqa: BLE001
+        logger.error("[guard] PAGE FAILED (%s: %s) - spooled for the next start: %s", type(exc).__name__, exc, text)
+        try:
+            from notifications.telegram_sender import spool_text
+            spool_text(text, why=f"order_guard page failed: {type(exc).__name__}")
+        except Exception as exc2:                              # noqa: BLE001
+            logger.error("[guard] spool of the failed page FAILED too (%s): %s", exc2, text)
 
 
 def _status_name(placed) -> str:

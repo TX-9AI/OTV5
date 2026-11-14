@@ -1,5 +1,6 @@
 """
-config.py  v5.18
+config.py  v5.19
+v5.19  2026-11-14  OTV5 r112 (AM.2 / LIVE.6) — LIVE_STOP_AT_BID_AFTER = 2 and LIVE_STOP_MARKET_AFTER = 3: a live stop that has not filled at the mark steps to the bid, then crosses (execution/exit_engine v5.19). Constants, no env key. Paper unchanged. The operator, 2026-11-14: "Let's fix the top 10 today" (amnesty bucket AM.2).
 v5.18  2026-11-14  OTV5 r110 (WS.3 TRIM) — BREAKOUT LEAVES THE ROSTER. ENTRY_WINDOWS loses "Breakout" (three live setups and PARK remain); its window moves to BREAKOUT_WINDOW = ((9, 35), BREAKOUT_END), read only by the dormant strategy's own code (BREAKOUT_EARLIEST_ET / BREAKOUT_LATEST_ET), and its admission row (execution/position_manager v5.36), so the code stays importable for a revisit. strategy/plan_state v5.8 makes it DORMANT with no switch, so it is never asked and writes nothing. Every other value is unchanged. The operator, 2026-11-14: "Concur" (WS.3, Breakout: the fitted gates failed blind; window EV -$11.73/trade [-59.33, +41.68], n=120, fees $1,572.62).
 v5.17  2026-11-09  OTV5 r103 (RETIRE.5 step 2) — THE GEX PIN BUTTERFLY'S KEYS GO: ENTRY_WINDOWS loses GEXPinButterfly; GEX_BUTTERFLY_ENABLED, HOLD_TO_CLOSE_STRATEGIES, every GEX_BFLY_* dial (PIN_CONC_MIN, EM_MIN/MAX_FRAC, SMOOTH_WINDOW, PERSIST_TICKS, VWAP_BAND_EM_FRAC, EARLIEST_ET, LATEST_ET, WING_EM_FRAC and its OT_GEX_BFLY_WING_EM_FRAC read), the debit gates (BUTTERFLY_MAX/MIN_DEBIT_PCT_WIDTH, _HICONV, BUTTERFLY_DEBIT_CEILING, BUTTERFLY_DISC_CONV_LO/HI and their OT_BFLY_* reads), BUTTERFLY_ENTRY_START_ET, BUTTERFLY_ENTRY_CUTOFF_ET (it gated nothing since r209), BUTTERFLY_WING_SPX/QQQ, BUTTERFLY_GEX_PIN_PROXIMITY_MULT and VIX_BUTTERFLY_HALF_SIZE are deleted. KEPT: BUTTERFLY_STOP_LOSS_PCT / _TP_PCT / _MAX_HOLD_MIN (exit_engine prices any butterfly record still on a book) and VIX_BUTTERFLY_DISABLE (macro_data's regime and the condor read it). Every live value is identical (diffed). The operator, 2026-11-08: "I concur on both, in that order".
 v5.16  2026-11-08  OTV5 r97 (RETIRE.5) — THE GEX PIN BUTTERFLY IS CUT: GEX_BUTTERFLY_ENABLED is False in code and OT_GEX_BUTTERFLY no longer turns it on. The operator, 2026-11-08: "I agree that our GEX fly may be on the chopping block ... I'm considering cutting it starting tomorrow" / "I concur on both, in that order" (no new fly from 11-09; the code is removed after the 11-09 close). Evidence: window EV -$6,482 [-19.2k, +3.2k], lunch entries lose, no fly since 11-03 (research r2). Its exits and management are untouched.
@@ -2578,6 +2579,12 @@ LIVE_FILL_POLL_SECONDS      = float(os.environ.get("OT_LIVE_FILL_POLL_SECONDS", 
 # Total seconds to wait for a fill before cancelling and handing the position
 # back to the caller's retry loop (15:45→16:00 hard-close retries + paging).
 LIVE_FILL_DEADLINE_SECONDS  = float(os.environ.get("OT_LIVE_FILL_DEADLINE_SECONDS", "8"))   # r295: 30 -> 8, mirror of otv4 r474 (F1); the operator, 10-05: "get it down to eight seconds"
+# r112 (AM.2 / LIVE.6) — A LIVE STOP ESCALATES. A floor-policy close (hard_stop, stop_hit, structure_stop, ...) of a
+# single leg posts at the mark; after LIVE_STOP_AT_BID_AFTER unfilled passes (each ~8 s deadline + the cancel grace)
+# it posts AT THE BID (a sale; the ask for a buy-back), and after LIVE_STOP_MARKET_AFTER it crosses with a MARKET order,
+# as the 15:55 cross does. Constants, no key: "No study toggles in config" (the operator, 10-31). Paper never reads them.
+LIVE_STOP_AT_BID_AFTER      = 2
+LIVE_STOP_MARKET_AFTER      = 3
 # Marketable-limit buffer ($/share THROUGH the mark) for multi-leg closes.
 # tastytrade rejects MARKET orders on spreads, so closes go out as aggressive
 # limits: vertical debit = min(mark + buffer, spread width); butterfly credit

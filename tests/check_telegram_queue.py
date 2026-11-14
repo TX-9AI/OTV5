@@ -1,5 +1,11 @@
 #!/usr/bin/env python3
-"""tests/check_telegram_queue.py — v5.1
+"""tests/check_telegram_queue.py — v5.2
+v5.2  2026-11-14  OTV5 r112 (AM.4 + AM.5) — AN ALERT LEFT AT EXIT IS SPOOLED AND SENT AT THE NEXT START. The spool is a
+      temp file here (OT_ALERT_SPOOL, set before the module loads; the children inherit it). T13 T9b's undelivered
+      alert is in the spool, text only (no token, no chat id); T14 the next process's first enabled sender queues it
+      again with the HELD prefix and delivers it, and the spool is gone; T15 a spooled alert older than SPOOL_MAX_AGE_S
+      is dropped at ERROR, not sent; T16 order_guard's suspect-order page, when the alert manager raises, logs ERROR and
+      spools the text. Born red on r108: T13 T14 T15 T16 (nothing spooled; the page failure was silent).
 v5.1  2026-11-08  OTV5 r84 (VENV.1) — a bare run (control's /usr/bin/python3 3.14, no requests) stops with one
       ModuleNotFoundError line naming the venv to use, not a traceback: utils.venv_guard.require_venv before the first
       third-party import. Under the venv nothing changes.
@@ -27,6 +33,13 @@ use time, so the 15-minute deadline and the backoff are shrunk here instead of s
   T11 an on_result that RAISES is logged at ERROR and the courier keeps delivering
   T12 a 400 "can't parse entities" is resent ONCE as plain text (no parse_mode, entities unescaped) and delivered;
       T12b if the plain resend fails too, the alert is dropped at ERROR after exactly two POSTs
+  T13 the T9b child's undelivered alert is SPOOLED (text only: no token, no chat id)                       (r112 AM.5)
+  T14 the next process's first enabled sender queues it again ("HELD FROM BEFORE A RESTART") and delivers it;
+      the spool file is gone afterwards                                                                      (r112 AM.5)
+  T15 a spooled alert older than SPOOL_MAX_AGE_S is DROPPED at ERROR at the next start, never sent         (r112 AM.5)
+  T16 order_guard._page with a raising alert manager logs ERROR and spools the page's text                (r112 AM.4)
+  T17 with OT_ALERT_SPOOL unset the spool sits beside the trades store (config.DB_PATH), never a box's real data/ for a
+      checker on a scratch OT_TRADES_DB                                                                      (r112 AM.5)
   T9  at interpreter exit the queue is drained: a child process that queues one alert (POST takes 0.5 s) and exits
       normally still delivers it; T9b a child whose POST always times out still exits, within the 5 s drain + slack
 
@@ -65,6 +78,10 @@ _watchdog = threading.Timer(BUDGET_S, _bail)
 _watchdog.daemon = True
 _watchdog.start()
 
+import tempfile                                                     # noqa: E402
+_SPOOL_DIR = tempfile.mkdtemp(prefix="check_tg_spool_")
+SPOOL = os.path.join(_SPOOL_DIR, "alert_spool.jsonl")
+os.environ["OT_ALERT_SPOOL"] = SPOOL                                # r112: never the repo's data/ (children inherit it)
 import requests                                                     # noqa: E402
 import notifications.telegram_sender as TS                          # noqa: E402
 
@@ -183,6 +200,36 @@ except TypeError:
     snd.send("child shutdown alert")
 sys.exit(0)
 """
+
+
+# r112 (AM.5): a fresh process with the spool present - its first enabled sender resends what is held.
+_CHILD2 = r"""
+import sys, time, logging
+logging.basicConfig(level=logging.INFO, stream=sys.stdout, format="LOG %%(levelname)s %%(message)s")
+sys.path.insert(0, %r)
+import requests, notifications.telegram_sender as TS
+class R:
+    status_code = 200
+    text = "ok"
+def post(url, json=None, timeout=None, **k):
+    print("POSTED " + repr((json or {}).get("text", "")), flush=True)
+    return R()
+TS.requests.post = post
+TS.telegram_configured = lambda: True
+TS.get_telegram_token = lambda: "T0K"
+TS.get_telegram_chat_id = lambda: "C1"
+snd = TS.TelegramSender()
+TS.flush(3)
+sys.exit(0)
+"""
+
+
+def _spool_rows():
+    import json as _j
+    try:
+        return [_j.loads(x) for x in open(SPOOL).read().splitlines() if x.strip()]
+    except FileNotFoundError:
+        return []
 
 
 def main():
@@ -370,6 +417,60 @@ def main():
         else:
             ck("T9b a child whose POST always times out still exits, bounded by the drain",
                not got and rc == 0 and dt < 12, f"rc={rc} t={dt:.1f}s")
+
+    # ── T13-T16 (r112, AM.4 + AM.5): the spool ──────────────────────────────
+    rows = _spool_rows()
+    raw = open(SPOOL).read() if os.path.exists(SPOOL) else ""
+    ck("T13 the T9b child's undelivered alert is SPOOLED, text only (no token, no chat id)",
+       any(r.get("text") == "child shutdown alert" for r in rows) and "T0K" not in raw and '"C1"' not in raw,
+       f"rows={rows!r}")
+    p = subprocess.run([sys.executable, "-c", _CHILD2 % (ROOT,)], capture_output=True, text=True, timeout=20,
+                       env=dict(os.environ))
+    ck("T14 the next start queues it again with the HELD prefix and delivers it; the spool is gone",
+       "POSTED" in p.stdout and "HELD FROM BEFORE A RESTART" in p.stdout and "child shutdown alert" in p.stdout
+       and not os.path.exists(SPOOL), f"out={p.stdout.strip()[-200:]!r} spool_left={os.path.exists(SPOOL)}")
+    import json as _j
+    with open(SPOOL, "w") as f:
+        f.write(_j.dumps({"text": "T15 stale alert", "enq": time.time() - 13 * 3600, "why": "test"}) + "\n")
+    p = subprocess.run([sys.executable, "-c", _CHILD2 % (ROOT,)], capture_output=True, text=True, timeout=20,
+                       env=dict(os.environ))
+    ck("T15 a spooled alert older than SPOOL_MAX_AGE_S is DROPPED at ERROR, never sent",
+       "POSTED" not in p.stdout and "LOG ERROR" in p.stdout and "DROPPED" in p.stdout and not os.path.exists(SPOOL),
+       f"out={p.stdout.strip()[-200:]!r}")
+    try:
+        import notifications.alert_manager as _am
+        from execution import order_guard as _og
+        saved = _am.get_alert_manager
+
+        def _boom():
+            raise RuntimeError("alert manager down")
+        _am.get_alert_manager = _boom
+        caps = []
+
+        class _H(logging.Handler):
+            def emit(self, rec):
+                caps.append((rec.levelno, rec.getMessage()))
+        h = _H()
+        logging.getLogger("execution.order_guard").addHandler(h)
+        try:
+            _og._page("T16 suspect order page")
+        finally:
+            _am.get_alert_manager = saved
+            logging.getLogger("execution.order_guard").removeHandler(h)
+        ck("T16 order_guard's page with a raising alert manager logs ERROR and spools the text",
+           any(r.get("text") == "T16 suspect order page" for r in _spool_rows())
+           and any(lv >= logging.ERROR and "PAGE FAILED" in m for lv, m in caps), f"caps={caps!r}")
+    except ImportError as e:
+        ck("T16 order_guard's page (import)", False, f"{e}")
+
+    p17 = subprocess.run([sys.executable, "-c",
+                          "import os,sys; sys.path.insert(0, %r); os.environ.pop('OT_ALERT_SPOOL', None); "
+                          "os.environ['OT_TRADES_DB'] = '/scratch/x/trades.db'; "
+                          "import notifications.telegram_sender as T; print(T.spool_path())" % (ROOT,)],
+                         capture_output=True, text=True, timeout=60, env={k: v for k, v in os.environ.items()
+                                                                           if k != "OT_ALERT_SPOOL"})
+    ck("T17 OT_ALERT_SPOOL unset: the spool sits beside the trades store (scratch OT_TRADES_DB -> scratch data/)",
+       p17.stdout.strip().endswith("/scratch/x/data/alert_spool.jsonl"), f"got {p17.stdout.strip()!r} {p17.stderr[-150:]!r}")
 
     fl = getattr(TS, "flush", None)
     if fl:

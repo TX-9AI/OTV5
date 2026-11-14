@@ -1,5 +1,11 @@
 """
-execution/broker_reconcile.py  v5.1
+execution/broker_reconcile.py  v5.2
+v5.2  2026-11-14  OTV5 r112 (AM.6) — AN ADOPTED POSITION KEEPS THE TIME IT WAS OPENED. _adopt_record stamped
+      entry_time = now (the reconcile), so a late fill adopted minutes after it filled ran every clock keyed on entry
+      (exit_engine's fizzle bars-since-entry, theta bleed's held >= 20 min, the excursion timing) from the adoption.
+      entry_time is now the broker position's opened_at (data/tasty_client v5.2, created_at, UTC ISO); when the broker
+      gives none (or a time in the future) it is the reconcile time as before and the note says so. The operator,
+      2026-11-14: "Let's fix the top 10 today" (amnesty bucket AM.6). Gate tests/check_reconcile_strict.py v5.1 A1-A3.
 v5.1  2026-10-27  OTV5 r46 (PARC.1) — phantom_pnl's credit sign and leg_roles' short/long split also read
       structure.is_credit_vertical(record), the same test position_manager._execute_exit now uses: PARC is a credit
       vertical with is_condor_leg = 0 (the operator, 2026-10-27: "Call it PARC"). Every row already signed is still signed.
@@ -76,6 +82,7 @@ Rules (agreed design):
 """
 
 import logging
+import time
 import uuid
 from dataclasses import dataclass, field
 from typing import List, Dict, Optional
@@ -125,6 +132,23 @@ def parse_occ(symbol: str) -> Optional[dict]:
     }
 
 
+def _opened_at(pos: dict) -> str:
+    """r112 (AM.6): the broker's open time for this position as UTC ISO, or "" (absent, unreadable or in the future)."""
+    try:
+        import datetime as _d
+        v = str(pos.get("opened_at", "") or "").strip()
+        if not v:
+            return ""
+        x = _d.datetime.fromisoformat(v.replace("Z", "+00:00"))
+        if x.tzinfo is None:
+            x = x.replace(tzinfo=_d.timezone.utc)
+        if x.timestamp() > time.time() + 60:
+            return ""
+        return x.astimezone(_d.timezone.utc).isoformat()
+    except Exception:                                           # noqa: BLE001
+        return ""
+
+
 def _adopt_record(pos: dict) -> Optional[dict]:
     """Synthesize a manageable TradeRecord from one normalized broker position.
     `pos` keys: symbol, underlying, quantity, direction ('Long'/'Short'),
@@ -136,6 +160,7 @@ def _adopt_record(pos: dict) -> Optional[dict]:
     is_short = str(pos.get("direction", "")).lower().startswith("short")
     entry    = float(pos.get("average_open_price", 0) or 0)
     contracts = abs(int(float(pos.get("quantity", 0) or 0)))
+    opened = _opened_at(pos)                                    # r112 (AM.6)
     # Stop at the same max-loss degree our normal stops respect, sign-correct:
     # a long loses as premium falls, a short as premium rises.
     if is_short:
@@ -158,8 +183,10 @@ def _adopt_record(pos: dict) -> Optional[dict]:
         "option_symbol":     pos.get("symbol", ""),
         "paper_trade":       0,          # adoption only happens live
         "status":            "open",
-        "entry_time":        ts_for_db(),
-        "notes":             "adopted from broker (no DB plan)",
+        "entry_time":        opened or ts_for_db(),           # r112 (AM.6): the broker's open time when it has one
+        "notes":             ("adopted from broker (no DB plan)" if opened
+                              else "adopted from broker (no DB plan; broker gave no open time - entry_time is the "
+                                   "reconcile time)"),
     }
 
 

@@ -84,6 +84,9 @@ data/SHUTDOWN_CAUSE
 data/CAP_PAGED
 data/CAP_PAGED.tmp
 data/AGENT_STATUS
+# r112 (AM.5) - Telegram alerts undelivered at exit, sent at the next start (and its in-flight rename).
+data/alert_spool.jsonl
+data/alert_spool.jsonl.sending.*
 env/
 ohlc/
 orb_range.json

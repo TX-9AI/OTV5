@@ -1,5 +1,15 @@
 """
-execution/exit_engine.py  v5.18
+execution/exit_engine.py  v5.19
+v5.19  2026-11-14  OTV5 r112 (AM.2 / LIVE.6) — A LIVE STOP NO LONGER CHASES THE MARK DOWN UNFILLED. A floor-policy close
+      (hard_stop / stop_hit / structure_stop / adopted_stop / ...) of a SINGLE LEG re-posted LIMIT-AT-MARK every pass
+      and never escalated before 15:55: in a fast squeeze each limit sat above the market and a "-20% stop" could fill at
+      -40% or not at all. _resolve_dead_order counts each unfilled (or partial) pass on the record (_stop_unfilled);
+      _close_single_leg posts at the mark for the first config.LIVE_STOP_AT_BID_AFTER (2) passes, then AT THE BID (the
+      ask for a buy-back; no fresh quote -> market), and from config.LIVE_STOP_MARKET_AFTER (3) crosses with a MARKET
+      order, as the 15:55 cross does, paging once when it escalates. Targets, trails and every non-floor close keep the
+      walk; verticals (the dormant condor) are unchanged. The count is in memory: a restart starts again at the mark.
+      Paper never places. The operator, 2026-11-14: "Let's fix the top 10 today" (amnesty bucket AM.2). Gate
+      tests/check_live_stop_escalation.py.
 v5.18  2026-11-11  OTV5 r107 (RETIRE.5 follow-up) — THE GENERIC BUTTERFLY EXIT GOES with the fly strategy removed at r103: the evaluate() fly route and _evaluate_butterfly, the fly EOD legs, the _close_order fly route and _close_butterfly, and the fly arm of _net_fill_price (with the unread BUTTERFLY_MAX_HOLD_MIN import). No butterfly can be opened since this revision and none is open (no overnight positions), so nothing reaches them. Runaway, Hunt, Breakout, PARK and the tent and vertical routes decide and close exactly as before. The operator, 2026-11-07: "Running dead code and logging dead code activity is unnecessary drag."
 v5.17  2026-11-09  OTV5 r103 (RETIRE.5 step 2) — THE GEX PIN BUTTERFLY IS REMOVED: r73's two HOLD_TO_CLOSE_STRATEGIES reads go (the fly was the only member; config no longer carries the key), so evaluate() asks _decay_read and _evaluate_butterfly checks its hard stop exactly as for any record. KEPT, said plainly: _evaluate_butterfly, _close_butterfly and the multi-leg pricing stay - they close any butterfly record still on a book (the startup sweep, the reconcile, the 15:45 flatten); no live strategy opens one. The live setups route and decide exactly as before. The operator, 2026-11-08: "I concur on both, in that order".
 v5.16  2026-11-08  OTV5 r88 (RETIRE.3) — the TC.6 branch (the 15%-of-credit stop and the breach backstop, answering only a TrendCreditSpread row) and its TCS_STOP_PCT_OF_CREDIT / is_trend_participation imports go with the TCS. The operator, 2026-11-08: "Delete" (the TCS shadow, which never fired: its own gates declined every candidate 11-02..11-06).
@@ -3685,7 +3695,10 @@ class ExitEngine:
             record["_live_exit_fills"] = prior
             if sum(q for q, _ in prior) >= total:
                 return self._book_from_fills(record, prior, total, order_id)
+            record["_stop_unfilled"] = int(record.get("_stop_unfilled") or 0) + 1   # r112 (AM.2): a partial escalates too
             return self._partial_result(record, prior, total, order_id, trade_id)
+        # r112 (AM.2): one more unfilled pass - a floor-policy stop escalates on it (_close_single_leg).
+        record["_stop_unfilled"] = int(record.get("_stop_unfilled") or 0) + 1
         # r105 — the rung did not fill: refuse it so the next tick posts the
         # NEXT rung rather than re-offering a price the book already declined.
         try:
@@ -4045,6 +4058,39 @@ class ExitEngine:
             f"nothing posted before the cross; retrying each tick, position stays OPEN")
         return True
 
+    def _stop_escalation(self, record: TradeRecord, reason: str, side: str):
+        """r112 (AM.2 / LIVE.6) — None (post as before), ("touch", price, why) or ("market", None, why) for a LIVE
+        single-leg close. Only a floor-policy close (a stop) escalates: after config.LIVE_STOP_AT_BID_AFTER unfilled
+        passes it posts AT THE BID (a sale) / THE ASK (a buy-back); after config.LIVE_STOP_MARKET_AFTER, or at the
+        touch step with no fresh quote, it crosses. Pages once per trade when it escalates. Never raises."""
+        try:
+            if self._exit_policy(record, reason) != "floor":
+                return None
+            n = int(record.get("_stop_unfilled") or 0)
+            at_bid = int(getattr(_cfg, "LIVE_STOP_AT_BID_AFTER", 2))
+            at_mkt = int(getattr(_cfg, "LIVE_STOP_MARKET_AFTER", 3))
+            if n < at_bid:
+                return None
+            tid = str(record.get("trade_id", ""))
+            if n >= at_mkt:
+                why = f"stop escalation: {n} unfilled passes - MARKET"
+                self._alert_live_exit_once(tid, "stop-market",
+                                           f"LIVE stop {tid[:8]} ({reason}): {n} passes unfilled - crossing with a "
+                                           f"MARKET order (LIVE.6)")
+                return ("market", None, why)
+            bid, ask = self._exit_quote(record)
+            touch = bid if side == "sell" else ask
+            if not touch or touch <= 0:
+                why = f"stop escalation: {n} unfilled passes, no fresh {('bid' if side == 'sell' else 'ask')} - MARKET"
+                self._alert_live_exit_once(tid, "stop-market", f"LIVE stop {tid[:8]} ({reason}): {why} (LIVE.6)")
+                return ("market", None, why)
+            why = f"stop escalation: {n} unfilled passes - at the {('bid' if side == 'sell' else 'ask')} {touch:.2f}"
+            self._alert_live_exit_once(tid, "stop-touch", f"LIVE stop {tid[:8]} ({reason}): {why} (LIVE.6)")
+            return ("touch", float(touch), why)
+        except Exception as exc:                               # noqa: BLE001
+            logger.warning("[ladder] stop escalation unreadable (%s) - posting as before", exc)
+            return None
+
     def _close_single_leg(self, session, account, record, contracts,
                           mark_price: Optional[float] = None,
                           force_market: bool = False, reason: str = ""):
@@ -4080,6 +4126,11 @@ class ExitEngine:
                 f"retrying each tick, position stays OPEN")
             return None
         record.pop("_exit_nomark_hold", None)
+        _side = "buy" if action == OrderAction.BUY_TO_CLOSE else "sell"
+        # r112 (AM.2 / LIVE.6): a floor-policy stop that has gone unfilled steps to the bid, then crosses.
+        _esc = self._stop_escalation(record, reason, _side)
+        if _esc is not None and _esc[0] == "market":
+            force_market = True
         if force_market or _no_mark:
             # the end-of-day cross, or no mark at/after it — cross and be done.
             order = NewOrder(
@@ -4087,7 +4138,8 @@ class ExitEngine:
                 order_type    = OrderType.MARKET,   # single-leg market is accepted
                 legs          = [leg],
             )
-            why = "hard-close cross" if force_market else "no mark, at/after the cross"
+            why = (_esc[2] if _esc is not None and _esc[0] == "market"
+                   else ("hard-close cross" if force_market else "no mark, at/after the cross"))
             return self._place(session, account, order,
                                f"Single-leg close (MARKET — {why})")
         tick  = self._tick_for(record)
@@ -4097,8 +4149,10 @@ class ExitEngine:
         # 🔴 r470 / BBK.1 — the side FOLLOWS THE ACTION. This was the literal
         # "sell", so an adopted short's BUY_TO_CLOSE walked down from the ask and
         # snapped up: a buy-back paying above its mark.
-        _side = "buy" if action == OrderAction.BUY_TO_CLOSE else "sell"
-        _lim, _why = self._exit_limit(record, reason, mark_price, _side, "single")
+        if _esc is not None and _esc[0] == "touch":
+            _lim, _why = _esc[1], _esc[2]
+        else:
+            _lim, _why = self._exit_limit(record, reason, mark_price, _side, "single")
         limit = self._round_to_tick(_lim, record, single_leg=True)   # TICK.1
         record["_exit_last_limit"] = limit
         logger.info("[ladder] single CLOSE %s @ %.2f — %s",
