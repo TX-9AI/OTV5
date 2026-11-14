@@ -1,5 +1,7 @@
 """
-analysis/orb_engine.py  v5.3
+analysis/orb_engine.py  v5.4
+v5.4  2026-11-14  OTV5 r118 (HYG.23) — COMMENTS ONLY: two notes named resting_orders and main._orb_offer_working as live; both are
+      deleted (the standing-offer store, no writer since r76). THE ENGINE IS UNCHANGED (AST identical to r117).
 v5.3  2026-11-08  OTV5 r76 (RETIRE.1) — is_confirmed (no caller anywhere) is removed. THE ENGINE IS UNCHANGED: every state, transition and reader Runaway, Breakout and Hunt use is byte-identical. The operator, 2026-11-07: "Running dead code and logging dead code activity is unnecessary drag. Yes, I want all of those things fixed."
 v5.2  2026-10-30  OTV5 r61 (ORB.10) — A CONFIRMATION NOBODY CAN TRADE IS RELEASED, SO THE ENGINE KEEPS WATCHING. ORBStrategy
       is retired (DORMANT since OTV4TEST r187) but this engine still runs for RunawayContinuation, which takes its
@@ -639,8 +641,8 @@ class ORBData:
     fifty_pending:      bool  = False
     fifty_accepted:     bool  = False
     # 🔴 r228 — WHERE PRICE CLOSED, RECORDED PER TICK. `notify_position_closed`
-    # has no price in scope (its two callers — position_manager:719 and
-    # resting_orders:571 — pass none), and the operator's rule is explicit:
+    # has no price in scope (its caller, position_manager, passes none; the
+    # other, resting_orders, is deleted r118), and the operator's rule is explicit:
     # stay ARMED **only if price is in that zone when the trade closes**. A
     # CLOSE back inside the range is a RE-ENTRY and terminates the thesis.
     # ⚠️ FROM THE LAST CLOSED BAR, like every other latch in this file — not
@@ -1939,8 +1941,8 @@ class ORBEngine:
         🔑 CALLED FROM THE PLACEMENT SITE, NOT THE FILL SITE, and in both
         modes. A live standing offer that has not filled yet is still an order
         against this setup; waiting for a fill would leave the window in which
-        r195's `_orb_offer_working()` was the only guard — the window that does
-        not exist in paper at all.
+        r195's `_orb_offer_working()` (deleted r118 with the standing-offer
+        store) was the only guard — the window that does not exist in paper at all.
 
         ⚠️ NEVER RAISES and never asserts a state. A latch that refuses to set
         because the engine has moved on would leave the confirmation

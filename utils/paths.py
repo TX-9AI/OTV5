@@ -1,5 +1,7 @@
 """
-utils/paths.py  v5.0
+utils/paths.py  v5.1
+v5.1  2026-11-14  OTV5 r118 (HYG §5.4, HYG.23) — resting_db_path() is deleted with the standing-offer store it resolved
+      (execution/resting_orders.py, no writer since r76). Two store paths remain: the feed and the derived store.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.0  2026-10-03  OTV4TEST r218 (PATH.1) — ONE RESOLVER FOR THE THREE STORE PATHS. The 10-03 audit (C4 / D4): the feed store's
       path was resolved six ways in the bot process - two of them hard-coded ~/options-trader and one read
@@ -42,7 +44,3 @@ def derived_db_path() -> str:
     """The derived store: $OT_DERIVED_DB, else <checkout>/data/derived_store.db."""
     return _resolve("OT_DERIVED_DB", "derived_store.db")
 
-
-def resting_db_path() -> str:
-    """The standing-offer store: $OT_RESTING_DB, else <checkout>/data/resting_orders.db."""
-    return _resolve("OT_RESTING_DB", "resting_orders.db")

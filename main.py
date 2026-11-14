@@ -1,5 +1,6 @@
 """
-main.py  v5.21
+main.py  v5.22
+v5.22  2026-11-14  OTV5 r118 (HYG §5.4, HYG.23) — THE STANDING-OFFER SUPERVISOR IS DELETED. The operator concurred (2026-11-14) on deleting the dead resting-offer entry code: r76 removed its only writer (entry_engine's ORB standing offer), so data/resting_orders.db had no new row since 2026-09-25 (CRM, read-only) and _supervise_offers polled an empty store every tick. _supervise_offers and its call before the has_open_position() split go; _orb_offer_working goes and _orb_release_due asks only the book (no ORB position open), exactly as before on an empty store. execution/resting_orders.py is deleted. No behaviour change.
 v5.21  2026-11-14  OTV5 r117 (HYG §5.3) — DOCSTRING ONLY: _afternoon_debit_blocked's docstring said the cutoff was 11:30; it has been EOD_SCHEDULE["entries_stop"] 15:40 since OTV4TEST r149. The 08-13/08-20 history is kept, marked superseded. No code changes.
 v5.20  2026-11-14  OTV5 (OGAP.1) — OGAP IS ASKED: _attempt_ogap beside _attempt_park in the normal dispatch and the capped branch (cap-exempt; its plan is dormant outside 09:46-10:32 and off the QQQ box), one per session (DB-backed, fails closed); _STRUCTURE_BY_NAME["OGAP"] = long_debit; PIN_EXEMPT gains OGAP (Park's book was measured without the pin gate; the counterfactual row is still written); the sizer is asked on the ASK with OGAP_BUDGET_USD (size_for budget_usd); the Service line adds " · ogap=on|not this symbol". Every other strategy dispatches and sizes exactly as before.
 v5.19  2026-11-14  OTV5 r112 (AM.3) — the Service mode line no longer says "(LIVE: refused - logs only)" after commit_gate=trade: analysis/commitment v5.2 refuses an ABANDONED side on a live box exactly as on paper. The comment at the gate call says so. The operator, 2026-11-14: "Let's fix the top 10 today" (amnesty bucket AM.3).
@@ -2806,8 +2807,8 @@ def _post_credit_vertical(short_contract, long_contract, contracts: int,
 
 def _supervise_credit_remainders(ctx: dict, state: BotState) -> None:
     """Post the next rung for every credit vertical still short of its
-    requested size. r315. CALLED FROM BEFORE THE `has_open_position()` SPLIT,
-    beside `_supervise_offers`, for the same reason that one is: the position
+    requested size. r315. CALLED FROM BEFORE THE `has_open_position()` SPLIT
+    (the shape r195's standing-offer supervisor had, deleted r118): the position
     the remainder belongs to is exactly what puts the box on the manage
     branch, where no entry code runs. Never raises into the loop."""
     try:
@@ -4023,68 +4024,18 @@ def _l1_scores(ctx):
         return None
 
 
-def _orb_offer_working() -> bool:
-    """True when an ORB standing offer is live at the broker right now.
-
-    ⚠️ FAILS CLOSED. An unreadable offer store returns True — better to skip
-    one setup than to place a second order against one we cannot see.
-    """
-    try:
-        from execution import resting_orders as _ro
-        from utils.time_utils import now_et
-        return bool(_ro.working(now_et().date().isoformat(), "ORBStrategy"))
-    except Exception as exc:                                    # noqa: BLE001
-        logger.warning("offer check failed (%s) — treating as WORKING and "
-                       "skipping ORB this tick", exc)
-        return True
-
-
 def _orb_release_due(state) -> bool:
-    """r61 (ORB.10) — True when no ORB trade can own an ORB confirmation: no ORB standing offer is working
-    and no ORB position is open (the ORB trade itself is removed, RETIRE.1). Then the engine is released
-    from OPEN_* (orb_engine.release_unowned) instead of holding it to 15:40, which blinded
-    RunawayContinuation to the opposite break. Fails CLOSED (False): an unreadable offer store or book
-    keeps today's behaviour."""
+    """r61 (ORB.10) — True when no ORB trade can own an ORB confirmation: no ORB position is open (the
+    ORB trade itself is removed, RETIRE.1; r118 HYG.23: the standing-offer store it also asked is deleted,
+    nothing had written it since r76). Then the engine is released from OPEN_* (orb_engine.release_unowned)
+    instead of holding it to 15:40, which blinded RunawayContinuation to the opposite break. Fails CLOSED
+    (False): an unreadable book keeps today's behaviour."""
     try:
-        if _orb_offer_working():
-            return False
         _recs = get_position_manager(getattr(state, "paper_trading", True)).get_open_records()
         return not any("ORB" in str(r.get("strategy") or "") for r in (_recs or []))
     except Exception as exc:                                    # noqa: BLE001
         logger.warning("[orb] release check unreadable (%s) - the engine is not released this tick", exc)
         return False
-
-
-def _supervise_offers(ctx: dict, state: BotState) -> None:
-    """Poll every standing ORB offer, adopt fills, fire the cancel triggers.
-
-    🔑 CALLED FROM BOTH BRANCHES OF THE LOOP, AND THAT IS THE WHOLE POINT. An
-    offer that has not filled has NO trade record, so `has_open_position()` is
-    False and the manage branch never runs for it. Supervising only from the
-    manage branch would leave every unfilled offer watched by nothing — the
-    orphan the module exists to prevent, reintroduced one level up.
-
-    ⚠️ NEVER RAISES INTO THE LOOP. A supervision failure must not stop the bot
-    from trading or managing; it logs and the next tick tries again, with the
-    10-minute broker reconcile underneath as the backstop.
-    """
-    try:
-        from execution import resting_orders as _ro
-        _df = ctx.get("df_1m")
-        _last = None
-        if _df is not None and len(_df) >= 2:
-            from utils.time_utils import closed_pos as _closed_pos     # r44 (BAR.1): by time, was iloc[-2]
-            _last = float(_df.iloc[_closed_pos(_df, now_et())]["close"])
-        _ro.supervise(
-            price=float(ctx.get("price") or 0.0),
-            last_1m_close=_last,
-            eod=is_hard_close_time(),
-            paper=state.paper_trading,
-            adopt=lambda row, n: _ro.adopt_fill(row, n,
-                                                paper=state.paper_trading))
-    except Exception as exc:                                    # noqa: BLE001
-        logger.warning("offer supervision skipped this tick: %s", exc)
-
 
 
 _CHAIN_MISS_SAID: set = set()          # r301 (LOG.1): the rehearsal's chain miss, once per ET date per process
@@ -6098,7 +6049,6 @@ def main_loop(state: BotState):
                 _readiness.assess_all(ctx, ms)
 
             # ── Manage open position ──────────────────────────────────────
-            _supervise_offers(ctx, state)   # r195 — BOTH branches
             _supervise_credit_remainders(ctx, state)   # r315 — BOTH branches
             if pos_mgr.has_open_position():
                 # ── Broken-wing roll: FIRST REFUSAL ───────────────────────

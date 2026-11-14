@@ -1,5 +1,8 @@
 """
-execution/order_guard.py  v5.1
+execution/order_guard.py  v5.2
+v5.2  2026-11-14  OTV5 r118 (HYG §5.4, HYG.23) — _kept_order_ids no longer reads the standing-offer store: execution/resting_orders
+      is deleted (r76 removed its only writer, the ORB standing offer, so the read always returned nothing). It keeps
+      every open row's live_exit_state order ids, as before. No behaviour change.
 v5.1  2026-11-14  OTV5 r112 (AM.4) — THE SUSPECT-ORDER PAGE NO LONGER SWALLOWS ITS OWN FAILURE. _page() was
       try: send except: pass, so when the alert manager raised, the one page that says "a live order may be working"
       vanished without a line. A failure now logs ERROR with the page's text and spools it (notifications.
@@ -121,15 +124,10 @@ def _norm_status(o) -> str:
 
 
 def _kept_order_ids() -> set:
-    """Order ids this box still tracks across a restart: today's WORKING resting offers and
-    every open row's live_exit_state order ids (B3). Raises when the rows are unreadable —
-    the caller then cancels NOTHING and blocks entries."""
+    """Order ids this box still tracks across a restart: every open row's live_exit_state order
+    ids (B3). r118 (HYG.23): the standing-offer store it also read is deleted (no writer since
+    r76). Raises when the rows are unreadable — the caller then cancels NOTHING and blocks entries."""
     keep = set()
-    from execution import resting_orders as _ro
-    from utils.time_utils import now_et
-    for r in _ro.working(now_et().strftime("%Y-%m-%d")):
-        if r.get("order_id"):
-            keep.add(str(r["order_id"]))
     from database.trade_logger import get_trade_logger
     for r in get_trade_logger().get_open_trades():
         raw = r.get("live_exit_state")

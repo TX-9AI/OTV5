@@ -1,4 +1,6 @@
-"""tests/check_db_handles.py — v5.1
+"""tests/check_db_handles.py — v5.2
+v5.2  2026-11-14  OTV5 r118 (HYG.23) — H2 goes with execution/resting_orders.py (deleted: the standing-offer store had no writer
+      since r76), and H6 reads trade_logger only. H1, H3-H5 unchanged.
 v5.1  2026-10-26  OTV5 r38 (HYG.18) — scratch no longer names dir="/var/tmp": mkdtemp honours TMPDIR, which boot_sweep and land.sh point
       at a per-run dir they remove (HYG.14), so a sweep leaves nothing behind (237 dirs had piled up on SOFI). No check changed.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
@@ -15,22 +17,21 @@ v1.0  2026-09-25 — OTV4TEST r143. `with conn:` on a sqlite3 connection COMMITS
       swallowed the error and logged HEARTBEAT_STALE while the heartbeat was 0.4s
       old, which cost a day of looking at the feed.
 
-  THE GC IS DISABLED for H1/H2, because the leak's whole character is that only
+  THE GC IS DISABLED for H1 (and was for the r118-removed H2), because the leak's whole character is that only
   the cyclic collector frees these handles: a check that let it run could pass
   on the broken code by luck of timing.
 
   H1  trade_logger: 150 each of log_entry / update_current_premium /
       get_open_trades / count_today / realized_pnl_today / _get_field hold the
       open handles on the scratch trades.db flat (<= 1)
-  H2  resting_orders: 150 each of record_placement / working (the reader) /
-      note_seen_qty, and a close_out, hold the resting store's handles flat (<= 1)
+  H2  (r118) removed with execution/resting_orders.py (the standing-offer store, no writer since r76)
   H3  behaviour is unchanged: a written premium reads back from a NEW
       connection (committed), and the open trade is returned
   H4  an exception inside `_db()` ROLLS BACK and still closes
   H5  a heartbeat read that RAISES is reported as a read failure with its
       exception text, not as an old heartbeat; an old heartbeat reports its age
-  H6  no `with self._connect() as` / `with _conn() as` statement remains in either
-      module (code lines only - comments that name the old form do not count)
+  H6  no `with self._connect() as` statement remains in trade_logger (r118: resting_orders deleted)
+       (code lines only - comments that name the old form do not count)
 """
 from __future__ import annotations
 
@@ -50,9 +51,7 @@ sys.path.insert(0, _root)
 
 _s = tempfile.mkdtemp(prefix="check_db_handles_")
 TR = os.path.join(_s, "trades.db")
-RE = os.path.join(_s, "resting.db")
 os.environ["OT_TRADES_DB"] = TR
-os.environ["OT_RESTING_DB"] = RE
 os.environ.setdefault("OT_DERIVED_DB", os.path.join(_s, "derived_store.db"))
 os.environ.setdefault("OT_PAPER_TRADING", "1")
 
@@ -112,23 +111,6 @@ try:
     check(f"H1 trade_logger: {N * 6} calls leave the trades.db handles flat",
           after <= max(before, 1), f"open handles {before} -> {after}")
 
-    # ── H2 ────────────────────────────────────────────────────────────────
-    from execution import resting_orders as ro
-    ro.record_placement(order_id="o0", session_date="2026-09-25", strategy="ORBStrategy",
-                        symbol="QQQ", underlying="QQQ", side="call", strike=745.0,
-                        offered_qty=1, offer_price=1.0)
-    before = fds(RE)
-    for i in range(N):
-        ro.record_placement(order_id=f"o{i + 1}", session_date="2026-09-25",
-                            strategy="ORBStrategy", symbol="QQQ", underlying="QQQ",
-                            side="call", strike=745.0, offered_qty=1, offer_price=1.0)
-        ro.working("2026-09-25")                      # the reader
-        ro.note_seen_qty(f"o{i + 1}", 1)              # an update
-    ro.close_out("o1", "cancelled", "check")          # the close path
-    after = fds(RE)
-    check(f"H2 resting_orders: {N} each of record_placement / working / note_seen_qty leave the handles flat",
-          after <= max(before, 1), f"open handles {before} -> {after}")
-
     # ── H3 ────────────────────────────────────────────────────────────────
     tl.update_current_premium("h1", 2.345)
     v = premium_on_disk("h1")
@@ -176,8 +158,7 @@ check("H5b an OLD heartbeat reports its age, not a read failure",
 
 # ── H6 ────────────────────────────────────────────────────────────────────
 left = []
-for rel, pat in (("database/trade_logger.py", r"^\s+with self\._connect\(\) as "),
-                 ("execution/resting_orders.py", r"^\s+with _conn\(\) as ")):
+for rel, pat in (("database/trade_logger.py", r"^\s+with self\._connect\(\) as "),):
     for i, line in enumerate(open(os.path.join(_root, rel)), 1):
         if re.match(pat, line):
             left.append(f"{rel}:{i}")

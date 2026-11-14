@@ -1,5 +1,6 @@
 """
-tests/retired_names.py  v5.2
+tests/retired_names.py  v5.3
+v5.3  2026-11-14  OTV5 r118 (HYG.23) — REMOVED adds execution.resting_orders (the standing-offer store; r76 removed its only writer).
 v5.2  2026-11-09  OTV5 r103 (RETIRE.5 step 2) — REMOVED adds strategy.gex_pin_butterfly (the GEX pin butterfly).
 v5.1  2026-11-08  OTV5 r88 (RETIRE.3) — REMOVED adds the three TCS shadow modules (strategy.trend_credit_spread, strategy.tcs_plan,
       execution.shadow_book).
@@ -22,7 +23,9 @@ REMOVED = ("strategy.orb_strategy", "strategy.volt_strategy", "strategy.volt_pla
            # r88 (RETIRE.3): the TCS shadow
            "strategy.trend_credit_spread", "strategy.tcs_plan", "execution.shadow_book",
            # r103 (RETIRE.5 step 2): the GEX pin butterfly
-           "strategy.gex_pin_butterfly")
+           "strategy.gex_pin_butterfly",
+           # r118 (HYG.23): the standing-offer store (no writer since r76)
+           "execution.resting_orders")
 _REMOVED_FILES = {os.path.join(ROOT, *m.split(".")) + ".py" for m in REMOVED}
 
 

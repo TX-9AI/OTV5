@@ -7,7 +7,7 @@ Regenerated in the land gate; a stale map fails `--check`.
 
 ⚠️ **A table with no writer is an orphan. A table nobody reads is dead weight.** Both are visible here and in neither the schema nor the call graph alone.
 
-**34 tables.**
+**33 tables.**
 
 ## (unattributed)
 
@@ -54,12 +54,6 @@ Regenerated in the land gate; a stale map fails `--check`.
 | `session_summary` | `data/candle_feed.py` | `data/candle_feed.py` (insert), `tests/check_manifold_windows.py` (update), `warehouse/retention_purge.py` (delete) | `tools/manifold_status.py`, `warehouse/s3_push.py` |
 | `theo_series` | `data/candle_feed.py` | `data/candle_feed.py` (insert), `warehouse/retention_purge.py` (delete) | `tools/manifold_status.py`, `warehouse/s3_push.py` |
 | `underlying_series` | `data/candle_feed.py` | `data/candle_feed.py` (insert), `warehouse/retention_purge.py` (delete) | `tools/manifold_status.py`, `warehouse/s3_push.py` |
-
-## resting_orders.db
-
-| table | created by | written by | read by |
-|---|---|---|---|
-| `resting_orders` | `execution/resting_orders.py` | `execution/resting_orders.py` (insert/update) | `tests/check_offer_fill_price.py` |
 
 ## trades.db
 

@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """
-tests/check_store_paths.py  v5.0
+tests/check_store_paths.py  v5.1
+v5.1  2026-11-14  OTV5 r118 (HYG.23) — the resting store leaves VARS, S1 and S3: utils.paths.resting_db_path and
+      execution/resting_orders.py are deleted (no writer since r76). The S4 pattern still refuses a home-anchored resting_orders.db.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.0  2026-10-03  OTV4TEST r218 (PATH.1) — ONE RULE RESOLVES THE FEED, DERIVED AND RESTING STORE PATHS.
 
@@ -14,7 +16,7 @@ v1.0  2026-10-03  OTV4TEST r218 (PATH.1) — ONE RULE RESOLVES THE FEED, DERIVED
   S2  the feed process's own copy (data.candle_feed.feed_db_path, untouched)
       agrees with it, set and unset
   S3  every runtime consumer returns the same path as the rule, set and unset:
-      options_chain, entry_snapshot, derived_store, resting_orders
+      options_chain, entry_snapshot, derived_store (r118: resting_orders deleted)
   S4  no runtime module still spells a home-anchored store path
   S5  config.DATA_DIR and config.QUOTE_FLOOR exist; breakout_plan reads the floor
 
@@ -38,7 +40,7 @@ os.environ.setdefault("OT_LOG_FILE", os.path.join(_S, "bot.log"))
 os.environ.setdefault("OT_INSTRUMENT", "QQQ")
 
 FAILED = []
-VARS = {"OT_FEED_DB": "feed_store.db", "OT_DERIVED_DB": "derived_store.db", "OT_RESTING_DB": "resting_orders.db"}
+VARS = {"OT_FEED_DB": "feed_store.db", "OT_DERIVED_DB": "derived_store.db"}   # r118: the resting store is deleted
 
 
 def check(name, ok, detail=""):
@@ -63,7 +65,7 @@ def main():
                 check(f"{n} (did not run)", False, f"{type(exc).__name__}: {exc}")
             P = None
         if P is not None:
-            fns = {"OT_FEED_DB": P.feed_db_path, "OT_DERIVED_DB": P.derived_db_path, "OT_RESTING_DB": P.resting_db_path}
+            fns = {"OT_FEED_DB": P.feed_db_path, "OT_DERIVED_DB": P.derived_db_path}
             scratch = {k: os.path.join(_S, "x", f) for k, f in VARS.items()}
             _with(scratch)
             set_ok = all(fns[k]() == scratch[k] for k in VARS)
@@ -81,16 +83,15 @@ def main():
             import data.options_chain as OC
             import analysis.entry_snapshot as ES
             import data.derived_store as DS
-            import execution.resting_orders as RO
             cons = {"options_chain": (OC._feed_db_path, "OT_FEED_DB"), "entry_snapshot": (ES._feed_db, "OT_FEED_DB"),
-                    "derived_store": (DS.derived_db_path, "OT_DERIVED_DB"), "resting_orders": (RO._db_path, "OT_RESTING_DB")}
+                    "derived_store": (DS.derived_db_path, "OT_DERIVED_DB")}
             bad = []
             for label, env in (("set", scratch), ("unset", {})):
                 _with(env)
                 for name, (fn, var) in cons.items():
                     if fn() != fns[var]():
                         bad.append((label, name, fn(), fns[var]()))
-            check("S3 options_chain, entry_snapshot, derived_store and resting_orders all return the rule's path",
+            check("S3 options_chain, entry_snapshot and derived_store all return the rule's path",
                   not bad, str(bad))
     finally:
         for k, v in saved.items():
@@ -130,7 +131,7 @@ def main():
     if FAILED:
         print(f"\nRED — {len(FAILED)} check(s): {FAILED}")
         return 1
-    print("\nGREEN — one rule resolves the three store paths, and every runtime consumer uses it")
+    print("\nGREEN — one rule resolves the two store paths, and every runtime consumer uses it")
     return 0
 
 

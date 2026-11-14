@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""tests/check_map_accuracy.py — v5.1
+"""tests/check_map_accuracy.py — v5.2
+v5.2  2026-11-14  OTV5 r118 (HYG.23) — DOCSTRING ONLY: the resting store leaves the list of stores L reads (its module is deleted).
 v5.1  2026-10-25  OTV5 r23 — R1b EXEMPTS THE TABLES s3_push ITSELF WRITES. r20 (PUSH.1) gave s3_push its own SQLite
       ledger (derived_ledger.db, table `seen`), which it creates, writes and reads; R1b read that true read of its own
       state as over-attribution and went RED at r20-r22. The exemption is by WRITER (a table s3_push writes is its
@@ -43,7 +44,7 @@ v1.0  2026-09-14 — OTV4TEST r28 (MAP.2, MAP.3). Both `--check` gates ask "does
   E1  every repo script a deploy/ unit launches is a declared ENTRY_POINT
   E1b ...and every one of them EXISTS (r21's defect class: a unit naming no file)
   E2  every repo script tools/land.sh runs is a declared ENTRY_POINT
-  L1  every table in the box's four stores is on the write map (MAP.1's class)
+  L1  every table in the box's stores (r118: three) is on the write map (MAP.1's class)
   L2  ...in the database the map says it is in
   L3  (report only) map tables not yet on disk, each named
 
@@ -55,8 +56,8 @@ values — while the generator reads source; E reads the unit text in deploy/ an
 ⚠️ L READS THE BOX'S LIVE STORES, READ-ONLY, AND THAT IS ITS WHOLE JOB. Every
 connection is `mode=ro`; nothing is written. The stores are found at the layout
 the repo's own defaults use (`~/options-trader/data/*.db`, `~/options-trader/
-trades.db`: `data/options_chain.py`, `data/derived_store.py`, `config.DB_PATH`,
-`execution/resting_orders.py`) — NOT through OT_TRADES_DB/OT_DERIVED_DB, which
+trades.db`: `data/options_chain.py`, `data/derived_store.py`, `config.DB_PATH`;
+r118: `execution/resting_orders.py` is deleted, so its store is no longer read) — NOT through OT_TRADES_DB/OT_DERIVED_DB, which
 the lander points at empty scratch files. OT_MAP_STORE_ROOT overrides the root.
 A store that is absent prints NOT RUN by name — never PASS (§38.7).
 ⚠️ L3 DOES NOT FAIL. A table the code creates on first write (e.g.

@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """
-tests/gen_write_map.py  v5.0
+tests/gen_write_map.py  v5.1
+v5.1  2026-11-14  OTV5 r118 (HYG.23) — DB_OF_PREFIX loses execution/resting_orders.py -> resting_orders.db: the module is deleted
+      (the standing-offer store, no writer since r76), so the map names three databases again.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v4.6  2026-10-13  OTV4TEST r279 - a call to a same-module SQL HELPER inside a constant
       loop resolves through the helper (see _loop_sql). The purge's DELETEs moved into
@@ -486,13 +488,13 @@ DB_OF_DIR = {
 # files on the box, not inferred: `gate_disposition`, `plan_check` and
 # `plan_tick` are in `derived_store.db`; `resting_orders` is in its own
 # `data/resting_orders.db`. An "(unattributed)" heading reads as "nobody knows",
-# when in fact nobody had added the line.
+# when in fact nobody had added the line. (r118: execution/resting_orders.py is
+# deleted, so its row is gone from the dict below.)
 DB_OF_PREFIX = {
     "derived/": "derived_store.db",
     "analysis/tenor_publish.py": "feed_store.db",
     "analysis/gate_report.py": "derived_store.db",
     "strategy/plan.py": "derived_store.db",
-    "execution/resting_orders.py": "resting_orders.db",
 }
 
 

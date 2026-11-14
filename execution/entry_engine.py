@@ -1,5 +1,7 @@
 """
-execution/entry_engine.py  v5.2
+execution/entry_engine.py  v5.3
+v5.3  2026-11-14  OTV5 r118 (HYG.23) — DOCSTRING ONLY: _record_kwargs no longer describes the standing-offer supervisor as a
+      second caller (removed r76; its store and supervisor deleted r118). AST identical to r117.
 v5.2  2026-11-11  OTV5 r107 (RETIRE.5 follow-up) — THE GENERIC BUTTERFLY ENTRY GOES with the fly strategy removed at r103: the enter() butterfly branch, the fly record fields (lower/center/upper strike and symbol, net_debit, max_profit), _place_butterfly, _paper_fill_butterfly and the fly-only _mark_cap. No live strategy emits a butterfly signal since r103; every entry takes the single-leg path, unchanged. The trades schema keeps its fly columns (history). The operator, 2026-11-07: "Running dead code and logging dead code activity is unnecessary drag."
 v5.1  2026-11-08  OTV5 r76 (RETIRE.1) — THE ORB STANDING OFFER IS REMOVED with the ORB trade: _is_standing_offer, _place_standing_offer, _record_offer, _mark_orb_confirmation_spent, _session_date and the ORB latch after _place_single_leg. Every live single-leg entry already took the default path (paper fill / the ladder), unchanged. The operator, 2026-11-07: "Running dead code and logging dead code activity is unnecessary drag. Yes, I want all of those things fixed."
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
@@ -595,10 +597,10 @@ class EntryEngine:
     def _record_kwargs(self, signal) -> dict:
         """The record fields that come from the SIGNAL, not from the fill.
 
-        🔑 ONE LINEAGE. `enter()` builds a record the moment a fill confirms;
-        the standing-offer path builds one when the SUPERVISOR discovers a fill
-        minutes later, with no signal object left in memory. Both must produce
-        the same row for the same setup, so both call this. A second
+        🔑 ONE LINEAGE. `enter()` builds a record the moment a fill confirms.
+        (The standing-offer path that also built one when its SUPERVISOR found
+        a fill was removed at r76; its store and supervisor went at r118.) Any
+        new construction site must call this too. A second
         construction site is WORKING_AGREEMENT 7's exact failure — two versions
         that look correct in isolation and drift on the field nobody compares.
         """

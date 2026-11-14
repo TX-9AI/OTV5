@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_retired_gone.py  v5.7
+tests/check_retired_gone.py  v5.8
+v5.8  2026-11-14  OTV5 r118 (HYG §5.4, HYG.23) — NEW G15/G15b: the standing-offer store is gone (execution/resting_orders.py, main._supervise_offers and _orb_offer_working, order_guard's read of it, utils.paths.resting_db_path; entry_engine places no offer, r76's check_offer_fill_price F3, which is deleted), and _orb_release_due / _kept_order_ids / sweep_working stay. By AST. RED on d9286e9.
 v5.7  2026-11-14  OTV5 r115 (HYG §5.1) — G9b RE-POINTED (WA 38.4): the kept sweep helpers are gone with their module. G9b now pins strategy/sweep_credit_spread absent (no file, import fails), no live .py importing it, trade_logger carrying no TrendCredit [spent] branch, and liquidity_hunt._symbol_of answering config.INSTRUMENT. RED on 790ec1b.
 v5.6  2026-11-14  OTV5 r110 (WS.3 TRIM) — G3's live trades are Runaway, the Hunt and PARK; Breakout is DORMANT (plan_state row DORMANT, off ENTRY_WINDOWS, its admission row kept on BREAKOUT_WINDOW) and G3c pins that. Its code stays, so G6/G9 still exercise it.
 v5.5  2026-11-11  OTV5 r107 (RETIRE.5 follow-up) - G12 flips: OT_TR_BFLY_* is now stripped too (the butterfly readiness track is
@@ -43,6 +44,8 @@ v5.0  2026-11-08  OTV5 r76 (RETIRE.1) — THE RETIRED TRADES ARE GONE, THE LIVE 
   G10 (r88) no runtime reader of the TCS shadow is left; G10b the credit window is value-identical without its row
   G11 (r88) the strip tool takes OT_TCS_* / OT_TR_TCS_* / OT_TR_W_TCS_* / OT_SHADOW_TRADES_DB off a unit; G11b it
       never overwrites an existing .bak-retire1
+  G15 (r118) the standing-offer store is gone (no importer, supervisor, offer check, path or placement); G15b the
+      ORB release check and the boot order sweep stay
 
 Run:  python3 tests/check_retired_gone.py      (exit 0 = all pass)
 """
@@ -402,6 +405,39 @@ check("G14 the generic butterfly execution, management, sizing and readiness are
       not any(_gone14.values()), str([k for k, v in _gone14.items() if v]))
 check("G14b the history labels that decode old fly trades are kept (schema, query, structure)",
       all(_kept14.values()), str([k for k, v in _kept14.items() if not v]))
+
+# ── G15 (r118, HYG.23) ───────────────────────────────────────────────────────────────────────────────
+# The standing-offer store is deleted: r76 removed its only writer (entry_engine's ORB standing offer). Read by AST,
+# never by substring, so a header that names the removed code is history, not a hit.
+import ast as _ast                                             # noqa: E402
+
+
+def _defs_calls(rel):
+    t = _ast.parse(_src(*rel.split("/")), rel)
+    d = {n.name for n in _ast.walk(t) if isinstance(n, (_ast.FunctionDef, _ast.AsyncFunctionDef))}
+    c = {getattr(n.func, "attr", getattr(n.func, "id", "")) for n in _ast.walk(t) if isinstance(n, _ast.Call)}
+    return t, d, c
+
+
+_t_mn, _d_mn, _c_mn = _defs_calls("main.py")
+_t_og, _d_og, _c_og = _defs_calls("execution/order_guard.py")
+_t_ee, _d_ee, _c_ee = _defs_calls("execution/entry_engine.py")
+_t_up, _d_up, _c_up = _defs_calls("utils/paths.py")
+_og_imp = {getattr(n, "module", None) for n in _ast.walk(_t_og) if isinstance(n, _ast.ImportFrom)} | \
+          {a.name for n in _ast.walk(_t_og) if isinstance(n, (_ast.Import, _ast.ImportFrom)) for a in n.names}
+_gone15 = {
+    "a live file imports execution.resting_orders": importers("execution.resting_orders"),
+    "main defines or calls _supervise_offers / _orb_offer_working":
+        sorted({"_supervise_offers", "_orb_offer_working"} & (_d_mn | _c_mn)),
+    "order_guard imports resting_orders": sorted({"resting_orders", "execution.resting_orders"} & _og_imp),
+    "utils.paths defines resting_db_path": sorted({"resting_db_path"} & _d_up),
+    "entry_engine places or records a standing offer (r76's F3)":
+        sorted({"_place_standing_offer", "_record_offer", "record_placement"} & (_d_ee | _c_ee)),
+}
+check("G15 (r118) the standing-offer store is gone: no importer, no supervisor, no offer check, no path, no placement",
+      not any(_gone15.values()), str({k: v for k, v in _gone15.items() if v}))
+check("G15b (r118) what stays: main._orb_release_due and order_guard._kept_order_ids / sweep_working",
+      "_orb_release_due" in _d_mn and {"_kept_order_ids", "sweep_working"} <= _d_og, "")
 
 print()
 if FAIL:

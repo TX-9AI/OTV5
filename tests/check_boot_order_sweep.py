@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """
-tests/check_boot_order_sweep.py  v5.0
+tests/check_boot_order_sweep.py  v5.1
+v5.1  2026-11-14  OTV5 r118 (HYG.23) — S3 RE-POINTED (WA 38.4): order_guard._kept_order_ids no longer reads the standing-offer
+      store (execution/resting_orders.py is deleted, no writer since r76), so S3 keeps an open row's two exit order ids (X1, X0)
+      and cancels the stranger (Z9). S6 unchanged.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.0  2026-10-20  r495 / B4 — A RESTART CANCELS ITS INSTRUMENT'S LEFTOVER WORKING ORDERS
       BEFORE IT POSTS.
@@ -13,7 +16,7 @@ v1.0  2026-10-20  r495 / B4 — A RESTART CANCELS ITS INSTRUMENT'S LEFTOVER WORK
   S1  sweep_working cancels this instrument's WORKING orders (by underlying or by
       leg root) and nothing else: another instrument, a FILLED/CANCELLED order
   S2  SPX family: an SPXW-root order is the SPX box's; a QQQ order is not
-  S3  the ids the box still tracks are KEPT: a resting offer's, an open row's
+  S3  the ids the box still tracks are KEPT: an open row's
       live_exit_state order_id and last_order_id (B3)
   S4  a fresh process (sweep pending): clear_to_post sweeps first; an unreadable
       order book posts NOTHING and cancels nothing; once readable the leftover is
@@ -143,22 +146,20 @@ def main():
 
     # S3 — the real _kept_order_ids over patched readers
     G._kept_order_ids = real_keep
-    import execution.resting_orders as RO
     import database.trade_logger as TL
-    real_ro, real_tl = RO.working, TL.get_trade_logger
+    real_tl = TL.get_trade_logger
 
     class _TL:
         def get_open_trades(self):
             return [{"live_exit_state": '{"fills": [[1, 1.2]], "order_id": "X1", "last_order_id": "X0"}'},
                     {"live_exit_state": None}, {"live_exit_state": "not json"}]
     try:
-        RO.working = lambda d, strategy="": [{"order_id": "R1"}]
         TL.get_trade_logger = lambda: _TL()
         G.reset(boot_clean=False)
-        a = _Acct([_O(i, "Live", "QQQ") for i in ("R1", "X1", "X0", "Z9")])
+        a = _Acct([_O(i, "Live", "QQQ") for i in ("X1", "X0", "Z9")])
         ok, n, why = G.sweep_working(object(), a)
-        check("S3 a resting offer and an open row's exit order ids are KEPT; the rest cancelled",
-              ok and a.deleted == ["Z9"] and "kept 3" in why, f"deleted={a.deleted} {why}")
+        check("S3 an open row's exit order ids are KEPT; the rest cancelled (r118: no resting-offer store)",
+              ok and a.deleted == ["Z9"] and "kept 2" in why, f"deleted={a.deleted} {why}")
 
         # S6
         def _boom():
@@ -171,7 +172,7 @@ def main():
         check("S6 unreadable kept ids: cancels NOTHING, entries blocked",
               not ok and a.deleted == [] and not ok2 and "boot sweep" in w2, f"deleted={a.deleted} {why}")
     finally:
-        RO.working, TL.get_trade_logger = real_ro, real_tl
+        TL.get_trade_logger = real_tl
     G._kept_order_ids = no_keep
 
     # S4
