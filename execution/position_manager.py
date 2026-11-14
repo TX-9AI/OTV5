@@ -1,5 +1,9 @@
 """
-execution/position_manager.py  v5.36
+execution/position_manager.py  v5.37
+v5.37  2026-11-14  OTV5 r113 (AM.7) — the excursion (mfe/mae and their bars) sees EVERY priced tick, including the one
+      the management plan exits on: _manage_one calls exit_engine._track_excursion before decide() (a plan CLOSE skipped
+      evaluate(), which was the only caller). Telemetry only. The operator, 2026-11-14: "Let's fix the top 10 today"
+      (amnesty bucket AM.7).
 v5.36  2026-11-14  OTV5 r110 (WS.3 TRIM) — Breakout's admission row reads config.BREAKOUT_WINDOW (it left ENTRY_WINDOWS with the roster); it is DORMANT (strategy/plan_state v5.8), never asked, so the row admits nothing it is ever asked for; it stays for the code kept for a revisit. The operator, 2026-11-14: "Concur".
 v5.35  2026-11-11  OTV5 r107 (RETIRE.5 follow-up) — THE GENERIC BUTTERFLY MANAGEMENT GOES: _stash_fly_quote, _is_butterfly (has_blocking_position now exempts only the liquidity hunt, as the fly can no longer be open), and the fly arms of the chain pricing and of _rest_premium. Every live structure (single leg, credit vertical, tent) prices exactly as before. The operator, 2026-11-07: "Running dead code and logging dead code activity is unnecessary drag."
 v5.34  2026-11-09  OTV5 r103 (RETIRE.5 step 2) — the GEX pin butterfly's admission row and its GEXFLY name constant go. PARK keeps its own row (one per session, cap-exempt); every live row is unchanged. The generic multi-leg record handling (is_butterfly) stays for any butterfly record still on a book. The operator, 2026-11-08: "I concur on both, in that order".
@@ -1046,6 +1050,12 @@ class PositionManager:
         _fo.observe_map(record, current_premium, getattr(chain, "spot_price", None))
 
         exit_eng = get_exit_engine(self.paper_trading)
+        # r113 (AM.7): the excursion sees this tick even when the plan closes on it (evaluate() would never run).
+        try:
+            from execution.exit_engine import _track_excursion as _trk
+            _trk(record, current_premium)
+        except Exception:                                       # noqa: BLE001
+            pass
         # ── r167 — THE MANAGEMENT PLAN DECIDES FIRST for the records it covers
         # (runaway, butterfly, a lone sweep/TCS vertical). It asserts the
         # declared spec conditions itself (15% floor / hard stop, the breach

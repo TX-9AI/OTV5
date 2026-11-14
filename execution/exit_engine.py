@@ -1,5 +1,11 @@
 """
-execution/exit_engine.py  v5.19
+execution/exit_engine.py  v5.20
+v5.20  2026-11-14  OTV5 r113 (AM.7) — _track_excursion counts ONE tick per pricing pass and takes the best and worst
+      mark from every call: position_manager now calls it BEFORE the management plan decides (the plan's CLOSE skipped
+      evaluate(), so the tick a target or plan stop exits on was never seen - NFLX 11-13 booked target_hit at 0.245
+      with mfe_premium 0.205), and evaluate() still calls it, so a pass that reaches both is counted once (keyed on the
+      record's _px_seq; a record with no _px_seq counts every call, as before). Telemetry only; no exit changes. The
+      operator, 2026-11-14: "Let's fix the top 10 today" (amnesty bucket AM.7). Gate tests/check_excursion_plan_exit.py.
 v5.19  2026-11-14  OTV5 r112 (AM.2 / LIVE.6) — A LIVE STOP NO LONGER CHASES THE MARK DOWN UNFILLED. A floor-policy close
       (hard_stop / stop_hit / structure_stop / adopted_stop / ...) of a SINGLE LEG re-posted LIMIT-AT-MARK every pass
       and never escalated before 15:55: in a fast squeeze each limit sat above the market and a "-20% stop" could fill at
@@ -4430,7 +4436,14 @@ def _track_excursion(record, current_premium: float) -> None:
         px = safe_float(current_premium)
         if px is None or px <= 0 or px > 1e6:
             return
-        n = int(record.get("excursion_ticks") or 0) + 1
+        # r113 (AM.7): one tick per pricing pass - position_manager and evaluate() may both see the same pass.
+        _seq = record.get("_px_seq")
+        if _seq is not None and record.get("_exc_seq") == _seq:
+            n = int(record.get("excursion_ticks") or 0) or 1
+        else:
+            n = int(record.get("excursion_ticks") or 0) + 1
+            if _seq is not None:
+                record["_exc_seq"] = _seq
         record["excursion_ticks"] = n
         # ⚠️ AUDIT F7 (2026-08-20): `n` is a 15-second TICK count and it was
         # being written into columns named *_bars — every consumer reading

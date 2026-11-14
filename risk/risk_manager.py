@@ -1,5 +1,6 @@
 """
-risk/risk_manager.py  v5.3
+risk/risk_manager.py  v5.4
+v5.4  2026-11-14  OTV5 r113 (AM.8) — the cap-episode stamp's day comes from utils.time_utils.now_et(), the one ET owner. _et_date() fell back to the UTC date when zoneinfo could not load (after 19:00 ET that is tomorrow, so the once-per-episode page would key on the wrong day); an unreadable clock now returns "" (no stamp matches, so a page is never silenced). The operator, 2026-11-14: "Let's fix the top 10 today" (amnesty bucket AM.8). Gate tests/check_cap_page_once.py v5.2 P10-P11.
 v5.3  2026-11-11  OTV5 r107 (RETIRE.5 follow-up) — size_for("butterfly") and its net_debit / butterfly_half_size arguments go, with _size_budget's is_butterfly / net_debit / butterfly_half_size and the r122 VIX half-size (a fly-only rule). No live strategy declares the butterfly structure since r103; an unknown structure still falls to the budget rule. Every live size is unchanged. The operator, 2026-11-07: "Running dead code and logging dead code activity is unnecessary drag."
 v5.2  2026-10-31  OTV5 r67 (PARC.4) — size_for("parc") and _size_parc (rule parc_ramp) are removed,
       with size_for's value_at_stop argument (PARC's only). The CAP_EXCLUDED_STRATEGIES getattr defaults name
@@ -802,11 +803,14 @@ class RiskManager:
 
     @staticmethod
     def _et_date() -> str:
+        """r113 (AM.8): today's ET date from utils.time_utils.now_et (the one owner). Never the UTC date: an
+        unreadable clock is "" - it matches no stamp, so the cap page is never silenced by it."""
         try:
-            from zoneinfo import ZoneInfo
-            return datetime.now(ZoneInfo("America/New_York")).strftime("%Y-%m-%d")
-        except Exception:                                      # noqa: BLE001
-            return datetime.utcnow().strftime("%Y-%m-%d")
+            from utils import time_utils as _tu
+            return _tu.now_et().strftime("%Y-%m-%d")
+        except Exception as exc:                               # noqa: BLE001
+            logger.warning("[cap] ET clock unreadable (%s) - no episode stamp matches today", exc)
+            return ""
 
     def _cap_episode_open(self) -> bool:
         """True only when the stamp says TODAY's episode was paged and has not

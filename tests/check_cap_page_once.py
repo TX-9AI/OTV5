@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_cap_page_once.py  v5.1
+tests/check_cap_page_once.py  v5.2
+v5.2  2026-11-14  OTV5 r113 (AM.8) — P10 the episode day is utils.time_utils.now_et()'s date (21:30 ET on 11-13 is 11-13, not the UTC 11-14); P11 an unreadable ET clock gives "" (never the UTC date), so no stamp matches. Born red on r108 at P10 and P11.
 v5.1  2026-10-26  OTV5 r38 (HYG.18) — scratch no longer names dir="/var/tmp": mkdtemp honours TMPDIR, which boot_sweep and land.sh point
       at a per-run dir they remove (HYG.14), so a sweep leaves nothing behind (237 dirs had piled up on SOFI). No check changed.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
@@ -30,6 +31,8 @@ store. The pager is a recorder; the trades store and its stamp are scratch.
       never the live box's
   P9  CONTROL, the r162 shape inside one process is unchanged: a breach pages
       once, staying breached pages nothing more
+  P10 the episode day is time_utils.now_et()'s date: 21:30 ET 11-13 reads 2026-11-13 (r113 AM.8)
+  P11 an unreadable ET clock reads "" (never the UTC date), so no stamp matches (r113 AM.8)
 
 BORN RED on 59ba004 (r178) under both interpreters at P1 and P8 (no stamp is
 written) and P2 (the restart pages again - the 09-29 defect).
@@ -178,6 +181,28 @@ D.is_halted()
 D.is_halted()
 check("P9 CONTROL: inside one process a breach pages once, staying breached pages nothing more",
       len(PAGES) == _before + 1, f"pages {_before}->{len(PAGES)}")
+
+import datetime as _dt
+from zoneinfo import ZoneInfo as _Z
+import utils.time_utils as _TU
+_real_now = _TU.now_et
+_TU.now_et = lambda: _dt.datetime(2026, 11, 13, 21, 30, tzinfo=_Z("America/New_York"))
+try:
+    _d10 = RiskManager._et_date()
+finally:
+    _TU.now_et = _real_now
+check("P10 the episode day is time_utils.now_et()'s ET date (21:30 ET 11-13 -> 2026-11-13, not UTC 11-14)",
+      _d10 == "2026-11-13", f"got {_d10!r}")
+
+
+def _boom():
+    raise RuntimeError("no clock")
+_TU.now_et = _boom
+try:
+    _d11 = RiskManager._et_date()
+finally:
+    _TU.now_et = _real_now
+check("P11 an unreadable ET clock reads '' (never the UTC date)", _d11 == "", f"got {_d11!r}")
 
 shutil.rmtree(_SCR, ignore_errors=True)
 print()
