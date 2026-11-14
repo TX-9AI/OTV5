@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""tests/check_structure_viable.py  v5.2
+"""tests/check_structure_viable.py  v5.3
+v5.3  2026-11-14  OTV5 r115 (HYG §5.1) — header only: strategy/sweep_credit_spread.py is deleted, so every sweep_credit_spread.py named below is history; V1-V5 and V6c read criteria/credit_vertical and are unchanged.
 v5.2  2026-11-08  OTV5 r88 (RETIRE.3) — V7 (the TCS plan declares stop_vs_spread) goes with the TCS; V1-V5 and V6c unchanged.
 v5.1  2026-11-08  OTV5 r76 (RETIRE.1) — RE-POINTED (WA 38.4): the sweep is removed, so V6a/V6b (its plan applying the gate) and V8-V12 (its spent levels)
       go with it and V7 reads the TCS plan's declaration; V1-V5 (stop_survivable) and V6c (search_wing calls it) unchanged.

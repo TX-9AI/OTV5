@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""check_entry_windows.py — v5.4
+"""check_entry_windows.py — v5.5
+v5.5  2026-11-14  OTV5 r115 (HYG §5.1) — header only: strategy/sweep_credit_spread.py is deleted, so the W1/W5 note below naming sweep_credit_spread.EARLIEST_ET is history; every check unchanged.
 v5.4  2026-11-09  OTV5 r103 (RETIRE.5 step 2) — the GEX pin butterfly is removed: the butterfly NOTE, W4 and W4c (its noon/13:00 start, driven through its prepare()) go with it and W4 now pins its window row and start keys gone; W7 drops GEXPinButterflyStrategy. W1-W3, W6, W8 unchanged.
 v5.3  2026-11-08  OTV5 r88 (RETIRE.3) — the TCS is removed: W1 and W8 pin the one credit start and end on the condor and
       that TCS_START_ET / TCS_ENTRY_END_ET are gone; W7 drops TCSPlan.

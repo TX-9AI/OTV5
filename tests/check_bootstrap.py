@@ -1,4 +1,5 @@
-"""tests/check_bootstrap.py — v5.7
+"""tests/check_bootstrap.py — v5.8
+v5.8  2026-11-14  OTV5 r115 (HYG §5.1) — new G21b: data/option_candles_state.json (and its .tmp), tools/capture_all.py's per-day progress file, are gitignored. It made `git status` dirty on 14/14 boxes (the Saturday brief 2026-11-14 §3.4). RED on 790ec1b.
 v5.7  2026-11-08  OTV5 r94 (CAP.1) — G3's planned suite includes deploy/install_capture_timer.sh (setup_ec2.sh v5.5).
 v5.6  2026-11-08  OTV5 r76 (RETIRE.1) — G3/G3c/G5/G17 RE-POINTED (WA 38.4): setup_ec2.sh v5.4 no longer plans or writes OT_SCALE_ORB / OT_SCALE_VOLT
       (the ORB and VOLT trades are removed) and bootstrap.example.sh v5.5 drops their lines, so the checks assert no scale_*
@@ -907,6 +908,13 @@ _ig21 = subprocess.run(["git", "-C", _root, "check-ignore", "-q", "--no-index", 
 guard("G21 data/SWEEP_RESULT (tools/boot_sweep.py's result) is gitignored",
       lambda: _ig21.returncode == 0
       and "SWEEP_RESULT" in _read("tools/boot_sweep.py"), lambda: "check-ignore rc=%s" % _ig21.returncode)
+
+_ig21b = [subprocess.run(["git", "-C", _root, "check-ignore", "-q", "--no-index", f], capture_output=True,
+                         text=True).returncode for f in ("data/option_candles_state.json",
+                                                          "data/option_candles_state.json.tmp")]
+guard("G21b data/option_candles_state.json and its .tmp (tools/capture_all.py's progress) are gitignored",
+      lambda: _ig21b == [0, 0] and "option_candles_state.json" in _read("tools/capture_all.py"),
+      lambda: "check-ignore rc=%s" % _ig21b)
 
 # ── G22 (r13) — a box built before OTV5 can be moved to the observe-only settings ─
 _OLD22 = '{"env": {"DISABLE_AUTOUPDATER": "1"}, "theme": "dark"}\n'

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_retired_gone.py  v5.6
+tests/check_retired_gone.py  v5.7
+v5.7  2026-11-14  OTV5 r115 (HYG §5.1) — G9b RE-POINTED (WA 38.4): the kept sweep helpers are gone with their module. G9b now pins strategy/sweep_credit_spread absent (no file, import fails), no live .py importing it, trade_logger carrying no TrendCredit [spent] branch, and liquidity_hunt._symbol_of answering config.INSTRUMENT. RED on 790ec1b.
 v5.6  2026-11-14  OTV5 r110 (WS.3 TRIM) — G3's live trades are Runaway, the Hunt and PARK; Breakout is DORMANT (plan_state row DORMANT, off ENTRY_WINDOWS, its admission row kept on BREAKOUT_WINDOW) and G3c pins that. Its code stays, so G6/G9 still exercise it.
 v5.5  2026-11-11  OTV5 r107 (RETIRE.5 follow-up) - G12 flips: OT_TR_BFLY_* is now stripped too (the butterfly readiness track is
       removed); new G14 pins the generic butterfly execution, management, sizing and readiness names gone from the runtime.
@@ -36,8 +37,9 @@ v5.0  2026-11-08  OTV5 r76 (RETIRE.1) — THE RETIRED TRADES ARE GONE, THE LIVE 
   G8  tools/strip_retired_env.sh on a scratch unit: removes exactly the retired lines, keeps every other line,
       prints no value, is idempotent, and --check changes nothing; G8e-G8h the quoted, single-quoted, mixed and
       unparsable forms (RETIRE.2)
-  G9  the kept helpers still answer: orb_plan.select_contract (Breakout) and sweep_credit_spread.is_breach_exit
-      (trade_logger); strike_beyond_sweep went with the TCS (r88)
+  G9  the kept helper still answers: orb_plan.select_contract (Breakout); G9b (r115) the sweep module is gone
+      (its last helpers is_breach_exit / _symbol_of went: trade_logger's TrendCredit branch deleted, the Hunt reads
+      config.INSTRUMENT)
   G10 (r88) no runtime reader of the TCS shadow is left; G10b the credit window is value-identical without its row
   G11 (r88) the strip tool takes OT_TCS_* / OT_TR_TCS_* / OT_TR_W_TCS_* / OT_SHADOW_TRADES_DB off a unit; G11b it
       never overwrites an existing .bak-retire1
@@ -269,16 +271,31 @@ check("G8h an unparsable line is left exactly as it was and the run exits 1 (the
 
 # ── G9 ───────────────────────────────────────────────────────────────────────────────────────────────
 from strategy import orb_plan as OP                             # noqa: E402
-from strategy import sweep_credit_spread as SCS                 # noqa: E402
 C = lambda k, m, d, b=None, a=None: types.SimpleNamespace(strike=k, mark=m, delta=d, bid=b or m - 0.05,  # noqa: E731
                                                           ask=a or m + 0.05)
 ch = types.SimpleNamespace(calls=[C(709, 1.2, 0.45), C(710, 0.9, 0.40), C(711, 0.6, 0.33)], puts=[])
 sel = OP.select_contract(ch, "long", 710.2)
 check("G9 Breakout's selector still takes the nearest listed live strike (710 for a 710.2 reach)",
       sel is not None and sel.strike == 710, f"{getattr(sel, 'strike', None)}")
-check("G9b the kept sweep helper answers (is_breach_exit); strike_beyond_sweep went with the TCS (r88)",
-      SCS.is_breach_exit("tcs_breach: x") and not SCS.is_breach_exit("nickel_close")
-      and not hasattr(SCS, "strike_beyond_sweep"))
+import importlib.util as _ilu                                   # noqa: E402
+import config as _cfg                                           # noqa: E402
+from strategy import liquidity_hunt as _LH                      # noqa: E402
+_scs_file = os.path.exists(os.path.join(ROOT, "strategy", "sweep_credit_spread.py"))
+_scs_spec = _ilu.find_spec("strategy.sweep_credit_spread")
+_scs_importers = []
+for _d, _subs, _fs in os.walk(ROOT):
+    _subs[:] = [x for x in _subs if x not in (".git", "tests", "docs", "venv", "__pycache__")]
+    for _f in _fs:
+        if _f.endswith(".py"):
+            _t = open(os.path.join(_d, _f), encoding="utf-8").read()
+            if "import sweep_credit_spread" in _t or "from strategy.sweep_credit_spread" in _t:
+                _scs_importers.append(os.path.relpath(os.path.join(_d, _f), ROOT))
+_tl = open(os.path.join(ROOT, "database", "trade_logger.py"), encoding="utf-8").read()
+check("G9b (r115) the sweep module is gone: no file, no import, no live importer, no TrendCredit [spent] branch, "
+      "and the Hunt's symbol is config.INSTRUMENT",
+      not _scs_file and _scs_spec is None and not _scs_importers
+      and '"TrendCredit" in _strat' not in _tl and _LH._symbol_of() == str(_cfg.INSTRUMENT),
+      f"file={_scs_file} spec={_scs_spec is not None} importers={_scs_importers}")
 
 # ── G10 (r88, RETIRE.3): the TCS shadow is gone from every runtime reader ─────────────────────────────
 from analysis import trade_readiness as TR                      # noqa: E402

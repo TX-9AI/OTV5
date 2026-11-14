@@ -134,3 +134,5 @@ data/dxlink_nodes_fleet.json
 data/dxlink_nodes_fleet.json.tmp
 data/dxlink_assign.json
 data/dxlink_assign.json.tmp
+data/option_candles_state.json
+data/option_candles_state.json.tmp

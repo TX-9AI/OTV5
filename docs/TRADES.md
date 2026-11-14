@@ -1,5 +1,7 @@
 # TRADES — the specs
 
+**`TRADES.md` v5.18 · 2026-11-14 · OTV5 r115 (HYG §5.1) — §0's stops line drops the butterfly stop constant (deleted from config.py; nothing read it since r107); two bold stops remain (`check_docs_roster` R5). Docs only in this file.**
+
 **`TRADES.md` v5.17 · 2026-11-14 · OTV5 (OGAP.1) — OGAP joins the roster: Park's friend's ORB-GAP, a faithful paper copy on the QQQ box only (section 10; docs/OGAP_SPEC.md). The operator, 2026-11-14: "let's design & paper trade the OGAP on QQQ".**
 
 **`TRADES.md` v5.16 · 2026-11-14 · OTV5 r110 (WS.3 TRIM) — Breakout is DORMANT from 2026-11-16 and leaves the roster: its §0 row goes (three trades and PARK remain), section 7 is marked DORMANT. Its code is kept for a revisit (strategy/breakout.py, its plan and exits), with no switch: no env value turns it back on (strategy/plan_state v5.8). The operator, 2026-11-14: "Concur" (WS.3: the fitted gates failed blind; window EV -$11.73/trade [-59.33, +41.68], n=120, fees $1,572.62 beside).**
@@ -87,9 +89,8 @@ above as EOD_SCHEDULE).
 (`RUNAWAY_MAX_LOSS_PCT`). Hunt: NO premium stop - it RECORDS the same floor
 (`HUNT_MAX_LOSS_PCT`, also used to pick its contract) and the exit engine HOLDS through it,
 logging "would-have-floored" (r209; corrected r227 - r226 wrote this line as if it stopped).
-Other single legs: **25%** (`MAX_LOSS_PCT`). `BUTTERFLY_STOP_LOSS_PCT` (**40%**) is still defined in `config.py`,
-but NOTHING READS IT since r107 removed the butterfly exits (no fly can open since r103, and none is on any book); it
-goes with the next code land, and `check_docs_roster` R5 then checks two stops. Every other exit rule lives in `strategy/management.py` and
+Other single legs: **25%** (`MAX_LOSS_PCT`). (The butterfly stop constant was deleted at r115; nothing had read it
+since r107 removed the butterfly exits.) Every other exit rule lives in `strategy/management.py` and
 `execution/exit_engine.py`, not in a number that can be quoted here.
 
 **The fill observers (r270, PMAP.1 + FILL.2).** Every open single long gets a premium-map row a minute, and the

@@ -1,5 +1,6 @@
 """
-database/trade_logger.py  v5.6
+database/trade_logger.py  v5.7
+v5.7  2026-11-14  OTV5 r115 (HYG §5.1) — the [spent] report's TrendCredit branch is deleted: the TCS was removed at r88, so the branch could never run on a live close, and it was the last reader of strategy/sweep_credit_spread.is_breach_exit (module deleted). The Runaway [spent] line is unchanged.
 v5.6  2026-11-14  OTV5 r111 (AM.1) — THE EXECUTABLE-PRICE BASIS, BESIDE THE MARK. Paper books the mark in and out (100%
       fill, no spread), so the EV benchmark and the cash size table carried no spread cost and no fill risk. Four NEW
       columns, NULL = not captured (rows before r111 stay distinguishable): entry_exec_premium (the ASK a long would pay,
@@ -906,12 +907,6 @@ class TradeLogger:
             if "Runaway" in _strat:
                 logger.info("[spent] runaway %s closed — its break is finished "
                             "(the plan reads it from trades.db)", trade_id[:8])
-            elif "TrendCredit" in _strat:
-                from strategy.sweep_credit_spread import is_breach_exit
-                if is_breach_exit(exit_reason):
-                    logger.info("[spent] %s %s closed (%s) — its level is SPENT for the day "
-                                "(the plan reads it from trades.db)", _strat, trade_id[:8],
-                                str(exit_reason or "")[:48])
         except Exception as exc:                               # noqa: BLE001
             logger.warning("[spent] could not report the spent state for %s: %s",
                            trade_id[:8], exc)

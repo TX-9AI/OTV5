@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""check_wing_search.py  v5.2
+"""check_wing_search.py  v5.3
+v5.3  2026-11-14  OTV5 r115 (HYG §5.1) — W1 RE-POINTED (WA 38.4): it read strategy/sweep_credit_spread.py, a file left with no code (a check that could not fail). The module is deleted; W1 now scans every live strategy/*.py for the fixed-width lookup and pins the sweep file absent. RED on 790ec1b.
 v5.2  2026-11-08  OTV5 r88 (RETIRE.3) — the TCS row of W9-W11 goes with the TCS (strategy/tcs_plan.py deleted); every other check unchanged.
 v5.1  2026-11-08  OTV5 r76 (RETIRE.1) — RE-POINTED (WA 38.4): the sweep plan is removed, so W2b, W3 and W7 (its selection) and its W9-W11 row go with it;
       W1, W2 (search_wing), W4-W6, W8, the TCS W9-W11 row and W16-W19 (the condor) unchanged.
@@ -204,16 +205,21 @@ def _fixed_offset_lookups(node):
 
 def main():
     from strategy.criteria import R_FLOOR
-    src = open(os.path.join(_root, "strategy", "sweep_credit_spread.py"),
-               encoding="utf-8").read()
-    code = "\n".join(l for l in src.split("\n")
-                     if not l.strip().startswith("#"))
-
     # ── 🔴 W1 — THE FIXED WING IS NO LONGER THE SELECTION ────────────────
-    # ⚠️ Match CODE, not the comment explaining the removal.
-    check("W1 the wing is not a single fixed-width lookup",
-          "_long = cv.find_contract_at_strike(_contracts, _long_strike)"
-          not in code)
+    # ⚠️ Match CODE, not the comment explaining the removal. r115: every live
+    # strategy file, not the deleted sweep module (which held no code at all).
+    _sdir = os.path.join(_root, "strategy")
+    _hits = []
+    for _f in sorted(os.listdir(_sdir)):
+        if _f.endswith(".py"):
+            _c = "\n".join(l for l in open(os.path.join(_sdir, _f), encoding="utf-8").read().split("\n")
+                           if not l.strip().startswith("#"))
+            if "_long = cv.find_contract_at_strike(_contracts, _long_strike)" in _c:
+                _hits.append(_f)
+    check("W1 the wing is not a single fixed-width lookup in any live strategy file, and the empty sweep "
+          "module is gone",
+          not _hits and not os.path.exists(os.path.join(_sdir, "sweep_credit_spread.py")),
+          f"hits={_hits}")
     # ⚠️ r157 — the search lives in `credit_vertical.search_wing`, ONE
     # implementation shared by all four credit strategies. Four copies would
     # drift, and the drift would be silent.

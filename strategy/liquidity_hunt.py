@@ -1,5 +1,6 @@
 """
-strategy/liquidity_hunt.py  v5.4
+strategy/liquidity_hunt.py  v5.5
+v5.5  2026-11-14  OTV5 r115 (HYG §5.1) — the symbol comes from config.INSTRUMENT here (_symbol_of, the same try/except), not from strategy/sweep_credit_spread, whose last two helpers kept a 397-line removed-trade file alive; that module is deleted. Same value.
 v5.4  2026-11-09  OTV5 r103 (RETIRE.5 step 2) — the expected move is read from analysis.volatility_measures.expected_move_session, the function strategy/gex_pin_butterfly.expected_move wrapped since r223 (same value; the fly module is removed). The operator, 2026-11-08: "I concur on both, in that order".
 v5.3  2026-11-08  OTV5 r90 (SHADOW.1) — LOG ONLY: every fire records the opening-range / EM rule's verdict (S5 R1,
       skip below 0.927) through strategy/shadow_rules.record_hunt on the firing tick, before take(): one plan_check row
@@ -129,10 +130,17 @@ from strategy import shadow_rules as _shadow   # r90 (SHADOW.1): log-only, never
 from strategy.base_strategy import OptionsSignal as Signal
 from strategy.plan import Plan, _n
 from strategy.runaway_continuation import gamma_leverage_pick, target_delta, ATR_FLOOR_PCT
-from strategy.sweep_credit_spread import _symbol_of
 from utils.math_utils import safe_float
 
 logger = logging.getLogger(__name__)
+
+
+def _symbol_of() -> str:
+    """The box's instrument (config.INSTRUMENT); "" if it cannot be read."""
+    try:
+        return str(config.INSTRUMENT)
+    except Exception:                                          # noqa: BLE001
+        return ""
 
 GATES = {
     "ATR_FLOOR_PCT":   "FEASIBILITY",     # the runaway's; can the tape reach a strike

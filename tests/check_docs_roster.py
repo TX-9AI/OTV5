@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_docs_roster.py  v5.3
+tests/check_docs_roster.py  v5.4
+v5.4  2026-11-14  OTV5 r115 (HYG §5.1) — R5 checks TWO bold stops (RUNAWAY_MAX_LOSS_PCT, MAX_LOSS_PCT): config.BUTTERFLY_STOP_LOSS_PCT is deleted (nothing read it since r107), and TRADES §0 drops its bold 40%. R1-R4 unchanged.
 v5.3  2026-11-09  OTV5 r103 (RETIRE.5 step 2) — the OT_GEX_BUTTERFLY row goes with the GEX pin butterfly (config.GEX_BUTTERFLY_ENABLED removed); R1-R5 unchanged.
 v5.2  2026-11-08  OTV5 r88 (RETIRE.3) — the OT_TCS_ACTIVE row goes with the TCS (config.TREND_CREDIT_ACTIVE removed); R1-R5 unchanged.
 v5.1  2026-11-08  OTV5 r76 (RETIRE.1) — the probe no longer reads the removed trades' config flags (ORCS_ENABLED,
@@ -42,7 +43,8 @@ out = {
  "eod": {k: list(v) for k, v in c.EOD_SCHEDULE.items()},
  "on": {
  },
- "stops": [c.RUNAWAY_MAX_LOSS_PCT, c.MAX_LOSS_PCT, c.BUTTERFLY_STOP_LOSS_PCT],
+ "stops": [c.RUNAWAY_MAX_LOSS_PCT, c.MAX_LOSS_PCT],
+ "bfly_gone": not hasattr(c, "BUTTERFLY_STOP_LOSS_PCT"),
 }
 # r303 (PSTATE.1): every plan's switch is ON when its default state is ACTIVE - plan_state decides
 from strategy import plan_state as S
@@ -93,8 +95,9 @@ def main():
         got = [[int(a), int(b)] for a, b in re.findall(r"\*\*(\d\d):(\d\d)\*\*", sec)]
         check("R4 the close's four bold times equal config.EOD_SCHEDULE, in order", got == want, f"doc {got} config {want}")
         got = [int(x) / 100.0 for x in re.findall(r"\*\*(\d+)%\*\*", sec)]
-        check("R5 the three bold stops equal RUNAWAY_MAX_LOSS_PCT, MAX_LOSS_PCT, BUTTERFLY_STOP_LOSS_PCT",
-              got == [float(x) for x in cfg["stops"]], f"doc {got} config {cfg['stops']}")
+        check("R5 the two bold stops equal RUNAWAY_MAX_LOSS_PCT, MAX_LOSS_PCT (BUTTERFLY_STOP_LOSS_PCT deleted r115)",
+              got == [float(x) for x in cfg["stops"]] and cfg.get("bfly_gone") is True,
+              f"doc {got} config {cfg['stops']} bfly_gone={cfg.get('bfly_gone')}")
     except Exception as exc:                                  # noqa: BLE001
         for n in ("R1", "R2", "R3", "R4", "R5"):
             if n not in FAILED:
