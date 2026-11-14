@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_retired_gone.py  v5.8
+tests/check_retired_gone.py  v5.9
+v5.9  2026-11-14  OTV5 r119 (HYG §5.5, HYG.24) — NEW G16/G16b: the brief's 21 dead defs (and CircuitBreakerState, which only one of them built) stay gone, by AST, never by substring; and what they sat beside stays (is_halted, can_enter, is_orb_complete, minutes_since, SLOPE_FLAT_ATR, get_open_trades_live, the engine's G6 API). RED on 47cc55a.
 v5.8  2026-11-14  OTV5 r118 (HYG §5.4, HYG.23) — NEW G15/G15b: the standing-offer store is gone (execution/resting_orders.py, main._supervise_offers and _orb_offer_working, order_guard's read of it, utils.paths.resting_db_path; entry_engine places no offer, r76's check_offer_fill_price F3, which is deleted), and _orb_release_due / _kept_order_ids / sweep_working stay. By AST. RED on d9286e9.
 v5.7  2026-11-14  OTV5 r115 (HYG §5.1) — G9b RE-POINTED (WA 38.4): the kept sweep helpers are gone with their module. G9b now pins strategy/sweep_credit_spread absent (no file, import fails), no live .py importing it, trade_logger carrying no TrendCredit [spent] branch, and liquidity_hunt._symbol_of answering config.INSTRUMENT. RED on 790ec1b.
 v5.6  2026-11-14  OTV5 r110 (WS.3 TRIM) — G3's live trades are Runaway, the Hunt and PARK; Breakout is DORMANT (plan_state row DORMANT, off ENTRY_WINDOWS, its admission row kept on BREAKOUT_WINDOW) and G3c pins that. Its code stays, so G6/G9 still exercise it.
@@ -46,6 +47,8 @@ v5.0  2026-11-08  OTV5 r76 (RETIRE.1) — THE RETIRED TRADES ARE GONE, THE LIVE 
       never overwrites an existing .bak-retire1
   G15 (r118) the standing-offer store is gone (no importer, supervisor, offer check, path or placement); G15b the
       ORB release check and the boot order sweep stay
+  G16 (r119) the 21 dead defs of brief section 5 item 5 are gone (each file's AST, so a header naming one is history,
+      not a hit), and CircuitBreakerState with them; G16b the live neighbours they sat beside are still defined
 
 Run:  python3 tests/check_retired_gone.py      (exit 0 = all pass)
 """
@@ -438,6 +441,60 @@ check("G15 (r118) the standing-offer store is gone: no importer, no supervisor, 
       not any(_gone15.values()), str({k: v for k, v in _gone15.items() if v}))
 check("G15b (r118) what stays: main._orb_release_due and order_guard._kept_order_ids / sweep_working",
       "_orb_release_due" in _d_mn and {"_kept_order_ids", "sweep_working"} <= _d_og, "")
+
+# ── G16 (r119, HYG.24) ───────────────────────────────────────────────────────────────────────────────
+# The Saturday brief 2026-11-14 section 5 item 5: defs with no caller anywhere (OTV5, its tests and tools, dtp). By AST
+# per file, as G15, so each module's header that records the removal is not a hit.
+_DEAD16 = {
+    "analysis/condor_trigger_map.py": {"any_active"},
+    "analysis/orb_engine.py": {"order_already_placed"},
+    "analysis/pitchfork.py": {"slope_atr_ratio"},
+    "analysis/trade_readiness.py": {"_impulse_sd"},
+    "data/options_chain.py": {"get_iv_rank"},
+    "data/tasty_client.py": {"get_account_number"},
+    "database/trade_logger.py": {"get_open_trades_today"},
+    "derived/fork_projection.py": {"from_engine"},
+    "risk/risk_manager.py": {"CircuitBreakerState", "check_circuit_breaker", "_check_daily_loss_limit", "any_active"},
+    "risk/session_guard.py": {"must_close_all", "seconds_to_open", "log_session_state"},
+    "strategy/base_strategy.py": {"_add_confluence"},
+    "strategy/iron_condor_strategy.py": {"_approach_text"},
+    "utils/math_utils.py": {"option_pnl_pct", "option_pnl_usd"},
+    "utils/time_utils.py": {"is_orb_window", "is_within_minutes", "seconds_until_hard_close"},
+}
+_KEEP16 = {
+    "analysis/condor_trigger_map.py": {"best"},
+    "analysis/orb_engine.py": {"mark_order_placed", "take_missed_confirmation"},
+    "analysis/trade_readiness.py": {"assess_all"},
+    "data/tasty_client.py": {"get_account"},
+    "database/trade_logger.py": {"get_open_trades_live"},
+    "derived/fork_projection.py": {"rail_edges"},
+    "risk/risk_manager.py": {"is_halted", "_ensure_seeded", "record_loss"},
+    "risk/session_guard.py": {"can_enter"},
+    "utils/time_utils.py": {"is_orb_complete", "minutes_since", "is_hard_close_time", "seconds_until_rth_open"},
+}
+
+
+def _names16(rel):
+    t = _ast.parse(_src(*rel.split("/")), rel)
+    return {n.name for n in _ast.walk(t) if isinstance(n, (_ast.FunctionDef, _ast.AsyncFunctionDef, _ast.ClassDef))}, t
+
+
+_back16, _lost16 = {}, {}
+for _rel in sorted(set(_DEAD16) | set(_KEEP16)):
+    _nm, _t16 = _names16(_rel)
+    _b = sorted(_DEAD16.get(_rel, set()) & _nm)
+    _l = sorted(_KEEP16.get(_rel, set()) - _nm)
+    if _b:
+        _back16[_rel] = _b
+    if _l:
+        _lost16[_rel] = _l
+_pf = _names16("analysis/pitchfork.py")[1]
+_flat16 = any(isinstance(n, _ast.Assign) and any(getattr(x, "id", "") == "SLOPE_FLAT_ATR" for x in n.targets)
+              for n in _pf.body)
+check("G16 (r119) the 21 dead defs of brief section 5 item 5, and CircuitBreakerState, are not defined again",
+      not _back16, str(_back16))
+check("G16b (r119) what they sat beside stays: is_halted, can_enter, is_orb_complete, minutes_since, SLOPE_FLAT_ATR, "
+      "get_open_trades_live, the engine's G6 API", not _lost16 and _flat16, str(_lost16) + ("" if _flat16 else " SLOPE_FLAT_ATR"))
 
 print()
 if FAIL:

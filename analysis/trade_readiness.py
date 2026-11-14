@@ -1,5 +1,6 @@
 """
-analysis/trade_readiness.py  v5.2
+analysis/trade_readiness.py  v5.3
+v5.3  2026-11-14  OTV5 r119 (HYG §5.5, HYG.24) — _impulse_sd goes (its caller went with the TCS track, r88). No caller anywhere (OTV5 code, tests, tools, docs, dtp: token scan + grep on r118). Nothing else changes; the module's behaviour is identical.
 v5.2  2026-11-11  OTV5 r107 (RETIRE.5 follow-up) — the butterfly readiness track goes with the fly strategy (removed r103): _butterfly, its STRATEGIES entry and assess_all row, the W_BFLY_* weights and the OT_TR_BFLY_* knobs (TR_BFLY_PIN_NEAR / PIN_FAR / GEX_LO / GEX_HI / WARM_MIN). The four remaining tracks score exactly as before. Old journal rows keep their "butterfly" track label (history). tools/strip_retired_env.sh v5.5 now takes OT_TR_BFLY_* off a unit.
 v5.1  2026-11-08  OTV5 r88 (RETIRE.3) — the trend_credit_spread readiness track, its OT_TR_TCS_* / OT_TR_W_TCS_* knobs and its smoke test go with the TCS. The operator, 2026-11-08: "Delete" (the TCS shadow, which never fired: its own gates declined every candidate 11-02..11-06).
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
@@ -671,42 +672,6 @@ class TradeReadinessEngine:
             return frac, ext_val, fires
         except Exception:
             return 0.0, 0.0, False
-
-    @staticmethod
-    def _impulse_sd(df_1m, direction: str, lookback: int):
-        """
-        Return (sd_ratio, floor_px) for the most recent significant impulse
-        candle in the trend direction, else (0.0, None).
-
-        sd_ratio = candle_range / rolling_SD(range) over `lookback` prior bars.
-        This is the operator's aware/established/screaming magnitude. floor_px
-        is that candle's LOW (long/PCS) or HIGH (short/CCS) — the committed-flow
-        origin that anchors the short strike. Degrades to (0.0, None) with no
-        candles, so the corroborator simply contributes nothing (never raises).
-        """
-        try:
-            if df_1m is None or len(df_1m) < lookback + 1:
-                return 0.0, None
-            highs = df_1m["high"].astype(float).values
-            lows  = df_1m["low"].astype(float).values
-            rng   = highs - lows
-            last  = float(rng[-1])
-            prior = rng[-(lookback + 1):-1]
-            import statistics as _st
-            sd = _st.pstdev(prior) if len(prior) > 1 else 0.0
-            if sd <= 0:
-                return 0.0, None
-            ratio = last / sd
-            floor_px = float(lows[-1]) if direction == "long" else float(highs[-1])
-            # direction sanity: a bullish impulse should close up, bearish down
-            closes = df_1m["close"].astype(float).values
-            opens  = df_1m["open"].astype(float).values
-            up = closes[-1] >= opens[-1]
-            if (direction == "long" and not up) or (direction == "short" and up):
-                return 0.0, None
-            return ratio, floor_px
-        except Exception:
-            return 0.0, None
 
     # ── the temporal core: slope + state machine ─────────────────────────────
 

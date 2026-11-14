@@ -1,5 +1,6 @@
 """
-utils/time_utils.py  v5.3
+utils/time_utils.py  v5.4
+v5.4  2026-11-14  OTV5 r119 (HYG §5.5, HYG.24) — is_orb_window, is_within_minutes and seconds_until_hard_close (its own 15:45 literal) go (uncalled). is_orb_complete, minutes_since and is_hard_close_time stay. No caller anywhere (OTV5 code, tests, tools, docs, dtp: token scan + grep on r118). Nothing else changes; the module's behaviour is identical.
 v5.3  2026-10-30  OTV5 r59 (ENT.1) — ENTRY_OPEN_ET APPLIES ON THE PRODUCTION CLOCK, AND ONLY EVER LATER THAN THE RANGE.
       entries_open() honoured config.ENTRY_OPEN_ET (OT_ENTRY_OPEN_ET) only when the caller passed `now`; both production
       choke points call it bare (main._execute_condor_leg, entry_engine.enter), so the bare call fell through to
@@ -401,15 +402,6 @@ def is_hard_close_time(now: Optional[datetime] = None) -> bool:
 # is what actually bounds an ORB re-entry and always did.
 
 
-def is_orb_window() -> bool:
-    """True if we're in the 9:30–9:35 ORB definition window."""
-    now = now_et()
-    if now.weekday() >= 5:
-        return False
-    t = now.time()
-    return RTH_OPEN <= t < ORB_END
-
-
 def is_orb_complete(now: Optional[datetime] = None) -> bool:
     """True if the ORB window has closed and we can look for setups.
 
@@ -430,22 +422,9 @@ def minutes_since(dt: datetime) -> float:
     return (now - dt).total_seconds() / 60
 
 
-def is_within_minutes(dt: datetime, minutes: float) -> bool:
-    return minutes_since(dt) < minutes
-
-
 def today_et() -> datetime:
     """Today's date at midnight ET."""
     return now_et().replace(hour=0, minute=0, second=0, microsecond=0)
-
-
-def seconds_until_hard_close() -> float:
-    """Seconds until 15:45 ET today."""
-    now = now_et()
-    hc = now.replace(hour=15, minute=45, second=0, microsecond=0)
-    if now >= hc:
-        return 0
-    return (hc - now).total_seconds()
 
 
 def seconds_until_rth_open() -> float:

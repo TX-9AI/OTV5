@@ -1,5 +1,6 @@
 """
-derived/fork_projection.py  v5.0
+derived/fork_projection.py  v5.1
+v5.1  2026-11-14  OTV5 r119 (HYG §5.5, HYG.24) — from_engine goes (uncalled). No caller anywhere (OTV5 code, tests, tools, docs, dtp: token scan + grep on r118). Nothing else changes; the module's behaviour is identical.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.2  2026-09-23  OTV4TEST r115 — fork_key delegates to derived.forks.fork_identity (one definition).
 THE 1-HOUR PITCHFORK'S RAILS AS A PROJECTION — SEPARATE FROM THE LEVEL BOOK.
@@ -131,13 +132,3 @@ def rail_edges(fork, rail: str, idx_now: float, ts_now_ms: int
         p = float(rail_at(fork, rail, idx_now + (ts - ts_now_ms) / 3_600_000.0))
         return (p, p)
     return _e
-
-
-def from_engine(fork_engine, timeframe: str = "1h"):
-    """(fork, idx_now) from the live ForkEngine, or (None, None). The engine
-    clears both on a failed build, so a dead fork is None here the next tick."""
-    if fork_engine is None:
-        return None, None
-    f = (getattr(fork_engine, "last_forks", {}) or {}).get(timeframe)
-    i = (getattr(fork_engine, "last_idx", {}) or {}).get(timeframe)
-    return (f, float(i)) if (f is not None and i is not None) else (None, None)

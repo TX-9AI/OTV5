@@ -1,5 +1,6 @@
 """
-analysis/orb_engine.py  v5.4
+analysis/orb_engine.py  v5.5
+v5.5  2026-11-14  OTV5 r119 (HYG §5.5, HYG.24) — the order_already_placed property goes (uncalled). mark_order_placed / take_missed_confirmation stay: check_retired_gone G6 pins them as the engine's API. THE ENGINE IS OTHERWISE UNCHANGED. No caller anywhere (OTV5 code, tests, tools, docs, dtp: token scan + grep on r118). Nothing else changes; the module's behaviour is identical.
 v5.4  2026-11-14  OTV5 r118 (HYG.23) — COMMENTS ONLY: two notes named resting_orders and main._orb_offer_working as live; both are
       deleted (the standing-offer store, no writer since r76). THE ENGINE IS UNCHANGED (AST identical to r117).
 v5.3  2026-11-08  OTV5 r76 (RETIRE.1) — is_confirmed (no caller anywhere) is removed. THE ENGINE IS UNCHANGED: every state, transition and reader Runaway, Breakout and Hunt use is byte-identical. The operator, 2026-11-07: "Running dead code and logging dead code activity is unnecessary drag. Yes, I want all of those things fixed."
@@ -1959,11 +1960,6 @@ class ORBEngine:
                     "confirmation is SPENT; the next order needs a fresh "
                     "qualifying retest",
                     self._data.attempt_number, self._data.confirmation_seq)
-
-    @property
-    def order_already_placed(self) -> bool:
-        """True when this confirmation has already produced an order."""
-        return bool(self._data.order_placed)
 
     @property
     def direction(self) -> str:

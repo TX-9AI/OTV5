@@ -1,5 +1,6 @@
 """
-data/tasty_client.py  v5.2
+data/tasty_client.py  v5.3
+v5.3  2026-11-14  OTV5 r119 (HYG §5.5, HYG.24) — get_account_number goes (uncalled; config.get_tt_account_number is the one reader). No caller anywhere (OTV5 code, tests, tools, docs, dtp: token scan + grep on r118). Nothing else changes; the module's behaviour is identical.
 v5.2  2026-11-14  OTV5 r112 (AM.6) — get_open_option_positions also returns opened_at: the broker position's created_at
       (ISO, UTC) or "" when the SDK has none, so an adopted position keeps the time it was opened, not the reconcile
       time (execution/broker_reconcile v5.2). Nothing else changes. The operator, 2026-11-14: "Let's fix the top 10
@@ -143,10 +144,6 @@ def get_account() -> Account:
             _account       = sdk_result(Account.get(session, account_number))   # B0
             logger.info(f"TastyTrade account loaded: {account_number}")
     return _account
-
-
-def get_account_number() -> str:
-    return get_tt_account_number()
 
 
 def _underlying_family(u: str) -> set:

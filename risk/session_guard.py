@@ -1,5 +1,6 @@
 """
-risk/session_guard.py  v5.1
+risk/session_guard.py  v5.2
+v5.2  2026-11-14  OTV5 r119 (HYG §5.5, HYG.24) — must_close_all, seconds_to_open and log_session_state go (uncalled), and the seconds_until_rth_open import only seconds_to_open used. can_enter is unchanged. No caller anywhere (OTV5 code, tests, tools, docs, dtp: token scan + grep on r118). Nothing else changes; the module's behaviour is identical.
 v5.1  2026-11-09  OTV5 r103 (RETIRE.5 step 2) — config.BUTTERFLY_ENTRY_CUTOFF_ET and _BUTTERFLY_CUTOFF go with the GEX pin butterfly: they gated nothing since r209. can_enter keeps its is_butterfly parameter, accepted and unused, so no caller breaks. The operator, 2026-11-08: "I concur on both, in that order".
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v4.4  2026-10-03  OTV4TEST r209 (EXIT.4) — THE BUTTERFLY CUTOFF BRANCH IS DELETED. It could never run (no caller has ever
@@ -74,7 +75,7 @@ from typing import Optional
 
 from utils.time_utils import (
     is_rth, is_orb_complete, is_hard_close_time,
-    now_et, fmt_et_short, seconds_until_rth_open
+    now_et, fmt_et_short
 )
 from data.macro_data import MacroSnapshot
 
@@ -192,23 +193,6 @@ class SessionGuard:
                           % (", ".join(_noted), fmt_et_short()))
 
         return True, ""
-
-    def must_close_all(self) -> bool:
-        return is_hard_close_time()
-
-    def seconds_to_open(self) -> float:
-        return seconds_until_rth_open()
-
-    def log_session_state(self, macro: Optional[MacroSnapshot] = None):
-        allowed, reason = self.can_enter(macro)
-        logger.info(
-            f"Session [{fmt_et_short()}]: "
-            f"rth={is_rth()} "
-            f"entry={'OK' if allowed else 'BLOCKED: ' + reason} "
-            f"hard_close={is_hard_close_time()} "
-            f"vix={macro.vix:.1f if macro else 'N/A'} "
-            f"fed_day={macro.is_fed_day if macro else False}"
-        )
 
 
 _session_guard: Optional[SessionGuard] = None

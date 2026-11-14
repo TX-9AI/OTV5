@@ -1,5 +1,6 @@
 """
-analysis/pitchfork.py  v5.1
+analysis/pitchfork.py  v5.2
+v5.2  2026-11-14  OTV5 r119 (HYG §5.5, HYG.24) — slope_atr_ratio goes (uncalled). SLOPE_FLAT_ATR stays: main and status.py read it. No caller anywhere (OTV5 code, tests, tools, docs, dtp: token scan + grep on r118). Nothing else changes; the module's behaviour is identical.
 v5.1  2026-11-08  OTV5 r76 (RETIRE.1) — slope_label, build_all_variants and channel_width_at (no caller anywhere) are removed. Nothing else changes. The operator, 2026-11-07: "Running dead code and logging dead code activity is unnecessary drag. Yes, I want all of those things fixed."
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v4.2  2026-08-25  r65 EXORCISM: every mention of the retired classification
@@ -572,19 +573,6 @@ def _epoch_triple(df: pd.DataFrame, start: int, k: int):
 # confusion that has cost this repo more than any other single habit. A caller
 # with no fork gets None and says so.
 SLOPE_FLAT_ATR = 0.12          # |slope| below this fraction of ATR/bar = flat
-
-
-def slope_atr_ratio(fork) -> Optional[float]:
-    """Fork slope as a fraction of its own ATR-at-birth, per bar. None if unusable."""
-    if fork is None:
-        return None
-    try:
-        atr = float(getattr(fork, "atr_at_birth", 0.0) or 0.0)
-        if atr <= 0:
-            return None
-        return float(getattr(fork, "slope", 0.0) or 0.0) / atr
-    except (TypeError, ValueError):
-        return None
 
 
 def _containment(df: pd.DataFrame, start: int, origin_idx: float,

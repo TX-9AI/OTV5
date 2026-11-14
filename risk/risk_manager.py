@@ -1,5 +1,6 @@
 """
-risk/risk_manager.py  v5.5
+risk/risk_manager.py  v5.6
+v5.6  2026-11-14  OTV5 r119 (HYG §5.5, HYG.24) — check_circuit_breaker, its CircuitBreakerState dataclass and the _check_daily_loss_limit back-compat shim go (uncalled). The daily-loss halt is is_halted(), unchanged. No caller anywhere (OTV5 code, tests, tools, docs, dtp: token scan + grep on r118). Nothing else changes; the module's behaviour is identical.
 v5.5  2026-11-14  OTV5 (OGAP.1) — size_for passes budget_usd through to the BUDGET rule (_size_budget(budget_usd=...)): None (every existing caller) keeps self._risk_per_trade; OGAP passes OGAP_BUDGET_USD. The geometry rule's budget_usd is unchanged.
 v5.4  2026-11-14  OTV5 r113 (AM.8) — the cap-episode stamp's day comes from utils.time_utils.now_et(), the one ET owner. _et_date() fell back to the UTC date when zoneinfo could not load (after 19:00 ET that is tomorrow, so the once-per-episode page would key on the wrong day); an unreadable clock now returns "" (no stamp matches, so a page is never silenced). The operator, 2026-11-14: "Let's fix the top 10 today" (amnesty bucket AM.8). Gate tests/check_cap_page_once.py v5.2 P10-P11.
 v5.3  2026-11-11  OTV5 r107 (RETIRE.5 follow-up) — size_for("butterfly") and its net_debit / butterfly_half_size arguments go, with _size_budget's is_butterfly / net_debit / butterfly_half_size and the r122 VIX half-size (a fly-only rule). No live strategy declares the butterfly structure since r103; an unknown structure still falls to the budget rule. Every live size is unchanged. The operator, 2026-11-07: "Running dead code and logging dead code activity is unnecessary drag."
@@ -268,17 +269,6 @@ class SizingResult:
     # data already banked. Same shape as r198's wing_stretch.
     geometry_wanted:    int   = 0
     budget_allowed:     int   = 0
-
-
-@dataclass
-class CircuitBreakerState:
-    session_halted: bool  = False
-    session_losses: int   = 0
-    reason:         str   = ""
-
-    @property
-    def any_active(self) -> bool:
-        return self.session_halted
 
 
 def cap_cf_path() -> str:
@@ -737,13 +727,6 @@ class RiskManager:
         )
         return result
 
-    def check_circuit_breaker(self) -> CircuitBreakerState:
-        self._ensure_seeded()
-        return CircuitBreakerState(
-            session_losses=self._session_losses,
-            session_halted=self._session_halted,
-        )
-
     def _ensure_seeded(self):
         """Seed session net P&L from today's closed trades so the daily loss
         halt survives restarts within the same session."""
@@ -789,10 +772,6 @@ class RiskManager:
     def record_win(self, pnl_usd: float = 0.0):
         net = self.day_realized_pnl()
         logger.info(f"Session win (${pnl_usd:+.0f}) — day realized ${net:+.0f}")
-
-    def _check_daily_loss_limit(self):
-        """Back-compat shim — the authoritative check now lives in is_halted()."""
-        self.is_halted()
 
     # ── r181 (ALRT.2) — the page is once per EPISODE, across restarts ────────
     def _cap_stamp_path(self) -> str:

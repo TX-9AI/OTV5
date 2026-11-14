@@ -1,5 +1,6 @@
 """
-data/options_chain.py  v5.0
+data/options_chain.py  v5.1
+v5.1  2026-11-14  OTV5 r119 (HYG §5.5, HYG.24) — OptionsChainFetcher.get_iv_rank goes (uncalled). No caller anywhere (OTV5 code, tests, tools, docs, dtp: token scan + grep on r118). Nothing else changes; the module's behaviour is identical.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v4.7  2026-10-18  OTV4TEST r301 (LOG.1) — A ZERO-MARKS CHAIN OUTSIDE RTH IS SAID ONCE AT INFO, NOT EVERY MINUTE AT ERROR.
       The r101 rehearsal builds the chain every 60 s all evening and the marks are gone after the bell, so FAIL-LOUD
@@ -721,15 +722,6 @@ class OptionsChainFetcher:
             f"(target={target_delta:.2f}{'' if band else ', band empty->nearest'})"
         )
         return best
-
-    def get_iv_rank(self, chain: OptionsChain) -> float:
-        """Estimate IV rank. Falls back to ATM call IV."""
-        if chain.iv_rank > 0:
-            return chain.iv_rank
-        if chain.calls:
-            atm = min(chain.calls, key=lambda c: abs(c.delta - 0.5))
-            return atm.iv * 100
-        return 0.0
 
 
 # Singleton

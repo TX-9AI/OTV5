@@ -1,5 +1,6 @@
 """
-database/trade_logger.py  v5.7
+database/trade_logger.py  v5.8
+v5.8  2026-11-14  OTV5 r119 (HYG §5.5, HYG.24) — get_open_trades_today goes (the deprecated alias of get_open_trades_live; uncalled). No caller anywhere (OTV5 code, tests, tools, docs, dtp: token scan + grep on r118). Nothing else changes; the module's behaviour is identical.
 v5.7  2026-11-14  OTV5 r115 (HYG §5.1) — the [spent] report's TrendCredit branch is deleted: the TCS was removed at r88, so the branch could never run on a live close, and it was the last reader of strategy/sweep_credit_spread.is_breach_exit (module deleted). The Runaway [spent] line is unchanged.
 v5.6  2026-11-14  OTV5 r111 (AM.1) — THE EXECUTABLE-PRICE BASIS, BESIDE THE MARK. Paper books the mark in and out (100%
       fill, no spread), so the EV benchmark and the cash size table carried no spread cost and no fill risk. Four NEW
@@ -1205,13 +1206,6 @@ class TradeLogger:
                 (self._mode_flag,)
             ).fetchall()
         return [make_record(**dict(r)) for r in rows]
-
-    def get_open_trades_today(self) -> List[TradeRecord]:
-        """Deprecated alias — retained for safety. Prefer get_open_trades_live().
-        A 0DTE bot that also trades weeklies can hold a position across sessions
-        (expiry days out), so 'entered today' is the WRONG liveness test; use
-        expiry instead."""
-        return self.get_open_trades_live()
 
     @staticmethod
     def _expiry_date(expiry) -> str:

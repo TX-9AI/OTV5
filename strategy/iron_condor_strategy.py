@@ -1,5 +1,6 @@
 """
-strategy/iron_condor_strategy.py  v5.1
+strategy/iron_condor_strategy.py  v5.2
+v5.2  2026-11-14  OTV5 r119 (HYG §5.5, HYG.24) — _approach_text goes (uncalled). No caller anywhere (OTV5 code, tests, tools, docs, dtp: token scan + grep on r118). Nothing else changes; the module's behaviour is identical.
 v5.1  2026-11-08  OTV5 r76 (RETIRE.1) — ten uncalled helpers are removed (_select_beyond_rail, _reset_if_new_day, _find_contract_at_strike, _abandon_past_cutoff, reset_plan, _wing_width, _bars_left, _quote_ok, _pop, _liquidity_rank) with the imports only they used; the lone-leg HOLD line no longer reads the deleted sweep plan. Every called method is unchanged. The operator, 2026-11-07: "Running dead code and logging dead code activity is unnecessary drag. Yes, I want all of those things fixed."
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v4.17  2026-10-11  OTV4TEST r269 (OPS.22, mirror of otv4 r479) - the zone NAME is "America/New_York", the zone the legacy link
@@ -498,13 +499,6 @@ class IronCondorStrategy(BaseOptionsStrategy):
             "em_at_plan": round(plan.expected_move or 0.0, 2),
             "decided_at": plan.decided_at,
         }
-
-    @staticmethod
-    def _approach_text(a: dict) -> str:
-        def _p(v): return "n/a" if v is None else f"{v:.0%}"
-        return (f"call_approach={_p(a['call_approach'])} (max={a['max_seen']}) "
-                f"put_approach={_p(a['put_approach'])} (min={a['min_seen']}) "
-                f"rails={a['call_rail']}/{a['put_rail']}")
 
     @staticmethod
     def _journal_abandon(plan, a: dict, cause: str) -> None:

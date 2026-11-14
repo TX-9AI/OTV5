@@ -1,5 +1,6 @@
 """
-analysis/condor_trigger_map.py  v5.0
+analysis/condor_trigger_map.py  v5.1
+v5.1  2026-11-14  OTV5 r119 (HYG §5.5, HYG.24) — CondorTriggerMap.any_active goes (uncalled; best() and the trigger list stay). No caller anywhere (OTV5 code, tests, tools, docs, dtp: token scan + grep on r118). Nothing else changes; the module's behaviour is identical.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.0  2026-08-24  CONDOR TRIGGER MAP: the fork rails are a LINEAR FUNCTION
       OF TIME+SLOPE, not a stored snapshot. A trigger level cached at 11am
@@ -60,9 +61,6 @@ class CondorTriggerMap:
         """Active triggers on one side, inner (narrower rail) first."""
         hits = [t for t in self.triggers if t.side == side and t.active]
         return sorted(hits, key=lambda t: abs(t.rail - self.price))
-
-    def any_active(self, side: str) -> bool:
-        return any(t.side == side and t.active for t in self.triggers)
 
     def best(self, side: str) -> Optional[ForkTrigger]:
         """The closest active trigger for one side, or None."""
