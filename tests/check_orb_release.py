@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_orb_release.py  v5.2
+tests/check_orb_release.py  v5.3
+v5.3  2026-11-14  OTV5 r120 (HYG §5.7, HYG.25) — M1 RE-PINNED (WA 38.4): _orb_release_due no longer scans the book for an "ORB" record (none can be open: CRM read-only and the S3 trade warehouse 08-15..11-14), so an ORB-named row is True like any other; NEW M1b: an UNREADABLE book is still False (the fail-closed probe stays).
 v5.2  2026-11-08  OTV5 r76 (RETIRE.1) — M1 RE-POINTED (WA 38.4): the ORB trade is removed and OT_ORB_TRADE is read by nothing, so a set switch no
       longer holds the engine (b is True); a stale ORB position still holds it (fails closed), another strategy's does not.
 v5.1  2026-10-31  OTV5 r68 (CFG.5) — OT_RESTING_STOP_STATE leaves the scratch env: the resting stop and its state file are deleted
@@ -27,8 +28,9 @@ v5.0  2026-10-30  OTV5 r61 (ORB.10) — new. THE RETIRED ORB HELD THE ENGINE OPE
   U1  release_unowned() is a no-op off OPEN_*; U2 50% accepted -> INVALIDATED runaway; U3 past the cutoff ->
       EXPIRED; U4 a last close inside -> WAITING_FOR_BREAK; U5 else ARMED on the impulse, attempt + 1, the bar
       remembered (the notify_position_closed outcomes)
-  M1  main._orb_release_due: no offer, no ORB position -> True; OT_ORB_TRADE=1 -> still True (r76: removed); an open
-      ORB position -> False
+  M1  main._orb_release_due: an empty book -> True; OT_ORB_TRADE=1 -> still True (r76: removed); an ORB-named row
+      and another strategy's row -> True (r120: no name scan)
+  M1b an unreadable book -> False (fails closed, as since r61)
   M2  main.run_analysis releases right after get_orb_engine().update() and before orb_state.json is written, and
       the reach-back is called with release_open
 
@@ -347,10 +349,21 @@ if M is not None:
         finally:
             M.get_position_manager = _real_pm
             os.environ.pop("OT_ORB_TRADE", None)
-        check("M1 _orb_release_due: no ORB owner True, and still True with OT_ORB_TRADE=1 (r76: the trade is removed, its "
-              "switch reads nothing); a stale ORB position False; another strategy's position True",
-              a is True and b is True and c is False and d_ is True,
-              f"dormant={a} active={b} orb_open={c} other_open={d_}")
+        check("M1 _orb_release_due: True on an empty book, still True with OT_ORB_TRADE=1 (r76: the trade is removed, its "
+              "switch reads nothing), True with an ORB-named row (r120: no name scan) and with another strategy's row",
+              a is True and b is True and c is True and d_ is True,
+              f"empty={a} switch_set={b} orb_named={c} other_open={d_}")
+
+        class _BadPM:
+            def get_open_records(self):
+                raise RuntimeError("book unreadable")
+        try:
+            M.get_position_manager = lambda paper=True: _BadPM()
+            e_ = _due(_St())
+        finally:
+            M.get_position_manager = _real_pm
+        check("M1b _orb_release_due: an UNREADABLE book is False (fails closed: the engine is not released this tick)",
+              e_ is False, f"unreadable={e_}")
     import inspect
     src = inspect.getsource(M.run_analysis)
     iu = src.find("_orb_eng.update(")

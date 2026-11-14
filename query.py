@@ -1,5 +1,6 @@
 """
-query.py  v5.2
+query.py  v5.3
+v5.3  2026-11-14  OTV5 r120 (HYG §5.7, HYG.25) — the plans panel's _CREDIT_ENTRIES keeps IronCondorStrategy only: OpeningRangeCreditSpread, SweepCreditSpread (r76) and TrendCreditSpread (r88) are not in strategy/plan_state.TABLE or plan.REGISTRY, so data/plan_states.json (rewritten at every boot) can never carry them and their three reads were always empty. The panel shows the same lines. The ledger decode map (_STRAT_ABBR) keeps every name: it reads history.
 v5.2  2026-10-25  OTV5 r19 (VIEW.2) — THE PLANS PANEL SHOWS EVERY SWITCHED-ON PLAN, THE SAME ON EVERY BOX, AT ANY HOUR, AND
       HIDES WHAT IS SWITCHED OFF. The operator, 2026-10-25, comparing SOFI's and NVDA's panels: "Look at the plans. Why
       aren't they showing the same lines?"; "Can we suppress retired or paused plans from displaying here?"; "Yes. I want
@@ -972,7 +973,7 @@ def show_decisions(dc):
             return ""
     # r19 (VIEW.2) — THE ROSTER: what is switched on, the same on every box, whatever heartbeat rows exist
     _cats = {k: (v or {}).get("category", "") for k, v in ((_sdoc.get("plans") or {}).items())}
-    _CREDIT_ENTRIES = ("OpeningRangeCreditSpread", "SweepCreditSpread", "TrendCreditSpread", "IronCondorStrategy")
+    _CREDIT_ENTRIES = ("IronCondorStrategy",)      # r120: the other three left the plan table at r76/r88
     _entries = sorted(k for k, v in _states.items() if v in ("active", "log") and not k.endswith("/manage")
                       and k not in ("CondorManagement", "CreditRoll"))
     _credit_on = any(_states.get(k) in ("active", "log") for k in _CREDIT_ENTRIES)

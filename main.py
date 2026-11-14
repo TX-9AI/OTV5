@@ -1,5 +1,6 @@
 """
-main.py  v5.22
+main.py  v5.23
+v5.23  2026-11-14  OTV5 r120 (HYG §5.7, HYG.25) — RETIRED NAMES LEAVE THE LIVE PATHS. (1) _orb_release_due drops its scan for an open "ORB" record: nothing that can be on a book carries the name (ORBStrategy opens nothing since r76, adopted positions are "ADOPTED", no open ORB row on any box: CRM read-only and the S3 trade warehouse 08-15..11-14); the book read stays as the fail-closed probe, so an unreadable book still holds the engine this tick. (2) _open_credit_legs / _open_credit_sides drop r204's OpeningRangeCreditSpread filter (no ORCS row can be open). (3) _L1_BREAKDOWN_FOR and its lookup go: the one row named ContinuationStrategy, which no live setup is, so no fire carried a breakdown since r58; the score vector is journalled as before. No decision changes.
 v5.22  2026-11-14  OTV5 r118 (HYG §5.4, HYG.23) — THE STANDING-OFFER SUPERVISOR IS DELETED. The operator concurred (2026-11-14) on deleting the dead resting-offer entry code: r76 removed its only writer (entry_engine's ORB standing offer), so data/resting_orders.db had no new row since 2026-09-25 (CRM, read-only) and _supervise_offers polled an empty store every tick. _supervise_offers and its call before the has_open_position() split go; _orb_offer_working goes and _orb_release_due asks only the book (no ORB position open), exactly as before on an empty store. execution/resting_orders.py is deleted. No behaviour change.
 v5.21  2026-11-14  OTV5 r117 (HYG §5.3) — DOCSTRING ONLY: _afternoon_debit_blocked's docstring said the cutoff was 11:30; it has been EOD_SCHEDULE["entries_stop"] 15:40 since OTV4TEST r149. The 08-13/08-20 history is kept, marked superseded. No code changes.
 v5.20  2026-11-14  OTV5 (OGAP.1) — OGAP IS ASKED: _attempt_ogap beside _attempt_park in the normal dispatch and the capped branch (cap-exempt; its plan is dormant outside 09:46-10:32 and off the QQQ box), one per session (DB-backed, fails closed); _STRUCTURE_BY_NAME["OGAP"] = long_debit; PIN_EXEMPT gains OGAP (Park's book was measured without the pin gate; the counterfactual row is still written); the sizer is asked on the ASK with OGAP_BUDGET_USD (size_for budget_usd); the Service line adds " · ogap=on|not this symbol". Every other strategy dispatches and sizes exactly as before.
@@ -3587,8 +3588,7 @@ def _open_credit_legs() -> list:
     try:
         from database.trade_logger import get_trade_logger
         return [t for t in get_trade_logger().get_open_trades()
-                if t.get("is_condor_leg") and t.get("status") == "open"
-                and t.get("strategy") != "OpeningRangeCreditSpread"]   # r204: ORCS pairs with nothing
+                if t.get("is_condor_leg") and t.get("status") == "open"]   # r120: the r204 ORCS filter goes (no ORCS row can be open)
     except Exception:                                          # noqa: BLE001
         return []
 
@@ -3604,8 +3604,7 @@ def _open_credit_sides() -> set:
         from database.trade_logger import get_trade_logger
         return {t.get("option_side")
                 for t in get_trade_logger().get_open_trades()
-                if t.get("is_condor_leg") and t.get("status") == "open"
-                and t.get("strategy") != "OpeningRangeCreditSpread"}   # r204: ORCS pairs with nothing
+                if t.get("is_condor_leg") and t.get("status") == "open"}   # r120: the r204 ORCS filter goes (no ORCS row can be open)
     except Exception:                                          # noqa: BLE001
         return set()
 
@@ -4025,14 +4024,18 @@ def _l1_scores(ctx):
 
 
 def _orb_release_due(state) -> bool:
-    """r61 (ORB.10) — True when no ORB trade can own an ORB confirmation: no ORB position is open (the
-    ORB trade itself is removed, RETIRE.1; r118 HYG.23: the standing-offer store it also asked is deleted,
-    nothing had written it since r76). Then the engine is released from OPEN_* (orb_engine.release_unowned)
+    """r61 (ORB.10) — True when no ORB trade can own an ORB confirmation. The ORB trade is removed (RETIRE.1),
+    r118 (HYG.23) deleted the standing-offer store it also asked, and r120 (HYG.25) drops the scan for an open
+    "ORB" record (none can exist), so it is True whenever the book reads. Then the engine is released from OPEN_* (orb_engine.release_unowned)
     instead of holding it to 15:40, which blinded RunawayContinuation to the opposite break. Fails CLOSED
     (False): an unreadable book keeps today's behaviour."""
     try:
-        _recs = get_position_manager(getattr(state, "paper_trading", True)).get_open_records()
-        return not any("ORB" in str(r.get("strategy") or "") for r in (_recs or []))
+        # r120 (HYG.25): the "ORB" scan of the book goes - no strategy that can be on a book carries the name
+        # (ORBStrategy opens nothing since r76; adopted positions are "ADOPTED"; no open ORB row on any box,
+        # CRM read-only and the S3 trade warehouse 08-15..11-14). The read stays as the FAIL-CLOSED probe: an
+        # unreadable book still keeps the engine held this tick, exactly as before.
+        get_position_manager(getattr(state, "paper_trading", True)).get_open_records()
+        return True
     except Exception as exc:                                    # noqa: BLE001
         logger.warning("[orb] release check unreadable (%s) - the engine is not released this tick", exc)
         return False
@@ -5376,20 +5379,15 @@ def _execute_entry_signal(signal, ctx, ms, state, _sigj=None, *, additive: bool 
                 # costs one payload and no computation.
                 # Always: the six-score VECTOR — cheap, and it is the ambient
                 # context for ANY entry, not only sweeps.
-                # Additionally: the firing setup's OWN breakdown, keyed by
-                # strategy, so a fire does not carry five unused breakdowns.
+                # r120 (HYG.25): the per-strategy breakdown (_L1_BREAKDOWN_FOR) is
+                # gone - its one row named ContinuationStrategy, which no live
+                # setup is, so no fire has carried a breakdown since r58.
                 _l1_ctx = None
                 try:
                     _l1r = ctx.get("l1")
                     if _l1r is not None:
                         _l1_ctx = {"scores": {str(k): _rnd4(v)
                                               for k, v in (_l1r.scores or {}).items()}}
-                        _bdkey = _L1_BREAKDOWN_FOR.get(signal.strategy_name)
-                        if _bdkey:
-                            _bd = (_l1r.breakdown or {}).get(_bdkey)
-                            if _bd:
-                                _l1_ctx["breakdown"] = _bd
-                                _l1_ctx["breakdown_of"] = str(_bdkey)
                 except Exception:
                     _l1_ctx = None
                 _sigj.journal("disposition", outcome="fired",
@@ -5411,21 +5409,6 @@ def _rnd4(v):
         return None
 
 
-# v5.9 — which L1 breakdown belongs to a firing strategy. A WRONG entry here
-# does not raise: it files a well-formed breakdown from the wrong scorer under a
-# correct-looking key, and a week of collection would be characterised against
-# features that decided nothing. ORB and Butterfly are deliberately ABSENT —
-# breakdown to it would imply a dependency the engine does not have. An unmapped
-# strategy records the score vector and NO breakdown, never a wrong one.
-_L1_BREAKDOWN_FOR = {
-    "ContinuationStrategy":   "TRENDING",   # score() files BOTH trend scorers'
-                                            # shared breakdown under this key,
-                                            # not under the BULL/BEAR labels
-    # PHASE B (r58): SweepReversal and IronCondor rows removed — the first
-    # names a strategy deleted at r33; the second filed a label-keyed
-    # breakdown nothing computes. An unmapped strategy records NO breakdown,
-    # never a wrong one — the map's own rule.
-}
 
 
 def handle_session_reset(state: BotState):

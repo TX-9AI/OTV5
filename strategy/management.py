@@ -1,5 +1,6 @@
 """
-strategy/management.py  v5.8
+strategy/management.py  v5.9
+v5.9  2026-11-14  OTV5 r120 (HYG §5.7, HYG.25) — THE RETIRED SWEEP NAME LEAVES THE TWO CREDIT-SIGN READS. decide() only runs for a record covers() accepts (COVERED = RunawayContinuation, Breakout, both debits), so `strategy in ("SweepCreditSpread",)` there could never be true; credit is is_credit_vertical alone. _one() (narration rows, never a decision) keeps IronCondorStrategy (dormant entry, CondorManagement active) and drops SweepCreditSpread: no open row of it on any box (CRM read-only, the S3 trade warehouse 08-15..11-14). Every intent and every row is unchanged.
 v5.8  2026-11-09  OTV5 r103 (RETIRE.5 step 2) — THE GEX PIN BUTTERFLY IS REMOVED: its EXIT_CONDITIONS row, BUTTERFLIES, its COVERED entry and the HOLD_TO_CLOSE_STRATEGIES reads (the fly was the only member) go. The live strategies' conditions and intents are unchanged. The operator, 2026-11-08: "I concur on both, in that order" (cut 11-09, code removed after that close).
 v5.7  2026-11-08  OTV5 r88 (RETIRE.3) — the TrendCreditSpread EXIT_CONDITIONS row and COVERED entry, and its four special cases (no premium stop, 'breach', the credit classification), go with the TCS. The operator, 2026-11-08: "Delete" (the TCS shadow, which never fired: its own gates declined every candidate 11-02..11-06).
 v5.6  2026-11-08  OTV5 r76 (RETIRE.1) — EXIT_CONDITIONS, BUTTERFLIES and COVERED drop the removed ORB, sweep and ATP trades. The live strategies' conditions are unchanged. The operator, 2026-11-07: "Running dead code and logging dead code activity is unnecessary drag. Yes, I want all of those things fixed."
@@ -638,8 +639,7 @@ class ManagementPlan:
             strategy = str(record.get("strategy", "") or "")
             prem = _f(current_premium)
             entry = _f(record.get("entry_premium")) or 0.0
-            credit = bool(record.get("is_credit_vertical")) or strategy in (
-                "SweepCreditSpread",)
+            credit = bool(record.get("is_credit_vertical"))     # r120: COVERED is Runaway + Breakout, both debits
             pnl = 0.0
             if prem is not None and entry > 0:
                 pnl = (entry - prem) / entry if credit else (prem - entry) / entry
@@ -961,8 +961,7 @@ class ManagementPlan:
         mfe = _f(rec.get("mfe_premium"))
         mae = _f(rec.get("mae_premium"))
         ticks = int(rec.get("excursion_ticks") or 0)
-        credit = bool(rec.get("is_credit_vertical")) or strategy in (
-            "SweepCreditSpread", "IronCondorStrategy")
+        credit = bool(rec.get("is_credit_vertical")) or strategy == "IronCondorStrategy"
         pnl = None
         if prem is not None and entry > 0:
             pnl = (entry - prem) / entry if credit else (prem - entry) / entry

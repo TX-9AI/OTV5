@@ -1,5 +1,6 @@
 """
-strategy/base_strategy.py  v5.3
+strategy/base_strategy.py  v5.4
+v5.4  2026-11-14  OTV5 r120 (HYG §5.7, HYG.25) — the Signal.is_sweep property goes: it compared strategy_name with SweepReversal (deleted r33) and nothing reads it (OTV5 and dtp, `.is_sweep` grep). Nothing else changes.
 v5.3  2026-11-14  OTV5 r119 (HYG §5.5, HYG.24) — _add_confluence goes (uncalled). No caller anywhere (OTV5 code, tests, tools, docs, dtp: token scan + grep on r118). Nothing else changes; the module's behaviour is identical.
 v5.2  2026-11-11  OTV5 r107 (RETIRE.5 follow-up) — THE BUTTERFLY SIGNAL FIELDS GO (is_butterfly, lower/center/upper_contract, butterfly_direction, net_debit, max_profit) and their four branches in is_valid / stop_premium / trail_activation_premium / target_premium. Nothing has built a butterfly signal since r103 removed the fly strategy. Every live signal takes the same arms as before. The operator, 2026-11-07: "Running dead code and logging dead code activity is unnecessary drag."
 v5.1  2026-11-08  OTV5 r76 (RETIRE.1) — is_orb (the removed trade's identity) is removed; sizes_on_structure reads sizes_on_geometry alone (Breakout), as it already did for every live signal. The operator, 2026-11-07: "Running dead code and logging dead code activity is unnecessary drag. Yes, I want all of those things fixed."
@@ -187,10 +188,6 @@ class OptionsSignal:
     # Values: "1h_fork", "1d_fork", "sweep_reversal", "trend_orb", "".
     # Empty on non-credit-spread signals.
     condor_trigger_source: str = ""
-
-    @property
-    def is_sweep(self) -> bool:
-        return self.strategy_name == "SweepReversal"
 
     @property
     def is_valid(self) -> bool:

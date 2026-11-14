@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_retired_gone.py  v5.9
+tests/check_retired_gone.py  v5.10
+v5.10 2026-11-14  OTV5 r120 (HYG §5.7, HYG.25) — NEW G17/G17b: no retired strategy name is a string constant (docstrings aside) anywhere in the decision code (main.py, strategy/, execution/, risk/, query.py's plans panel roster), and no bare "ORB" strategy match comes back; what stays: _orb_release_due (fail-closed: an except that returns False), _open_credit_legs / _open_credit_sides, query._STRAT_ABBR (history decode). By AST. RED on 93341d4.
 v5.9  2026-11-14  OTV5 r119 (HYG §5.5, HYG.24) — NEW G16/G16b: the brief's 21 dead defs (and CircuitBreakerState, which only one of them built) stay gone, by AST, never by substring; and what they sat beside stays (is_halted, can_enter, is_orb_complete, minutes_since, SLOPE_FLAT_ATR, get_open_trades_live, the engine's G6 API). RED on 47cc55a.
 v5.8  2026-11-14  OTV5 r118 (HYG §5.4, HYG.23) — NEW G15/G15b: the standing-offer store is gone (execution/resting_orders.py, main._supervise_offers and _orb_offer_working, order_guard's read of it, utils.paths.resting_db_path; entry_engine places no offer, r76's check_offer_fill_price F3, which is deleted), and _orb_release_due / _kept_order_ids / sweep_working stay. By AST. RED on d9286e9.
 v5.7  2026-11-14  OTV5 r115 (HYG §5.1) — G9b RE-POINTED (WA 38.4): the kept sweep helpers are gone with their module. G9b now pins strategy/sweep_credit_spread absent (no file, import fails), no live .py importing it, trade_logger carrying no TrendCredit [spent] branch, and liquidity_hunt._symbol_of answering config.INSTRUMENT. RED on 790ec1b.
@@ -495,6 +496,52 @@ check("G16 (r119) the 21 dead defs of brief section 5 item 5, and CircuitBreaker
       not _back16, str(_back16))
 check("G16b (r119) what they sat beside stays: is_halted, can_enter, is_orb_complete, minutes_since, SLOPE_FLAT_ATR, "
       "get_open_trades_live, the engine's G6 API", not _lost16 and _flat16, str(_lost16) + ("" if _flat16 else " SLOPE_FLAT_ATR"))
+
+# ── G17 (r120, HYG.25) — retired strategy names are not decision inputs ────
+_RETIRED17 = ("ORBStrategy", "SweepCreditSpread", "SweepForLeg2", "TrendCreditSpread", "OpeningRangeCreditSpread",
+              "ATPButterfly", "GEXPinButterfly", "SweepReversal", "ContinuationStrategy", "PARC", "VOLT")
+
+_RX17 = re.compile(r"\b(" + "|".join(_RETIRED17) + r")\b")
+
+
+def _consts17(rel, skip_assign=()):
+    """String constants in rel, docstrings excluded, and the targets named in skip_assign excluded (decode maps)."""
+    t = _ast.parse(_src(*rel.split("/")), rel)
+    skip = set()
+    for n in _ast.walk(t):
+        if isinstance(n, (_ast.Module, _ast.FunctionDef, _ast.AsyncFunctionDef, _ast.ClassDef)) and n.body \
+                and isinstance(n.body[0], _ast.Expr) and isinstance(getattr(n.body[0], "value", None), _ast.Constant):
+            skip.add(id(n.body[0].value))
+        if isinstance(n, _ast.Assign) and any(getattr(x, "id", "") in skip_assign for x in n.targets):
+            skip |= {id(c) for c in _ast.walk(n.value)}
+    return [(rel, c.lineno, c.value) for c in _ast.walk(t)
+            if isinstance(c, _ast.Constant) and isinstance(c.value, str) and id(c) not in skip], t
+
+
+_rels17 = ["main.py", "query.py"]
+for _d in ("strategy", "execution", "risk"):
+    _rels17 += sorted(f"{_d}/{f}" for f in os.listdir(os.path.join(ROOT, _d)) if f.endswith(".py"))
+_hits17 = []
+for _rel in _rels17:
+    for _r, _ln, _v in _consts17(_rel, skip_assign=("_STRAT_ABBR",) if _rel == "query.py" else ())[0]:
+        if _v == "ORB" or _RX17.search(_v):
+            _hits17.append(f"{_r}:{_ln} {_v!r}")
+check("G17 (r120) no retired strategy name (or a bare \"ORB\" match) is a string constant in main, query, strategy/, "
+      "execution/ or risk/ (docstrings and query._STRAT_ABBR aside)", not _hits17, "; ".join(_hits17[:8]))
+_mn17 = _ast.parse(_src("main.py"), "main.py")
+_fn17 = {n.name: n for n in _mn17.body if isinstance(n, _ast.FunctionDef)}
+_rel_due = _fn17.get("_orb_release_due")
+_fail_closed = bool(_rel_due) and any(
+    isinstance(h, _ast.ExceptHandler) and any(isinstance(r, _ast.Return) and getattr(r.value, "value", None) is False
+                                              for r in _ast.walk(h))
+    for h in _ast.walk(_rel_due))
+_q17 = _consts17("query.py")[1]
+_abbr = any(isinstance(n, _ast.Assign) and any(getattr(x, "id", "") == "_STRAT_ABBR" for x in n.targets)
+            for n in _q17.body)
+check("G17b (r120) what stays: main._orb_release_due fails closed (an except returning False), "
+      "_open_credit_legs / _open_credit_sides, query._STRAT_ABBR",
+      _fail_closed and {"_open_credit_legs", "_open_credit_sides"} <= set(_fn17) and _abbr,
+      f"fail_closed={_fail_closed} credit={sorted({'_open_credit_legs', '_open_credit_sides'} & set(_fn17))} abbr={_abbr}")
 
 print()
 if FAIL:
