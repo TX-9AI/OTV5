@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/stress_entry_path.py  v5.1
+tests/check_stress_entry_path.py  v5.2
+v5.2  2026-11-14  OTV5 r116 (HYG.21) — RENAMED from tests/stress_entry_path.py so checker_sweep.py's tests/check_*.py glob runs it; it had been red on HEAD with nobody told. stress_sweep() GOES (strategy/sweep_credit_spread.py deleted; its import made the run red). The two cutoff checks were STALE, not a rule change: they pinned 11:30, but OTV4TEST r149 (EOD.1, 2026-09-26, the operator's reset) made DEBIT_DIRECTIONAL_CUTOFF_ET = EOD_SCHEDULE["entries_stop"] = 15:40 (pinned by check_eod_schedule). The cutoff checks now READ config.DEBIT_DIRECTIONAL_CUTOFF_ET and test at it, one minute before it and one after; the retired ORBStrategy / SweepCreditSpread names are replaced by a declared long_debit (RunawayContinuation), an undeclared name, and a signal object declaring structure="vertical". No behaviour change.
 v5.1  2026-11-09  OTV5 r103 (RETIRE.5 step 2) — stress_butterfly goes with the GEX pin butterfly (strategy/gex_pin_butterfly.py deleted); every other path unchanged.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 Hostile inputs against every entry path. Nothing crashes, nothing fires on
@@ -109,46 +110,6 @@ def stress_runaway():
           target_delta(0.04) is None)
 
 
-def stress_sweep():
-    from strategy.sweep_credit_spread import (SweepCreditSpreadStrategy,
-                                              pierced_strike,
-                                              boundary_from_sweep)
-    s = SweepCreditSpreadStrategy()
-    sw = NS(swept_named_level="PDH", reclaimed=True, invalidated=False,
-            bars_ago=2, rejection_pct=0.0018, kind="high_sweep",
-            pool_price=600.0, sweep_price=601.2)
-
-    probe("sweep liq_map=None",
-          lambda: s.generate_signal(liq_map=None, price_now=599.0,
-                                    now_et="13:30", atr_pct=0.10))
-    probe("sweep recent_sweep=None",
-          lambda: s.generate_signal(liq_map=NS(recent_sweep=None),
-                                    price_now=599.0, now_et="13:30",
-                                    atr_pct=0.10))
-    probe("sweep object missing every field",
-          lambda: s.generate_signal(liq_map=NS(recent_sweep=NS()),
-                                    price_now=599.0, now_et="13:30",
-                                    atr_pct=0.10))
-    for v in HOSTILE:
-        probe(f"sweep price={v!r}",
-              lambda v=v: s.generate_signal(liq_map=NS(recent_sweep=sw),
-                                            price_now=v, now_et="13:30",
-                                            atr_pct=0.10))
-    # a NaN ATR must not slip past the feasibility ceiling
-    r = s.generate_signal(liq_map=NS(recent_sweep=sw), price_now=599.0,
-                          now_et="13:30", atr_pct=float("nan"))
-    check("sweep: NaN ATR does not bypass the ceiling", r is None,
-          "a NaN comparison is False, so `atr > MAX` does not refuse")
-
-    check("sweep: unknown sweep kind -> no boundary",
-          boundary_from_sweep("sideways_sweep") is None)
-    check("sweep: pierced_strike on garbage -> None",
-          pierced_strike(0, 0, True, 0) is None)
-    check("sweep: pierced_strike with a NaN sweep price -> None or sane",
-          pierced_strike(float("nan"), 600.0, True, 1.0) in (None,)
-          or not math.isnan(pierced_strike(float("nan"), 600.0, True, 1.0) or 0))
-
-
 def stress_ladder():
     from execution.entry_ladder import rungs, LadderState
     # ⚠️ A CROSSED QUOTE IS NOT HYPOTHETICAL. It appears around the open, on
@@ -199,19 +160,34 @@ def stress_relaxed_and_cutoff():
         _os.environ.pop(k, None)
 
     import main
-    from datetime import datetime
+    import config
 
     class T:
         def __init__(self, h, m):
             self.hour, self.minute = h, m
-    check("cutoff: an UNDECLARED strategy fails closed after 11:30",
-          main._afternoon_debit_blocked("SomethingBrandNew", T(11, 31)))
-    check("cutoff: a vertical is never blocked",
-          not main._afternoon_debit_blocked("SweepCreditSpread", T(15, 0)))
-    check("cutoff: exact boundary 11:30 blocks",
-          main._afternoon_debit_blocked("ORBStrategy", T(11, 30)))
-    check("cutoff: 11:29 does not",
-          not main._afternoon_debit_blocked("ORBStrategy", T(11, 29)))
+
+    # v5.2: read the cutoff, never pin a clock here. It is the EOD table's
+    # entries_stop (OTV4TEST r149, the operator's all-day debit window);
+    # check_eod_schedule pins its value. This file tests the GATE's shape.
+    ch, cm = tuple(config.DEBIT_DIRECTIONAL_CUTOFF_ET)
+    at = T(ch, cm)
+    before = T(*divmod(ch * 60 + cm - 1, 60))
+    after = T(*divmod(ch * 60 + cm + 1, 60))
+    cut = f"{ch:02d}:{cm:02d}"
+    check("cutoff: the block is active by default", main.DEBIT_BLOCK_ACTIVE)
+    check(f"cutoff: an UNDECLARED strategy fails closed at {cut}",
+          main._afternoon_debit_blocked("SomethingBrandNew", at))
+    check(f"cutoff: an UNDECLARED strategy fails closed after {cut}",
+          main._afternoon_debit_blocked("SomethingBrandNew", after))
+    check("cutoff: a declared vertical is never blocked",
+          not main._afternoon_debit_blocked(
+              NS(structure="vertical", strategy_name="SomethingBrandNew"), after))
+    check(f"cutoff: exact boundary {cut} blocks a long debit",
+          main._afternoon_debit_blocked("RunawayContinuation", at))
+    check("cutoff: one minute before does not",
+          not main._afternoon_debit_blocked("RunawayContinuation", before))
+    check("cutoff: a None signal fails closed",
+          main._afternoon_debit_blocked(None, at))
 
 
 def stress_excursion():
@@ -232,7 +208,7 @@ def stress_excursion():
 def main_(argv):
     print("STRESS: hostile inputs against every entry path")
     print("=" * 72)
-    for fn in (stress_runaway, stress_sweep, stress_ladder,          # r103: stress_butterfly removed with the GEX fly
+    for fn in (stress_runaway, stress_ladder,          # r103: stress_butterfly removed with the GEX fly; r116: stress_sweep with the sweep module
                stress_relaxed_and_cutoff, stress_excursion):
         try:
             fn()
