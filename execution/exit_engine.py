@@ -1,5 +1,15 @@
 """
-execution/exit_engine.py  v5.21
+execution/exit_engine.py  v5.22
+v5.22  2026-11-15  OTV5 r124 (AM.13 + AM.14) — FIZZLE NEVER READS THE WHOLE SESSION, AND A LOST DIAL IS SAID. AM.13: when
+      _entry_epoch() could not read entry_time (0.0), or the since-entry bar filter raised, the `t0 > 0` guard and an
+      `except: pass` let fizzle grade EVERY closed bar of the day, pre-entry bars included (a "since entry" VWAP that
+      is not since entry). Now fizzle is SKIPPED for that trade (no events, no dials, so it cannot fire), a WARNING is
+      logged once per trade, and _fizzle_read says why; the thesis line and the structure backstop still run. AM.14:
+      trend_strength.measure() is built never to raise, so ANY exception is unexpected: it still drops the
+      acceptance_decay dial (as before) but is now logged once per trade at WARNING with its type and written into
+      _fizzle_read. Evidence: 0 of 200 Runaway/Hunt rows 10-26..11-13 have an unreadable entry_time and the live 1m
+      frame is tz-aware (data/market_data.py), so no past decision changes. The operator ordered the amnesty and
+      hygiene items done before the cold audit (2026-11-14). Gate tests/check_fizzle_fallbacks.py.
 v5.21  2026-11-14  OTV5 (OGAP.1) — OGAP GETS ITS OWN EXIT ROUTE: evaluate() routes strategy OGAP to _evaluate_ogap, Park's walk on the BID against the entry ASK (ogap_exit_step, pure: 2.0x -> floor 0.60 x peak, 1.6x -> floor 1.2x, the 14:00 sweep once, the 15:45 bell; the EOD schedule a backstop), every exit written once to data/counterfactual/ogap_exit.jsonl. Every other route is unchanged. The operator, 2026-11-14: "let's design & paper trade the OGAP on QQQ".
 v5.20  2026-11-14  OTV5 r113 (AM.7) — _track_excursion counts ONE tick per pricing pass and takes the best and worst
       mark from every call: position_manager now calls it BEFORE the management plan decides (the plan's CLOSE skipped
@@ -1340,6 +1350,16 @@ def _gain_floor(entry: float, peak: float, lock: float) -> float:
 
 
 _HANDOFF_NO_ENTRY_SAID: set = set()          # r317 (STALE.1): trade_ids already warned about
+_FIZZLE_SAID: set = set()                    # r124 (AM.13/AM.14): (trade_id, reason) already warned about
+
+
+def _fizzle_say(record, kind: str, msg: str) -> None:
+    """r124 (AM.13/AM.14) — one WARNING per (trade, kind) per process for a fizzle read that could not be made."""
+    key = (str(record.get("trade_id", "") or ""), kind)
+    if key in _FIZZLE_SAID:
+        return
+    _FIZZLE_SAID.add(key)
+    logger.warning("[exit] %s %s: %s", str(record.get("trade_id", "") or "?")[:8], record.get("strategy"), msg)
 
 
 def _bars_in_session(df) -> Optional[int]:
@@ -2384,11 +2404,21 @@ class ExitEngine:
             # ── fizzle, on the bars since entry ──
             t0 = self._entry_epoch(record)
             bars = _closed_part(df_1m, _now_c)                  # r44 (BAR.1): by time, was iloc[:-1]
-            if t0 > 0:
+            # 🔴 r124 (AM.13) — "SINCE ENTRY" NEEDS AN ENTRY. An unreadable entry_time (t0 0.0) or a filter that
+            # raised used to fall through to EVERY closed bar of the day, pre-entry bars included. Now fizzle is
+            # skipped for the trade and says so once; the thesis line above and the backstop below still run.
+            _skip = ""
+            if t0 <= 0:
+                _skip = f"entry_time {record.get('entry_time')!r} unreadable"
+            else:
                 try:
                     bars = bars[bars.index.map(lambda x: x.timestamp()) >= t0]
-                except Exception:                               # noqa: BLE001
-                    pass
+                except Exception as exc:                        # noqa: BLE001
+                    _skip = f"since-entry bar filter failed ({type(exc).__name__}: {exc})"
+            if _skip:
+                _skip = f"fizzle SKIPPED: {_skip}"
+                _fizzle_say(record, "skip", _skip)
+                bars = bars.iloc[0:0]
             n = len(bars)
             events, dials = [], []
             if n >= 4:
@@ -2421,8 +2451,11 @@ class ExitEngine:
                     ad, ar = getattr(ts, "acc_delta", None), getattr(ts, "acc_recent", None)
                     if ad is not None and ar is not None and ad < 0 and ar < 0.5:
                         dials.append(f"acceptance_decay delta={ad:.2f} recent={ar:.2f}")
-                except Exception:                               # noqa: BLE001
-                    pass
+                except Exception as exc:                        # noqa: BLE001
+                    # r124 (AM.14) — measure() is built never to raise, so any exception is unexpected. The dial
+                    # is still dropped (unchanged), but no longer silently.
+                    _skip = f"acceptance_decay unreadable ({type(exc).__name__}: {exc})"
+                    _fizzle_say(record, "dial", _skip)
                 # DIAL: range contracting against the first bars since entry
                 rng = (highs - lows)
                 k = min(3, n // 2)
@@ -2438,7 +2471,7 @@ class ExitEngine:
                 new_underlying_extreme = (recent_hi > prior) if direction == "long" else (recent_hi < prior)
                 if peak > 0 and new_underlying_extreme and current_premium < peak * 0.9:
                     dials.append(f"premium_divergence {current_premium:.2f} vs peak {peak:.2f}")
-            record["_fizzle_read"] = f"events={events} dials={dials}"
+            record["_fizzle_read"] = f"events={events} dials={dials}" + (f" note={_skip}" if _skip else "")
             if len(events) >= 2 or (len(events) >= 1 and len(dials) >= 1):
                 # r285 (HUNT.8) — a Hunt held on its 5m line is not cut by a 1m fizzle read
                 # (10-14: the fizzle fires on the same 1m bounce the 5m line holds through).
