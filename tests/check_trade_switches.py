@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_trade_switches.py  v5.6
+tests/check_trade_switches.py  v5.7
+v5.7  2026-11-15  OTV5 r123 (HYG.27) — OT_RESTING_DB leaves the scratch env (r118 deleted execution/resting_orders.py, its only reader).
 v5.6  2026-11-14  OTV5 r110 (WS.3 TRIM) — Breakout left ENTRY_WINDOWS (dormant, off the roster): S8 reads its end from config.BREAKOUT_WINDOW (still 10:30, read by its own module) and pins it absent from ENTRY_WINDOWS; S11 reads Breakout's end from BREAKOUT_WINDOW too. What each check pins is unchanged.
 v5.5  2026-11-09  OTV5 r103 (RETIRE.5 step 2) — S0 adds the GEX fly (strategy.gex_pin_butterfly, OT_GEX_BUTTERFLY); S9 pins PARK's window and the fly's row removed (was the fly's 13:00-15:00). Every other check unchanged.
 v5.4  2026-11-08  OTV5 r88 (RETIRE.3) — S9 pins the GEX fly's window and that the TCS row is removed (r88).
@@ -58,7 +59,7 @@ for _sp in _glob.glob(os.path.join(_root, "venv", "lib", "python*", "site-packag
 from utils.venv_guard import require_venv                         # noqa: E402  (stdlib only)
 require_venv('pandas')
 _S = tempfile.mkdtemp(prefix="check_trade_switches_")
-for _k, _f in (("OT_TRADES_DB", "t.db"), ("OT_DERIVED_DB", "d.db"), ("OT_RESTING_DB", "r.db")):
+for _k, _f in (("OT_TRADES_DB", "t.db"), ("OT_DERIVED_DB", "d.db")):
     os.environ.setdefault(_k, os.path.join(_S, _f))
 os.environ.setdefault("OT_SIGNAL_JOURNAL_DIR", os.path.join(_S, "sj"))
 os.environ.setdefault("OT_INSTRUMENT", "QQQ")

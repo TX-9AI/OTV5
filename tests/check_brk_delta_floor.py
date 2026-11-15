@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_brk_delta_floor.py  v5.0
+tests/check_brk_delta_floor.py  v5.1
+v5.1  2026-11-15  OTV5 r123 (HYG.27) — OT_RESTING_DB leaves the scratch env (r118 deleted execution/resting_orders.py, its only reader).
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 BREAKOUT'S DELTA FLOOR (BRK.13).
 v1.0  2026-10-18  OTV4TEST r288. The operator, 2026-10-17 19:12 ET: "A is fine" (to: trade the Breakout delta floor
@@ -34,7 +35,6 @@ os.environ["OT_DERIVED_DB"] = os.path.join(_TD, "d.db")
 os.environ["OT_FEED_DB"] = os.path.join(_TD, "f.db")
 os.environ["OT_LOG_FILE"] = os.path.join(_TD, "bot.log")
 os.environ["OT_SIGNAL_JOURNAL_DIR"] = os.path.join(_TD, "sj")
-os.environ["OT_RESTING_DB"] = os.path.join(_TD, "r.db")
 CF = os.path.join(_TD, "cf")
 os.environ["OT_COUNTERFACTUAL_DIR"] = CF
 FAILED, RAN = [], []

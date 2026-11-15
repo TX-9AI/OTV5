@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_plan_lifecycle.py  v5.1
+tests/check_plan_lifecycle.py  v5.2
+v5.2  2026-11-15  OTV5 r123 (HYG.27) — FIXTURES RE-POINTED (the Saturday brief 11-14 section 5 item 10): SweepCreditSpread -> LiquidityHunt, GEXPinButterfly -> PARK; what each check proves is unchanged.
 v5.1  2026-11-08  OTV5 r97 (RETIRE.5) —  GEX fly is cut in production (OFF in code); this checker flips it on to exercise its code until step 2 removes it.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.1  2026-10-19  OTV4TEST r303 (PSTATE.1) — its subject SweepCreditSpread is DORMANT by default and a dormant plan now
@@ -112,10 +113,10 @@ def main():
     # ⟨ASSUMPTION⟩. Closing has an exact key available, so it must not inherit
     # that heuristic: closing trade t2 closes t2's plan and nothing else.
     st, led = _fresh()
-    a = led.open_plan("SweepCreditSpread", "TRIGGERED", {"price": 100.0})
-    led.link_trade("SweepCreditSpread", "ta")
-    b = led.open_plan("SweepCreditSpread", "TRIGGERED", {"price": 101.0})
-    led.link_trade("SweepCreditSpread", "tb")
+    a = led.open_plan("LiquidityHunt", "TRIGGERED", {"price": 100.0})
+    led.link_trade("LiquidityHunt", "ta")
+    b = led.open_plan("LiquidityHunt", "TRIGGERED", {"price": 101.0})
+    led.link_trade("LiquidityHunt", "tb")
     led.close_for_trade("ta", "stopped")
     live = {p["plan_id"] for p in led.live_plans()}
     check("L2 closing one trade closes ITS plan, not the newest",
@@ -124,8 +125,8 @@ def main():
 
     # ── L3 — a plan that never filled is superseded, not left live ───────
     st, led = _fresh()
-    led.open_plan("GEXPinButterfly", "TRIGGERED", {"price": 50.0})
-    n = led.close_unfilled("GEXPinButterfly", "superseded — never filled")
+    led.open_plan("PARK", "TRIGGERED", {"price": 50.0})
+    n = led.close_unfilled("PARK", "superseded — never filled")
     check("L3 an unfilled plan is closed when the next one fires",
           n == 1 and not led.live_plans(), f"closed {n}")
 
@@ -135,9 +136,9 @@ def main():
     # one bucket — and those are the two populations the whole ledger exists to
     # tell apart. A filled plan is closed by its EXIT and by nothing else.
     st, led = _fresh()
-    f = led.open_plan("SweepCreditSpread", "TRIGGERED", {"price": 100.0})
-    led.link_trade("SweepCreditSpread", "tf")
-    n = led.close_unfilled("SweepCreditSpread", "superseded")
+    f = led.open_plan("LiquidityHunt", "TRIGGERED", {"price": 100.0})
+    led.link_trade("LiquidityHunt", "tf")
+    n = led.close_unfilled("LiquidityHunt", "superseded")
     check("L4 a plan holding a trade is NOT closed by supersession",
           n == 0 and any(p["plan_id"] == f for p in led.live_plans()),
           f"swept {n} (want 0)")
@@ -159,8 +160,8 @@ def main():
 
     # ── L6 — an unknown trade closes nothing, silently and safely ────────
     st, led = _fresh()
-    led.open_plan("SweepCreditSpread", "TRIGGERED", {"price": 1.0})
-    led.link_trade("SweepCreditSpread", "tz")
+    led.open_plan("LiquidityHunt", "TRIGGERED", {"price": 1.0})
+    led.link_trade("LiquidityHunt", "tz")
     got = led.close_for_trade("not-a-trade", "x")
     check("L6 an unmatched trade_id closes nothing and does not raise",
           got is None and len(led.live_plans()) == 1)

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_exit_executes.py  v5.0
+tests/check_exit_executes.py  v5.1
+v5.1  2026-11-15  OTV5 r123 (HYG.27) — FIXTURES RE-POINTED (the Saturday brief 11-14 section 5 item 10): ORBStrategy -> RunawayContinuation; what each check proves is unchanged.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v4.3  2026-09-05  r269 — the "prefer executing to reading" citation now names
       WORKING_AGREEMENT §0.6 rather than `AUDIT_HANDOFF §5`, deleted this
@@ -84,7 +85,7 @@ def main(argv):
         eng = XE.ExitEngine(paper_trading=True)
 
         # ── 1. a debit record flows through evaluate() and DECIDES ──────────
-        rec = {"trade_id": "check-exit-1", "strategy": "ORBStrategy",
+        rec = {"trade_id": "check-exit-1", "strategy": "RunawayContinuation",
                "setup_type": "orb_long", "direction": "long",
                "entry_premium": 1.00, "contracts": 1, "status": "open",
                "stop_premium": 0.75, "target_premium": 2.00,

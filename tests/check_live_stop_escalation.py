@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_live_stop_escalation.py  v5.1
+tests/check_live_stop_escalation.py  v5.2
+v5.2  2026-11-15  OTV5 r123 (HYG.27) — OT_RESTING_DB leaves the scratch env (r118 deleted execution/resting_orders.py, its only reader).
 v5.1  2026-11-14  OTV5 r112 (AM.2 / LIVE.6) — new. A LIVE STOP STEPS TO THE BID, THEN CROSSES. Driven through the REAL
       ExitEngine._confirm_and_book_live_exit with a stub broker whose every order dies UNFILLED (CANCELLED, no legs), so
       each pass is one unfilled close and the record carries the count to the next pass, as the live retry loop does.
@@ -29,7 +30,7 @@ sys.path.insert(0, ROOT)
 os.environ.setdefault("OT_INSTRUMENT", "QQQ")
 _s = tempfile.mkdtemp(prefix="check_live_stop_escalation.")
 for _k, _f in (("OT_TRADES_DB", "trades.db"), ("OT_DERIVED_DB", "derived_store.db"),
-               ("OT_RESTING_DB", "resting.db"), ("OT_COUNTERFACTUAL_DIR", "cf"), ("OT_LOG_FILE", "bot.log"),
+               ("OT_COUNTERFACTUAL_DIR", "cf"), ("OT_LOG_FILE", "bot.log"),
                ("OT_ALERT_SPOOL", "alert_spool.jsonl")):
     os.environ.setdefault(_k, os.path.join(_s, _f))
 ET = ZoneInfo("America/New_York")

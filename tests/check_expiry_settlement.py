@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_expiry_settlement.py  v5.1
+tests/check_expiry_settlement.py  v5.2
+v5.2  2026-11-15  OTV5 r123 (HYG.27) — FIXTURES RE-POINTED (the Saturday brief 11-14 section 5 item 10): the vertical's SweepCreditSpread -> IronCondorStrategy; the fly row keeps its old name; what each check proves is unchanged; OT_RESTING_DB leaves the scratch env (r118 deleted execution/resting_orders.py, its only reader).
 v5.1  2026-10-26  OTV5 r38 (HYG.18) — scratch no longer names dir="/var/tmp": mkdtemp honours TMPDIR, which boot_sweep and land.sh point
       at a per-run dir they remove (HYG.14), so a sweep leaves nothing behind (237 dirs had piled up on SOFI). No check changed.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
@@ -55,7 +56,6 @@ _S = tempfile.mkdtemp(prefix="check_expiry_settlement_")
 if not os.environ.get("OT_TRADES_DB"):
     os.environ["OT_TRADES_DB"] = os.path.join(_S, "t.db")
     os.environ["OT_DERIVED_DB"] = os.path.join(_S, "d.db")
-    os.environ["OT_RESTING_DB"] = os.path.join(_S, "r.db")
     os.environ["OT_SIGNAL_JOURNAL_DIR"] = os.path.join(_S, "sj")
 os.environ.setdefault("OT_INSTRUMENT", "QQQ")
 os.environ["OT_PAPER_TRADING"] = "True"
@@ -94,7 +94,7 @@ base = {"symbol": "QQQ", "expiry": EXP, "option_side": "call", "contracts": 2, "
 long_itm = dict(base, strike=700.0, entry_premium=1.00)
 long_otm = dict(base, strike=710.0, entry_premium=1.00)
 short_itm = dict(base, strike=700.0, entry_premium=1.00, is_short_position=1)
-vert = dict(base, strategy="SweepCreditSpread", is_condor_leg=1, short_symbol=".QQQ260925C700",
+vert = dict(base, strategy="IronCondorStrategy", is_condor_leg=1, short_symbol=".QQQ260925C700",
             long_symbol=".QQQ260925C706", short_strike=700.0, long_strike=706.0, entry_premium=0.50)
 fly = dict(base, strategy="GEXPinButterfly", is_butterfly=1, lower_strike=700.0, center_strike=705.0,
            upper_strike=710.0, entry_premium=1.20)

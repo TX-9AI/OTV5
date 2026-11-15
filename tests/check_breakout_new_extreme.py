@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_breakout_new_extreme.py  v5.2
+tests/check_breakout_new_extreme.py  v5.3
+v5.3  2026-11-15  OTV5 r123 (HYG.27) — OT_RESTING_DB leaves the scratch env (r118 deleted execution/resting_orders.py, its only reader).
 v5.2  2026-10-29  OTV5 r54 (BRK.16) — TWO FIXTURE/RULE UPDATES FOR THE OPERATOR'S 2026-10-29 SPEC, NO RE-FIRE PROPERTY CHANGED.
       (1) _tick's opening range is WIDER on the far side only (TST 101.00/95.00, TSS 106.00/99.00; the edge each test
       breaks is unchanged): N3, N4c, N9b and N10b re-fire on closes 0.6-1.7 points past the edge, which on the old 1.00
@@ -103,7 +104,6 @@ SCRATCH = (os.environ["N5_SCRATCH"] if os.environ.get("N5_RESTART") == "1"
            else tempfile.mkdtemp(prefix="chk_brk_ne_"))
 os.environ["OT_TRADES_DB"] = os.path.join(SCRATCH, "trades.db")
 os.environ["OT_DERIVED_DB"] = os.path.join(SCRATCH, "derived.db")
-os.environ["OT_RESTING_DB"] = os.path.join(SCRATCH, "resting.db")
 os.environ["OT_FEED_DB"] = os.path.join(SCRATCH, "feed.db")
 os.environ["OT_BRK_RESEARCH_UNTIL"] = "2099-12-31"      # informers: accept any
 os.environ["OT_COUNTERFACTUAL_DIR"] = os.path.join(SCRATCH, "cf")   # BRK.12: never the LIVE data/counterfactual

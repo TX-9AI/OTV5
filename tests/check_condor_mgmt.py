@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_condor_mgmt.py  v5.1
+tests/check_condor_mgmt.py  v5.2
+v5.2  2026-11-15  OTV5 r123 (HYG.27) — FIXTURES RE-POINTED (the Saturday brief 11-14 section 5 item 10): TrendCreditSpread -> IronCondorStrategy; what each check proves is unchanged.
 v5.1  2026-11-08  OTV5 r76 (RETIRE.1) — C5/R5 RE-POINTED (WA 38.4): the sweep and its second-leg window are removed, so a lone vertical's row no
       longer names a sweep complement (it HOLDs as a standalone on its 15% stop) and R5 pins the second-leg ask gone.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
@@ -69,7 +70,7 @@ def main():
     class _PM:
         def get_open_records(self):
             return [{"option_side": "call", "short_strike": 720.0, "long_strike": 722.0,
-                     "is_credit_vertical": 1, "status": "open", "trade_id": "c1", "strategy": "TrendCreditSpread"}]
+                     "is_credit_vertical": 1, "status": "open", "trade_id": "c1", "strategy": "IronCondorStrategy"}]
     P.begin_tick(1.0)
     out = IC.manage(_PM(), None, 716.0)
     P.close_tick(st, "TST")

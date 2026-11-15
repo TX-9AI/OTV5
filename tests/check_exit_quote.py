@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_exit_quote.py  v5.1
+tests/check_exit_quote.py  v5.2
+v5.2  2026-11-15  OTV5 r123 (HYG.27) — FIXTURES RE-POINTED (the Saturday brief 11-14 section 5 item 10): SweepCreditSpread -> IronCondorStrategy; what each check proves is unchanged; OT_RESTING_DB leaves the scratch env (r118 deleted execution/resting_orders.py, its only reader).
 v5.1  2026-11-11  OTV5 r107 (RETIRE.5 follow-up) — Q3/Q4 (the butterfly's composite exit quote) go with the generic fly path (position_manager v5.35). Q1, Q2 and Q5 unchanged.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.0  2026-10-03  OTV4TEST r195 (AUD.4) — THE EXIT QUOTE AND IV REACH THE TRADE ROW.
@@ -30,7 +31,7 @@ for _sp in _glob.glob(os.path.join(_root, "venv", "lib", "python*", "site-packag
     if _sp not in sys.path:                                  # r106 venv bootstrap
         sys.path.insert(1, _sp)
 _S = tempfile.mkdtemp(prefix="check_exit_quote_")
-for _k, _f in (("OT_TRADES_DB", "trades.db"), ("OT_DERIVED_DB", "d.db"), ("OT_RESTING_DB", "r.db")):
+for _k, _f in (("OT_TRADES_DB", "trades.db"), ("OT_DERIVED_DB", "d.db")):
     os.environ.setdefault(_k, os.path.join(_S, _f))
 os.environ.setdefault("OT_SIGNAL_JOURNAL_DIR", os.path.join(_S, "sj"))
 os.environ.setdefault("OT_LOG_FILE", os.path.join(_S, "bot.log"))
@@ -106,7 +107,7 @@ def main():
 
     # Q2 — credit vertical: short 750 / long 751
     try:
-        rec = run("q2-vert", strategy="SweepCreditSpread", direction="short", is_condor_leg=1,
+        rec = run("q2-vert", strategy="IronCondorStrategy", direction="short", is_condor_leg=1,
                   short_strike=750.0, long_strike=751.0, spread_width=1.0, entry_premium=0.20)
         ok, row = close(rec)
         check("Q2 credit vertical: bid 0.05 (0.40-0.35), ask 0.25 (0.50-0.25), the SHORT leg's IV 0.18",

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_liquidity_hunt.py  v5.3
+tests/check_liquidity_hunt.py  v5.4
+v5.4  2026-11-15  OTV5 r123 (HYG.27) — FIXTURES RE-POINTED (the Saturday brief 11-14 section 5 item 10): H9b's ORBStrategy -> Breakout; what each check proves is unchanged; OT_RESTING_DB leaves the scratch env (r118 deleted execution/resting_orders.py, its only reader).
 v5.3  2026-11-08  OTV5 r76 (RETIRE.1) — H6/H10 RE-POINTED (WA 38.4): the Hunt's target-wick exit is unchanged, but it no longer grants a handoff -
       its only taker, the sweep, is removed with execution/handoff.py; H10 pins the module gone.
 v5.2  2026-10-31  OTV5 r68 (CFG.5) — OT_RESTING_STOP_STATE leaves the scratch env: the resting stop and its state file are deleted
@@ -59,7 +60,7 @@ os.environ.setdefault("OT_COUNTERFACTUAL_DIR", tempfile.mkdtemp(prefix="cf_"))  
 _H12_DIR = tempfile.mkdtemp(prefix="chk_hunt_db_")
 os.environ.setdefault("OT_TRADES_DB", os.path.join(_H12_DIR, "trades.db"))   # r297: H12 logs Hunt rows through the real TradeLogger
 for _k, _v in (("OT_DERIVED_DB", "d.db"), ("OT_FEED_DB", "f.db"), ("OT_LOG_FILE", "bot.log"),        # r304: H13 imports main
-               ("OT_SIGNAL_JOURNAL_DIR", "sj"), ("OT_RESTING_DB", "r.db"),
+               ("OT_SIGNAL_JOURNAL_DIR", "sj"),
                ("OT_WAREHOUSE_STATE", "ws"), ("OT_PLAN_STATES_FILE", "ps.json")):
     os.environ.setdefault(_k, os.path.join(_H12_DIR, _v))
 import time
@@ -262,8 +263,8 @@ def main():
     pm = PositionManager.__new__(PositionManager)
     pm._open_records = [{"strategy": "LiquidityHunt", "is_liquidity_hunt": 1, "status": "open"}]
     check("H9 an open hunt is not a blocking position", not pm.has_blocking_position())
-    pm._open_records = [{"strategy": "ORBStrategy", "status": "open"}]
-    check("H9b an open ORB still blocks the credit side (unchanged)", pm.has_blocking_position())
+    pm._open_records = [{"strategy": "Breakout", "status": "open"}]
+    check("H9b an open Breakout still blocks the credit side (unchanged)", pm.has_blocking_position())
     # H10 r76: the handoff module is removed with the sweep, its only taker
     import importlib.util as _ilu
     check("H10 the handoff grant is gone (execution/handoff.py removed with the sweep: nothing live imports it)",

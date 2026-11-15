@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_plan_ledger_take.py  v5.1
+tests/check_plan_ledger_take.py  v5.2
+v5.2  2026-11-15  OTV5 r123 (HYG.27) — OT_RESTING_DB leaves the scratch env (r118 deleted execution/resting_orders.py, its only reader).
 v5.1  2026-11-08  OTV5 r76 (RETIRE.1) — L2 RE-POINTED (WA 38.4): the ORB trade leaves OWN_LEDGER, so L2's own-ledger plan is the condor; L4 (ORCS's
       per-leg rows) goes with ORCS. L1, L3 and the rest unchanged.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
@@ -39,7 +40,7 @@ for _sp in _glob.glob(os.path.join(_root, "venv", "lib", "python*", "site-packag
     if _sp not in sys.path:                                  # r106 venv bootstrap
         sys.path.insert(1, _sp)
 _S = tempfile.mkdtemp(prefix="check_plan_ledger_take_")
-for _k, _f in (("OT_TRADES_DB", "trades.db"), ("OT_DERIVED_DB", "d.db"), ("OT_RESTING_DB", "r.db")):
+for _k, _f in (("OT_TRADES_DB", "trades.db"), ("OT_DERIVED_DB", "d.db")):
     os.environ.setdefault(_k, os.path.join(_S, _f))
 os.environ.setdefault("OT_SIGNAL_JOURNAL_DIR", os.path.join(_S, "sj"))
 os.environ.setdefault("OT_LOG_FILE", os.path.join(_S, "bot.log"))

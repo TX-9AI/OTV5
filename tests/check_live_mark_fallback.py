@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""tests/check_live_mark_fallback.py  v5.1
+"""tests/check_live_mark_fallback.py  v5.2
+v5.2  2026-11-15  OTV5 r123 (HYG.27) — FIXTURES RE-POINTED (the Saturday brief 11-14 section 5 item 10): ORBStrategy -> RunawayContinuation, SweepCreditSpread -> IronCondorStrategy; what each check proves is unchanged.
 v5.1  2026-11-11  OTV5 r107 (RETIRE.5 follow-up) — L3 (the butterfly's REST composite) goes with the generic fly path. Every other check unchanged.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 F4 — THE LIVE MARK FALLBACK WORKS, AND PRICES THE WHOLE STRUCTURE.
@@ -120,12 +121,12 @@ def main():
         "SYN ONESIDE": _MD(0, 0.22, mark=0.22),
     })
 
-    v = price({"trade_id": "L1", "strategy": "ORBStrategy", "option_symbol": "SYN 1C100"})
+    v = price({"trade_id": "L1", "strategy": "RunawayContinuation", "option_symbol": "SYN 1C100"})
     check("L1 single leg, two-sided -> the mid 1.10", near(v, 1.10), f"got {v!r}")
     check("L8 asks for the record's own symbol as an equity option",
           calls == [("options", ("SYN 1C100",))], f"calls={calls!r}")
 
-    vert = {"trade_id": "L2", "strategy": "SweepCreditSpread", "is_condor_leg": 1,
+    vert = {"trade_id": "L2", "strategy": "IronCondorStrategy", "is_condor_leg": 1,
             "option_symbol": "SYN 1P90", "short_symbol": "SYN 1P90", "long_symbol": "SYN 1P85"}
     v = price(vert)
     check("L2 credit vertical -> short minus long 1.50, never the short leg's 2.10",
@@ -141,21 +142,21 @@ def main():
     v = price(dict(vert, trade_id="L5", long_symbol=""))
     check("L5 vertical with no long_symbol -> None", v is None, f"got {v!r}")
 
-    v = price({"trade_id": "L6", "strategy": "ORBStrategy", "option_symbol": "SYN ABSURD"})
+    v = price({"trade_id": "L6", "strategy": "RunawayContinuation", "option_symbol": "SYN ABSURD"})
     check("L6 a 1e12 mark -> None", v is None, f"got {v!r}")
 
     cap.lines.clear()
-    v = price({"trade_id": "L7", "strategy": "ORBStrategy", "option_symbol": "SYN BROKEN"})
+    v = price({"trade_id": "L7", "strategy": "RunawayContinuation", "option_symbol": "SYN BROKEN"})
     check("L7 SDK raises -> None and a WARNING names the symbol",
           v is None and any("SYN BROKEN" in ln for ln in cap.lines),
           f"got {v!r} warnings={cap.lines!r}")
 
-    v = price({"trade_id": "L9", "strategy": "ORBStrategy", "option_symbol": "SYN ONESIDE"})
+    v = price({"trade_id": "L9", "strategy": "RunawayContinuation", "option_symbol": "SYN ONESIDE"})
     check("L9 one-sided quote keeps the old rule: the mark 0.22", near(v, 0.22), f"got {v!r}")
 
     paper = live()
     paper.paper_trading = True
-    v = price({"trade_id": "L10", "strategy": "ORBStrategy", "option_symbol": "SYN 1C100",
+    v = price({"trade_id": "L10", "strategy": "RunawayContinuation", "option_symbol": "SYN 1C100",
                "current_premium": 0.77, "entry_premium": 1.00}, mgr=paper)
     check("L10 paper, no chain -> last mark 0.77, nothing asked", near(v, 0.77) and not calls,
           f"got {v!r} calls={calls!r}")

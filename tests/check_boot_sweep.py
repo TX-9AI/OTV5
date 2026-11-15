@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """
-tests/check_boot_sweep.py  v5.2
+tests/check_boot_sweep.py  v5.3
+v5.3  2026-11-15  OTV5 r123 (HYG.27) — B3/B3b RE-POINTED: OT_RESTING_DB is no longer a scratch store - r118 deleted the
+      resting-offer store (execution/resting_orders.py), its only reader; B3 no longer requires it and B3b no longer
+      expects it in run_one's env. Every other store unchanged.
 v5.2  2026-10-31  OTV5 r68 (CFG.5) — B3/B3b RE-POINTED (section 38.4): OT_RESTING_STOP_STATE is no longer a scratch store - the
       resting stop is deleted (the operator, 2026-10-31: "Resting stop was a study. It failed."); B3 no longer requires it
       and B3b no longer expects it in run_one's env. Every other store unchanged.
@@ -141,13 +144,13 @@ check("B2 it reads MemAvailable and has a floor to skip under",
 # the operator's standing rule is that a check once purged live data.
 check("B3 every checker runs against SCRATCH stores",
       ("OT_TRADES_DB" in _src) and ("OT_DERIVED_DB" in _src)
-      and ("OT_RESTING_DB" in _src) and ("OT_SIGNAL_JOURNAL_DIR" in _src)
+      and ("OT_SIGNAL_JOURNAL_DIR" in _src)
       and ("OT_LOG_FILE" in _src) and ("OT_COUNTERFACTUAL_DIR" in _src)
       and ("OT_FEED_DB" in _src)                                              # r292 (GATE.1)
       and ("OT_WAREHOUSE_STATE" in _src) and ("OT_PLAN_STATES_FILE" in _src)     # r307 (GATE.4)
       and ("OT_HEARTBEAT_FILE" in _src)                                          # OTV5 r4 (GATE.6)
       and ("mkdtemp" in _src or "TemporaryDirectory" in _src),
-      "checkers must never see the live trades/derived/resting stores")
+      "checkers must never see the live trades/derived stores")
 
 
 # ── B3b — DRIVEN (§21): the real run_one, its subprocess intercepted, so no
@@ -178,7 +181,7 @@ def _b3b():
     finally:
         _m.subprocess.run = _orig
     env = seen.get("env") or {}
-    want = ("OT_TRADES_DB", "OT_DERIVED_DB", "OT_RESTING_DB", "OT_SIGNAL_JOURNAL_DIR", "OT_LOG_FILE",
+    want = ("OT_TRADES_DB", "OT_DERIVED_DB", "OT_SIGNAL_JOURNAL_DIR", "OT_LOG_FILE",
             "OT_COUNTERFACTUAL_DIR", "OT_FEED_DB", "OT_WAREHOUSE_STATE",   # r292 (r68: OT_RESTING_STOP_STATE gone)
             "OT_PLAN_STATES_FILE",                                                   # r307 (GATE.4)
             "OT_HEARTBEAT_FILE")                                                     # OTV5 r4 (GATE.6)
@@ -193,7 +196,7 @@ try:
     _ok3b, _paths3b = _b3b()
 except Exception as _e3b:                                       # noqa: BLE001
     _ok3b, _paths3b = False, f"{type(_e3b).__name__}: {_e3b}"
-check("B3b DRIVEN: run_one hands a checker ONLY scratch stores (trades, derived, resting, journal, log, cf, feed, rest-state, warehouse-state, plan-states, heartbeat)",
+check("B3b DRIVEN: run_one hands a checker ONLY scratch stores (trades, derived, journal, log, cf, feed, warehouse-state, plan-states, heartbeat)",
       _ok3b, str(_paths3b))
 
 
@@ -212,7 +215,7 @@ def _b3c():
             "print('LOGFILES=' + '|'.join(x for x in hs if x) + ' CFG=' + config.LOG_FILE)" % (sps, _root))
     env = dict(os.environ)
     for k, f in (("OT_TRADES_DB", "trades.db"), ("OT_DERIVED_DB", "derived_store.db"),
-                 ("OT_RESTING_DB", "resting_orders.db"), ("OT_SIGNAL_JOURNAL_DIR", "signal_journal")):
+                 ("OT_SIGNAL_JOURNAL_DIR", "signal_journal")):
         env[k] = os.path.join(d, f)
     env.setdefault("OT_INSTRUMENT", "QQQ")
     scratch_log = os.path.join(d, "bot.log")

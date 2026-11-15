@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_breakout_rearm.py  v5.3
+tests/check_breakout_rearm.py  v5.4
+v5.4  2026-11-15  OTV5 r123 (HYG.27) — OT_RESTING_DB leaves the scratch env (r118 deleted execution/resting_orders.py, its only reader).
 v5.3  2026-11-08  OTV5 r76 (RETIRE.1) — the fixture no longer resets execution/handoff (removed with the sweep, r76). No check changed.
 v5.2  2026-10-31  OTV5 r68 (CFG.5) — OT_RESTING_STOP_STATE leaves the scratch env: the resting stop and its state file are deleted
       (the operator, 2026-10-31: "Resting stop was a study. It failed. Get this the fuck out of here"). No check changed.
@@ -62,7 +63,7 @@ for _sp in _glob.glob(os.path.join(os.path.dirname(os.path.dirname(os.path.abspa
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 SCRATCH = os.environ.get("RA_SCRATCH") or tempfile.mkdtemp(prefix="chk_brk_ra_")
-for _k, _v in (("OT_TRADES_DB", "trades.db"), ("OT_DERIVED_DB", "derived.db"), ("OT_RESTING_DB", "resting.db"),
+for _k, _v in (("OT_TRADES_DB", "trades.db"), ("OT_DERIVED_DB", "derived.db"),
                ("OT_FEED_DB", "feed.db"), ("OT_COUNTERFACTUAL_DIR", "cf"), ("OT_LOG_FILE", "bot.log"),
                ("OT_SIGNAL_JOURNAL_DIR", "sj"),
                ("OT_WAREHOUSE_STATE", "ws"), ("OT_PLAN_STATES_FILE", "ps.json")):

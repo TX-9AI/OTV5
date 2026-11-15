@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_not_asked_reasons.py  v5.2
+tests/check_not_asked_reasons.py  v5.3
+v5.3  2026-11-15  OTV5 r123 (HYG.27) — FIXTURES RE-POINTED (the Saturday brief 11-14 section 5 item 10): ORBStrategy/manage -> Breakout/manage, SweepCreditSpread -> PARK; what each check proves is unchanged.
 v5.2  2026-11-14  OTV5 r110 (WS.3 TRIM) — the subject plan is LiquidityHunt where it was Breakout (dormant from r110); every reason pinned is unchanged.
 v5.1  2026-11-08  OTV5 r88 (RETIRE.3) — the subject plan is Breakout where it was the removed TCS (its OT_TCS_ACTIVE=1 switch goes); every reason pinned is unchanged.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
@@ -91,8 +92,8 @@ def main():
     P.REGISTRY.clear()
     P.Plan("CondorManagement", ("legs",), self_ledgers=True)
     P.Plan("CreditRoll", ("legs",), self_ledgers=True)
-    P.Plan("ORBStrategy/manage", ("legs",), self_ledgers=True)
-    P.Plan("SweepCreditSpread", ("age",))
+    P.Plan("Breakout/manage", ("legs",), self_ledgers=True)
+    P.Plan("PARK", ("age",))
 
     P.begin_tick(500.0)
     P.skipped_management("no open position — nothing to manage")
@@ -100,7 +101,7 @@ def main():
     rows = {r["strategy"]: (r["verdict"], r["reason"]) for r in
             st.conn.execute("SELECT strategy, verdict, reason FROM plan_tick"
                             " WHERE ts_epoch=500.0")}
-    mgmt = ("CondorManagement", "CreditRoll", "ORBStrategy/manage")
+    mgmt = ("CondorManagement", "CreditRoll", "Breakout/manage")
     written = [m for m in mgmt if m in rows]
     check("N1 on a flat tick no management plan writes a row (r303: condition absent), none as a dispatch gap",
           not written, f"written: {[(m, rows[m]) for m in written]}")
@@ -110,9 +111,9 @@ def main():
     # management plans and false of the entry strategies, and a reason that is
     # wrong is worse than one that is missing — it looks like an answer.
     check("N2 an entry strategy is not given a management reason",
-          "SweepCreditSpread" in rows
-          and "nothing to manage" not in (rows["SweepCreditSpread"][1] or ""),
-          f"{rows.get('SweepCreditSpread')}")
+          "PARK" in rows
+          and "nothing to manage" not in (rows["PARK"][1] or ""),
+          f"{rows.get('PARK')}")
 
     # ── N3 — a more specific reason WINS ────────────────────────────────
     # `setdefault`, not assignment: a plan already skipped for a real cause

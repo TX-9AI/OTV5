@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""check_chain_ordering.py — v5.2
+"""check_chain_ordering.py — v5.3
+v5.3  2026-11-15  OTV5 r123 (HYG.27) — OT_RESTING_DB leaves the scratch env (r118 deleted execution/resting_orders.py, its only reader).
 v5.2  2026-11-14  OTV5 r110 (WS.3 TRIM) — C9/C10 use LiquidityHunt as the second registered plan (Breakout is DORMANT, and a dormant plan writes no plan_tick row by ruling); what they pin is unchanged.
 v5.1  2026-11-08  OTV5 r76 (RETIRE.1) — C9/C10 use Breakout as the second registered plan (the sweep is removed); what they pin is unchanged.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
@@ -215,7 +216,7 @@ def main():
                 sys.path.insert(1, _sp)                       # r106 venv bootstrap
         import tempfile as _tf
         _d = _tf.mkdtemp(prefix="check_chain_ordering_")
-        for _k, _f in (("OT_TRADES_DB", "trades.db"), ("OT_DERIVED_DB", "d.db"), ("OT_RESTING_DB", "r.db")):
+        for _k, _f in (("OT_TRADES_DB", "trades.db"), ("OT_DERIVED_DB", "d.db")):
             os.environ.setdefault(_k, os.path.join(_d, _f))
         os.environ.setdefault("OT_SIGNAL_JOURNAL_DIR", os.path.join(_d, "sj"))
         os.environ.setdefault("OT_LOG_FILE", os.path.join(_d, "bot.log"))

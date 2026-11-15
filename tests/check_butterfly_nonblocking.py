@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""tests/check_butterfly_nonblocking.py  v5.1
+"""tests/check_butterfly_nonblocking.py  v5.2
+v5.2  2026-11-15  OTV5 r123 (HYG.27) — FIXTURES RE-POINTED (the Saturday brief 11-14 section 5 item 10): B3's list is Breakout, RunawayContinuation, PARK, OGAP, IronCondorStrategy and the ORB record is a Breakout one; the butterfly-flagged rows keep their old name (no live setup trades a fly); what each check proves is unchanged.
 v5.1  2026-11-11  OTV5 r107 (RETIRE.5 follow-up) — B2 RE-POINTED (WA 38.4): the butterfly exemption from has_blocking_position is
       removed with the generic fly path, so a fly-flagged row now blocks like any other. B1, B3-B5b unchanged.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
@@ -99,32 +100,32 @@ def main():
 
     # ── B3: the block that must SURVIVE ───────────────────────────────────
     # 🔑 Operator: no credit trades while the ORB or runaway debit are open.
-    for name in ("ORBStrategy", "RunawayContinuation", "SweepCreditSpread",
-                 "TrendCreditSpread", "IronCondorStrategy"):
+    for name in ("Breakout", "RunawayContinuation", "PARK", "OGAP",
+                 "IronCondorStrategy"):
         pm._open_records = [rec("x", name)]
         if not pm.has_blocking_position():
             check(f"B3 {name} still blocks", False,
                   "only the butterfly is exempt — this unblocked everything")
             break
     else:
-        check("B3 ORB, runaway and every credit strategy STILL block", True)
+        check("B3 Breakout, runaway, PARK, OGAP and the condor STILL block", True)
 
     # ── B3b: a butterfly alongside a blocker does not rescue the box ──────
     pm._open_records = [rec("bf1", "GEXPinButterfly", butterfly=1),
-                        rec("orb1", "ORBStrategy")]
-    check("B3b butterfly + ORB still blocks — the exemption is per-record",
+                        rec("brk1", "Breakout")]
+    check("B3b butterfly + Breakout still blocks — the exemption is per-record",
           pm.has_blocking_position())
 
     # ── B4: entering alongside a butterfly must not drop it ───────────────
     pm._open_records = [rec("bf1", "GEXPinButterfly", butterfly=1)]
-    pm.add_open_position(rec("orb1", "ORBStrategy"))
+    pm.add_open_position(rec("brk1", "Breakout"))
     ids = {r["trade_id"] for r in pm.get_open_records()}
     check("B4 add_open_position keeps the butterfly under management",
-          ids == {"bf1", "orb1"}, str(sorted(ids)))
+          ids == {"bf1", "brk1"}, str(sorted(ids)))
 
     pm._open_records = [rec("bf1", "GEXPinButterfly", butterfly=1)]
-    pm.set_open_position(rec("orb1", "ORBStrategy"))
-    dropped = {r["trade_id"] for r in pm.get_open_records()} == {"orb1"}
+    pm.set_open_position(rec("brk1", "Breakout"))
+    dropped = {r["trade_id"] for r in pm.get_open_records()} == {"brk1"}
     check("B4b set_open_position REPLACES — which is why main.py must not "
           "call it when anything is open", dropped,
           "if this ever stops replacing, the r197 guard in main is moot")

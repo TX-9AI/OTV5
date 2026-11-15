@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_runaway_plan.py  v5.1
+tests/check_runaway_plan.py  v5.2
+v5.2  2026-11-15  OTV5 r123 (HYG.27) — FIXTURES RE-POINTED (the Saturday brief 11-14 section 5 item 10): X1b/X6's ORBStrategy record -> Breakout (the ORB family's own floor); what each check proves is unchanged.
 v5.1  2026-10-26  OTV5 r38 (HYG.18) — scratch no longer names dir="/var/tmp": mkdtemp honours TMPDIR, which boot_sweep and land.sh point
       at a per-run dir they remove (HYG.14), so a sweep leaves nothing behind (237 dirs had piled up on SOFI). No check changed.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
@@ -381,9 +382,9 @@ def main():
         check("X1 🔴 REJECTED handoff exits the runaway, naming the pool",
               d.should_exit and "handoff" in str(d.exit_reason) and "102.60" in str(d.exit_reason),
               f"{d.should_exit}: {d.exit_reason}")
-        d_orb = xe._evaluate_orb(dict(base, trade_id="x-orb", strategy="ORBStrategy",
+        d_orb = xe._evaluate_orb(dict(base, trade_id="x-orb", strategy="Breakout",
                                       underlying_stop=100.5, stop_premium=0.75), 1.30, held)
-        check("X1b ...and the ORB record too", d_orb.should_exit and "handoff" in str(d_orb.exit_reason))
+        check("X1b ...and the Breakout (ORB family) record too", d_orb.should_exit and "handoff" in str(d_orb.exit_reason))
         # clear the event for the rest
         store.conn.execute("DELETE FROM level_event"); store.conn.commit()
         # X2 HOLD at the old floor while price is beyond the 50
@@ -425,9 +426,9 @@ def main():
               d.should_exit and ("thesis_dead" in str(d.exit_reason) or "backstop" in str(d.exit_reason)),
               str(d.exit_reason))
         # X6 ORB floor unchanged
-        d = xe._evaluate_orb(dict(base, trade_id="x-orb2", strategy="ORBStrategy",
+        d = xe._evaluate_orb(dict(base, trade_id="x-orb2", strategy="Breakout",
                                   underlying_stop=100.5, stop_premium=0.75), 0.70, held)
-        check("X6 the ORB's own 25% floor still fires", d.should_exit and "hard_stop" in str(d.exit_reason),
+        check("X6 the ORB family's own 25% floor still fires (a Breakout record)", d.should_exit and "hard_stop" in str(d.exit_reason),
               str(d.exit_reason))
     finally:
         XE.datetime = _real_dt

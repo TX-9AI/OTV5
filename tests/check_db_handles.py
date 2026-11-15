@@ -1,4 +1,5 @@
-"""tests/check_db_handles.py — v5.2
+"""tests/check_db_handles.py — v5.3
+v5.3  2026-11-15  OTV5 r123 (HYG.27) — FIXTURES RE-POINTED (the Saturday brief 11-14 section 5 item 10): VOLT -> LiquidityHunt; what each check proves is unchanged.
 v5.2  2026-11-14  OTV5 r118 (HYG.23) — H2 goes with execution/resting_orders.py (deleted: the standing-offer store had no writer
       since r76), and H6 reads trade_logger only. H1, H3-H5 unchanged.
 v5.1  2026-10-26  OTV5 r38 (HYG.18) — scratch no longer names dir="/var/tmp": mkdtemp honours TMPDIR, which boot_sweep and land.sh point
@@ -105,7 +106,7 @@ try:
         tl.realized_pnl_today()
         tl._get_field("h1", "symbol")
     for i in range(N):
-        tl.log_entry(make_record(trade_id=f"h1-{i}", symbol="QQQ", strategy="VOLT",
+        tl.log_entry(make_record(trade_id=f"h1-{i}", symbol="QQQ", strategy="LiquidityHunt",
                                  direction="short", paper_trade=1))
     after = fds(TR)
     check(f"H1 trade_logger: {N * 6} calls leave the trades.db handles flat",

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_shadow_rules.py  v5.2
+tests/check_shadow_rules.py  v5.3
+v5.3  2026-11-15  OTV5 r123 (HYG.27) — OT_RESTING_DB leaves the scratch env (r118 deleted execution/resting_orders.py, its only reader).
 v5.2  2026-11-10  OTV5 r106 - S2: decisions and shadow rows are counted over settled ticks (a tick committed between the
       two SELECTs no longer reads as a missing row, 11-09 AVGO 49/48); S1 reads yesterday so it passes at any hour.
 v5.1  2026-11-08  OTV5 r95 (CHK.13) - G1: shadow_rules.GATES names every frozen constant FOUNDATIONAL (check_gates was red
@@ -47,7 +48,7 @@ sys.path.insert(0, ROOT)
 _TD = tempfile.mkdtemp(prefix="check_shadow_rules_")
 FEED = os.path.join(_TD, "f.db")
 for _k, _v in (("OT_TRADES_DB", "t.db"), ("OT_DERIVED_DB", "d.db"), ("OT_LOG_FILE", "bot.log"),
-               ("OT_SIGNAL_JOURNAL_DIR", "sj"), ("OT_RESTING_DB", "r.db"), ("OT_COUNTERFACTUAL_DIR", "cf"),
+               ("OT_SIGNAL_JOURNAL_DIR", "sj"), ("OT_COUNTERFACTUAL_DIR", "cf"),
                ("OT_WAREHOUSE_STATE", "ws"), ("OT_PLAN_STATES_FILE", "ps.json")):
     os.environ[_k] = os.path.join(_TD, _v)
 os.environ["OT_FEED_DB"] = FEED

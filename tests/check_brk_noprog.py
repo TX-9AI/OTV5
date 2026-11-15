@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_brk_noprog.py  v5.2
+tests/check_brk_noprog.py  v5.3
+v5.3  2026-11-15  OTV5 r123 (HYG.27) — OT_RESTING_DB leaves the scratch env (r118 deleted execution/resting_orders.py, its only reader).
 v5.2  2026-11-14  OTV5 r110 (WS.3 TRIM) — N11 reads Breakout's end from config.BREAKOUT_WINDOW (Breakout is dormant and off ENTRY_WINDOWS; its code and its 10:30 end are kept). What N11 pins is unchanged.
 v5.1  2026-10-31  OTV5 r68 (CFG.5) — N11-N13 RE-POINTED, NOT DROPPED (section 38.4). The operator, 2026-10-31: "10&11–defaults are
       fine, take them out"; "12, same thing. Trade it—I don't want this toggled". config v5.10 reads neither OT_BREAKOUT_END
@@ -42,7 +43,6 @@ os.environ["OT_DERIVED_DB"] = os.path.join(_TD, "d.db")
 os.environ["OT_FEED_DB"] = os.path.join(_TD, "f.db")
 os.environ["OT_LOG_FILE"] = os.path.join(_TD, "bot.log")
 os.environ["OT_SIGNAL_JOURNAL_DIR"] = os.path.join(_TD, "sj")
-os.environ["OT_RESTING_DB"] = os.path.join(_TD, "r.db")
 CF = os.path.join(_TD, "cf")
 os.environ["OT_COUNTERFACTUAL_DIR"] = CF
 FAILED, RAN = [], []

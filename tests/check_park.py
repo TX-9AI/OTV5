@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_park.py  v5.4
+tests/check_park.py  v5.5
+v5.5  2026-11-15  OTV5 r123 (HYG.27) — OT_RESTING_DB leaves the scratch env (r118 deleted execution/resting_orders.py, its only reader).
 v5.4  2026-11-14  OTV5 (OGAP.1) — K13 pins PIN_EXEMPT = (PARK, OGAP): OGAP is measured without the pin gate, as PARK. Every PARK check unchanged.
 v5.3  2026-11-09  OTV5 r103 (RETIRE.5 step 2) — K13a intercepts _attempt_park alone: _attempt_butterfly is removed with the GEX fly. Every check unchanged.
 v5.2  2026-10-30  OTV5 r60 (PARK.4) — K1 PINS THE MARK, NOT THE ASK. The operator, 2026-10-30: "That's not my spec… you
@@ -79,7 +80,6 @@ FEED = os.path.join(_TD, "f.db")
 os.environ["OT_FEED_DB"] = FEED
 os.environ["OT_LOG_FILE"] = os.path.join(_TD, "bot.log")
 os.environ["OT_SIGNAL_JOURNAL_DIR"] = os.path.join(_TD, "sj")
-os.environ["OT_RESTING_DB"] = os.path.join(_TD, "r.db")
 CF = os.path.join(_TD, "cf")
 os.environ["OT_COUNTERFACTUAL_DIR"] = CF
 # r58 (DECAY.1): this checker pins a pre-decay exit in isolation; the peak-decay stop is gated in tests/check_decay_stop.py

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_credit_sign_history.py  v5.0
+tests/check_credit_sign_history.py  v5.1
+v5.1  2026-11-15  OTV5 r123 (HYG.27) — FIXTURES RE-POINTED (the Saturday brief 11-14 section 5 item 10): SweepCreditSpread -> IronCondorStrategy; what each check proves is unchanged.
 v5.0  2026-10-25  (MEAS.6 / RPT.26 / PRE.2) — THE CREDIT BOOK RE-READS WITH THE RIGHT SIGN, WITHOUT REWRITING A ROW
       (otv4 r344's gate, ported). No OTV5 entry path writes is_short_position (only broker_reconcile, for an
       adopted short), so every credit row carries 0 and r_ledger.position_dollars took its MFE off mfe_premium -
@@ -70,7 +71,7 @@ def main():
     # H6 — the verdict, not the column. Premium never rose above entry (mfe_premium == entry) and fell to 0.20:
     # a credit WINNER. The old long rule read MFE = $0 and filed it NEVER favourable.
     winner = dict(pnl_usd=60.0, entry_premium=1.0, mfe_premium=1.0, mae_premium=0.20, contracts=1,
-                  is_short_position=0, credit_received=1.0, strategy="SweepCreditSpread",
+                  is_short_position=0, credit_received=1.0, strategy="IronCondorStrategy",
                   option_side="put", exit_reason="hard_close", status="closed")
     d = RL.two_population([winner], RL.BASE_CUT)
     check("H6 a credit winner is filed WAS favourable, not NEVER",

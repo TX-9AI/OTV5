@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_ladder_wired.py  v5.2
+tests/check_ladder_wired.py  v5.3
+v5.3  2026-11-15  OTV5 r123 (HYG.27) — FIXTURES RE-POINTED (the Saturday brief 11-14 section 5 item 10): ORBStrategy -> RunawayContinuation; what each check proves is unchanged.
 v5.2  2026-11-11  OTV5 r107 (RETIRE.5 follow-up) — L1b and L5's butterfly path go with the generic fly entry (entry_engine v5.2). L1a, L1c and L5 on the single leg unchanged.
 v5.1  2026-11-08  OTV5 r76 (RETIRE.1) — L10 RE-POINTED (WA 38.4): the second-leg sweep is removed, so the condor still authorizes a side and no
       SweepForLeg2 is asked; the three direct-fire tags stay absent.
@@ -119,7 +120,7 @@ from execution.exit_engine import ExitEngine
 _ee = ExitEngine.__new__(ExitEngine)
 _credit = {"strategy": "IronCondorStrategy", "setup_type": "1h_fork_call_credit_spread",
            "is_condor_leg": 1}
-_debit  = {"strategy": "ORBStrategy", "setup_type": "orb_long"}
+_debit  = {"strategy": "RunawayContinuation", "setup_type": "orb_long"}
 import datetime as _dt
 from zoneinfo import ZoneInfo as _Z
 import execution.exit_engine as _EEm

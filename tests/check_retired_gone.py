@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_retired_gone.py  v5.10
+tests/check_retired_gone.py  v5.11
+v5.11 2026-11-15  OTV5 r123 (HYG §5.10, HYG.27) — NEW G18/G18b/G18c: test fixtures name no removed trade except the listed history decoders, fly-shaped records and absence gates (a per-file ratchet on string-constant hits); nothing sets OT_RESTING_DB; the ORCS-named check is renamed tests/check_spxw_settle.py. OT_RESTING_DB leaves this check's own scratch env.
 v5.10 2026-11-14  OTV5 r120 (HYG §5.7, HYG.25) — NEW G17/G17b: no retired strategy name is a string constant (docstrings aside) anywhere in the decision code (main.py, strategy/, execution/, risk/, query.py's plans panel roster), and no bare "ORB" strategy match comes back; what stays: _orb_release_due (fail-closed: an except that returns False), _open_credit_legs / _open_credit_sides, query._STRAT_ABBR (history decode). By AST. RED on 93341d4.
 v5.9  2026-11-14  OTV5 r119 (HYG §5.5, HYG.24) — NEW G16/G16b: the brief's 21 dead defs (and CircuitBreakerState, which only one of them built) stay gone, by AST, never by substring; and what they sat beside stays (is_halted, can_enter, is_orb_complete, minutes_since, SLOPE_FLAT_ATR, get_open_trades_live, the engine's G6 API). RED on 47cc55a.
 v5.8  2026-11-14  OTV5 r118 (HYG §5.4, HYG.23) — NEW G15/G15b: the standing-offer store is gone (execution/resting_orders.py, main._supervise_offers and _orb_offer_working, order_guard's read of it, utils.paths.resting_db_path; entry_engine places no offer, r76's check_offer_fill_price F3, which is deleted), and _orb_release_due / _kept_order_ids / sweep_working stay. By AST. RED on d9286e9.
@@ -64,7 +65,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 _SCR = tempfile.mkdtemp(prefix="check_retired_gone_")
 for _k, _f in (("OT_TRADES_DB", "trades.db"), ("OT_DERIVED_DB", "derived_store.db"),
-               ("OT_RESTING_DB", "resting_orders.db"), ("OT_SIGNAL_JOURNAL_DIR", "signal_journal")):
+               ("OT_SIGNAL_JOURNAL_DIR", "signal_journal")):
     os.environ.setdefault(_k, os.path.join(_SCR, _f))
 os.environ.setdefault("OT_INSTRUMENT", "QQQ")
 
@@ -542,6 +543,128 @@ check("G17b (r120) what stays: main._orb_release_due fails closed (an except ret
       "_open_credit_legs / _open_credit_sides, query._STRAT_ABBR",
       _fail_closed and {"_open_credit_legs", "_open_credit_sides"} <= set(_fn17) and _abbr,
       f"fail_closed={_fail_closed} credit={sorted({'_open_credit_legs', '_open_credit_sides'} & set(_fn17))} abbr={_abbr}")
+
+# ── G18 (r123, HYG.27) — test fixtures do not name the removed trades ──────────────────────────────────
+# Every removal re-pointed 10-15 fixture files (r76, r88, r103, r107 headers say so). r123 gives each
+# fixture that only needed AN example a live setup's name, so the next removal touches none of them. What
+# may still name a removed trade, file by file, with the most string-constant hits it may carry (a RATCHET:
+# fewer is fine, more is red, and a file not listed carries none):
+#   "history"  - decodes old ledger rows or replays old trades (the warehouse holds them for good)
+#   "fly"      - a butterfly-shaped record (is_butterfly=1): no live setup trades a fly, so the old name stays
+#   "gone"     - a gate that asserts the removed name is ABSENT (it must name what it forbids)
+_KEEP18 = {
+    "tests/cascade_harness.py": (1, "history"),
+    "tests/cascade_real.py": (1, "history"),
+    "tests/cascade_warehouse.py": (1, "history"),
+    "tests/check_bootstrap.py": (1, "gone"),
+    "tests/check_butterfly_nonblocking.py": (4, "fly"),
+    "tests/check_condor_mgmt.py": (2, "gone"),
+    "tests/check_config_menu.py": (1, "gone"),
+    "tests/check_dashboards_multi_position.py": (1, "fly"),
+    "tests/check_entry_windows.py": (1, "gone"),
+    "tests/check_eod_schedule.py": (1, "fly"),
+    "tests/check_exit_replay.py": (10, "history"),
+    "tests/check_expiry_settlement.py": (1, "fly"),
+    "tests/check_fill_observers.py": (1, "gone"),
+    "tests/check_fly_entry_quote.py": (1, "fly"),
+    "tests/check_ladder_wired.py": (1, "gone"),
+    "tests/check_late_credit_window.py": (4, "gone"),
+    "tests/check_lineage.py": (1, "history"),
+    "tests/check_management_plan.py": (13, "gone"),
+    "tests/check_nearer_stop.py": (2, "history"),
+    "tests/check_no_parc.py": (17, "gone"),
+    "tests/check_note_label.py": (4, "history"),
+    "tests/check_orb_bounds_capability.py": (1, "history"),
+    "tests/check_orb_release.py": (1, "gone"),
+    "tests/check_orb_resume.py": (3, "gone"),
+    "tests/check_plan_ledger_take.py": (1, "gone"),
+    "tests/check_plan_prepares.py": (1, "gone"),
+    "tests/check_plan_states.py": (1, "gone"),
+    "tests/check_plans_panel_width.py": (4, "history"),
+    "tests/check_r_ledger_width.py": (5, "history"),
+    "tests/check_recorder_keys.py": (2, "history"),
+    "tests/check_retired_gone.py": (25, "gone"),
+    "tests/check_scaling_toggle.py": (1, "gone"),
+    "tests/check_stop_spread_report.py": (11, "history"),
+    "tests/check_structure_stop_ramp.py": (1, "gone"),
+    "tests/check_time_parse.py": (1, "gone"),
+    "tests/check_trade_report.py": (5, "history"),
+    "tests/check_trade_switches.py": (3, "gone"),
+    "tests/check_unrealized_sign.py": (1, "history"),
+    "tests/entry_profile.py": (1, "history"),
+    "tests/exit_replay.py": (6, "history"),
+    "tests/fees.py": (3, "history"),
+    "tests/priced_plan.py": (1, "history"),
+    "tests/r_gate.py": (1, "history"),
+    "tests/r_ledger.py": (1, "history"),
+    "tests/stop_spread_report.py": (1, "history"),
+    "tests/tick_board.py": (1, "history"),
+    "tests/trade_report.py": (9, "history"),
+}
+
+
+def _count18(rel):
+    t = _ast.parse(open(os.path.join(ROOT, rel), encoding="utf-8").read(), rel)
+    skip = set()
+    for n in _ast.walk(t):
+        if isinstance(n, (_ast.Module, _ast.FunctionDef, _ast.AsyncFunctionDef, _ast.ClassDef)) and n.body \
+                and isinstance(n.body[0], _ast.Expr) and isinstance(getattr(n.body[0], "value", None), _ast.Constant):
+            skip.add(id(n.body[0].value))
+    return sum(len(_RX17.findall(c.value)) for c in _ast.walk(t)
+               if isinstance(c, _ast.Constant) and isinstance(c.value, str) and id(c) not in skip)
+
+
+_over18 = []
+for _dp, _dn, _fn in os.walk(os.path.join(ROOT, "tests")):
+    if "__pycache__" in _dp:
+        continue
+    for _f in sorted(_fn):
+        if not _f.endswith(".py"):
+            continue
+        _rel = os.path.relpath(os.path.join(_dp, _f), ROOT)
+        try:
+            _n = _count18(_rel)
+        except SyntaxError:
+            continue
+        _cap = _KEEP18.get(_rel, (0, ""))[0]
+        if _n > _cap:
+            _over18.append(f"{_rel} {_n}>{_cap}")
+check("G18 (r123) no test fixture names a removed trade except the listed history decoders, fly-shaped "
+      "records and absence gates, each within its recorded count", not _over18, "; ".join(_over18[:8]))
+
+# G18b: OT_RESTING_DB is set by nothing (r118 deleted its only reader); comments and docstrings may tell the history.
+_set18 = []
+for _dp, _dn, _fn in os.walk(ROOT):
+    if any(x in _dp for x in ("/.git", "__pycache__", "/venv", "/docs")):
+        continue
+    for _f in _fn:
+        _p = os.path.join(_dp, _f)
+        _rel = os.path.relpath(_p, ROOT)
+        if _f.endswith(".py"):
+            try:
+                _t = _ast.parse(open(_p, encoding="utf-8").read(), _rel)
+            except (SyntaxError, UnicodeDecodeError):
+                continue
+            _doc = set()
+            for _n in _ast.walk(_t):
+                if isinstance(_n, (_ast.Module, _ast.FunctionDef, _ast.AsyncFunctionDef, _ast.ClassDef)) and _n.body \
+                        and isinstance(_n.body[0], _ast.Expr) and isinstance(getattr(_n.body[0], "value", None), _ast.Constant):
+                    _doc.add(id(_n.body[0].value))
+            _hit = [c.lineno for c in _ast.walk(_t) if isinstance(c, _ast.Constant) and isinstance(c.value, str)
+                    and id(c) not in _doc and "OT_RESTING_DB" in c.value]
+            _hit += [k.lineno for k in _ast.walk(_t) if isinstance(k, _ast.keyword) and k.arg == "OT_RESTING_DB"]
+        elif _f.endswith(".sh") or _f.endswith(".service"):
+            _hit = [i for i, ln in enumerate(open(_p, encoding="utf-8", errors="replace").read().splitlines(), 1)
+                    if "OT_RESTING_DB" in ln.split("#", 1)[0]]
+        else:
+            continue
+        _set18 += [f"{_rel}:{i}" for i in _hit if _rel != "tests/check_retired_gone.py"]
+check("G18b (r123) nothing sets OT_RESTING_DB (no .py string, keyword or .sh/.service line outside comments)",
+      not _set18, "; ".join(_set18[:8]))
+check("G18c (r123) the check named for the removed ORCS trade is renamed: tests/check_spxw_settle.py, no "
+      "tests/check_spxw_settle_orcs_live.py",
+      os.path.exists(os.path.join(ROOT, "tests", "check_spxw_settle.py"))
+      and not os.path.exists(os.path.join(ROOT, "tests", "check_spxw_settle_orcs_live.py")))
 
 print()
 if FAIL:

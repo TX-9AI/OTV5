@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_expected_move_home.py  v5.2
+tests/check_expected_move_home.py  v5.3
+v5.3  2026-11-15  OTV5 r123 (HYG.27) — OT_RESTING_DB leaves the scratch env (r118 deleted execution/resting_orders.py, its only reader).
 v5.2  2026-11-09  OTV5 r103 (RETIRE.5 step 2) — E1 drops the GEX fly's wrapper (strategy/gex_pin_butterfly.py removed): expected_move_session itself is held to the old body on the same grid and floor, and E1b pins the three callers the wrapper served (the pin gate, the Hunt, the snapshot) importing it directly. E2-E5 unchanged.
 v5.1  2026-11-08  OTV5 r76 (RETIRE.1) — E5 drops the ORCS call site (strategy/orcs_plan.py removed with ORCS); the condor and readiness sites unchanged.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
@@ -40,7 +41,7 @@ for _sp in _glob.glob(os.path.join(_root, "venv", "lib", "python*", "site-packag
     if _sp not in sys.path:                                  # r106 venv bootstrap
         sys.path.insert(1, _sp)
 _S = tempfile.mkdtemp(prefix="check_expected_move_home_")
-for _k, _f in (("OT_TRADES_DB", "trades.db"), ("OT_DERIVED_DB", "d.db"), ("OT_RESTING_DB", "r.db")):
+for _k, _f in (("OT_TRADES_DB", "trades.db"), ("OT_DERIVED_DB", "d.db")):
     os.environ.setdefault(_k, os.path.join(_S, _f))
 os.environ.setdefault("OT_SIGNAL_JOURNAL_DIR", os.path.join(_S, "sj"))
 os.environ.setdefault("OT_LOG_FILE", os.path.join(_S, "bot.log"))

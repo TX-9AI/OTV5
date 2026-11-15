@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_park_late_shadow.py  v5.5
+tests/check_park_late_shadow.py  v5.6
+v5.6  2026-11-15  OTV5 r123 (HYG.27) — OT_RESTING_DB leaves the scratch env (r118 deleted execution/resting_orders.py, its only reader).
 v5.5  2026-11-14  OTV5 (OGAP.1) — B1's _evaluate_route pin RE-POINTED (WA section 38.4): 1127111d9e2e2b11 -> 69d56af628818235, the OGAP route arm added beside PARK's; _evaluate_park, _park_cf and _decay_read unchanged; DECAY_STOP_EXEMPT gains OGAP.
 v5.4  2026-11-11  OTV5 r107 (RETIRE.5 follow-up) — B1's _evaluate_route pin RE-POINTED (WA section 38.4): 1855505efa2e697f -> 1127111d9e2e2b11,
       the butterfly arm removed with the generic fly path (the diff is that arm and the elif that followed it becoming if);
@@ -63,7 +64,7 @@ from zoneinfo import ZoneInfo
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 _s = tempfile.mkdtemp(prefix="check_park_late_shadow.")
-for _k, _v in (("OT_TRADES_DB", "trades.db"), ("OT_DERIVED_DB", "derived.db"), ("OT_RESTING_DB", "resting.db"),
+for _k, _v in (("OT_TRADES_DB", "trades.db"), ("OT_DERIVED_DB", "derived.db"),
                ("OT_FEED_DB", "feed.db"), ("OT_COUNTERFACTUAL_DIR", "cf"), ("OT_LOG_FILE", "bot.log"),
                ("OT_SIGNAL_JOURNAL_DIR", "sj"),
                ("OT_WAREHOUSE_STATE", "ws"), ("OT_PLAN_STATES_FILE", "ps.json")):

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""tests/check_mark_rate_limit.py  v5.1
+"""tests/check_mark_rate_limit.py  v5.2
+v5.2  2026-11-15  OTV5 r123 (HYG.27) — FIXTURES RE-POINTED (the Saturday brief 11-14 section 5 item 10): SweepCreditSpread -> IronCondorStrategy; what each check proves is unchanged.
 v5.1  2026-11-11  OTV5 r107 (RETIRE.5 follow-up) — the butterfly fixture goes with the generic fly path (position_manager v5.35
       prices no fly): R1/R4/R5/R10 ride the credit vertical (two legs, still one request), R2 becomes the vertical's
       one-retry case. The retry, backoff, heartbeat and cooldown rules checked are unchanged.
@@ -126,7 +127,7 @@ def main():
         return m._fetch_current_premium(rec, chain=None)
 
     near = lambda a, b: a is not None and abs(a - b) < 1e-9              # noqa: E731
-    vert = {"trade_id": "V", "strategy": "SweepCreditSpread", "is_condor_leg": 1,
+    vert = {"trade_id": "V", "strategy": "IronCondorStrategy", "is_condor_leg": 1,
             "option_symbol": "SYN 1P90", "short_symbol": "SYN 1P90", "long_symbol": "SYN 1P85"}
     single = {"trade_id": "S", "strategy": "RunawayContinuation", "option_symbol": "SYN 1C100"}
     every_other = lambda n: n % 2 == 0                                  # noqa: E731

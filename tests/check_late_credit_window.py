@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""tests/check_late_credit_window.py — v5.2
+"""tests/check_late_credit_window.py — v5.3
+v5.3  2026-11-15  OTV5 r123 (HYG.27) — FIXTURES RE-POINTED (the Saturday brief 11-14 section 5 item 10): the DEBIT set drops the removed GEX fly and adds PARK and OGAP, so W2 now covers them (a PARK window past the ladder is red; it was green); what each check proves is unchanged.
 v5.2  2026-11-08  OTV5 r88 (RETIRE.3) — W1 re-derived: no credit entry is left in admission (the TCS removed), so W1 pins the one credit end (config.CREDIT_ENTRY_END_ET 15:40) strictly before the vertical hold; W2/W3 unchanged.
 v5.1  2026-11-08  OTV5 r76 (RETIRE.1) — W1 and the DEBIT / CREDIT sets drop the removed trades (sweep, ATP fly, ORB); W2-W7 unchanged.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
@@ -95,8 +96,8 @@ VHOLD = tuple(config.VERTICAL_HOLD_TO_ET)
 
 # Which structures pay a debit. MEASURED on the book 2026-09-20: both
 # butterflies carry net_debit (0.26, 0.47) and credit_received 0.0.
-DEBIT = {"GEXPinButterfly", "RunawayContinuation",
-         "LiquidityHunt", "Breakout"}                       # r76: the ATP fly and the ORB trade removed
+DEBIT = {"RunawayContinuation", "LiquidityHunt", "Breakout",
+         "PARK", "OGAP"}                                    # r123: the GEX fly out (r103), PARK and OGAP in
 CREDIT = set()                                              # r76: the sweep removed; r88: the TCS - no credit entry left
 
 

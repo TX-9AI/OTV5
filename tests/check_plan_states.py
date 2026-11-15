@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_plan_states.py  v5.12
+tests/check_plan_states.py  v5.13
+v5.13  2026-11-15  OTV5 r123 (HYG.27) — OT_RESTING_DB leaves the scratch env (r118 deleted execution/resting_orders.py, its only reader).
 v5.12  2026-11-14  OTV5 (OGAP.1) — S1's ruled-active list gains OGAP (ACTIVE, no switch key). Every other check unchanged.
 v5.11  2026-11-14  OTV5 r110 (WS.3 TRIM) — RE-POINTED (WA 38.4): Breakout is DORMANT with no switch, so S1's ruled roster moves it to dormant, S3's three OT_BREAKOUT cases read dormant for "1", "active" and "log" (no env turns it back on), and D1/D2/D5's ACTIVE exemplar is LiquidityHunt. What each check pins is unchanged.
 v5.10  2026-11-09  OTV5 r103 (RETIRE.5 step 2) — RE-POINTED (WA 38.4): the GEX fly's plan_state row is removed, so S1's ruled roster drops it (and pins it absent) and S3's three OT_GEX_BUTTERFLY cases go. S2, S4+ unchanged.
@@ -83,7 +84,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 _TD = tempfile.mkdtemp(prefix="check_plan_states_")
 for _k, _v in (("OT_TRADES_DB", "t.db"), ("OT_DERIVED_DB", "d.db"), ("OT_FEED_DB", "f.db"),
-               ("OT_LOG_FILE", "bot.log"), ("OT_SIGNAL_JOURNAL_DIR", "sj"), ("OT_RESTING_DB", "r.db"),
+               ("OT_LOG_FILE", "bot.log"), ("OT_SIGNAL_JOURNAL_DIR", "sj"),
                ("OT_COUNTERFACTUAL_DIR", "cf"),
                ("OT_WAREHOUSE_STATE", "ws"), ("OT_PLAN_STATES_FILE", "plan_states.json")):
     os.environ[_k] = os.path.join(_TD, _v)

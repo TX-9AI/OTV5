@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""tests/check_entry_underwater.py — v5.1
+"""tests/check_entry_underwater.py — v5.2
+v5.2  2026-11-15  OTV5 r123 (HYG.27) — FIXTURES RE-POINTED (the Saturday brief 11-14 section 5 item 10): ORBStrategy -> RunawayContinuation; what each check proves is unchanged.
 v5.1  2026-10-26  OTV5 r38 (HYG.18) — scratch no longer names dir="/var/tmp": mkdtemp honours TMPDIR, which boot_sweep and land.sh point
       at a per-run dir they remove (HYG.14), so a sweep leaves nothing behind (237 dirs had piled up on SOFI). No check changed.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
@@ -113,7 +114,7 @@ class _State:
     paper_trading = True
 
 
-def _sig(direction, price, stop, *, name="ORBStrategy", thesis=False):
+def _sig(direction, price, stop, *, name="RunawayContinuation", thesis=False):
     s = OptionsSignal(
         strategy_name=name,
         setup_type="fixture",

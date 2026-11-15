@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""tests/check_commitment.py — v5.1
+"""tests/check_commitment.py — v5.2
+v5.2  2026-11-15  OTV5 r123 (HYG.27) — FIXTURES RE-POINTED (the Saturday brief 11-14 section 5 item 10): G8's non-directional GEXPinButterfly -> IronCondorStrategy; what each check proves is unchanged; OT_RESTING_DB leaves the scratch env (r118 deleted execution/resting_orders.py, its only reader).
 v5.1  2026-11-14  OTV5 r112 (AM.3) — G4 flips: a LIVE box with mode trade REFUSES an ABANDONED side (row BLOCKED, effective=trade, paper=false), exactly as paper does (G1). RED on r108 (it placed, effective=log).
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 WE ENTER ON COMMITMENT (COMMIT.1 / COMMIT.2 / COMMIT.3, OTV4TEST r272).
@@ -57,7 +58,6 @@ os.environ["OT_COUNTERFACTUAL_DIR"] = os.path.join(_tmp, "cf")
 os.environ.setdefault("OT_TRADES_DB", os.path.join(_tmp, "trades.db"))
 os.environ.setdefault("OT_LOG_FILE", os.path.join(_tmp, "bot.log"))
 os.environ.setdefault("OT_DERIVED_DB", os.path.join(_tmp, "derived_store.db"))
-os.environ.setdefault("OT_RESTING_DB", os.path.join(_tmp, "resting_orders.db"))
 os.environ.setdefault("OT_SIGNAL_JOURNAL_DIR", os.path.join(_tmp, "signal_journal"))
 FAILED, RAN = [], []
 
@@ -288,7 +288,7 @@ guard("G7b no tick state on ctx (a caller outside the loop) -> placed, NO row", 
 
 def g8():
     n0 = len(_rows("commit_gate.jsonl"))
-    placed = _fire(_sig(name="GEXPinButterfly"), _state("ABANDONED", "ABANDONED"))
+    placed = _fire(_sig(name="IronCondorStrategy"), _state("ABANDONED", "ABANDONED"))
     return bool(placed) and len(_rows("commit_gate.jsonl")) == n0
 
 

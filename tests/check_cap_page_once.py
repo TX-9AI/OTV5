@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_cap_page_once.py  v5.2
+tests/check_cap_page_once.py  v5.3
+v5.3  2026-11-15  OTV5 r123 (HYG.27) — OT_RESTING_DB leaves the scratch env (r118 deleted execution/resting_orders.py, its only reader).
 v5.2  2026-11-14  OTV5 r113 (AM.8) — P10 the episode day is utils.time_utils.now_et()'s date (21:30 ET on 11-13 is 11-13, not the UTC 11-14); P11 an unreadable ET clock gives "" (never the UTC date), so no stamp matches. Born red on r108 at P10 and P11.
 v5.1  2026-10-26  OTV5 r38 (HYG.18) — scratch no longer names dir="/var/tmp": mkdtemp honours TMPDIR, which boot_sweep and land.sh point
       at a per-run dir they remove (HYG.14), so a sweep leaves nothing behind (237 dirs had piled up on SOFI). No check changed.
@@ -63,7 +64,6 @@ sys.path.insert(0, ROOT)
 _SCR = tempfile.mkdtemp(prefix="check_cap_page_once_")
 os.environ["OT_TRADES_DB"] = os.path.join(_SCR, "trades.db")
 os.environ["OT_DERIVED_DB"] = os.path.join(_SCR, "derived_store.db")
-os.environ["OT_RESTING_DB"] = os.path.join(_SCR, "resting.db")
 os.environ.setdefault("OT_INSTRUMENT", "QQQ")
 os.environ["OT_PAPER_TRADING"] = "1"
 os.environ["OT_RISK_USD"] = "1050"

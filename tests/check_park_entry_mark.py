@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_park_entry_mark.py  v5.1
+tests/check_park_entry_mark.py  v5.2
+v5.2  2026-11-15  OTV5 r123 (HYG.27) — OT_RESTING_DB leaves the scratch env (r118 deleted execution/resting_orders.py, its only reader).
 v5.1  2026-11-03  OTV5 r72 (PARK.5) — RE-POINTED, NOT CHANGED: CVX is an equity, so PARK now also reads the commitment
       gate (park_plan v5.4), and the four-bar fixture starved it ("no signal; the rest cannot run"). _committed_tape()
       lays a full CVX + QQQ tape that passes the gate under the four fixture bars (prices unchanged; their volume is the
@@ -44,7 +45,7 @@ from zoneinfo import ZoneInfo
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 _TD = tempfile.mkdtemp(prefix="check_park_entry_mark.")
-for _k, _v in (("OT_TRADES_DB", "t.db"), ("OT_DERIVED_DB", "d.db"), ("OT_RESTING_DB", "r.db"),
+for _k, _v in (("OT_TRADES_DB", "t.db"), ("OT_DERIVED_DB", "d.db"),
                ("OT_FEED_DB", "f.db"), ("OT_COUNTERFACTUAL_DIR", "cf"), ("OT_LOG_FILE", "bot.log"),
                ("OT_SIGNAL_JOURNAL_DIR", "sj"), ("OT_PLAN_STATES_FILE", "ps.json")):
     os.environ[_k] = os.path.join(_TD, _v)

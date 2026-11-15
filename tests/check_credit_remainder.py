@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""tests/check_credit_remainder.py  v5.2
+"""tests/check_credit_remainder.py  v5.3
+v5.3  2026-11-15  OTV5 r123 (HYG.27) — FIXTURES RE-POINTED (the Saturday brief 11-14 section 5 item 10): TrendCreditSpread -> IronCondorStrategy; what each check proves is unchanged.
 v5.2  2026-11-08  OTV5 r88 (RETIRE.3) — C7 drives a generic credit vertical where it drove a TCS (removed): the intent key cv:SYN:CreditVertical:put, and C7d re-derived - the remainder carries config.CONDOR_LONE_STOP_PCT and main._credit_window_end(); C2-C6 unchanged.
 v5.1  2026-10-30  OTV5 r57 (TCS.LOG1) — C7's subject is a TRADED TCS (a live partial), and a TCS is LOG (a shadow trade, never
       ordered) by default since r57, so this run switches it ACTIVE (OT_TCS_ACTIVE=1), as r303 did for the plan checkers;
@@ -177,7 +178,7 @@ def main():
     rem = cr.Remainder(key=key, trade_id="T-1", record=rec,
                        short_symbol=short.symbol, long_symbol=long_.symbol,
                        short_strike=99.0, long_strike=94.0, side="put",
-                       strategy="TrendCreditSpread", requested=4, remaining=2,
+                       strategy="IronCondorStrategy", requested=4, remaining=2,
                        stop_pct=0.0, window_end_et=(14, 0))
     cr.register(rem)
 
@@ -217,7 +218,7 @@ def main():
         r = cr.Remainder(key=key, trade_id="T-1", record=dict(rec),
                          short_symbol=short.symbol, long_symbol=long_.symbol,
                          short_strike=99.0, long_strike=94.0, side="put",
-                         strategy="TrendCreditSpread", requested=4, remaining=2,
+                         strategy="IronCondorStrategy", requested=4, remaining=2,
                          stop_pct=0.0, window_end_et=(14, 0))
         cr.register(r)
     hit = []

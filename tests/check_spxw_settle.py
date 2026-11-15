@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """
-tests/check_spxw_settle_orcs_live.py  v5.1
+tests/check_spxw_settle.py  v5.2
+v5.2  2026-11-15  OTV5 r123 (HYG.27) — RENAMED from tests/check_spxw_settle_orcs_live.py (the Saturday brief 11-14 section 5
+      item 10): the file is no longer named for the removed ORCS trade. Its checks are unchanged.
 v5.1  2026-11-08  OTV5 r76 (RETIRE.1) — O1/O2 RE-POINTED (WA 38.4): ORCS is removed, so its live-refusal and paper rows become one check that main
       carries no ORCS path; S1/S2 (the SPXW settlement) unchanged.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
@@ -17,7 +19,7 @@ v1.0  2026-10-04  OTV4TEST r247 (FORK-ONLY) — TWO LIVE-PATH FINDINGS FROM SPX-
   O2  a PAPER box: unchanged - ledger_open, then the entry, once per ready side
 Drives the REAL main._settlement_spot against a scratch feed store built by the real FeedStore, and the REAL
 main._attempt_orcs with the strategy and the entry stubbed. No network, no live store.
-Run: python3 tests/check_spxw_settle_orcs_live.py
+Run: python3 tests/check_spxw_settle.py
 """
 import os, sys, tempfile
 from datetime import datetime

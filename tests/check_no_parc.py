@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_no_parc.py  v5.4
+tests/check_no_parc.py  v5.5
+v5.5  2026-11-15  OTV5 r123 (HYG.27) — OT_RESTING_DB leaves the scratch env (r118 deleted execution/resting_orders.py, its only reader).
 v5.4  2026-11-14  OTV5 (OGAP.1) — N1 pins CAP_EXCLUDED_STRATEGIES = (PARK, OGAP): OGAP's own budget is outside the cap, as PARK's. Every PARC assertion unchanged.
 v5.3  2026-11-11  OTV5 r107 (RETIRE.5 follow-up) — N5 strips the seven butterfly signal fields from the golden (asserting they were the defaults): OptionsSignal no longer has them. PARK's prepare and signal are otherwise unchanged.
 v5.2  2026-11-08  OTV5 r93 (C8.1) — N5 strips exactly PARK's new C8 condition and its rows, and r90's shadow_park_sma50
@@ -58,7 +59,7 @@ def probe():
     sys.path.insert(0, ROOT)
     td = tempfile.mkdtemp(prefix="check_no_parc_")
     for k, v in {"OT_TRADES_DB": "t.db", "OT_DERIVED_DB": "d.db", "OT_FEED_DB": "f.db", "OT_LOG_FILE": "bot.log",
-                 "OT_SIGNAL_JOURNAL_DIR": "sj", "OT_RESTING_DB": "r.db", "OT_RESTING_STOP_STATE": "rs.json",
+                 "OT_SIGNAL_JOURNAL_DIR": "sj", "OT_RESTING_STOP_STATE": "rs.json",
                  "OT_COUNTERFACTUAL_DIR": "cf", "OT_PLAN_STATES_FILE": "ps.json"}.items():
         os.environ[k] = os.path.join(td, v)
     os.environ.update(OT_RISK_USD="1050", OT_ORB_BUDGET_USD="2500", OT_INSTRUMENT="QQQ")

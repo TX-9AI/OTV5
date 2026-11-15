@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""tests/check_exit_deadline.py  v5.1
+"""tests/check_exit_deadline.py  v5.2
+v5.2  2026-11-15  OTV5 r123 (HYG.27) — FIXTURES RE-POINTED (the Saturday brief 11-14 section 5 item 10): ORBStrategy -> RunawayContinuation; what each check proves is unchanged; OT_RESTING_DB leaves the scratch env (r118 deleted execution/resting_orders.py, its only reader).
 v5.1  2026-10-31  OTV5 r68 (CFG.5) — OT_RESTING_STOP_STATE leaves the scratch env: the resting stop and its state file are deleted
       (the operator, 2026-10-31: "Resting stop was a study. It failed. Get this the fuck out of here"). No check changed.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
@@ -37,7 +38,7 @@ sys.path.insert(0, ROOT)
 os.environ.setdefault("OT_INSTRUMENT", "QQQ")
 _SCR = tempfile.mkdtemp(prefix="chk_exit_deadline_")
 for _k, _v in (("OT_TRADES_DB", "t.db"), ("OT_DERIVED_DB", "d.db"), ("OT_FEED_DB", "f.db"), ("OT_LOG_FILE", "bot.log"),
-               ("OT_COUNTERFACTUAL_DIR", "cf"), ("OT_RESTING_DB", "r.db"), ("OT_SIGNAL_JOURNAL_DIR", "sj"),
+               ("OT_COUNTERFACTUAL_DIR", "cf"), ("OT_SIGNAL_JOURNAL_DIR", "sj"),
                ("OT_HEARTBEAT_FILE", "BOT_HEARTBEAT")):
     os.environ[_k] = os.path.join(_SCR, _v)
 PROBLEMS = []
@@ -121,7 +122,7 @@ def main():
             broker.submitted += 1
             return _Order(f"O{broker.submitted}", OrderStatus.LIVE)
         e._submit_live_close = submit
-        rec = TL.make_record(trade_id=tid, symbol="QQQ", strategy="ORBStrategy", setup_type="ORB",
+        rec = TL.make_record(trade_id=tid, symbol="QQQ", strategy="RunawayContinuation", setup_type="ORB",
                              option_side="call", contracts=5, entry_premium=1.50, total_cost=750.0,
                              max_loss=750.0, stop_premium=0.0, option_symbol="QQQ   261016C00100000",
                              expiry="2099-01-01")

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_scaling_toggle.py  v5.4
+tests/check_scaling_toggle.py  v5.5
+v5.5  2026-11-15  OTV5 r123 (HYG.27) — FIXTURES RE-POINTED (the Saturday brief 11-14 section 5 item 10): S3's GEXPinButterfly / TrendCreditSpread -> OGAP / IronCondorStrategy; what each check proves is unchanged; OT_RESTING_DB leaves the scratch env (r118 deleted execution/resting_orders.py, its only reader).
 v5.4  2026-11-11  OTV5 r107 (RETIRE.5 follow-up) — size() mirrors main's size_for call, which no longer passes net_debit / butterfly_half_size (removed with the fly path). Checks unchanged.
 v5.3  2026-11-08  OTV5 r76 (RETIRE.1) — RE-POINTED ONTO THE ONE SWITCH LEFT (section 38.4). The ORB trade and VOLT are REMOVED,
       and with them SCALE_ORB / SCALE_VOLT; Breakout's switch (main.SCALE_BREAKOUT, fixed ON in config since r68) is the
@@ -84,7 +85,6 @@ if not os.environ.get("OT_TRADES_DB"):
     atexit.register(shutil.rmtree, _scr, True)
     os.environ.setdefault("OT_TRADES_DB", os.path.join(_scr, "trades.db"))
     os.environ.setdefault("OT_DERIVED_DB", os.path.join(_scr, "derived_store.db"))
-    os.environ.setdefault("OT_RESTING_DB", os.path.join(_scr, "resting.db"))
 os.environ.setdefault("OT_INSTRUMENT", "QQQ")
 os.environ.setdefault("OT_PAPER_TRADING", "1")
 # The live ramp: MIN 1050, TOP 10000 - the same values check_volt_sizing forces.
@@ -173,7 +173,7 @@ setsw()
 # ── S3 — no other trade has a switch ────────────────────────────────────────
 setsw(False)
 others = {n: main._scaling_on(other(n)) for n in ("RunawayContinuation", "LiquidityHunt", "PARK",
-                                                    "GEXPinButterfly", "TrendCreditSpread")}
+                                                    "OGAP", "IronCondorStrategy")}
 check("S3 with Breakout OFF every other trade still rides the ramp (_scaling_on True: no switch of its own)",
       all(others.values()), str(others))
 setsw()

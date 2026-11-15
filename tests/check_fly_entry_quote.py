@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_fly_entry_quote.py  v5.3
+tests/check_fly_entry_quote.py  v5.4
+v5.4  2026-11-15  OTV5 r123 (HYG.27) — FIXTURES RE-POINTED (the Saturday brief 11-14 section 5 item 10): F7's vertical SweepCreditSpread -> IronCondorStrategy; the fly rows keep their old name; what each check proves is unchanged; OT_RESTING_DB leaves the scratch env (r118 deleted execution/resting_orders.py, its only reader).
 v5.3  2026-11-11  OTV5 r107 (RETIRE.5 follow-up) — F1-F5 (the butterfly's composite entry quote) go with the generic fly path; F1 now
       pins main._fly_entry_contract gone. F6 (single leg) and F7 (credit vertical) unchanged.
 v5.2  2026-10-31  OTV5 r68 (CFG.5) — OT_RESTING_STOP_STATE leaves the scratch env: the resting stop and its state file are deleted
@@ -47,7 +48,7 @@ for _sp in _glob.glob(os.path.join(ROOT, "venv", "lib", "python*", "site-package
     if _sp not in sys.path:
         sys.path.insert(1, _sp)
 _s = tempfile.mkdtemp(prefix="check_fly_entry_quote.")
-for _k, _v in (("OT_TRADES_DB", "trades.db"), ("OT_DERIVED_DB", "derived.db"), ("OT_RESTING_DB", "resting.db"),
+for _k, _v in (("OT_TRADES_DB", "trades.db"), ("OT_DERIVED_DB", "derived.db"),
                ("OT_FEED_DB", "feed.db"), ("OT_COUNTERFACTUAL_DIR", "cf"), ("OT_LOG_FILE", "bot.log"),
                ("OT_SIGNAL_JOURNAL_DIR", "sj"),
                ("OT_WAREHOUSE_STATE", "ws"), ("OT_PLAN_STATES_FILE", "ps.json")):
@@ -145,7 +146,7 @@ check("F6 a single-leg trade writes its own contract (2.50/2.55, delta 0.80, iv 
       and near(got6.get("entry_delta"), 0.80) and near(got6.get("entry_iv"), 0.66), f"{ok6!r} {got6}")
 
 # ── F7 a credit vertical unchanged ────────────────────────────────────────────
-vert = {"trade_id": str(uuid.uuid4()), "symbol": "NVDA", "strategy": "SweepCreditSpread", "setup_type": "sweep_credit_spread",
+vert = {"trade_id": str(uuid.uuid4()), "symbol": "NVDA", "strategy": "IronCondorStrategy", "setup_type": "sweep_credit_spread",
         "direction": "long", "option_side": "put", "is_butterfly": 0, "is_condor_leg": 0, "strike": 220.0,
         "short_symbol": PUT.symbol, "long_symbol": "NVDA  261028P00217500", "option_symbol": PUT.symbol,
         "entry_premium": 0.80, "contracts": 2, "paper_trade": 1}

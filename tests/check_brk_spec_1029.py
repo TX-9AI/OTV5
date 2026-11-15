@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_brk_spec_1029.py  v5.3
+tests/check_brk_spec_1029.py  v5.4
+v5.4  2026-11-15  OTV5 r123 (HYG.27) — FIXTURES RE-POINTED (the Saturday brief 11-14 section 5 item 10): P4's ORBStrategy -> PARK; what each check proves is unchanged; OT_RESTING_DB leaves the scratch env (r118 deleted execution/resting_orders.py, its only reader).
 v5.3  2026-11-09  OTV5 r103 (RETIRE.5 step 2) — P1-P5 read the expected move from analysis.volatility_measures.expected_move_session (the pin gate's own source since r103; the GEX fly module is removed).
 v5.2  2026-10-31  OTV5 r68 (CFG.5) — OT_RESTING_STOP_STATE leaves the scratch env: the resting stop and its state file are deleted
       (the operator, 2026-10-31: "Resting stop was a study. It failed. Get this the fuck out of here"). No check changed.
@@ -61,7 +62,7 @@ import types
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 _s = tempfile.mkdtemp(prefix="check_brk_spec_1029.")
-for _k, _v in (("OT_TRADES_DB", "trades.db"), ("OT_DERIVED_DB", "derived.db"), ("OT_RESTING_DB", "resting.db"),
+for _k, _v in (("OT_TRADES_DB", "trades.db"), ("OT_DERIVED_DB", "derived.db"),
                ("OT_FEED_DB", "feed.db"), ("OT_COUNTERFACTUAL_DIR", "cf"), ("OT_LOG_FILE", "bot.log"),
                ("OT_SIGNAL_JOURNAL_DIR", "sj"),
                ("OT_WAREHOUSE_STATE", "ws"), ("OT_PLAN_STATES_FILE", "ps.json")):
@@ -356,7 +357,7 @@ def main():
           f"long allow={ab} short allow={abs_}")
     ra, aa = verdict("Breakout", "long", px)
     check("P3 a pin exactly AT price stays refused", ra and not aa, f"refuse={ra} allow={aa}")
-    others = [(n, verdict(n, "long", px + near)) for n in ("ORBStrategy", "RunawayContinuation", "LiquidityHunt")]
+    others = [(n, verdict(n, "long", px + near)) for n in ("PARK", "RunawayContinuation", "LiquidityHunt")]
     check("P4 every other strategy keeps today's gate (a pin ahead is still refused)",
           all(v[0] and not v[1] for _, v in others), f"{others}")
     far = em * (C.PIN_PROXIMITY_MIN_FRAC + 0.2)

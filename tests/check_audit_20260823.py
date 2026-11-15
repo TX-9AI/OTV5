@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_audit_20260823.py  v5.1
+tests/check_audit_20260823.py  v5.2
+v5.2  2026-11-15  OTV5 r123 (HYG.27) — FIXTURES RE-POINTED (the Saturday brief 11-14 section 5 item 10): A4's SweepCreditSpread -> LiquidityHunt; what each check proves is unchanged.
 v5.1  2026-11-04  OTV5 r74 (ORP.3) — A2 RE-POINTED, NOT LOOSENED: the rescue still fires on a store with only a 09:45 bar
       (the pin), and it now re-pulls BOTH tenors from 09:30 - 5m and 1m, each unsubscribed first - because the range is
       the five 1m bars (data/candle_feed v5.9; the operator, 2026-11-03: "Yes to the proposal"). The rest is unchanged.
@@ -212,14 +213,14 @@ def a4():
     from analysis import gate_report as gr
     store = _Store()
     r = gr.GateReporter(store, "X")
-    r.blocked("SweepCreditSpread", "age", "too old")
+    r.blocked("LiquidityHunt", "age", "too old")
     fired = getattr(r, "fired", None)
     if fired:
-        fired("SweepCreditSpread")
+        fired("LiquidityHunt")
     snap = r.snapshot()
     n = store.conn.execute("SELECT COUNT(*) FROM gate_disposition WHERE event='CLEARED'").fetchone()[0]
     check("A4 a fire clears the block (snapshot empty, CLEARED row written)",
-          fired is not None and "SweepCreditSpread" not in snap and n == 1,
+          fired is not None and "LiquidityHunt" not in snap and n == 1,
           f"fired={'present' if fired else 'MISSING'} snap={snap} cleared_rows={n}")
 
 

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_orb_release.py  v5.3
+tests/check_orb_release.py  v5.4
+v5.4  2026-11-15  OTV5 r123 (HYG.27) — OT_RESTING_DB leaves the scratch env (r118 deleted execution/resting_orders.py, its only reader).
 v5.3  2026-11-14  OTV5 r120 (HYG §5.7, HYG.25) — M1 RE-PINNED (WA 38.4): _orb_release_due no longer scans the book for an "ORB" record (none can be open: CRM read-only and the S3 trade warehouse 08-15..11-14), so an ORB-named row is True like any other; NEW M1b: an UNREADABLE book is still False (the fail-closed probe stays).
 v5.2  2026-11-08  OTV5 r76 (RETIRE.1) — M1 RE-POINTED (WA 38.4): the ORB trade is removed and OT_ORB_TRADE is read by nothing, so a set switch no
       longer holds the engine (b is True); a stale ORB position still holds it (fails closed), another strategy's does not.
@@ -53,7 +54,7 @@ from zoneinfo import ZoneInfo
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 _s = tempfile.mkdtemp(prefix="check_orb_release.")
-for _k, _v in (("OT_TRADES_DB", "trades.db"), ("OT_DERIVED_DB", "derived.db"), ("OT_RESTING_DB", "resting.db"),
+for _k, _v in (("OT_TRADES_DB", "trades.db"), ("OT_DERIVED_DB", "derived.db"),
                ("OT_FEED_DB", "feed.db"), ("OT_COUNTERFACTUAL_DIR", "cf"), ("OT_LOG_FILE", "bot.log"),
                ("OT_SIGNAL_JOURNAL_DIR", "sj"),
                ("OT_WAREHOUSE_STATE", "ws"), ("OT_PLAN_STATES_FILE", "ps.json")):

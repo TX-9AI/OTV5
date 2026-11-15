@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """
-tests/check_land_tooling.py  v5.1
+tests/check_land_tooling.py  v5.2
+v5.2  2026-11-15  OTV5 r123 (HYG.27) — T6 RE-POINTED: OT_RESTING_DB is no longer required under $_scratch - r118 deleted
+      the resting-offer store (execution/resting_orders.py), its only reader. Every other store unchanged.
 v5.1  2026-10-31  OTV5 r68 (CFG.5) — T6 RE-POINTED (section 38.4): OT_RESTING_STOP_STATE is no longer required under $_scratch -
       the resting stop is deleted (the operator, 2026-10-31: "Resting stop was a study. It failed."). Every other store unchanged.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
@@ -125,14 +127,14 @@ def main():
     _runs = [ln for ln in _ls.splitlines()
              if 'python3 "$chk"' in ln and not ln.lstrip().startswith("#")]
     _need = ('OT_TRADES_DB="$_scratch/', 'OT_DERIVED_DB="$_scratch/',
-             'OT_RESTING_DB="$_scratch/', 'OT_SIGNAL_JOURNAL_DIR="$_scratch/',
+             'OT_SIGNAL_JOURNAL_DIR="$_scratch/',                              # r123: OT_RESTING_DB gone
              'OT_LOG_FILE="$_scratch/', 'OT_COUNTERFACTUAL_DIR="$_scratch/',    # r194, r287
              'OT_FEED_DB="$_scratch/',                                           # r68: OT_RESTING_STOP_STATE gone
              'OT_WAREHOUSE_STATE="$_scratch/',                                  # r292 (GATE.1)
              'OT_PLAN_STATES_FILE="$_scratch/',                                 # r307 (GATE.4)
              'OT_HEARTBEAT_FILE="$_scratch/')                                   # OTV5 r4 (GATE.6)
     _bad = [ln.strip()[:90] for ln in _runs if not all(n in ln for n in _need)]
-    check("T6 every CHECK invocation isolates the trades, derived, resting stores, the journal, the log, the counterfactual logs, the feed store, the resting-stop state, the warehouse state and the plan states",
+    check("T6 every CHECK invocation isolates the trades and derived stores, the journal, the log, the counterfactual logs, the feed store, the warehouse state and the plan states",
           bool(_runs) and not _bad,
           f"{len(_runs)} invocation line(s)" + (f"; missing on: {_bad}" if _bad else ""))
 

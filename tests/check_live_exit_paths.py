@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_live_exit_paths.py  v5.3
+tests/check_live_exit_paths.py  v5.4
+v5.4  2026-11-15  OTV5 r123 (HYG.27) — FIXTURES RE-POINTED (the Saturday brief 11-14 section 5 item 10): SweepCreditSpread -> IronCondorStrategy; what each check proves is unchanged; OT_RESTING_DB leaves the scratch env (r118 deleted execution/resting_orders.py, its only reader).
 v5.3  2026-11-11  OTV5 r107 (RETIRE.5 follow-up) — L3b-L3d and L5a (the butterfly's live and paper close) go with the generic fly path
       (exit_engine v5.18, position_manager v5.35). L3a (the stop is declared walk) and every single / vertical / tent check unchanged.
 v5.2  2026-10-31  OTV5 r68 (CFG.5) — OT_RESTING_STOP_STATE leaves the scratch env: the resting stop and its state file are deleted
@@ -49,7 +50,7 @@ sys.path.insert(0, ROOT)
 os.environ.setdefault("OT_INSTRUMENT", "QQQ")
 _s = tempfile.mkdtemp(prefix="check_live_exit_paths.")
 for _k, _f in (("OT_TRADES_DB", "trades.db"), ("OT_DERIVED_DB", "derived_store.db"),
-               ("OT_RESTING_DB", "resting.db"),
+
                ("OT_COUNTERFACTUAL_DIR", "cf"), ("OT_LOG_FILE", "bot.log")):
     os.environ.setdefault(_k, os.path.join(_s, _f))
 ET = ZoneInfo("America/New_York")
@@ -179,7 +180,7 @@ def main():
 
     clock["t"] = at(15, 47)
     acct["a"] = _Acct(); LR.reset_all()
-    r1c = TL.make_record(trade_id="L1c-vert", symbol="QQQ", strategy="SweepCreditSpread", setup_type="sweep_credit_spread",
+    r1c = TL.make_record(trade_id="L1c-vert", symbol="QQQ", strategy="IronCondorStrategy", setup_type="sweep_credit_spread",
                          direction="long", option_side="put", contracts=3, entry_premium=0.60,
                          total_cost=120.0, max_loss=120.0, short_strike=699.0, long_strike=698.0,
                          short_symbol="QQQ   261028P00699000", long_symbol="QQQ   261028P00698000",

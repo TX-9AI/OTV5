@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""tests/check_buyback_side.py  v5.0
+"""tests/check_buyback_side.py  v5.1
+v5.1  2026-11-15  OTV5 r123 (HYG.27) — FIXTURES RE-POINTED (the Saturday brief 11-14 section 5 item 10): ORBStrategy -> RunawayContinuation; what each check proves is unchanged.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 BBK.1 — A SINGLE-LEG BUY-BACK IS PRICED AS A BUY.
 
@@ -85,7 +86,7 @@ def main():
     eng.paper_trading = False
 
     def rec(tid, symbol, bid, ask, short):
-        r = {"trade_id": tid, "symbol": symbol, "strategy": "ORBStrategy",
+        r = {"trade_id": tid, "symbol": symbol, "strategy": "RunawayContinuation",
              "option_symbol": f"{symbol}   261016C00100000", "option_side": "call",
              "contracts": 2, "entry_premium": 1.0, "_exit_bid": bid, "_exit_ask": ask}
         if short:

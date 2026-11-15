@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_cap_counterfactual.py  v5.1
+tests/check_cap_counterfactual.py  v5.2
+v5.2  2026-11-15  OTV5 r123 (HYG.27) — FIXTURES RE-POINTED (the Saturday brief 11-14 section 5 item 10): OpeningRangeCreditSpread -> IronCondorStrategy; what each check proves is unchanged; OT_RESTING_DB leaves the scratch env (r118 deleted execution/resting_orders.py, its only reader).
 v5.1  2026-11-09  OTV5 r103 (RETIRE.5 step 2) — K3's exempt example is PARK (cap-exempt, its own budget) where it was the GEX fly, removed. Every other check unchanged.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.1  2026-10-18  OTV4TEST r288 (PARK.1) — the fake realized_pnl_today takes the cap's new exclude_strategies argument
@@ -39,7 +40,7 @@ for _sp in _glob.glob(os.path.join(_root, "venv", "lib", "python*", "site-packag
     if _sp not in sys.path:                                  # r106 venv bootstrap
         sys.path.insert(1, _sp)
 _S = tempfile.mkdtemp(prefix="check_cap_counterfactual_")
-for _k, _f in (("OT_TRADES_DB", "trades.db"), ("OT_DERIVED_DB", "d.db"), ("OT_RESTING_DB", "r.db")):
+for _k, _f in (("OT_TRADES_DB", "trades.db"), ("OT_DERIVED_DB", "d.db")):
     os.environ.setdefault(_k, os.path.join(_S, _f))
 os.environ.setdefault("OT_SIGNAL_JOURNAL_DIR", os.path.join(_S, "sj"))
 os.environ.setdefault("OT_LOG_FILE", os.path.join(_S, "bot.log"))
@@ -99,7 +100,7 @@ def main():
               len(lines()) == 2 and r.get("refuse_stop") == 0 and r.get("refuse_max") == 0 and r.get("headroom") == 5000.0,
               f"{len(lines())} lines, {r}")
         day(-4500.0)
-        rm.note_entry_risk({"trade_id": "bbbbbbbb-1", "strategy": "OpeningRangeCreditSpread", "entry_premium": 0.28,
+        rm.note_entry_risk({"trade_id": "bbbbbbbb-1", "strategy": "IronCondorStrategy", "entry_premium": 0.28,
                             "stop_premium": 0.0, "contracts": 1, "credit_received": 0.28, "max_loss": 672.0,
                             "total_cost": 672.0, "is_condor_leg": 1})
         c = lines()[-1]

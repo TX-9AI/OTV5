@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_fill_observers.py  v5.2
+tests/check_fill_observers.py  v5.3
+v5.3  2026-11-15  OTV5 r123 (HYG.27) — OT_RESTING_DB leaves the scratch env (r118 deleted execution/resting_orders.py, its only reader).
 v5.2  2026-11-08  OTV5 r76 (RETIRE.1) — O1 drops the VOLT and ORB cases (both trades removed; EXCLUDED is the Hunt alone); the other five unchanged.
 v5.1  2026-10-31  OTV5 r68 (CFG.5) — O1's RESTING-ROW CASE LEAVES WITH THE RESTING STOP (deleted; the operator, 2026-10-31: "Resting
       stop was a study. It failed. Get this the fuck out of here"); the seven other O1 cases are unchanged, and O5 no longer
@@ -37,7 +38,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 _TD = tempfile.mkdtemp(prefix="check_fill_observers_")
 for k, v in {"OT_TRADES_DB": "t.db", "OT_DERIVED_DB": "d.db", "OT_FEED_DB": "f.db", "OT_LOG_FILE": "bot.log",
-             "OT_RESTING_DB": "r.db", "OT_SIGNAL_JOURNAL_DIR": "sj", "OT_COUNTERFACTUAL_DIR": "cf"}.items():
+             "OT_SIGNAL_JOURNAL_DIR": "sj", "OT_COUNTERFACTUAL_DIR": "cf"}.items():
     os.environ[k] = os.path.join(_TD, v)
 os.environ.pop("OT_FILL_OBSERVE", None)
 os.environ.pop("OT_FLOOR_WATCH", None)

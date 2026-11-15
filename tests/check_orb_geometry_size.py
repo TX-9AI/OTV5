@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""tests/check_orb_geometry_size.py  v5.0
+"""tests/check_orb_geometry_size.py  v5.1
+v5.1  2026-11-15  OTV5 r123 (HYG.27) — FIXTURES RE-POINTED (the Saturday brief 11-14 section 5 item 10): ORBStrategy -> Breakout; what each check proves is unchanged.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v2.1  2026-08-31  r201 — the geometry cases pass an EXPLICIT budget so they
       measure the arithmetic and not the box's risk setting, and G3c is
@@ -123,7 +124,7 @@ def main():
         symbol, strike, expiry, mark = "TEST  260830C00196000", 196.0, "2026-08-30", 1.20
 
     class _Sig:
-        strategy_name = "ORBStrategy"
+        strategy_name = "Breakout"
         setup_type = "ORB Long"
         direction = "long"
         option_side = "call"

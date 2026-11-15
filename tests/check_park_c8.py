@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_park_c8.py  v5.0
+tests/check_park_c8.py  v5.1
+v5.1  2026-11-15  OTV5 r123 (HYG.27) — OT_RESTING_DB leaves the scratch env (r118 deleted execution/resting_orders.py, its only reader).
 v5.0  2026-11-08  OTV5 r93 (C8.1) — new. PARK SKIPS AN ENTRY THE FIRST HOUR HAS ALREADY OUTRUN (strategy/park_plan v5.7,
       strategy/park v5.3). The operator, 2026-11-08: "Yes, to both". The rule is the frozen, blind-passed C8 of
       ~/reviews/studies/web_setups_1108 (FROZEN.txt 18:57 UTC): skip a call when the 10:59 1m close is above the
@@ -44,7 +45,7 @@ sys.path.insert(0, ROOT)
 _TD = tempfile.mkdtemp(prefix="check_park_c8_")
 FEED = os.path.join(_TD, "f.db")
 for _k, _v in (("OT_TRADES_DB", "t.db"), ("OT_DERIVED_DB", "d.db"), ("OT_LOG_FILE", "bot.log"),
-               ("OT_SIGNAL_JOURNAL_DIR", "sj"), ("OT_RESTING_DB", "r.db"), ("OT_COUNTERFACTUAL_DIR", "cf"),
+               ("OT_SIGNAL_JOURNAL_DIR", "sj"), ("OT_COUNTERFACTUAL_DIR", "cf"),
                ("OT_WAREHOUSE_STATE", "ws"), ("OT_PLAN_STATES_FILE", "ps.json"), ("OT_RESTING_STOP_STATE", "rs.json")):
     os.environ[_k] = os.path.join(_TD, _v)
 os.environ["OT_FEED_DB"] = FEED

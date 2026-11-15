@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_adx_stamp.py  v5.0
+tests/check_adx_stamp.py  v5.1
+v5.1  2026-11-15  OTV5 r123 (HYG.27) — OT_RESTING_DB leaves the scratch env (r118 deleted execution/resting_orders.py, its only reader).
 v5.0  2026-10-25  (MEAS.4) — EVERY ENTRY CARRIES THE ADX IT WAS TAKEN AT. Only ORBStrategy set
       signal.adx_at_signal (from MarketState.adx), so adx_at_entry was 0.0 on every non-ORB row
       (27 of 34 at MEAS.4's count). main._stamp_adx stamps it beside _stamp_vix, from the same source.
@@ -30,7 +31,7 @@ for _sp in _glob.glob(os.path.join(_root, "venv", "lib", "python*", "site-packag
     if _sp not in sys.path:
         sys.path.insert(1, _sp)
 _S = tempfile.mkdtemp(prefix="check_adx_stamp_")
-for _k, _f in (("OT_TRADES_DB", "trades.db"), ("OT_DERIVED_DB", "d.db"), ("OT_RESTING_DB", "r.db")):
+for _k, _f in (("OT_TRADES_DB", "trades.db"), ("OT_DERIVED_DB", "d.db")):
     os.environ.setdefault(_k, os.path.join(_S, _f))
 os.environ.setdefault("OT_SIGNAL_JOURNAL_DIR", os.path.join(_S, "sj"))
 os.environ.setdefault("OT_LOG_FILE", os.path.join(_S, "bot.log"))

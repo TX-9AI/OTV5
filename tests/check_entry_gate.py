@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_entry_gate.py  v5.0
+tests/check_entry_gate.py  v5.1
+v5.1  2026-11-15  OTV5 r123 (HYG.27) — FIXTURES RE-POINTED (the Saturday brief 11-14 section 5 item 10): ORBStrategy -> RunawayContinuation; what each check proves is unchanged.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 
 r101 — DECIDE ALWAYS, PLACE AFTER 09:35. Operator directive 2026-08-24:
@@ -66,7 +67,7 @@ class _Boom:
 
 eng = ee.EntryEngine(paper_trading=True)
 eng._trade_logger = _Boom()
-sig = OptionsSignal(strategy_name="ORBStrategy", setup_type="orb_long",
+sig = OptionsSignal(strategy_name="RunawayContinuation", setup_type="orb_long",
                     option_side="call", strike=81.0, entry_premium=0.85,
                     underlying_entry=80.0,
                     contract=OptionContract(symbol="X", strike=81.0, mark=0.85))

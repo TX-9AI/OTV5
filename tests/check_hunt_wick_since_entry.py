@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_hunt_wick_since_entry.py  v5.2
+tests/check_hunt_wick_since_entry.py  v5.3
+v5.3  2026-11-15  OTV5 r123 (HYG.27) — OT_RESTING_DB leaves the scratch env (r118 deleted execution/resting_orders.py, its only reader).
 v5.2  2026-11-08  OTV5 r84 (VENV.1) — a bare run (control's /usr/bin/python3 3.14, no pandas) stops with one
       ModuleNotFoundError line naming the venv to use, not a traceback: utils.venv_guard.require_venv before the first
       third-party import. Under the venv nothing changes.
@@ -35,7 +36,7 @@ sys.path.insert(0, ROOT)
 from utils.venv_guard import require_venv                         # noqa: E402  (stdlib only)
 require_venv('pandas')
 _s = tempfile.mkdtemp(prefix="check_hunt_wick_since_entry.")
-for _k, _v in (("OT_TRADES_DB", "trades.db"), ("OT_DERIVED_DB", "derived.db"), ("OT_RESTING_DB", "resting.db"),
+for _k, _v in (("OT_TRADES_DB", "trades.db"), ("OT_DERIVED_DB", "derived.db"),
                ("OT_FEED_DB", "feed.db"), ("OT_COUNTERFACTUAL_DIR", "cf"), ("OT_LOG_FILE", "bot.log"),
                ("OT_SIGNAL_JOURNAL_DIR", "sj"),
                ("OT_WAREHOUSE_STATE", "ws"), ("OT_PLAN_STATES_FILE", "ps.json")):

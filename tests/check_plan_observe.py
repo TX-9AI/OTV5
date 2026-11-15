@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_plan_observe.py  v5.0
+tests/check_plan_observe.py  v5.1
+v5.1  2026-11-15  OTV5 r123 (HYG.27) — FIXTURES RE-POINTED (the Saturday brief 11-14 section 5 item 10): D1's GEXPinButterfly -> PARK; what each check proves is unchanged.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 THE PLAN ALWAYS LOOKS; THE STRATEGY IS GATED ON THE HOUR - AND AN OBSERVED FIRE IS NEVER EXECUTED (OBS.1).
 
@@ -164,7 +165,7 @@ def main():
     if _lo is None:                      # the unfixed tree: a FAIL, never a crash (§40.1)
         def _lo(*_a, **_k):
             return "absent"
-    d1 = (_lo(_Sig("Breakout"), {}), _lo(_Sig("GEXPinButterfly"), {}),
+    d1 = (_lo(_Sig("Breakout"), {}), _lo(_Sig("PARK"), {}),
           _lo(_Sig("RunawayContinuation"), {}))
     check("D1 _log_only: True for the observed Breakout, False for anything else",
           d1 == (True, False, False), f"{d1}")

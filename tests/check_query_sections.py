@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_query_sections.py  v5.0
+tests/check_query_sections.py  v5.1
+v5.1  2026-11-15  OTV5 r123 (HYG.27) — FIXTURES RE-POINTED (the Saturday brief 11-14 section 5 item 10): ORBStrategy -> Breakout; what each check proves is unchanged.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.6  2026-09-23  OTV4TEST r126 — Q4 no longer opens analysis/liquidity_mapper.py (deleted):
       it read the file into a variable nothing used. Q4's assertion is unchanged.
@@ -222,9 +223,9 @@ def main():
         def __getitem__(self, k): return self.get(k)
     widest = 0
     for t, st, side, k, n, e, x, p, pc, w in [
-            ("2026-09-01 09:44:00", "ORBStrategy", "put", 705, 2, 1.56, 1.15,
+            ("2026-09-01 09:44:00", "Breakout", "put", 705, 2, 1.56, 1.15,
              -82.0, -26.3, "hard_stop_25% pnl=-26.3%"),
-            ("2026-09-01 09:46:00", "ORBStrategy", "put", 705, 24, 1.15, 0.94,
+            ("2026-09-01 09:46:00", "Breakout", "put", 705, 24, 1.15, 0.94,
              -516.0, -18.7, "orb_structure_stop: 1m close"),
             ("2026-09-01 10:48:00", "RunawayContinuation", "call", 709, 8,
              1.21, 2.56, 1080.0, 111.6, "target_hit pnl=111.6%")]:

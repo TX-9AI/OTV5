@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
-"""tools/boot_sweep.py — v5.2
+"""tools/boot_sweep.py — v5.3
+v5.3  2026-11-15  OTV5 r123 (HYG.27) — OT_RESTING_DB IS NO LONGER SET: r118 (HYG.23) deleted execution/resting_orders.py,
+the only reader of the key, so a scratch path for it isolates nothing. check_boot_sweep B3/B3b.
 v5.2  2026-10-31  OTV5 r68 (CFG.5) — OT_RESTING_STOP_STATE IS NO LONGER SET: the resting stop and its state file are deleted
 (the operator, 2026-10-31: "Resting stop was a study. It failed. Get this the fuck out of here"), so nothing reads the key.
 check_boot_sweep B3/B3b.
@@ -159,7 +161,6 @@ def run_one(name: str) -> bool:
     env.pop("PYTHONPATH", None)
     env["OT_TRADES_DB"] = os.path.join(d, "trades.db")
     env["OT_DERIVED_DB"] = os.path.join(d, "derived_store.db")
-    env["OT_RESTING_DB"] = os.path.join(d, "resting_orders.db")     # r109
     env["OT_SIGNAL_JOURNAL_DIR"] = os.path.join(d, "signal_journal")  # r144
     env["OT_LOG_FILE"] = os.path.join(d, "bot.log")                   # r194 (BOX.16)
     env["OT_COUNTERFACTUAL_DIR"] = os.path.join(d, "counterfactual")  # r287 (CFDIR.1)

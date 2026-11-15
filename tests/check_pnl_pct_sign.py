@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_pnl_pct_sign.py  v5.0
+tests/check_pnl_pct_sign.py  v5.1
+v5.1  2026-11-15  OTV5 r123 (HYG.27) — FIXTURES RE-POINTED (the Saturday brief 11-14 section 5 item 10): SweepCreditSpread -> IronCondorStrategy; what each check proves is unchanged; OT_RESTING_DB leaves the scratch env (r118 deleted execution/resting_orders.py, its only reader).
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.0  2026-10-03  OTV4TEST r198 (MEAS.1) — THE STORED pnl_pct AGREES IN SIGN WITH pnl_usd.
 
@@ -30,7 +31,7 @@ for _sp in _glob.glob(os.path.join(_root, "venv", "lib", "python*", "site-packag
     if _sp not in sys.path:                                  # r106 venv bootstrap
         sys.path.insert(1, _sp)
 _S = tempfile.mkdtemp(prefix="check_pnl_pct_sign_")
-for _k, _f in (("OT_TRADES_DB", "trades.db"), ("OT_DERIVED_DB", "d.db"), ("OT_RESTING_DB", "r.db")):
+for _k, _f in (("OT_TRADES_DB", "trades.db"), ("OT_DERIVED_DB", "d.db")):
     os.environ.setdefault(_k, os.path.join(_S, _f))
 os.environ.setdefault("OT_SIGNAL_JOURNAL_DIR", os.path.join(_S, "sj"))
 os.environ.setdefault("OT_LOG_FILE", os.path.join(_S, "bot.log"))
@@ -68,9 +69,9 @@ def main():
             check(f"{tag} (did not run)", False, f"{type(exc).__name__}: {exc}")
 
     case("S1", "credit LOSS: entry 0.20 -> 0.35, pnl_usd -15 stores pnl_pct -0.75", "s1", 0.20, 0.35, -15.0, -0.75,
-         strategy="SweepCreditSpread", direction="short", is_condor_leg=1)
+         strategy="IronCondorStrategy", direction="short", is_condor_leg=1)
     case("S2", "credit WIN: entry 0.20 -> 0.05, pnl_usd +15 stores pnl_pct +0.75", "s2", 0.20, 0.05, 15.0, 0.75,
-         strategy="SweepCreditSpread", direction="short", is_condor_leg=1)
+         strategy="IronCondorStrategy", direction="short", is_condor_leg=1)
     case("S3", "UNCHANGED debit WIN: 2.00 -> 3.00, +100 stores +0.50", "s3", 2.00, 3.00, 100.0, 0.50,
          strategy="Breakout", direction="long")
     case("S4", "UNCHANGED debit LOSS: 2.00 -> 1.50, -50 stores -0.25", "s4", 2.00, 1.50, -50.0, -0.25,

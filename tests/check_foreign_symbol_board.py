@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_foreign_symbol_board.py  v5.0
+tests/check_foreign_symbol_board.py  v5.1
+v5.1  2026-11-15  OTV5 r123 (HYG.27) — FIXTURES RE-POINTED (the Saturday brief 11-14 section 5 item 10): F7's stale SPX VOLT heartbeat -> PARK; what each check proves is unchanged.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.1  2026-10-20  OTV4TEST r307 (GATE.4) - F7 PINS ITS OWN PLAN STATES FILE. Since r303 the plans panel skips every plan
       data/plan_states.json names dormant, and F7 read the LIVE file (the bot writes it at start; VOLT is dormant in it),
@@ -138,7 +139,7 @@ def main():
         Q.now_et = lambda: _pin            # in session, whatever the wall clock says
         t_now = _pin.timestamp()           # ages are measured against the PINNED clock
         for sym, plan, age in (("AAL", "LiquidityHunt", 132000), ("AAL", "Breakout", 132000),
-                               ("SPX", "LiquidityHunt", 5), ("SPX", "VOLT", 900)):
+                               ("SPX", "LiquidityHunt", 5), ("SPX", "PARK", 900)):
             ds.conn.execute("INSERT INTO plan_heartbeat (symbol, plan, ts_epoch, tick_id, state)"
                             " VALUES (?,?,?,?,?)", (sym, plan, t_now - age, 6, "IDLE"))
         ds.conn.commit()
@@ -156,7 +157,7 @@ def main():
         out = buf.getvalue()
         stale = [ln.split()[1] for ln in out.splitlines() if "STALE" in ln and ln.strip().startswith("!!")]
         check("F7 the plans panel lists no AAL heartbeat as STALE; the stale SPX one still shows",
-              "VOLT" in stale and not ({"Breakout"} & set(stale)) and stale.count("LiquidityHunt") == 0,
+              "PARK" in stale and not ({"Breakout"} & set(stale)) and stale.count("LiquidityHunt") == 0,
               f"STALE rows: {stale}")
 
     print(("RED - " + f"{len(FAILED)} of {len(RAN)} failed: " + " ".join(FAILED)) if FAILED

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_ogap.py  v5.1
+tests/check_ogap.py  v5.2
+v5.2  2026-11-15  OTV5 r123 (HYG.27) — OT_RESTING_DB leaves the scratch env (r118 deleted execution/resting_orders.py, its only reader).
 v5.1  2026-11-14  OTV5 r117 (HYG §5.3) — O7b NEW: a one-sided quote (bid 0.00 / ask 4.26, and bid 4.23 / ask 0.00) at the
       fill minute gives no signal. ogap_plan.prepare and ogap.generate_signal each refuse it (`ask >= bid > 0`, two
       guards by design, so O7b goes red only when both are broken) but nothing pinned it; the zero-bid gate
@@ -44,7 +45,6 @@ os.environ["OT_DERIVED_DB"] = os.path.join(_TD, "d.db")
 os.environ["OT_FEED_DB"] = os.path.join(_TD, "f.db")
 os.environ["OT_LOG_FILE"] = os.path.join(_TD, "bot.log")
 os.environ["OT_SIGNAL_JOURNAL_DIR"] = os.path.join(_TD, "sj")
-os.environ["OT_RESTING_DB"] = os.path.join(_TD, "r.db")
 CF = os.path.join(_TD, "cf")
 os.environ["OT_COUNTERFACTUAL_DIR"] = CF
 os.environ.setdefault("OT_INSTRUMENT", "QQQ")

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_management_plan.py  v5.5  (2026-11-11)
+tests/check_management_plan.py  v5.6  (2026-11-11)
+v5.6  2026-11-15  OTV5 r123 (HYG.27) — FIXTURES RE-POINTED (the Saturday brief 11-14 section 5 item 10): D2b's ORBStrategy record -> PARK (a setup outside the plan); what each check proves is unchanged.
 v5.5  2026-11-11  OTV5 r107 (RETIRE.5 follow-up) — D12c re-pointed (WA 38.4): the engine's butterfly exit is removed, so D12c pins it gone.
 v5.4  2026-11-09  OTV5 r103 (RETIRE.5 step 2) — the GEX pin fly leaves the management plan: M5, D12 and D12a pin that a GEXPinButterfly record is no longer the plan's (decide -> None, no row); M7's ids drop bf1; M11 pins its EXIT_CONDITIONS row absent and Breakout's present. D12c (the engine's generic butterfly path) unchanged.
 v5.3  2026-11-08  OTV5 r88 (RETIRE.3) — M4, M8, D8 and D9 (the TCS's narration, vector, hold and breach) go with the TCS; M7 drops its id and M11 pins it absent; D10's formed condor is two IronCondorStrategy legs (were TCS). Every other check unchanged.
@@ -226,10 +227,10 @@ def main():
           "still above the floor -> HOLD. Room to breathe; the boundary is not a stop.",
           it and it.action == "HOLD" and rd2 and rd2[0] == "HOLD" and "breach" not in rd2[1],
           f"{it and it.action} {rd2}")
-    orb_rec = {"trade_id": "d2o", "strategy": "ORBStrategy", "option_side": "call",
+    orb_rec = {"trade_id": "d2o", "strategy": "PARK", "option_side": "call",          # r123: was the removed ORB trade
                "direction": "long", "entry_premium": 1.00, "current_premium": 1.10,
                "stop_premium": 0.75, "underlying_stop": 100.62}
-    check("D2b ORB keeps its impulsive-origin structure stop — but through ITS OWN path, "
+    check("D2b a setup outside the plan (PARK) keeps its own exits — through ITS OWN path, "
           "never this plan's",
           not covers(orb_rec))
     tr = ExitDecision(); tr.new_trail_stop = 1.12

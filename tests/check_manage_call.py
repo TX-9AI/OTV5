@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_manage_call.py  v5.0
+tests/check_manage_call.py  v5.1
+v5.1  2026-11-15  OTV5 r123 (HYG.27) — FIXTURES RE-POINTED (the Saturday brief 11-14 section 5 item 10): SweepCreditSpread -> IronCondorStrategy, ORBStrategy -> RunawayContinuation; what each check proves is unchanged.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 
 v1.2  2026-09-26  OTV4TEST r149 (EOD.1) — M3 and M4 RE-POINTED; the ORDER REVERSES. The operator:
@@ -100,9 +101,9 @@ class _PM(pm.PositionManager):
     def _fetch_current_premium(self, record, chain=None): return 0.10
     def _execute_exit(self, record, decision, premium):
         booked.append(record["trade_id"]); return True
-vert = {"trade_id": "VERT0001", "strategy": "SweepCreditSpread", "setup_type": "sweep_credit_call",
+vert = {"trade_id": "VERT0001", "strategy": "IronCondorStrategy", "setup_type": "sweep_credit_call",
         "is_condor_leg": 1, "entry_premium": 0.30, "contracts": 1}
-deb  = {"trade_id": "DEBT0001", "strategy": "ORBStrategy", "setup_type": "orb", "entry_premium": 0.50, "contracts": 1}
+deb  = {"trade_id": "DEBT0001", "strategy": "RunawayContinuation", "setup_type": "orb", "entry_premium": 0.50, "contracts": 1}
 real_now = pm.now_et if hasattr(pm, "now_et") else None
 import utils.time_utils as tu
 _orig = tu.now_et

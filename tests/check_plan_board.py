@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_plan_board.py  v5.0
+tests/check_plan_board.py  v5.1
+v5.1  2026-11-15  OTV5 r123 (HYG.27) — FIXTURES RE-POINTED (the Saturday brief 11-14 section 5 item 10): ORBStrategy -> Breakout, TrendCreditSpread -> PARK, SweepCreditSpread -> LiquidityHunt; what each check proves is unchanged.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 THE PLAN BOARD REPORTS LAST KNOWN STATUS AND WHEN IT CHANGED — AND WRITES NOTHING.
 
@@ -89,16 +90,16 @@ def main():
 
     # NEWEST row per strategy is the status; older ones must be ignored
     seed(db, [
-        (now - 9000, "ORBStrategy", "INACTIVE", "inactive — window: outside 09:35-11:30"),
-        (now - 60, "ORBStrategy", "ARMED", "break confirmed, waiting on retest"),
-        (now - 30, "TrendCreditSpread", "INACTIVE", "inactive — window: outside 11:30-15:00"),
-        (now - 45, "SweepCreditSpread", "NO PLAN", "asked and wrote nothing"),
-        (now - 20, "ORBStrategy/manage", "INACTIVE", "no open position"),
+        (now - 9000, "Breakout", "INACTIVE", "inactive — window: outside 09:35-11:30"),
+        (now - 60, "Breakout", "ARMED", "break confirmed, waiting on retest"),
+        (now - 30, "PARK", "INACTIVE", "inactive — window: outside 11:30-15:00"),
+        (now - 45, "LiquidityHunt", "NO PLAN", "asked and wrote nothing"),
+        (now - 20, "Breakout/manage", "INACTIVE", "no open position"),
     ])
     rc, out = run(db)
     guard("B1 the board runs and exits clean", lambda: rc == 0, f"rc={rc}")
     guard("B2 an ACTIVE plan reports its working verdict, not 'inactive'",
-          lambda: "ORBStrategy" in out and "active" in out.split("ORBStrategy")[1].split("\n")[0],
+          lambda: "Breakout" in out and "active" in out.split("Breakout")[1].split("\n")[0],
           "ARMED must read as active")
     guard("B2b the NEWEST row wins — a stale INACTIVE must not shadow it",
           lambda: "outside 09:35-11:30" not in out,
@@ -108,8 +109,8 @@ def main():
     guard("B3b a NO PLAN row is flagged as a DEFECT, never as a status",
           lambda: "DEFECT" in out, "asked-and-silent is a dispatch gap")
     guard("B4 /manage plans are hidden by default and shown with --all",
-          lambda: "ORBStrategy/manage" not in out
-          and "ORBStrategy/manage" in run(db, "--all")[1])
+          lambda: "Breakout/manage" not in out
+          and "Breakout/manage" in run(db, "--all")[1])
 
     # ── B5 — A READER WRITES NOTHING ───────────────────────────────────────
     def wrote_nothing():

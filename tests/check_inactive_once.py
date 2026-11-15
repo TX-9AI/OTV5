@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_inactive_once.py  v5.0
+tests/check_inactive_once.py  v5.1
+v5.1  2026-11-15  OTV5 r123 (HYG.27) — FIXTURES RE-POINTED (the Saturday brief 11-14 section 5 item 10): ORBStrategy -> Breakout; what each check proves is unchanged.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 
 v1.0  2026-09-21  OTV4TEST r73 — INACTIVE SAYS SO ONCE, AND A CLOCK IN THE
@@ -103,28 +104,28 @@ DAY = "2026-09-21"
 CLEAN = "opening range still forming (<9:35 ET) — no entries"
 
 fresh()
-first = _status_changed("ORBStrategy", DAY, "INACTIVE", CLEAN, "orb_window")
-rest  = [_status_changed("ORBStrategy", DAY, "INACTIVE", CLEAN, "orb_window") for _ in range(64)]
+first = _status_changed("Breakout", DAY, "INACTIVE", CLEAN, "orb_window")
+rest  = [_status_changed("Breakout", DAY, "INACTIVE", CLEAN, "orb_window") for _ in range(64)]
 check("I3 the latch HOLDS: 65 identical ticks -> exactly ONE row",
       first and not any(rest), f"first={first} further_writes={sum(1 for x in rest if x)}")
 
 fresh()
-clocked = [_status_changed("ORBStrategy", DAY, "INACTIVE",
+clocked = [_status_changed("Breakout", DAY, "INACTIVE",
                            f"{CLEAN} (09/21 09:{m:02d} ET)", "orb_window") for m in range(65)]
 check("I4 BORN-RED PROOF: a CLOCKED reason breaks the same latch",
       sum(1 for x in clocked if x) == 65,
       f"{sum(1 for x in clocked if x)} of 65 ticks wrote a row — this is the defect r73 removes")
 
 fresh()
-_status_changed("ORBStrategy", DAY, "INACTIVE", CLEAN, "orb_window")
-diff = _status_changed("ORBStrategy", DAY, "INACTIVE",
+_status_changed("Breakout", DAY, "INACTIVE", CLEAN, "orb_window")
+diff = _status_changed("Breakout", DAY, "INACTIVE",
                        "catastrophic cap broken", "catastrophic_cap")
 check("I5 CONTROL: a genuinely DIFFERENT reason still announces",
       diff, "r41 kept this on purpose — silencing it would be a worse defect")
 
 fresh()
-_status_changed("ORBStrategy", DAY, "INACTIVE", CLEAN, "orb_window")
-nextday = _status_changed("ORBStrategy", "2026-09-22", "INACTIVE", CLEAN, "orb_window")
+_status_changed("Breakout", DAY, "INACTIVE", CLEAN, "orb_window")
+nextday = _status_changed("Breakout", "2026-09-22", "INACTIVE", CLEAN, "orb_window")
 check("I6 CONTROL: a new trading day re-announces once", nextday,
       "keyed by trading date, so a session does not inherit yesterday's silence")
 

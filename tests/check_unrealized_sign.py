@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_unrealized_sign.py  v5.1
+tests/check_unrealized_sign.py  v5.2
+v5.2  2026-11-15  OTV5 r123 (HYG.27) — FIXTURES RE-POINTED (the Saturday brief 11-14 section 5 item 10): CREDIT -> IronCondorStrategy, DEBIT -> RunawayContinuation; S4's legacy row keeps its old name (history); what each check proves is unchanged.
 v5.1  2026-11-11  OTV5 r107 (RETIRE.5 follow-up) — S3 reads the debit sign on _evaluate_orb alone: _evaluate_butterfly is removed with the generic fly path.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.0  2026-09-01  r214 — THE UNREALIZED LINE, SIGNED BY STRUCTURE.
@@ -48,10 +49,10 @@ def check(name, ok, detail=""):
         _fails.append(name)
 
 
-CREDIT = {"strategy": "SweepCreditSpread", "is_credit_vertical": 1,
+CREDIT = {"strategy": "IronCondorStrategy", "is_credit_vertical": 1,
           "credit_received": 1.30, "spread_width": 2.5,
           "short_strike": 95.0, "long_strike": 92.5, "option_side": "put"}
-DEBIT = {"strategy": "ORBStrategy", "strike": 705.0, "option_side": "put"}
+DEBIT = {"strategy": "RunawayContinuation", "strike": 705.0, "option_side": "put"}
 
 
 def _q():

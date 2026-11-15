@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_decay_stop.py  v5.6
+tests/check_decay_stop.py  v5.7
+v5.7  2026-11-15  OTV5 r123 (HYG.27) — FIXTURES RE-POINTED (the Saturday brief 11-14 section 5 item 10): TrendCreditSpread -> IronCondorStrategy; what each check proves is unchanged; OT_RESTING_DB leaves the scratch env (r118 deleted execution/resting_orders.py, its only reader).
 v5.6  2026-11-14  OTV5 (OGAP.1) — C1 pins DECAY_STOP_EXEMPT = (Runaway, PARK, OGAP): OGAP joins the default exempt set (its own exits). Every other check unchanged.
 v5.5  2026-11-11  OTV5 r107 (RETIRE.5 follow-up) — B1/B2 (the butterfly's net pricing and decay) go with the generic fly path (position_manager v5.35 no longer prices a fly). Every other check unchanged.
 v5.4  2026-11-09  OTV5 r103 (RETIRE.5 step 2) — B2 re-pointed (WA 38.4): HOLD_TO_CLOSE_STRATEGIES is removed with the GEX fly, so B2 pins that a record under the fly's name now decays exactly as B1. Every other check unchanged.
@@ -64,7 +65,7 @@ from zoneinfo import ZoneInfo
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 _s = tempfile.mkdtemp(prefix="check_decay_stop.")
-for _k, _v in (("OT_TRADES_DB", "trades.db"), ("OT_DERIVED_DB", "derived.db"), ("OT_RESTING_DB", "resting.db"),
+for _k, _v in (("OT_TRADES_DB", "trades.db"), ("OT_DERIVED_DB", "derived.db"),
                ("OT_FEED_DB", "feed.db"), ("OT_COUNTERFACTUAL_DIR", "cf"), ("OT_LOG_FILE", "bot.log"),
                ("OT_SIGNAL_JOURNAL_DIR", "sj"),
                ("OT_WAREHOUSE_STATE", "ws"), ("OT_PLAN_STATES_FILE", "ps.json")):
@@ -116,7 +117,7 @@ def rec(tid, strategy="Breakout", **kw):
 
 
 def credit_rec(tid, **kw):
-    r = rec(tid, "TrendCreditSpread", option_side="put", direction="long", is_credit_vertical=1, is_condor_leg=1,
+    r = rec(tid, "IronCondorStrategy", option_side="put", direction="long", is_credit_vertical=1, is_condor_leg=1,
             short_strike=715.0, long_strike=710.0, entry_premium=1.00, stop_premium=2.00,
             short_symbol="QQQ   261030P00715000", long_symbol="QQQ   261030P00710000")
     r.update(kw)

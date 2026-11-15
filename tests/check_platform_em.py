@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_platform_em.py  v5.2
+tests/check_platform_em.py  v5.3
+v5.3  2026-11-15  OTV5 r123 (HYG.27) — OT_RESTING_DB leaves the scratch env (r118 deleted execution/resting_orders.py, its only reader).
 v5.2  2026-11-09  OTV5 r103 (RETIRE.5 step 2) — M6 RE-POINTED (WA 38.4): the GEX fly's expected_move wrapper is removed, so M6 holds volatility_measures.expected_move_session to the session formula and pins that the pin gate (its reader) never names the platform function. M1-M5 unchanged.
 v5.1  2026-11-08  OTV5 r76 (RETIRE.1) — M5 RE-POINTED (WA 38.4): ORCS is removed, so M5 pins its plan gone (check_expected_move_home E5 pins the condor and
       readiness readers); M1-M4 and M6 unchanged.
@@ -38,7 +39,7 @@ for _sp in _glob.glob(os.path.join(_root, "venv", "lib", "python*", "site-packag
     if _sp not in sys.path:                                  # r106 venv bootstrap
         sys.path.insert(1, _sp)
 _S = tempfile.mkdtemp(prefix="check_platform_em_")
-for _k, _f in (("OT_TRADES_DB", "trades.db"), ("OT_DERIVED_DB", "d.db"), ("OT_RESTING_DB", "r.db")):
+for _k, _f in (("OT_TRADES_DB", "trades.db"), ("OT_DERIVED_DB", "d.db")):
     os.environ.setdefault(_k, os.path.join(_S, _f))
 os.environ.setdefault("OT_SIGNAL_JOURNAL_DIR", os.path.join(_S, "sj"))
 os.environ.setdefault("OT_LOG_FILE", os.path.join(_S, "bot.log"))

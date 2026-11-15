@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_plans_panel_width.py  v5.1
+tests/check_plans_panel_width.py  v5.2
+v5.2  2026-11-15  OTV5 r123 (HYG.27) — FIXTURES RE-POINTED (the Saturday brief 11-14 section 5 item 10): ACTIVE and DORMANT are today's roster (plan_state) and W3 counts len(DORMANT); SOFI_OLD's history rows keep their old names; what each check proves is unchanged.
 v5.1  2026-10-25  OTV5 r19 (VIEW.2) — RE-POINTED (WA section 38.4) AND WIDENED: THE SAME SWITCHED-ON PLANS ON EVERY BOX, AT
       ANY HOUR, NOTHING SWITCHED OFF. The operator, 2026-10-25: "Why aren't they showing the same lines?"; "Can we suppress
       retired or paused plans from displaying here?"; "I want to see active plans that would trade during RTH that are
@@ -44,9 +45,8 @@ def check(name, ok, detail=""):
         FAILED.append(name.split()[0])
 
 
-ACTIVE = ["Breakout", "GEXPinButterfly", "LiquidityHunt", "PARK", "RunawayContinuation"]
-DORMANT = ["ATPButterfly", "IronCondorStrategy", "ORBStrategy", "OpeningRangeCreditSpread", "SweepCreditSpread",
-           "TrendCreditSpread", "VOLT"]
+ACTIVE = ["LiquidityHunt", "OGAP", "PARK", "RunawayContinuation"]          # r123: today's roster (plan_state)
+DORMANT = ["Breakout", "IronCondorStrategy"]                                # r123: the removed trades have no plan row
 SOFI_OLD = ["Breakout/manage", "CondorManagement", "CreditRoll", "LiquidityHunt/manage", "ORBStrategy/manage",
             "RunawayContinuation/manage", "VOLT/manage"]
 DOC = {"plans": dict({p: {"state": "active", "category": "hour"} for p in ACTIVE},
@@ -115,7 +115,7 @@ def main():
           all(got.get(p) in ("HELD", "IDLE") for p in want), str({p: got.get(p) for p in want}))
     leaked = [p for p in DORMANT + ["ORBStrategy/manage", "VOLT/manage"] if any((" %s " % p) in (ln + " ") for ln in out)]
     check("W3 no switched-off plan appears; the hidden count is said",
-          not leaked and any("7 switched-off plan(s) hidden" in ln for ln in out), str(leaked))
+          not leaked and any("%d switched-off plan(s) hidden" % len(DORMANT) in ln for ln in out), str(leaked))
     check("W4 the reasons survive shortened: 'no opening range yet', 'no open position'",
           any("no opening range yet" in ln for ln in out) and any("no open position" in ln for ln in out))
     nv = render(Q, mon, "nvda")

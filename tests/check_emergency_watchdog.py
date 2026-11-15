@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_emergency_watchdog.py  v5.1 — the r168 emergency watchdog (EXP.1 item 3).
+tests/check_emergency_watchdog.py  v5.2 — the r168 emergency watchdog (EXP.1 item 3).
+v5.2  2026-11-15  OTV5 r123 (HYG.27) — FIXTURES RE-POINTED (the Saturday brief 11-14 section 5 item 10): VOLT -> LiquidityHunt, ORBStrategy -> RunawayContinuation; what each check proves is unchanged.
 v5.1  2026-11-08  OTV5 r86 (CHK.12) — W16 runs the real installer from a fixture tree that has a venv
       (red on every land since r54: control and lander scratch trees have no venv, and the installer rightly
       refuses one it would have to guess); W16b pins that refusal. W1-W15, W17, W18 unchanged.
@@ -175,7 +176,7 @@ ck("W8  never flat: ends at 16:00, ONE page naming what is still open",
 # W9
 f = Fake(hm=(15, 49), svc="failed", flat_after=1); a, b = two_runs(f)          # closes by 15:50
 f.advance(60); f.svc = "active"; W.run_once(f)                                   # the operator brings it back
-f.svc = "failed"; f.opened = ["VOLT bbbb2222"]; f.passes = 0
+f.svc = "failed"; f.opened = ["LiquidityHunt bbbb2222"]; f.passes = 0
 f.advance(60); c = W.run_once(f); f.advance(60); d = W.run_once(f)               # a new episode, 15:52-15:53
 ck("W9  once a day: a second episode inside 15:50-16:00 neither closes nor pages",
    b == "closed" and f.t.time() < dt.time(16, 0) and f.calls.count("stop") == 1 and len(f.pages) == 1
@@ -256,22 +257,22 @@ with tempfile.TemporaryDirectory() as td:
     con = sqlite3.connect(db)
     con.execute("CREATE TABLE trades (trade_id TEXT, strategy TEXT, status TEXT, paper_trade INTEGER, pnl_usd REAL)")
     con.executemany("INSERT INTO trades VALUES (?,?,?,?,?)", [
-        ("p-open-1", "Breakout", "open", 1, None), ("p-closed-9", "VOLT", "closed", 1, -412.5),
-        ("l-open-1", "ORBStrategy", "open", 0, None)])
+        ("p-open-1", "Breakout", "open", 1, None), ("p-closed-9", "LiquidityHunt", "closed", 1, -412.5),
+        ("l-open-1", "RunawayContinuation", "open", 0, None)])
     con.commit(); con.close()
     old_db, old_pt = os.environ.get("OT_TRADES_DB"), os.environ.get("OT_PAPER_TRADING")
     os.environ["OT_TRADES_DB"] = db
     os.environ["OT_PAPER_TRADING"] = "True"; pap = W.Real().open_positions()
     os.environ["OT_PAPER_TRADING"] = "False"; liv = W.Real().open_positions()
-    outs = W.Real().outcomes(["VOLT p-closed", "Breakout p-open-1"])
+    outs = W.Real().outcomes(["LiquidityHunt p-closed", "Breakout p-open-1"])
     for k, v in (("OT_TRADES_DB", old_db), ("OT_PAPER_TRADING", old_pt)):
         if v is None:
             os.environ.pop(k, None)
         else:
             os.environ[k] = v
 ck("W14 open_positions reads only this mode's open rows; outcomes reads each close's P&L",
-   pap == ["Breakout p-open-1"] and liv == ["ORBStrategy l-open-1"]
-   and outs == ["VOLT p-closed -412", "Breakout p-open-1 STILL OPEN"], f"paper={pap} live={liv} outs={outs}")
+   pap == ["Breakout p-open-1"] and liv == ["RunawayContinuation l-open-1"]
+   and outs == ["LiquidityHunt p-closed -412", "Breakout p-open-1 STILL OPEN"], f"paper={pap} live={liv} outs={outs}")
 
 # W15
 class _TL:

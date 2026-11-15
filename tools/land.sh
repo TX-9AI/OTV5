@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
-# tools/land.sh — v5.4
+# tools/land.sh — v5.5
+# v5.5  2026-11-15  OTV5 r123 (HYG.27) — THE CHECK STAGE NO LONGER SETS OT_RESTING_DB: r118 (HYG.23) deleted
+#   execution/resting_orders.py, the only reader, so the scratch path isolated nothing. check_land_tooling T6.
 # v5.4  2026-11-14  OTV5 r121 (LAND.11, mirrors dtp land.sh v1.20 / r560) — A CHECK CAN NO LONGER EAT THE CHECKS LISTED
 #   AFTER IT, AND A COUNT THAT DOES NOT MATCH REFUSES THE LAND. At v5.3 the CHECK loop read the spec's CHECK lines on stdin
 #   and every CHECK inherited it, so a CHECK that reads stdin swallowed the rest and the loop ended early, silently (found
@@ -671,7 +673,7 @@ land_one() {
     # ~110 checkers mkdtemp without removing; TMPDIR points them into $_scratch,
     # which is removed below on both branches.
     mkdir -p "$_scratch/tmp"
-    if ( cd "$repo" && env -u LAND_ARCHIVE -u LAND_STAGE TMPDIR="$_scratch/tmp" OT_TRADES_DB="$_scratch/trades.db" OT_DERIVED_DB="$_scratch/derived_store.db" OT_RESTING_DB="$_scratch/resting_orders.db" OT_SIGNAL_JOURNAL_DIR="$_scratch/signal_journal" OT_LOG_FILE="$_scratch/bot.log" OT_COUNTERFACTUAL_DIR="$_scratch/counterfactual" OT_FEED_DB="$_scratch/feed_store.db" OT_WAREHOUSE_STATE="$_scratch/warehouse_state" OT_PLAN_STATES_FILE="$_scratch/plan_states.json" OT_HEARTBEAT_FILE="$_scratch/BOT_HEARTBEAT" OT_INSTRUMENT="${OT_INSTRUMENT:-QQQ}" python3 "$chk" </dev/null ) >/dev/null 2>&1; then
+    if ( cd "$repo" && env -u LAND_ARCHIVE -u LAND_STAGE TMPDIR="$_scratch/tmp" OT_TRADES_DB="$_scratch/trades.db" OT_DERIVED_DB="$_scratch/derived_store.db" OT_SIGNAL_JOURNAL_DIR="$_scratch/signal_journal" OT_LOG_FILE="$_scratch/bot.log" OT_COUNTERFACTUAL_DIR="$_scratch/counterfactual" OT_FEED_DB="$_scratch/feed_store.db" OT_WAREHOUSE_STATE="$_scratch/warehouse_state" OT_PLAN_STATES_FILE="$_scratch/plan_states.json" OT_HEARTBEAT_FILE="$_scratch/BOT_HEARTBEAT" OT_INSTRUMENT="${OT_INSTRUMENT:-QQQ}" python3 "$chk" </dev/null ) >/dev/null 2>&1; then
       rm -rf "${_scratch:?}"
       pb_clear
       echo "  check: $chk PASS"

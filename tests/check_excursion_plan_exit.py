@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_excursion_plan_exit.py  v5.1
+tests/check_excursion_plan_exit.py  v5.2
+v5.2  2026-11-15  OTV5 r123 (HYG.27) — OT_RESTING_DB leaves the scratch env (r118 deleted execution/resting_orders.py, its only reader).
 v5.1  2026-11-14  OTV5 r113 (AM.7) — new. THE EXCURSION SEES THE TICK THE MANAGEMENT PLAN EXITS ON. NFLX 2026-11-13
       booked target_hit at 0.245 with mfe_premium 0.205: the management plan's CLOSE skipped exit_engine.evaluate(),
       the only caller of _track_excursion, so the exit tick's mark was never recorded. Driven through the REAL
@@ -22,7 +23,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 _TD = tempfile.mkdtemp(prefix="check_excursion_plan_exit_")
 for k, v in {"OT_TRADES_DB": "t.db", "OT_DERIVED_DB": "d.db", "OT_FEED_DB": "f.db", "OT_LOG_FILE": "bot.log",
-             "OT_RESTING_DB": "r.db", "OT_SIGNAL_JOURNAL_DIR": "sj", "OT_COUNTERFACTUAL_DIR": "cf",
+             "OT_SIGNAL_JOURNAL_DIR": "sj", "OT_COUNTERFACTUAL_DIR": "cf",
              "OT_ALERT_SPOOL": "spool.jsonl"}.items():
     os.environ[k] = os.path.join(_TD, v)
 os.environ.setdefault("OT_INSTRUMENT", "QQQ")
