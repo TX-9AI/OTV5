@@ -1,4 +1,5 @@
-"""tests/check_bootstrap.py — v5.8
+"""tests/check_bootstrap.py — v5.9
+v5.9  2026-11-15  OTV5 r125 (HYG.28) — the ramp TOP's key is OT_BREAKOUT_BUDGET_USD (was OT_ORB_BUDGET_USD); the PLAN key is breakout_budget_usd, G5 wants Environment=OT_BREAKOUT_BUDGET_USD, G17 the template's new line.
 v5.8  2026-11-14  OTV5 r115 (HYG §5.1) — new G21b: data/option_candles_state.json (and its .tmp), tools/capture_all.py's per-day progress file, are gitignored. It made `git status` dirty on 14/14 boxes (the Saturday brief 2026-11-14 §3.4). RED on 790ec1b.
 v5.7  2026-11-08  OTV5 r94 (CAP.1) — G3's planned suite includes deploy/install_capture_timer.sh (setup_ec2.sh v5.5).
 v5.6  2026-11-08  OTV5 r76 (RETIRE.1) — G3/G3c/G5/G17 RE-POINTED (WA 38.4): setup_ec2.sh v5.4 no longer plans or writes OT_SCALE_ORB / OT_SCALE_VOLT
@@ -312,7 +313,7 @@ _R = {}
 _R["base"] = _setup(["--plan"], {"OT_CLAUDE_AT_BOOT": "1", "CLAUDE_LOGIN_B64": "x"})
 r, plan, suite, home_after, sudo_calls = _R["base"]
 _WANT = {"unattended": "true", "tty": "0", "paper": "True", "instrument": "QQQ",
-         "risk_usd": "200", "orb_budget_usd": "200",
+         "risk_usd": "200", "breakout_budget_usd": "200",
          # r68 (CFG.5): no scale_breakout / pin_gate line; r76 (RETIRE.1): no scale_orb / scale_volt line
          "daily_loss_limit": "200", "swap_gb": "2",
          "requirements": "requirements.lock", "git_repo": _origin,       # v1.12: origin.conf, as G2
@@ -351,12 +352,23 @@ r1, plan1, _s1, _h1, _x1 = _setup(["--plan"], {"OT_RISK_USD": "500",
 guard("G3c the bootstrap's values win (risk 500 flows to TOP/loss; swap, push, ref); r68/r76: no pin gate, no scaling line",
       lambda: r1.returncode == 0 and "orb_risk_usd" not in plan1
       and not any(k.startswith("scale_") for k in plan1)
-      and plan1.get("orb_budget_usd") == "500" and plan1.get("daily_loss_limit") == "500"
+      and plan1.get("breakout_budget_usd") == "500" and plan1.get("daily_loss_limit") == "500"
       and "pin_gate" not in plan1 and plan1.get("swap_gb") == "0"
       and plan1.get("git_push") == "1" and plan1.get("git_ref") == "abc1234"
       and plan1.get("data_capture") == "standalone" and plan1.get("data_capture_requested") == "managed"
       and "start_bot" not in plan1 and "first_start" in plan1,
       lambda: str(plan1))
+
+# r125 (HYG.28): the ramp TOP's key is OT_BREAKOUT_BUDGET_USD; a bootstrap still carrying the old key is honoured,
+# and the new key wins when both are set. The value written to the unit is therefore the one the operator chose.
+_rd = {}
+for _tag, _env in (("old", {"OT_RISK_USD": "500", "OT_ORB_BUDGET_USD": "700"}),
+                   ("new", {"OT_RISK_USD": "500", "OT_BREAKOUT_BUDGET_USD": "900"}),
+                   ("both", {"OT_RISK_USD": "500", "OT_ORB_BUDGET_USD": "700", "OT_BREAKOUT_BUDGET_USD": "900"})):
+    _r, _p, _a, _b, _c = _setup(["--plan"], _env)
+    _rd[_tag] = (_r.returncode, _p.get("breakout_budget_usd"))
+guard("G3d the ramp TOP: old key alone 700, new key alone 900, both set -> new key 900",
+      lambda: _rd == {"old": (0, "700"), "new": (0, "900"), "both": (0, "900")}, lambda: str(_rd))
 
 r4, _p4, _s4, home4, sudo4 = _setup([], creds=False)
 guard("G4 no credentials + no terminal: rc 1 with the named refusal, no sudo, no writes",
@@ -378,7 +390,7 @@ guard("G5 the bot unit no longer writes the merged OT_ORB_RISK_USD (r161)",
       lambda: "Environment=OT_ORB_RISK_USD" not in _unit)
 guard("G5 the bot unit carries the keys configure.sh grew",
       lambda: all("Environment=%s=${%s}" % (k, v) in _unit for k, v in (
-          ("OT_ORB_BUDGET_USD", "ORB_BUDGET_USD"),
+          ("OT_BREAKOUT_BUDGET_USD", "BREAKOUT_BUDGET_USD"),
           ("OT_DAILY_LOSS_LIMIT", "DAILY_LOSS_LIMIT"))))
 guard("G5 r68/r76: the bot unit writes no OT_SCALE_* and no OT_PIN_PROXIMITY_ACTIVE (config reads none of them)",
       lambda: "OT_SCALE_" not in _unit and "OT_PIN_PROXIMITY_ACTIVE" not in _unit)
@@ -853,7 +865,7 @@ _b17 = _read("bootstrap.example.sh")
 guard("G17 each sizing line names its configure.sh item",
       lambda: all(re.search(r"%s=.*configure\.sh item %s\s+%s" % (v, n, lbl), _b17)
                   for v, n, lbl in (("OT_RISK_USD", "2", "Risk per trade / ramp MIN"),
-                                    ("OT_ORB_BUDGET_USD", "7", r"Ramp TOP \(MAX\)"),
+                                    ("OT_BREAKOUT_BUDGET_USD", "7", r"Ramp TOP \(MAX\)"),
                                     ("OT_DAILY_LOSS_LIMIT", "6", "Daily catastrophic loss cap")))
       and not re.search(r"OT_SCALE_(ORB|VOLT)=", _b17))
 

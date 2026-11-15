@@ -1,5 +1,6 @@
 """
-main.py  v5.23
+main.py  v5.24
+v5.24  2026-11-15  OTV5 r125 (HYG.28) — THE RAMP TOP'S KEY IS OT_BREAKOUT_BUDGET_USD: main reads config.BREAKOUT_BUDGET_USD / BREAKOUT_BUDGET_IS_DEFAULT (was ORB_BUDGET_*), and the service start logs ONE WARNING line when the value came from the deprecated OT_ORB_BUDGET_USD (names only, never a value). The banner's ramp_top= is the same number. No decision changes.
 v5.23  2026-11-14  OTV5 r120 (HYG §5.7, HYG.25) — RETIRED NAMES LEAVE THE LIVE PATHS. (1) _orb_release_due drops its scan for an open "ORB" record: nothing that can be on a book carries the name (ORBStrategy opens nothing since r76, adopted positions are "ADOPTED", no open ORB row on any box: CRM read-only and the S3 trade warehouse 08-15..11-14); the book read stays as the fail-closed probe, so an unreadable book still holds the engine this tick. (2) _open_credit_legs / _open_credit_sides drop r204's OpeningRangeCreditSpread filter (no ORCS row can be open). (3) _L1_BREAKDOWN_FOR and its lookup go: the one row named ContinuationStrategy, which no live setup is, so no fire carried a breakdown since r58; the score vector is journalled as before. No decision changes.
 v5.22  2026-11-14  OTV5 r118 (HYG §5.4, HYG.23) — THE STANDING-OFFER SUPERVISOR IS DELETED. The operator concurred (2026-11-14) on deleting the dead resting-offer entry code: r76 removed its only writer (entry_engine's ORB standing offer), so data/resting_orders.db had no new row since 2026-09-25 (CRM, read-only) and _supervise_offers polled an empty store every tick. _supervise_offers and its call before the has_open_position() split go; _orb_offer_working goes and _orb_release_due asks only the book (no ORB position open), exactly as before on an empty store. execution/resting_orders.py is deleted. No behaviour change.
 v5.21  2026-11-14  OTV5 r117 (HYG §5.3) — DOCSTRING ONLY: _afternoon_debit_blocked's docstring said the cutoff was 11:30; it has been EOD_SCHEDULE["entries_stop"] 15:40 since OTV4TEST r149. The 08-13/08-20 history is kept, marked superseded. No code changes.
@@ -1522,7 +1523,7 @@ from zoneinfo import ZoneInfo
 from config import (
     POLL_INTERVAL_SECONDS, LOG_LEVEL, LOG_FILE, LOG_ROTATION_MB,
     PAPER_TRADING, RISK_PER_TRADE_USD, DAILY_LOSS_LIMIT_USD,
-    ORB_BUDGET_USD, ORB_BUDGET_IS_DEFAULT,
+    BREAKOUT_BUDGET_USD, BREAKOUT_BUDGET_IS_DEFAULT, BREAKOUT_BUDGET_FROM_OLD_KEY,   # r125 (HYG.28)
     SCALE_BREAKOUT, ORB_RISK_ENV_IGNORED,                           # r161
     RUNAWAY_CUTOFF_ET,                                              # r253 (RUNW.2)
     BREAKOUT_LATEST_ET,                                             # r265 (BRK.9)
@@ -6835,15 +6836,19 @@ def main():
             # r201 — WHICH BUDGET, AND WHETHER ANYBODY CHOSE IT. An
             # unconfigured box trades 1-lot on an index name, which reads as a
             # defect rather than a config gap unless the banner says otherwise.
-            # RETIRE.1: the sizing ramp's TOP (configure.sh item 7, OT_ORB_BUDGET_USD).
-            f" · ramp_top=${ORB_BUDGET_USD:.0f}"
-            f"{' (DEFAULT — not set for this box)' if ORB_BUDGET_IS_DEFAULT else ''}"
+            # RETIRE.1: the sizing ramp's TOP (configure.sh item 7, OT_BREAKOUT_BUDGET_USD since r125).
+            f" · ramp_top=${BREAKOUT_BUDGET_USD:.0f}"
+            f"{' (DEFAULT — not set for this box)' if BREAKOUT_BUDGET_IS_DEFAULT else ''}"
             # r161 — the ramp is MIN (risk per trade) to MAX (ramp_top); Breakout rides it.
             f" · scaling BRK={'on' if SCALE_BREAKOUT else 'OFF'}"
             # r253 (RUNW.2) — the pin gate and Runaway's end in force, READ here rather than
             # inferred from silence (SPX-TEST, 10-05: neither was printed anywhere).
             f"{_banner_dials()}"
         )
+        if BREAKOUT_BUDGET_FROM_OLD_KEY:                         # r125 (HYG.28): one line, names only
+            logger.warning(
+                "ramp_top is read from the DEPRECATED key OT_ORB_BUDGET_USD (r125 renamed it "
+                "OT_BREAKOUT_BUDGET_USD; same value). Migrate the unit with tools/strip_retired_env.sh.")
         if ORB_RISK_ENV_IGNORED:
             logger.warning(
                 "OT_ORB_RISK_USD=%s is set on this unit and is NO LONGER READ "
@@ -6980,8 +6985,8 @@ def _interactive_startup() -> SessionConfig:
     print(f"  Risk/trade:    ${risk_usd:.0f}")
     print(f"  Mode:          {'PAPER' if paper else '⚠️  LIVE'}")
     print(f"  Loss cap:      ${DAILY_LOSS_LIMIT_USD:.0f} realized → no new entries until back under")
-    print(f"  Ramp top:      ${ORB_BUDGET_USD:.0f} per setup"
-          f"{'  (DEFAULT — not set for this box)' if ORB_BUDGET_IS_DEFAULT else ''}")
+    print(f"  Ramp top:      ${BREAKOUT_BUDGET_USD:.0f} per setup"
+          f"{'  (DEFAULT — not set for this box)' if BREAKOUT_BUDGET_IS_DEFAULT else ''}")
     print(f"{'─'*50}")
 
     if not paper:

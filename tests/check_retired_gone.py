@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_retired_gone.py  v5.11
+tests/check_retired_gone.py  v5.12
+v5.12 2026-11-15  OTV5 r125 (HYG.28) — the ramp TOP's key is OT_BREAKOUT_BUDGET_USD: G4b asks for config.BREAKOUT_BUDGET_USD, and G8/G8e's KEEP fixtures carry the new key (the old one is now RENAMED by strip_retired_env.sh v5.6, tested in check_ramp_top_key). Same checks otherwise.
 v5.11 2026-11-15  OTV5 r123 (HYG §5.10, HYG.27) — NEW G18/G18b/G18c: test fixtures name no removed trade except the listed history decoders, fly-shaped records and absence gates (a per-file ratchet on string-constant hits); nothing sets OT_RESTING_DB; the ORCS-named check is renamed tests/check_spxw_settle.py. OT_RESTING_DB leaves this check's own scratch env.
 v5.10 2026-11-14  OTV5 r120 (HYG §5.7, HYG.25) — NEW G17/G17b: no retired strategy name is a string constant (docstrings aside) anywhere in the decision code (main.py, strategy/, execution/, risk/, query.py's plans panel roster), and no bare "ORB" strategy match comes back; what stays: _orb_release_due (fail-closed: an except that returns False), _open_credit_legs / _open_credit_sides, query._STRAT_ABBR (history decode). By AST. RED on 93341d4.
 v5.9  2026-11-14  OTV5 r119 (HYG §5.5, HYG.24) — NEW G16/G16b: the brief's 21 dead defs (and CircuitBreakerState, which only one of them built) stay gone, by AST, never by substring; and what they sat beside stays (is_halted, can_enter, is_orb_complete, minutes_since, SLOPE_FLAT_ATR, get_open_trades_live, the engine's G6 API). RED on 47cc55a.
@@ -177,8 +178,8 @@ bad = sorted(n for n in dir(config) if re.match(
     and n != "SWEEP_CS_MAX_REJECTION_PCT")
 check("G4 config carries no removed key (SWEEP_CS_MAX_REJECTION_PCT stays for derived/levels)",
       not bad and hasattr(config, "SWEEP_CS_MAX_REJECTION_PCT"), str(bad))
-check("G4b the ramp TOP and the engine cutoff are unchanged (OT_ORB_BUDGET_USD read; ORB_NO_ENTRY_AFTER_ET = entries stop)",
-      hasattr(config, "ORB_BUDGET_USD") and tuple(config.ORB_NO_ENTRY_AFTER_ET)
+check("G4b the ramp TOP and the engine cutoff are unchanged (OT_BREAKOUT_BUDGET_USD read since r125; ORB_NO_ENTRY_AFTER_ET = entries stop)",
+      hasattr(config, "BREAKOUT_BUDGET_USD") and tuple(config.ORB_NO_ENTRY_AFTER_ET)
       == tuple(config.EOD_SCHEDULE["entries_stop"]) and hasattr(config, "DELTA_PAR")
       and hasattr(config, "BREAKOUT_DELTA_PAR"), f"{getattr(config, 'ORB_NO_ENTRY_AFTER_ET', None)}")
 
@@ -223,7 +224,7 @@ check("G7 the banner says ramp_top= and scaling BRK=, and no scaling ORB / VOLT,
 tool = os.path.join(ROOT, "tools", "strip_retired_env.sh")
 unit = os.path.join(_SCR, "optionsbot.service")
 KEEP = ["[Unit]", "Description=x", "[Service]", "Environment=TT_USERNAME=SECRETVALUE1",
-        "Environment=OT_ORB_BUDGET_USD=10000", "Environment=OT_RISK_USD=1050", "Environment=OT_VOLTAGE=9",
+        "Environment=OT_BREAKOUT_BUDGET_USD=10000", "Environment=OT_RISK_USD=1050", "Environment=OT_VOLTAGE=9",
         "Environment=OT_SCALE_BREAKOUT=1", "Environment=OT_PARK=log", "Environment=OT_ORCS_NOTE_X=keep"]   # r88: OT_TCS_ACTIVE is retired now
 DROP = ["Environment=OT_SCALE_ORB=1", "Environment=OT_SCALE_VOLT=1", "Environment=OT_VOLT=0",
         "Environment=OT_VOLT_BUDGET_USD=SECRETVALUE2", "Environment=OT_ORB_TRADE=0", "Environment=OT_ATP_BUTTERFLY=0",
@@ -248,7 +249,7 @@ check("G8d a second run finds nothing and changes nothing", run2.returncode == 0
 
 # ── G8e-G8h: the units as setup_ec2.sh / configure.sh write them (RETIRE.2: v5.0 matched none of these) ─────
 unit2 = os.path.join(_SCR, "optionsbot_q.service")
-KEEP2 = ["[Service]", 'Environment="TT_USERNAME=SECRETVALUE3"', 'Environment="OT_ORB_BUDGET_USD=10000"',
+KEEP2 = ["[Service]", 'Environment="TT_USERNAME=SECRETVALUE3"', 'Environment="OT_BREAKOUT_BUDGET_USD=10000"',
          "Environment='OT_RISK_USD=1050'", 'Environment="OT_VOLTAGE=9"']
 DROP2 = ['Environment="OT_SCALE_ORB=1"', 'Environment="OT_SCALE_VOLT=1"', "Environment='OT_VOLT_BUDGET_USD=SECRETVALUE4'",
          'Environment="OT_VELOCITY_ENFORCE=0" "OT_SWEEP_CS=0"']

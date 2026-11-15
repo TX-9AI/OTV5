@@ -1,5 +1,6 @@
 """
-config.py  v5.22
+config.py  v5.23
+v5.23  2026-11-15  OTV5 r125 (HYG.28) — THE RAMP TOP'S KEY IS OT_BREAKOUT_BUDGET_USD (was OT_ORB_BUDGET_USD, named after the ORB trade retired at r76). BREAKOUT_BUDGET_USD / BREAKOUT_BUDGET_IS_DEFAULT replace ORB_BUDGET_USD / ORB_BUDGET_IS_DEFAULT; the old key is read as a fallback (new key first, BREAKOUT_BUDGET_FROM_OLD_KEY), so every box sizes exactly as before. The value and the default (RISK_PER_TRADE_USD) are unchanged.
 v5.22  2026-11-14  OTV5 r117 (HYG §5.3) — COMMENT ONLY: the long-debit cutoff's comment block still described the 11:00/11:30 afternoon block (and ORB, VOLT, the butterfly and condor as live). It now states the rule in force since OTV4TEST r149 - every long_debit entry may be placed until EOD_SCHEDULE["entries_stop"] 15:40, `>=` - with the 08-13/08-20/08-30 history marked superseded. No value changes.
 v5.21  2026-11-14  OTV5 r115 (HYG §5.1) — BUTTERFLY_STOP_LOSS_PCT is deleted: its last reader (exit_engine._evaluate_butterfly) went at r107, and only tests/check_docs_roster R5 still read it (R5 now checks two stops). The v5.17 line's "exit_engine prices any butterfly record" was true at r103 and false from r107; corrected below. Every live value is unchanged.
 v5.20  2026-11-14  OTV5 (OGAP.1) — OGAP, PARK'S FRIEND'S ORB-GAP ON QQQ PAPER: ENTRY_WINDOWS["OGAP"] = 09:46-10:32, the OGAP_* constants (no env key), OGAP joins CAP_EXCLUDED_STRATEGIES and _DECAY_EXEMPT_DEFAULT. The operator, 2026-11-14: "let's design & paper trade the OGAP on QQQ". Every other value is unchanged.
@@ -1282,12 +1283,20 @@ RISK_PER_TRADE_USD  = float(os.environ.get("OT_RISK_USD", "200"))
 # boxes committed seconds earlier, and the reject-vs-reduce-to-fit question at
 # the broker is never approached (still unverified — see backlog).
 # ⚠️ PER BOX. Fifteen boxes each hold this much, so fleet exposure is 15x.
-ORB_BUDGET_USD     = float(os.environ.get("OT_ORB_BUDGET_USD",
-                                          str(RISK_PER_TRADE_USD)))
+# r125 (HYG.28): THE KEY IS OT_BREAKOUT_BUDGET_USD. Until r124 it was OT_ORB_BUDGET_USD, named after the ORB trade
+# retired at r76; Breakout is the setup that rides this ramp. The old key is still READ as a fallback (new key first),
+# so a unit not yet migrated by tools/strip_retired_env.sh sizes exactly as before; BREAKOUT_BUDGET_FROM_OLD_KEY says
+# so and main.py logs one deprecation line at startup. No value or default changes.
+# The keys are written out (not held in a variable) so tests/gen_env_doc.py lists both readers in docs/ENV.md.
+# OT_ORB_BUDGET_USD is DEPRECATED (r125): read only as the fallback, here and in the two lines below.
+BREAKOUT_BUDGET_FROM_OLD_KEY = ("OT_BREAKOUT_BUDGET_USD" not in os.environ
+                                and "OT_ORB_BUDGET_USD" in os.environ)
+BREAKOUT_BUDGET_USD = float(os.environ.get("OT_BREAKOUT_BUDGET_USD",
+                                           os.environ.get("OT_ORB_BUDGET_USD", str(RISK_PER_TRADE_USD))))
 
 
 # ── r44 — WHAT ONE ORB SETUP MAY RISK ──────────────────────────────────────
-# 🔑 ORB_BUDGET_USD is a CEILING ON DEPLOYED CAPITAL; this is the TARGET RISK
+# 🔑 BREAKOUT_BUDGET_USD is a CEILING ON DEPLOYED CAPITAL; this is the TARGET RISK
 # at the structure stop, and they are different questions. The geometry rule
 # (`width // distance`) is exactly risk-normalised — the operator's own model,
 # tight stop big / wide stop small — but it normalises to `width x delta x 100`,
@@ -1317,7 +1326,7 @@ ORB_RISK_ENV_IGNORED = os.environ.get("OT_ORB_RISK_USD", "")
 # *"retain the original structure stop responsible for scaling the sizes but
 # just use a flat dollar amount for the entry"*.
 # ON  = the ramp: risk RISK_PER_TRADE_USD at the structure stop, capped at
-#       ORB_BUDGET_USD deployed (RiskManager._size_geometry).
+#       BREAKOUT_BUDGET_USD deployed (RiskManager._size_geometry).
 # OFF = FLAT: the budget rule every unscaled debit uses — about
 #       RISK_PER_TRADE_USD of premium, whatever the stop distance.
 # ⚠️ OFF CHANGES THE CONTRACT COUNT AND NOTHING ELSE. The structure stop is
@@ -1453,7 +1462,8 @@ TRAIL_GAIN_LOCK = float(os.environ.get("OT_TRAIL_GAIN_LOCK", "0.50"))
 # a config gap. Operator sets this per underlying ($3–5k), so the common case
 # is explicit and the default is the exception that needs announcing. main.py
 # logs it at startup and status.py prints it; this flag is how they tell.
-ORB_BUDGET_IS_DEFAULT = "OT_ORB_BUDGET_USD" not in os.environ
+BREAKOUT_BUDGET_IS_DEFAULT = ("OT_BREAKOUT_BUDGET_USD" not in os.environ
+                              and "OT_ORB_BUDGET_USD" not in os.environ)      # r125: neither key set
 # DAILY CATASTROPHIC LOSS CAP (r162 name): no NEW entries while the day's NET
 # REALIZED P&L is down by this much; open positions are still managed, and
 # entries RE-OPEN once closes bring the loss back under it (the operator,

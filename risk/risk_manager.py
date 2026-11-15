@@ -1,5 +1,6 @@
 """
-risk/risk_manager.py  v5.6
+risk/risk_manager.py  v5.7
+v5.7  2026-11-15  OTV5 r125 (HYG.28) — the BUDGET rule reads config.BREAKOUT_BUDGET_USD (was ORB_BUDGET_USD; key OT_BREAKOUT_BUDGET_USD, the old key read as a fallback in config). Same number, same sizing.
 v5.6  2026-11-14  OTV5 r119 (HYG §5.5, HYG.24) — check_circuit_breaker, its CircuitBreakerState dataclass and the _check_daily_loss_limit back-compat shim go (uncalled). The daily-loss halt is is_halted(), unchanged. No caller anywhere (OTV5 code, tests, tools, docs, dtp: token scan + grep on r118). Nothing else changes; the module's behaviour is identical.
 v5.5  2026-11-14  OTV5 (OGAP.1) — size_for passes budget_usd through to the BUDGET rule (_size_budget(budget_usd=...)): None (every existing caller) keeps self._risk_per_trade; OGAP passes OGAP_BUDGET_USD. The geometry rule's budget_usd is unchanged.
 v5.4  2026-11-14  OTV5 r113 (AM.8) — the cap-episode stamp's day comes from utils.time_utils.now_et(), the one ET owner. _et_date() fell back to the UTC date when zoneinfo could not load (after 19:00 ET that is tomorrow, so the once-per-episode page would key on the wrong day); an unreadable clock now returns "" (no stamp matches, so a page is never silenced). The operator, 2026-11-14: "Let's fix the top 10 today" (amnesty bucket AM.8). Gate tests/check_cap_page_once.py v5.2 P10-P11.
@@ -14,7 +15,7 @@ v5.1  2026-10-27  OTV5 r46 (PARC.1) — size_for("parc") -> _size_parc, rule "pa
       are set to $2500)". Per spread: max_loss = (width - credit) x 100; loss_at_stop = (the spread's estimated value
       with the underlying AT the structure stop - credit) x 100, capped at max_loss (no value - no IV - or a value at or
       under the credit -> max_loss, never a smaller invented number). by_risk = floor(risk per trade [OT_RISK_USD, the
-      ramp START/MIN] / loss_at_stop), by_top = floor(ORB_BUDGET_USD [OT_ORB_BUDGET_USD, the ramp TOP] / max_loss),
+      ramp START/MIN] / loss_at_stop), by_top = floor(BREAKOUT_BUDGET_USD [OT_BREAKOUT_BUDGET_USD, the ramp TOP] / max_loss),
       contracts = max(1, min(by_risk, by_top)); one spread's max_loss over the TOP is REFUSED (as _size_geometry's
       orb_budget refusal). The CAP_EXCLUDED_STRATEGIES getattr defaults name ("PARK", "PARC"), config's value.
       Gate tests/check_parc.py P4.
@@ -228,7 +229,7 @@ from typing import Optional
 
 import config
 from config import (
-    ORB_BUDGET_USD,
+    BREAKOUT_BUDGET_USD,                                         # r125 (HYG.28): was ORB_BUDGET_USD
     ORB_RISK_USD,
     RISK_PER_TRADE_USD, GRADE_SIZE_MULTIPLIER, SIZE_ON_RISK_TO_STOP,
     DEPLOY_CAP_MULT,
@@ -461,7 +462,7 @@ class RiskManager:
         # allows. A WIDE stop makes geometry small, so GEOMETRY binds and you
         # get one lot. "Smallest stops get the maximum budget, biggest stops
         # get a 1-lot maximum, everything else in between."
-        budget = float(budget_usd if budget_usd is not None else ORB_BUDGET_USD)
+        budget = float(budget_usd if budget_usd is not None else BREAKOUT_BUDGET_USD)
         by_budget = int(budget // cost_per_contract)
         if by_budget < 1:
             # ⚠️ REFUSED, NOT FLOORED TO ONE. A single contract that costs more

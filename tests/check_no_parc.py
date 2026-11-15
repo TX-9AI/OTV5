@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_no_parc.py  v5.5
+tests/check_no_parc.py  v5.6
+v5.6  2026-11-15  OTV5 r125 (HYG.28) — the ramp TOP's key is OT_BREAKOUT_BUDGET_USD (was OT_ORB_BUDGET_USD); the scratch env sets the new key. Same value.
 v5.5  2026-11-15  OTV5 r123 (HYG.27) — OT_RESTING_DB leaves the scratch env (r118 deleted execution/resting_orders.py, its only reader).
 v5.4  2026-11-14  OTV5 (OGAP.1) — N1 pins CAP_EXCLUDED_STRATEGIES = (PARK, OGAP): OGAP's own budget is outside the cap, as PARK's. Every PARC assertion unchanged.
 v5.3  2026-11-11  OTV5 r107 (RETIRE.5 follow-up) — N5 strips the seven butterfly signal fields from the golden (asserting they were the defaults): OptionsSignal no longer has them. PARK's prepare and signal are otherwise unchanged.
@@ -62,7 +63,7 @@ def probe():
                  "OT_SIGNAL_JOURNAL_DIR": "sj", "OT_RESTING_STOP_STATE": "rs.json",
                  "OT_COUNTERFACTUAL_DIR": "cf", "OT_PLAN_STATES_FILE": "ps.json"}.items():
         os.environ[k] = os.path.join(td, v)
-    os.environ.update(OT_RISK_USD="1050", OT_ORB_BUDGET_USD="2500", OT_INSTRUMENT="QQQ")
+    os.environ.update(OT_RISK_USD="1050", OT_BREAKOUT_BUDGET_USD="2500", OT_INSTRUMENT="QQQ")
     for k in ("OT_PARK", "OT_PARC"):
         os.environ.pop(k, None)
     feed_db = os.environ["OT_FEED_DB"]

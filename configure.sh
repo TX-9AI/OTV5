@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 # ==========================================================================
-# configure.sh  v5.8
+# configure.sh  v5.9
+# v5.9  2026-11-15  OTV5 r125 (HYG.28) — ITEM 7 WRITES OT_BREAKOUT_BUDGET_USD (the ramp TOP; was OT_ORB_BUDGET_USD, named after the
+#       ORB trade retired at r76) and drops the old bare line; it displays the new key, else the old one (config.py's
+#       own precedence). The item number, its label and every other item are unchanged.
 # v5.8  2026-11-08  OTV5 r76 (RETIRE.1) — item 7's explanation no longer names the removed ORB and VOLT trades
 #       ("The most premium one scaled trade may deploy."). The key (OT_ORB_BUDGET_USD), the item number and every
 #       other item are unchanged. The stored retired lines (OT_SCALE_ORB, OT_SCALE_VOLT, and any OT_VOLT*, OT_ORCS,
@@ -672,12 +675,28 @@ capture_guard_ok() {
 #   · the r203 land gate RUNS this body against a planted repo and REQUIRES a
 #     Spot line back, and refuses both a literal `data/` path and any
 #     re-suppression of stderr on this call.
+# r125 (HYG.28): the ramp TOP's key is OT_BREAKOUT_BUDGET_USD. A unit not yet migrated still carries the old
+# OT_ORB_BUDGET_USD, which config.py reads as the fallback; show what the bot reads (new key first, then the old).
+get_ramp_top() {
+    local v
+    v=$(get_env "OT_BREAKOUT_BUDGET_USD")
+    [[ -z "$v" ]] && v=$(get_env "OT_ORB_BUDGET_USD")
+    echo "$v"
+}
+
+# r125: writing the ramp TOP writes the NEW key and takes the deprecated one off (bare form; tools/strip_retired_env.sh
+# renames the quoted forms), so the unit carries one key and the value the operator typed.
+set_ramp_top() {
+    set_env "OT_BREAKOUT_BUDGET_USD" "$1"
+    drop_env "OT_ORB_BUDGET_USD"
+}
+
 change_orb_budget() {
     local current risk
-    current=$(get_env "OT_ORB_BUDGET_USD")
+    current=$(get_ramp_top)
     risk=$(get_env "OT_RISK_USD")
     echo ""
-    echo -e "  ${BOLD}Scaling ramp TOP (MAX)${RESET}  (OT_ORB_BUDGET_USD)"
+    echo -e "  ${BOLD}Scaling ramp TOP (MAX)${RESET}  (OT_BREAKOUT_BUDGET_USD)"
     echo -e "  The most premium one scaled trade may deploy."
     echo ""
     echo -e "  Current: ${BOLD}$(fmt_declared "$current")${RESET}"
@@ -689,13 +708,13 @@ change_orb_budget() {
             return
         fi
         if [[ "$input" == "r" ]]; then
-            set_env "OT_ORB_BUDGET_USD" "$risk"
+            set_ramp_top "$risk"
             reload_daemon
             print_ok "Ramp TOP reset to the per-trade risk default (\$${risk})."
             return
         fi
         if [[ "$input" =~ ^[0-9]+(\.[0-9]+)?$ ]] && (( $(echo "$input > 0" | bc -l) )); then
-            set_env "OT_ORB_BUDGET_USD" "$input"
+            set_ramp_top "$input"
             reload_daemon
             print_ok "Ramp TOP updated to ${BOLD}\$$input${RESET}."
             return
@@ -920,7 +939,7 @@ while true; do
     echo -e "  ${BOLD}4.${RESET}  Telegram alerts     (chat: $(get_env TELEGRAM_CHAT_ID))"
     echo -e "  ${BOLD}5.${RESET}  TastyTrade credentials"
     echo -e "  ${BOLD}6.${RESET}  Catastrophic cap    (currently: \$$(dll=$(get_env OT_DAILY_LOSS_LIMIT); echo ${dll:-$(get_env OT_RISK_USD)}))"
-    echo -e "  ${BOLD}7.${RESET}  Ramp TOP (MAX)      (currently: $(fmt_declared "$(get_env OT_ORB_BUDGET_USD)"))"
+    echo -e "  ${BOLD}7.${RESET}  Ramp TOP (MAX)      (currently: $(fmt_declared "$(get_ramp_top)"))"
     echo -e "  ${BOLD}8.${RESET}  Data capture        (currently: $(data_capture_label))"
     echo -e "  ${BOLD}9.${RESET}  Done"
     echo ""

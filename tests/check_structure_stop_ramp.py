@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_structure_stop_ramp.py  v5.1
+tests/check_structure_stop_ramp.py  v5.2
+v5.2  2026-11-15  OTV5 r125 (HYG.28) — the ramp TOP's key is OT_BREAKOUT_BUDGET_USD (was OT_ORB_BUDGET_USD); reads config.BREAKOUT_BUDGET_USD and sets the new key. Same checks.
 v5.1  2026-11-08  OTV5 r76 (RETIRE.1) — RE-POINTED (WA 38.4): the ORB trade, its default fixture, is removed, so the fixture is a structure-sized
       Breakout; R9 pins STRUCTURE_TRAIL_STRATEGIES to Breakout alone; R10 uses the Hunt and Runaway (VOLT and the sweep are
       removed). Every arithmetic expectation is unchanged.
@@ -70,13 +71,13 @@ os.environ.setdefault("OT_DERIVED_DB", os.path.join(_s, "derived_store.db"))
 # 2-lot and the ramp collapses — a verification going red on ENVIRONMENT
 # rather than CONTENT, which is precisely what teaches an operator to skim
 # reds (`check_gates` paid for this lesson with pytest).
-# ⚠️ THE ASSERTIONS BELOW READ `config.ORB_RISK_USD` / `config.ORB_BUDGET_USD`
+# ⚠️ THE ASSERTIONS BELOW READ `config.ORB_RISK_USD` / `config.BREAKOUT_BUDGET_USD`
 # RATHER THAN THESE LITERALS, so the fixture can be re-declared without
 # rewriting a single check. What is pinned is the SHAPE of the ramp between
 # whatever two ends are set — never the operator's particular dollars, which
 # are his to change from `configure.sh` and are not this file's business.
 os.environ.setdefault("OT_RISK_USD", "1050")
-os.environ.setdefault("OT_ORB_BUDGET_USD", "10000")
+os.environ.setdefault("OT_BREAKOUT_BUDGET_USD", "10000")
 
 FAIL: list = []
 
@@ -159,7 +160,7 @@ check("R2 deployed capital never RISES as the impulsive stop deepens",
 # 🔑 AND WHERE THE CEILING IS NOT BINDING IT MUST STRICTLY FALL — otherwise
 # "non-increasing" is satisfied by the flat defect this revision removes.
 _free = [d for d, r in zip(_dep, [r for _, r in _rows])
-         if d < config.ORB_BUDGET_USD * 0.95]
+         if d < config.BREAKOUT_BUDGET_USD * 0.95]
 check("R2a ...and STRICTLY falls wherever the budget is not binding",
       len(_free) >= 3 and all(a > b for a, b in zip(_free, _free[1:])),
       " -> ".join(f"${x:.0f}" for x in _free))
@@ -174,9 +175,9 @@ check("R2b and the ramp SPANS, rather than drifting",
 # ── R3 — THE TWO ENDS ARE THE OPERATOR'S TWO CONSTANTS ────────────────────
 _, r_tight = _size(0.07, 0.456, 0.99)
 check("R3 a tight impulsive candle runs the position to the ORB budget (ramp TOP)",
-      r_tight.total_cost > config.ORB_BUDGET_USD * 0.95
-      and r_tight.total_cost <= config.ORB_BUDGET_USD,
-      f"${r_tight.total_cost:.0f} against a ${config.ORB_BUDGET_USD:.0f} ceiling")
+      r_tight.total_cost > config.BREAKOUT_BUDGET_USD * 0.95
+      and r_tight.total_cost <= config.BREAKOUT_BUDGET_USD,
+      f"${r_tight.total_cost:.0f} against a ${config.BREAKOUT_BUDGET_USD:.0f} ceiling")
 
 _, r_deep = _size(2.00, 0.400, 0.80)
 check("R3b a deep one comes back to the ramp START and stops there",

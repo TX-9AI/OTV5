@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 # ==========================================================================
-# tools/strip_retired_env.sh  v5.5
+# tools/strip_retired_env.sh  v5.6
+# v5.6  2026-11-15  OTV5 r125 (HYG.28) - A RENAMED KEY IS RENAMED, NOT REMOVED. RENAMES maps a deprecated key to its new
+#       name: OT_ORB_BUDGET_USD (the ramp TOP, named after the ORB trade retired at r76) -> OT_BREAKOUT_BUDGET_USD. The
+#       assignment keeps its value and its quoting, only the key changes; if the unit ALREADY carries the new key, the old
+#       assignment goes instead (config.py v5.23 reads the new key first, so the old one was inert). Either way the value
+#       the bot reads is the same. A renamed assignment is counted with the retired ones and named OLD->NEW.
 # v5.5  2026-11-11  OTV5 r107 (RETIRE.5 follow-up) - THE BUTTERFLY READINESS KNOBS JOIN THE LIST. analysis/trade_readiness.py v5.2
 #       removes the butterfly track, so OT_TR_BFLY_* (PIN_NEAR / PIN_FAR / GEX_LO / GEX_HI / WARM_MIN) is read by nothing.
 # v5.4  2026-11-10  OTV5 r106 - A UNIT THE CALLER CANNOT READ IS READ THROUGH sudo -n, AND IF THAT IS REFUSED THE RUN SAYS SO
@@ -42,6 +47,7 @@
 # ==========================================================================
 set -u
 
+RENAMES="OT_ORB_BUDGET_USD=OT_BREAKOUT_BUDGET_USD"
 EXACT="OT_SCALE_ORB OT_SCALE_VOLT OT_VOLT OT_ORB_TRADE OT_ATP_BUTTERFLY OT_ORCS OT_SWEEP_CS OT_CONTRACT_SCALE OT_SHADOW_TRADES_DB OT_GEX_BUTTERFLY"
 FAMILIES="OT_VOLT_ OT_SWEEP_CS_ OT_VELOCITY_ OT_TCS_ OT_TR_TCS_ OT_TR_W_TCS_ OT_BFLY_ OT_GEX_BFLY_ OT_TR_BFLY_"
 # r107 (RETIRE.5 follow-up): the butterfly readiness track's OT_TR_BFLY_* knobs are read by nothing once the track is removed.
@@ -61,10 +67,11 @@ _sudo() { if [ -w "$1" ] && [ -w "$(dirname "$1")" ]; then shift; "$@"; else shi
 # _plan UNIT OUT: write the stripped unit to OUT; print "N KEYS..." (count of retired assignments, their names);
 # exit 2 when a line could not be parsed (that line is copied unchanged). Never prints a value.
 _plan() {
-    EXACT="$EXACT" FAMILIES="$FAMILIES" python3 -I - "$1" "$2" <<'PY'
+    EXACT="$EXACT" FAMILIES="$FAMILIES" RENAMES="$RENAMES" python3 -I - "$1" "$2" <<'PY'
 import os, shlex, sys
 exact = set(os.environ["EXACT"].split()); fam = tuple(os.environ["FAMILIES"].split())
 def retired(k): return k in exact or k.startswith(fam)
+ren = dict(r.split("=", 1) for r in os.environ.get("RENAMES", "").split())
 def tokens(rest):
     out, cur, q = [], "", None
     for ch in rest:
@@ -83,6 +90,18 @@ def tokens(rest):
 src, dst = sys.argv[1], sys.argv[2]
 lines = open(src).read().split("\n")
 keep, names, bad = [], [], 0
+def _keys_of(ln):
+    raw = tokens(ln[len("Environment="):]); ks = []
+    for t in raw:
+        v = shlex.split(t)
+        if len(v) != 1 or "=" not in v[0]: raise ValueError("not an assignment")
+        ks.append(v[0].split("=", 1)[0])
+    return raw, ks
+present = set()                       # every key already assigned anywhere in the unit (a rename must not duplicate)
+for ln in lines:
+    if ln.startswith("Environment="):
+        try: present.update(_keys_of(ln)[1])
+        except ValueError: pass
 for ln in lines:
     if not ln.startswith("Environment="):
         keep.append(ln); continue
@@ -96,10 +115,20 @@ for ln in lines:
     except ValueError:
         keep.append(ln); bad += 1; continue
     gone = [k for k in keys if retired(k)]
-    if not gone:
+    moved = [k for k in keys if k in ren]
+    if not gone and not moved:
         keep.append(ln); continue
-    names += gone
-    live = [t for t, k in zip(raw, keys) if not retired(k)]
+    names += gone + ["%s->%s" % (k, ren[k]) for k in moved]
+    live = []
+    for t, k in zip(raw, keys):
+        if retired(k): continue
+        if k in ren:
+            if ren[k] in present: continue            # the new key is already set: the old assignment was inert
+            i = t.index(k + "=")                      # after an opening quote, if any: only the KEY changes
+            t = t[:i] + ren[k] + t[i + len(k):]
+            if shlex.split(t)[0].split("=", 1)[0] != ren[k]: raise SystemExit(3)
+            present.add(ren[k])
+        live.append(t)
     if live: keep.append("Environment=" + " ".join(live))
 open(dst, "w").write("\n".join(keep))
 print(len(names), " ".join(sorted(names)))

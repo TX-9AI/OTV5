@@ -1,4 +1,5 @@
-"""tests/check_noise_floor_open.py — v5.2
+"""tests/check_noise_floor_open.py — v5.3
+v5.3  2026-11-15  OTV5 r125 (HYG.28) — the ramp TOP's key is OT_BREAKOUT_BUDGET_USD (was OT_ORB_BUDGET_USD); the scratch env sets the new key. Same value.
 v5.2  2026-11-15  OTV5 r123 (HYG.27) — OT_RESTING_DB leaves the scratch env (r118 deleted execution/resting_orders.py, its only reader).
 v5.1  2026-10-26  OTV5 r38 (HYG.18) — scratch no longer names dir="/var/tmp": mkdtemp honours TMPDIR, which boot_sweep and land.sh point
       at a per-run dir they remove (HYG.14), so a sweep leaves nothing behind (237 dirs had piled up on SOFI). No check changed.
@@ -52,7 +53,7 @@ os.environ.setdefault("OT_DERIVED_DB", os.path.join(_s, "derived_store.db"))
 os.environ.setdefault("OT_PAPER_TRADING", "1")
 os.environ.setdefault("OT_RISK_USD", "1050")
 os.environ.setdefault("OT_ORB_RISK_USD", "1000")
-os.environ.setdefault("OT_ORB_BUDGET_USD", "10000")
+os.environ.setdefault("OT_BREAKOUT_BUDGET_USD", "10000")
 
 FAIL: list = []
 

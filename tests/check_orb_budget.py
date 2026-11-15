@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""tests/check_orb_budget.py  v5.1
+"""tests/check_orb_budget.py  v5.2
+v5.2  2026-11-15  OTV5 r125 (HYG.28) — the ramp TOP's key is OT_BREAKOUT_BUDGET_USD (was OT_ORB_BUDGET_USD); B0 imports BREAKOUT_BUDGET_USD / BREAKOUT_BUDGET_IS_DEFAULT. Same checks.
 v5.1  2026-11-11  OTV5 r107 (RETIRE.5 follow-up) — B7 re-pointed (WA 38.4) from the removed butterfly rule to the vertical: no other rule gained a budget.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 ORB SIZES TO min(GEOMETRY, BUDGET), AND A CONTRACT DEARER THAN THE BUDGET IS
@@ -52,9 +53,9 @@ def check(label, cond, detail=""):
 
 def main():
     try:
-        from config import ORB_BUDGET_USD, ORB_BUDGET_IS_DEFAULT  # noqa: F401
+        from config import BREAKOUT_BUDGET_USD, BREAKOUT_BUDGET_IS_DEFAULT  # noqa: F401
     except ImportError as exc:
-        check("B0 config exposes ORB_BUDGET_USD", False, str(exc))
+        check("B0 config exposes BREAKOUT_BUDGET_USD", False, str(exc))
         print("\nFAILED 1: B0 — ORB has no budget at all")
         return 1
 

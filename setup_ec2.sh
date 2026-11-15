@@ -1,6 +1,9 @@
 #!/bin/bash
 # ==========================================================================
-# setup_ec2.sh  v5.5
+# setup_ec2.sh  v5.6
+# v5.6  2026-11-15  OTV5 r125 (HYG.28) — THE UNIT WRITES OT_BREAKOUT_BUDGET_USD (the ramp TOP; was OT_ORB_BUDGET_USD, named after
+#       the ORB trade retired at r76). A bootstrap that still sets OT_ORB_BUDGET_USD is read as the fallback, so the value
+#       written is the same; PLAN prints breakout_budget_usd=. config.py v5.23 reads the new key first, the old one after.
 # v5.5  2026-11-08  OTV5 r94 (CAP.1) — the fresh-box suite also runs deploy/install_capture_timer.sh (tools/capture_all.py:
 #       TastyTrade market metrics, the full chain and corporate events into the warehouse; recording only).
 # v5.4  2026-11-08  OTV5 r76 (RETIRE.1) — THE UNIT NO LONGER CARRIES OT_SCALE_ORB OR OT_SCALE_VOLT (nor their --plan lines).
@@ -109,7 +112,7 @@
 #       requirements.lock (the reference venv, 41 packages, Python 3.14) is
 #       installed when present, with no pip upgrade and no silent fallback to the
 #       floors; a pin that fails stops the install. (5) THE FOUR KEYS configure.sh
-#       grew after v3 are PRIMED: OT_ORB_RISK_USD, OT_ORB_BUDGET_USD,
+#       grew after v3 are PRIMED: OT_ORB_RISK_USD, OT_ORB_BUDGET_USD (OT_BREAKOUT_BUDGET_USD from r125),
 #       OT_DAILY_LOSS_LIMIT (all default to the base risk, as config.py does) and
 #       OT_PIN_PROXIMITY_ACTIVE=0 — config.py defaults the gate ON, and the
 #       operator turned it OFF 2026-09-24 pending data (PIN.1), so an unprimed box
@@ -278,7 +281,8 @@ PAPER_TRADING="True"
 # the operator chose. Defaults match config.py's. r68 (CFG.5): the pin gate and Breakout
 # scaling are fixed ON in config.py and are no longer written here. r76 (RETIRE.1): nor the ORB / VOLT
 # scaling switches - both trades are removed and config.py reads neither key.
-ORB_BUDGET_USD="${OT_ORB_BUDGET_USD:-$RISK_USD}"
+# r125 (HYG.28): the ramp TOP's key is OT_BREAKOUT_BUDGET_USD; a bootstrap still carrying the old OT_ORB_BUDGET_USD is honoured.
+BREAKOUT_BUDGET_USD="${OT_BREAKOUT_BUDGET_USD:-${OT_ORB_BUDGET_USD:-$RISK_USD}}"
 DAILY_LOSS_LIMIT="${OT_DAILY_LOSS_LIMIT:-$RISK_USD}"
 SWAP_GB="${OT_SWAP_GB:-2}"
 CLAUDE_AT_BOOT="${OT_CLAUDE_AT_BOOT:-0}"
@@ -418,7 +422,7 @@ if [ "$PLAN" = 1 ]; then
     echo "PLAN instrument=$INSTRUMENT"
     echo "PLAN paper=$PAPER_TRADING"
     echo "PLAN risk_usd=$RISK_USD"
-    echo "PLAN orb_budget_usd=$ORB_BUDGET_USD"
+    echo "PLAN breakout_budget_usd=$BREAKOUT_BUDGET_USD"
     echo "PLAN daily_loss_limit=$DAILY_LOSS_LIMIT"
     echo "PLAN swap_gb=$SWAP_GB"
     echo "PLAN requirements=$REQ_FILE"
@@ -550,7 +554,7 @@ Environment=TELEGRAM_TOKEN=${TELEGRAM_TOKEN}
 Environment=TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID}
 Environment=GITHUB_TOKEN=${GITHUB_TOKEN}
 Environment=GITHUB_REPO=${GITHUB_REPO}
-Environment=OT_ORB_BUDGET_USD=${ORB_BUDGET_USD}
+Environment=OT_BREAKOUT_BUDGET_USD=${BREAKOUT_BUDGET_USD}
 Environment=OT_DAILY_LOSS_LIMIT=${DAILY_LOSS_LIMIT}
 ExecStartPre=/bin/bash -c 'touch ${INSTALL_DIR}/bot.log ${INSTALL_DIR}/trades.db && chown ${USER}:${USER} ${INSTALL_DIR}/bot.log ${INSTALL_DIR}/trades.db'
 ExecStart=${VENV}/bin/python main.py --service

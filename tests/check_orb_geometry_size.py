@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""tests/check_orb_geometry_size.py  v5.1
+"""tests/check_orb_geometry_size.py  v5.2
+v5.2  2026-11-15  OTV5 r125 (HYG.28) — the ramp TOP's key is OT_BREAKOUT_BUDGET_USD (was OT_ORB_BUDGET_USD); comment only.
 v5.1  2026-11-15  OTV5 r123 (HYG.27) — FIXTURES RE-POINTED (the Saturday brief 11-14 section 5 item 10): ORBStrategy -> Breakout; what each check proves is unchanged.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v2.1  2026-08-31  r201 — the geometry cases pass an EXPLICIT budget so they
@@ -68,7 +69,7 @@ def main():
         return 1
 
     # ⚠️ r201 — AN EXPLICIT BUDGET, SO THESE MEASURE THE GEOMETRY. ORB is now
-    # clamped by ORB_BUDGET_USD, default one trade's risk; without this every
+    # clamped by BREAKOUT_BUDGET_USD, default one trade's risk; without this every
     # case below would measure the sandbox's risk setting instead of the
     # arithmetic it exists to pin. Budget behaviour: tests/check_orb_budget.py.
     _BIG = 10_000_000.0
