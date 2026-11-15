@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_one_per_session.py  v5.1
+tests/check_one_per_session.py  v5.2
+v5.2  2026-11-15  OTV5 r126 (HYG.29) — THE CHECK NO LONGER DEPENDS ON THE HOUR IT RUNS. r0's S1b/S2 put their in-session trades at a fixed now-5min / now-90min, which lands BEFORE ET midnight during the first 90 minutes of every ET day: S2/S3 went red 00:00-01:30 ET (S1b too, 00:00-00:05) and green after, with count_today correct throughout (the 11-15 sweep ran at ~01:00 ET; reproduced at pinned clocks, red at 05:03/05:30/06:20 UTC, green at 06:40/15:00). S1-S4 now run as _db_scenario at seven pinned clocks (00:03, 00:45, 01:29, 10:00, 23:58 ET in EST; 00:20, 21:30 ET in EDT) and the real clock, every in-session time placed between ET midnight and now; S1a adds a trade 1 s before ET midnight, S2 enters 1 s after it, new S2b a trade exactly AT ET midnight (OGAP). Five count_today mutants each red: UTC midnight, `>` for `>=`, a rolling 24 h window, open-only, fail-open. S5-S6 unchanged.
 v5.1  2026-11-09  OTV5 r103 (RETIRE.5 step 2) — RE-POINTED (WA 38.4): the GEX fly and _attempt_butterfly are removed, so S2-S4 count PARK (the other one-per-session trade) and S5 pins _attempt_park checking BEFORE asking PARK, with the remaining guard sites (Runaway, PARK). S1, S5b, S6 unchanged.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.1  2026-10-11  r481 / RUN.1 — S6: THE RUNAWAY CAP MUST GATE, NOT NARRATE.
@@ -53,39 +54,88 @@ def check(label, cond, detail=""):
         _fails.append(label)
 
 
-def main():
+def _db_scenario(now_utc, tag):
+    """S1-S4 against a fresh DB with the clock pinned to NOW_UTC (None = the real clock).
+    v5.2: every in-session timestamp sits BETWEEN ET midnight and now, so the check means the
+    same thing at 00:03 ET as at noon (r0's fixed now-5min / now-90min offsets landed BEFORE
+    ET midnight in the first 90 minutes of every ET day and went red there)."""
     import tempfile
+    import datetime as _dtm
     from database.trade_logger import TradeLogger
+    from utils.time_utils import ET
 
-    d = tempfile.mkdtemp()
-    db = os.path.join(d, "trades.db")
-    lg = TradeLogger(db_path=db)
+    real = _dtm.datetime
+    if now_utc is not None:
+        class _Pinned(real):
+            @classmethod
+            def now(cls, tz=None):
+                return now_utc.astimezone(tz) if tz else now_utc.replace(tzinfo=None)
+        _dtm.datetime = _Pinned
+    try:
+        now = real.now(timezone.utc) if now_utc is None else now_utc
+        mid = now.astimezone(ET).replace(hour=0, minute=0, second=0, microsecond=0
+                                         ).astimezone(timezone.utc)
+        span = (now - mid).total_seconds()
+        if span < 4:                       # the real clock within 4 s of ET midnight
+            return None
+        at = lambda frac: mid + timedelta(seconds=max(1, int(span * frac)))
 
-    def _ins(strategy, when_utc, status):
-        with sqlite3.connect(db) as c:
-            c.execute("INSERT INTO trades (trade_id, strategy, entry_time, status) "
-                      "VALUES (?,?,?,?)",
-                      (f"t{strategy}{when_utc}{status}", strategy,
-                       when_utc.strftime("%Y-%m-%d %H:%M:%S"), status))
+        d = tempfile.mkdtemp()
+        db = os.path.join(d, "trades.db")
+        lg = TradeLogger(db_path=db)
 
-    now = datetime.now(timezone.utc)
-    _ins("RunawayContinuation", now - timedelta(hours=30), "CLOSED")   # yesterday
-    check("S1a yesterday's trade does not count",
-          lg.count_today("RunawayContinuation") == 0,
-          str(lg.count_today("RunawayContinuation")))
-    _ins("RunawayContinuation", now - timedelta(minutes=5), "OPEN")
-    check("S1b a trade this session counts", lg.count_today("RunawayContinuation") == 1)
-    _ins("PARK", now - timedelta(minutes=90), "CLOSED")          # r103: was the GEX fly
-    check("S2 a CLOSED trade still spends the session's one shot",
-          lg.count_today("PARK") == 1)
-    lg2 = TradeLogger(db_path=db)                       # the restart
-    check("S3 a fresh logger over the same DB reads the same count — a restart "
-          "cannot re-arm it", lg2.count_today("PARK") == 1
-          and lg2.count_today("RunawayContinuation") == 1)
-    lg4 = TradeLogger(db_path=db)
-    lg4._connect = lambda: (_ for _ in ()).throw(sqlite3.OperationalError("disk gone"))
-    check("S4 an unreadable DB FAILS CLOSED (counts as traded)",
-          lg4.count_today("PARK") >= 1)
+        def _ins(strategy, when_utc, status):
+            with sqlite3.connect(db) as c:
+                c.execute("INSERT INTO trades (trade_id, strategy, entry_time, status) "
+                          "VALUES (?,?,?,?)",
+                          (f"t{strategy}{when_utc}{status}", strategy,
+                           when_utc.strftime("%Y-%m-%d %H:%M:%S"), status))
+
+        _ins("RunawayContinuation", mid - timedelta(seconds=1), "CLOSED")   # 1 s before ET midnight
+        _ins("RunawayContinuation", mid - timedelta(hours=6), "CLOSED")     # yesterday
+        check(f"S1a [{tag}] yesterday's trades, one of them 1 s before ET midnight, do not count",
+              lg.count_today("RunawayContinuation") == 0,
+              str(lg.count_today("RunawayContinuation")))
+        _ins("RunawayContinuation", at(0.9), "OPEN")
+        check(f"S1b [{tag}] a trade this session counts",
+              lg.count_today("RunawayContinuation") == 1)
+        _ins("PARK", mid + timedelta(seconds=1), "CLOSED")                  # 1 s after ET midnight
+        check(f"S2 [{tag}] a CLOSED trade still spends the session's one shot "
+              f"(entered 1 s after ET midnight)", lg.count_today("PARK") == 1)
+        _ins("OGAP", mid, "CLOSED")                                         # exactly ET midnight
+        check(f"S2b [{tag}] a trade entered exactly at ET midnight is this session's",
+              lg.count_today("OGAP") == 1)
+        lg2 = TradeLogger(db_path=db)                                       # the restart
+        check(f"S3 [{tag}] a fresh logger over the same DB reads the same count - a restart "
+              "cannot re-arm it", lg2.count_today("PARK") == 1
+              and lg2.count_today("RunawayContinuation") == 1)
+        lg4 = TradeLogger(db_path=db)
+        lg4._connect = lambda: (_ for _ in ()).throw(sqlite3.OperationalError("disk gone"))
+        check(f"S4 [{tag}] an unreadable DB FAILS CLOSED (counts as traded)",
+              lg4.count_today("PARK") >= 1)
+        return True
+    finally:
+        _dtm.datetime = real
+
+
+# v5.2: the clocks the DB scenario runs at. 00:03 / 00:45 / 01:29 ET are inside the window r0's
+# offsets broke (red 00:00-01:30 ET every day); 23:58 ET is the far edge; 10:00 ET is a session
+# hour; and in EDT as well as EST, so the UTC offset of ET midnight is exercised both ways.
+_CLOCKS = [
+    ("00:03 ET (EST)", datetime(2026, 11, 16, 5, 3, tzinfo=timezone.utc)),
+    ("00:45 ET (EST)", datetime(2026, 11, 16, 5, 45, tzinfo=timezone.utc)),
+    ("01:29 ET (EST)", datetime(2026, 11, 16, 6, 29, tzinfo=timezone.utc)),
+    ("10:00 ET (EST)", datetime(2026, 11, 16, 15, 0, tzinfo=timezone.utc)),
+    ("23:58 ET (EST)", datetime(2026, 11, 17, 4, 58, tzinfo=timezone.utc)),
+    ("00:20 ET (EDT)", datetime(2026, 7, 14, 4, 20, tzinfo=timezone.utc)),
+    ("21:30 ET (EDT)", datetime(2026, 7, 14, 1, 30, tzinfo=timezone.utc)),
+]
+
+
+def main():
+    for tag, t in _CLOCKS:
+        _db_scenario(t, tag)
+    _db_scenario(None, "real clock")
 
     src = open(os.path.join(_root, "main.py"), encoding="utf-8").read()
     tree = ast.parse(src)
