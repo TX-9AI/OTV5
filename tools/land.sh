@@ -1,5 +1,11 @@
 #!/usr/bin/env bash
-# tools/land.sh — v5.3
+# tools/land.sh — v5.4
+# v5.4  2026-11-14  OTV5 r121 (LAND.11, mirrors dtp land.sh v1.20 / r560) — A CHECK CAN NO LONGER EAT THE CHECKS LISTED
+#   AFTER IT, AND A COUNT THAT DOES NOT MATCH REFUSES THE LAND. At v5.3 the CHECK loop read the spec's CHECK lines on stdin
+#   and every CHECK inherited it, so a CHECK that reads stdin swallowed the rest and the loop ended early, silently (found
+#   at dtp r559: 7 declared, 4 ran). Now the loop reads the spec on fd 3, each CHECK runs with stdin from /dev/null, and
+#   after the loop the number that ran must equal the number declared (the loop's own pattern), or the land is REFUSED
+#   as CHECK COUNT MISMATCH. Gate tests/check_land_spec_parse.py L18-L20. The operator's yes, 2026-11-14.
 # v5.3  2026-11-08  OTV5 r76 (RETIRE.1) — DEL RUNS BEFORE THE ENV DOC AND THE CHECKS. At v5.2 the DEL block ran after the CHECK
 #   loop, so a delivery that removes modules regenerated docs/ENV.md from files about to be deleted (committing a stale doc
 #   that check_env_doc E1 then fails on every box) and ran its CHECKs with the deleted files still importable. The block is
@@ -640,7 +646,10 @@ land_one() {
   fi
 
   local nchk=0 chk
-  while IFS= read -r line; do
+  # v5.4 (LAND.11) — THE SPEC IS READ ON FD 3 AND EVERY CHECK GETS /dev/null ON STDIN. A CHECK that reads stdin
+  # swallowed every CHECK line after it (dtp r559: 7 declared, 4 ran, nothing said). The count guard after the loop
+  # catches any other way of losing one.
+  while IFS= read -r -u 3 line; do
     chk="$(_spec_val "$line" CHECK)"
     nchk=$((nchk+1))
     # 🔴 A CHECK MUST NOT INHERIT THIS DELIVERY'S OWN CONTROL VARIABLES, and
@@ -662,7 +671,7 @@ land_one() {
     # ~110 checkers mkdtemp without removing; TMPDIR points them into $_scratch,
     # which is removed below on both branches.
     mkdir -p "$_scratch/tmp"
-    if ( cd "$repo" && env -u LAND_ARCHIVE -u LAND_STAGE TMPDIR="$_scratch/tmp" OT_TRADES_DB="$_scratch/trades.db" OT_DERIVED_DB="$_scratch/derived_store.db" OT_RESTING_DB="$_scratch/resting_orders.db" OT_SIGNAL_JOURNAL_DIR="$_scratch/signal_journal" OT_LOG_FILE="$_scratch/bot.log" OT_COUNTERFACTUAL_DIR="$_scratch/counterfactual" OT_FEED_DB="$_scratch/feed_store.db" OT_WAREHOUSE_STATE="$_scratch/warehouse_state" OT_PLAN_STATES_FILE="$_scratch/plan_states.json" OT_HEARTBEAT_FILE="$_scratch/BOT_HEARTBEAT" OT_INSTRUMENT="${OT_INSTRUMENT:-QQQ}" python3 "$chk" ) >/dev/null 2>&1; then
+    if ( cd "$repo" && env -u LAND_ARCHIVE -u LAND_STAGE TMPDIR="$_scratch/tmp" OT_TRADES_DB="$_scratch/trades.db" OT_DERIVED_DB="$_scratch/derived_store.db" OT_RESTING_DB="$_scratch/resting_orders.db" OT_SIGNAL_JOURNAL_DIR="$_scratch/signal_journal" OT_LOG_FILE="$_scratch/bot.log" OT_COUNTERFACTUAL_DIR="$_scratch/counterfactual" OT_FEED_DB="$_scratch/feed_store.db" OT_WAREHOUSE_STATE="$_scratch/warehouse_state" OT_PLAN_STATES_FILE="$_scratch/plan_states.json" OT_HEARTBEAT_FILE="$_scratch/BOT_HEARTBEAT" OT_INSTRUMENT="${OT_INSTRUMENT:-QQQ}" python3 "$chk" </dev/null ) >/dev/null 2>&1; then
       rm -rf "${_scratch:?}"
       pb_clear
       echo "  check: $chk PASS"
@@ -673,7 +682,15 @@ land_one() {
       echo "     re-run it yourself:  cd $repo && python3 $chk"
       die "A DECLARED CHECK DID NOT PASS"; return 1
     fi
-  done < <(grep -E '^CHECK[[:space:]]' "$spec")
+  done 3< <(grep -E '^CHECK[[:space:]]' "$spec")
+  # 🔴 v5.4 (LAND.11) — FAIL CLOSED ON THE COUNT, with the loop's own pattern.
+  local ndecl
+  ndecl=$(grep -cE '^CHECK[[:space:]]' "$spec" 2>/dev/null || true); ndecl=${ndecl:-0}
+  if [ "$nchk" != "$ndecl" ]; then
+    echo "  🔴 CHECK COUNT MISMATCH: the spec declares $ndecl CHECK(s) and $nchk ran — a declared CHECK was skipped"
+    die "CHECK COUNT MISMATCH — $ndecl declared, $nchk ran; nothing is landed"; return 1
+  fi
+  [ "$nchk" != "0" ] && echo "  checks: $nchk of $ndecl declared CHECK(s) ran and passed"
 
   # ⚠️ A CODE HALF WITH NO CHECK IS REFUSED. Detected from the payload rather
   # than trusted to the author: if this half ships a .py outside docs/ and

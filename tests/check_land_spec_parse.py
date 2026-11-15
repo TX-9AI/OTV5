@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""tests/check_land_spec_parse.py — v5.1
+"""tests/check_land_spec_parse.py — v5.2
+v5.2  2026-11-14  OTV5 r121 (LAND.11, mirrors dtp check_land_sh SK1-SK2) — L18: a first CHECK that drains stdin does not
+      skip the second (it runs, and the land says "2 of 2 declared CHECK(s) ran"); L19: the fixture bites — under a
+      lander with the v5.3 loop restored and no guard the second CHECK never runs; L20: the v5.3 loop WITH the v5.4 count
+      guard is REFUSED as CHECK COUNT MISMATCH, HEAD untouched. Born red on land.sh v5.3 at L18, L19 and L20.
 v5.1  2026-10-25  (DEP.2 mirror, HYG.14) — L15: a POS whose text begins with `-` (the payload carries "--dash-led line")
       passes the content gate; L16: a NEG of that same present text FAILS as STILL PRESENT (grep read it as an option:
       the POS refused and the NEG could never fire). L17: a CHECK that calls tempfile.mkdtemp() and records the path got
@@ -82,7 +86,7 @@ def _git(cwd, *a):
 
 
 def _world(spec_body, payload=("payload.txt", "NEWCONTENT\n"), twin=False, checkers=False, envdoc=False,
-           tmpcheck=False):
+           tmpcheck=False, stdincheck=False, lander_text=None):
     """A throwaway HOME containing one uniquely-marked repo, plus a stage."""
     root = tempfile.mkdtemp(prefix="landgate-")
     home = os.path.join(root, "home")
@@ -137,6 +141,14 @@ def _world(spec_body, payload=("payload.txt", "NEWCONTENT\n"), twin=False, check
         _git(repo, "add", "-A")
         _git(repo, "commit", "-qm", "tmp leak check")
         _git(repo, "push", "-q", "origin", "HEAD:refs/heads/master")
+    if stdincheck:                             # v5.2 / L18-L20 — a CHECK that drains stdin, and one after it
+        os.makedirs(os.path.join(repo, "tests"), exist_ok=True)
+        open(os.path.join(repo, "tests", "check_eat.py"), "w").write("import sys\nsys.stdin.read()\n")
+        open(os.path.join(repo, "tests", "check_after.py"), "w").write(
+            "import os\nopen(os.path.join(os.environ['HOME'], 'after_ran'), 'w').write('1')\n")
+        _git(repo, "add", "-A")
+        _git(repo, "commit", "-qm", "stdin checks")
+        _git(repo, "push", "-q", "origin", "HEAD:refs/heads/master")
     sha = subprocess.run(["git", "rev-parse", "HEAD"], cwd=repo,
                          capture_output=True, text=True).stdout.strip()
     if twin:                                   # v1.1 — a SECOND checkout carrying the same markers
@@ -156,8 +168,11 @@ def _world(spec_body, payload=("payload.txt", "NEWCONTENT\n"), twin=False, check
     stage = os.path.join(root, "stage")
     half = os.path.join(stage, "half")
     os.makedirs(half)
-    shutil.copy(os.path.join(_root, "tools", "land.sh"),
-                os.path.join(stage, "land.sh"))
+    if lander_text is None:
+        shutil.copy(os.path.join(_root, "tools", "land.sh"),
+                    os.path.join(stage, "land.sh"))
+    else:                                      # v5.2 — a mutated lander (L19/L20)
+        open(os.path.join(stage, "land.sh"), "w", encoding="utf-8").write(lander_text)
     open(os.path.join(half, payload[0]), "w").write(payload[1])
     open(os.path.join(half, "land.spec"), "w").write(spec_body.replace("@SHA@", sha))
     return root, home, repo, stage, sha
@@ -175,6 +190,7 @@ def _land(spec_body, **kw):
     head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=repo,
                           capture_output=True, text=True).stdout.strip()
     out = r.stdout + r.stderr
+    _AFTER["ran"] = os.path.exists(os.path.join(home, "after_ran"))
     try:                                       # v5.1 — where a CHECK's mkdtemp went, and whether it survived
         _leak = open(os.path.join(home, "tmpleak.txt")).read().strip()
         _TMPLEAK.update(path=_leak, survived=os.path.exists(_leak))
@@ -191,6 +207,7 @@ def _land(spec_body, **kw):
 
 
 _ENVDOC = {}
+_AFTER = {}
 _TMPLEAK = {}
 
 
@@ -319,6 +336,26 @@ check("L17 a CHECK's tempfile.mkdtemp() is NOT at /tmp's top level and is GONE a
       "check: tests/check_tmpleak.py PASS" in out and bool(_lp)
       and os.path.dirname(_lp) != "/tmp" and not _TMPLEAK.get("survived", True),
       f"path={_lp!r} survived={_TMPLEAK.get('survived')}")
+
+# ── L18-L20 (v5.2 / LAND.11) — a CHECK that reads stdin cannot skip the CHECKs after it ──
+_SK = BASE_SPEC.format(extra="CHECK  tests/check_eat.py\nCHECK  tests/check_after.py\nPOS    payload.txt|NEWCONTENT")
+_src = open(os.path.join(_root, "tools", "land.sh"), encoding="utf-8").read()
+_old_loop = (_src.replace("read -r -u 3 line", "read -r line", 1)
+                 .replace("done 3< <(grep -E '^CHECK[[:space:]]'", "done < <(grep -E '^CHECK[[:space:]]'", 1)
+                 .replace('python3 "$chk" </dev/null )', 'python3 "$chk" )', 1))
+_reverted = _old_loop.replace('if [ "$nchk" != "$ndecl" ]; then', "if false; then", 1)
+_mut_ok = _old_loop != _src and _reverted != _old_loop and "read -r -u 3 line" not in _old_loop
+rc, out, sha, head = _land(_SK, stdincheck=True)
+check("L18 a first CHECK that drains stdin does not skip the second: it runs and the land says 2 of 2 ran",
+      _AFTER.get("ran") and "check: tests/check_after.py PASS" in out and "2 of 2 declared CHECK(s) ran" in out,
+      f"rc={rc} after_ran={_AFTER.get('ran')}")
+rc, out, sha, head = _land(_SK, stdincheck=True, lander_text=_reverted)
+check("L19 the fixture bites: under the v5.3 loop (no guard) the second CHECK never runs",
+      _mut_ok and not _AFTER.get("ran"), f"mutation applied={_mut_ok} after_ran={_AFTER.get('ran')} rc={rc}")
+rc, out, sha, head = _land(_SK, stdincheck=True, lander_text=_old_loop)
+check("L20 a lost CHECK is REFUSED by the count guard (CHECK COUNT MISMATCH), HEAD untouched",
+      _mut_ok and rc != 0 and "CHECK COUNT MISMATCH" in out and sha == head,
+      f"mutation applied={_mut_ok} rc={rc} {sha[:8]}->{head[:8]}")
 
 print()
 if FAILED:
