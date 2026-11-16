@@ -1,5 +1,15 @@
 """
-main.py  v5.25
+main.py  v5.26
+v5.26  2026-11-16  OTV5 r129 (LOP.2, FA.3; the cold audit 2026-11-15, critical, live-only) — A BROKER POSITION NO ROW EXPLAINS
+      IS ADOPTED INTRADAY. _intraday_reconcile returned at once when nothing of ours was open and otherwise inspected only
+      the rows it had; the one adoption was the boot reconcile, so an unrecorded fill (r127's lost reply that FILLED, a
+      fill after the confirm deadline, order_guard's FILLED-after-error) had no stop, no exit and no EOD flatten until the
+      next restart. NEW _intraday_adopt, run at every intraday reconcile slot (every 10 min and 15:45/15:50/15:55/15:57):
+      the boot reconcile's own build_plan over this box's family against every open trades.db row and every managed
+      record, log_entry + position manager add, the adopted page. Nothing is adopted while a WORKING order touches a leg
+      to adopt (all or none; paged once a day) or when the order book is unreadable (fail closed). Live only (the call
+      site is behind `not state.paper_trading` and the pass returns on paper before any read). Gate
+      tests/check_intraday_adopt.py.
 v5.25  2026-11-16  OTV5 r127 (LOP.1, FA.1; the cold audit 2026-11-15, critical) — _post_credit_vertical: a placer that RAISES
       (the reply lost, a 30 s run_async timeout) registers the intent with order_guard.after_lost_post before the error
       goes up, so the next call (the entry's next tick, or the remainder supervisor) cancels or blocks on what the
@@ -6418,8 +6428,13 @@ def _intraday_reconcile(state: BotState, instrument: str):
     LIVE intraday broker-truth check (gated by BROKER_RECONCILE_ENABLED). Detects
     positions the broker closed out from under us DURING the session — especially
     a SHORT leg auto-closed while the long remains — and reacts before the 15:45
-    flatten. It only inspects rows WE already manage (it does not adopt brand-new
-    broker positions intraday, so a manual trade you place is left alone).
+    flatten. r129 (LOP.2, FA.3): it then ADOPTS any position of this box's family
+    that no open row explains (_intraday_adopt: the boot reconcile's own build_plan
+    and adopt records), so a fill the bot never recorded is stopped, exited and
+    flattened like any adopted position instead of waiting for the next restart.
+    (Was: "it does not adopt brand-new broker positions intraday, so a manual trade
+    you place is left alone" - a manual trade in this box's family is now adopted at
+    the next slot, as it always was at boot.)
 
     FAIL-SAFE: a failed or empty broker read changes nothing.
     """
@@ -6433,6 +6448,8 @@ def _intraday_reconcile(state: BotState, instrument: str):
 
     open_rows = trade_logger.get_open_trades_live()
     if not open_rows:
+        if broker:                                             # r129 (LOP.2): an unrecorded fill, nothing of ours open
+            _intraday_adopt(state, instrument, broker)
         return
     if not broker:
         logger.warning(
@@ -6499,6 +6516,101 @@ def _intraday_reconcile(state: BotState, instrument: str):
         get_position_manager(state.paper_trading).set_open_positions(
             trade_logger.get_open_trades_live()
         )
+    _intraday_adopt(state, instrument, broker)                 # r129 (LOP.2)
+
+
+# r129 (LOP.2) — one page per day per reason for an adoption the pass had to defer.
+_ADOPT_DEFER_PAGED: dict = {}
+
+
+def _intraday_adopt(state: BotState, instrument: str, broker: list) -> list:
+    """r129 (LOP.2, FA.3; the cold audit 2026-11-15, critical, live-only) — ADOPT, INTRADAY, A BROKER POSITION NO
+    OPEN ROW EXPLAINS. Every path that can leave a fill unrecorded (LOP.1's lost reply that FILLED, a fill after the
+    confirm deadline, order_guard's FILLED-after-error) promised "reconcile adopts it", and only the boot reconcile
+    did: the position had no stop, no exit and no EOD flatten until the next restart.
+
+    The SAME adoption the boot reconcile makes: execution.broker_reconcile.build_plan over this box's family
+    (`broker`, the caller's one get_open_option_positions read) against every row that could claim a leg (all open
+    rows in trades.db, plus the records the position manager holds in memory), journalled with log_entry and handed
+    to the position manager, which then stops, exits and flattens it like any ADOPTED record.
+
+    NEVER TWICE, NEVER BESIDE A CLOSE:
+      · a leg any open row (or managed record) carries is never adopted - a close in flight (r128's LOST stamp, a
+        pending booking write) keeps its row open, so its legs stay claimed;
+      · if any WORKING order in the book touches a leg to adopt (an open still being cancelled by r127's lost-post
+        guard, a close working with no row), NOTHING is adopted this pass (all or none, so a vertical is never split
+        across passes); the next slot looks again. Paged once a day;
+      · an unreadable book adopts nothing (fail closed) and pages once a day;
+      · adopted records get fresh trade ids; the next pass finds their rows open, so they are never adopted again.
+    LIVE ONLY: the caller runs only when not paper_trading, and this returns before any read on paper. Never raises.
+    Returns the adopted records."""
+    try:
+        if state.paper_trading or not broker:
+            return []
+        trade_logger = get_trade_logger()
+        pos_mgr = get_position_manager(state.paper_trading)
+        pos_mgr.has_open_position()                            # hydrate first: never append to an empty, unloaded set
+        from execution.broker_reconcile import build_plan
+        claim = list(trade_logger.get_open_trades() or [])
+        claim += [r for r in pos_mgr.get_open_records() if hasattr(r, "get")]
+        plan = build_plan(broker, claim)
+        if not plan.adopt:
+            return []
+        legs = {str(r.get("option_symbol", "") or "").strip() for r in plan.adopt}
+        day = now_et().strftime("%Y-%m-%d")
+
+        def _defer(kind: str, text: str) -> list:
+            logger.error(f"INTRADAY ADOPT DEFERRED [{instrument}] {text}")
+            if _ADOPT_DEFER_PAGED.get(kind) != day:
+                _ADOPT_DEFER_PAGED[kind] = day
+                try:
+                    get_alert_manager()._send(f"⚠️ {instrument} UNRECORDED POSITION at the broker: "
+                                              f"{', '.join(sorted(legs))}. {text} {fmt_et_short()}")
+                except Exception:                              # noqa: BLE001
+                    pass
+            return []
+
+        try:
+            from data.tasty_client import get_session, get_account, sdk_result
+            from execution.order_guard import _norm_status, _WORKING, _PENDING
+            orders = sdk_result(get_account().get_live_orders(get_session())) or []
+        except Exception as exc:                               # noqa: BLE001
+            return _defer("unread", f"The order book is unreadable ({type(exc).__name__}) - NOT adopted this pass; "
+                                    f"the next reconcile slot retries.")
+        busy = []
+        for o in orders:
+            if _norm_status(o) not in (_WORKING | _PENDING):
+                continue
+            for lg in (getattr(o, "legs", None) or []):
+                if str(getattr(lg, "symbol", "") or "").strip() in legs:
+                    busy.append(str(getattr(o, "id", "") or "?"))
+                    break
+        if busy:
+            return _defer("busy", f"Working order(s) {', '.join(busy)} touch it - NOT adopted while an order is "
+                                  f"working on it; the next reconcile slot retries.")
+
+        anomaly_ids = set(plan.anomalies)
+        for rec in plan.adopt:
+            trade_logger.log_entry(rec)
+            pos_mgr.add_open_position(rec)
+            get_alert_manager().send_adopted_alert(
+                instrument    = instrument,
+                position_desc = _describe_position(rec),
+                contracts     = int(rec.get("contracts", 0) or 0),
+                entry_premium = float(rec.get("entry_premium", 0) or 0),
+                is_short      = bool(rec.get("is_short_position")),
+                anomaly       = rec.get("trade_id") in anomaly_ids,
+                restart_type  = "intraday reconcile",
+            )
+            logger.warning(
+                f"ADOPTED INTRADAY [{instrument}] {_describe_position(rec)} "
+                f"({'short' if rec.get('is_short_position') else 'long'}) x{rec.get('contracts')} "
+                f"id={rec.get('trade_id','')[:8]} - no row explained it; now stopped, exited and flattened"
+            )
+        return list(plan.adopt)
+    except Exception as exc:                                   # noqa: BLE001
+        logger.error(f"Intraday adopt pass failed ({type(exc).__name__}: {exc}) - nothing adopted this pass")
+        return []
 
 
 def _reconcile_with_broker(state: BotState, live_rows: list,
