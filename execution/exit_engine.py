@@ -1,5 +1,17 @@
 """
-execution/exit_engine.py  v5.22
+execution/exit_engine.py  v5.23
+v5.23  2026-11-16  OTV5 r128 (ERC.1 / FA.2, the cold audit 2026-11-15, critical, live-only) — A CLOSE WHOSE place_order
+      REPLY WAS LOST IS NEVER POSTED A SECOND TIME BESIDE ITSELF. At r127 _submit_live_close swallowed the raise and
+      returned None with no order id stored, so the next pass posted a fresh full-size close (at 15:55 a second MARKET
+      order) while the first could be working or filled: two closes for one contract. Now _place keeps the post's start
+      instant until the reply is read; a raise (or a reply with no order id) stamps _live_exit_order_id "LOST:<epoch>",
+      kept in live_exit_state across a restart, and the next pass runs _resolve_lost_close before anything posts: a
+      CLOSING order on the record's legs received no earlier than LOST_CLOSE_SLACK_S (60 s) before the post, not one
+      this close already posted (posted_ids, now kept in the row too), is ADOPTED - polled, cancelled at the deadline,
+      harvested, booked by the ordinary close path; with none, nothing posts for LOST_CLOSE_GRACE_S (10 s), then a fresh
+      close posts only while the broker still holds the remaining quantity on every leg (gone -> nothing posts, page
+      once, the reconcile settles the row); an unreadable book or positions -> nothing posts, page once. Paper never
+      reaches _submit_live_close. Gate tests/check_double_close.py D1-D10.
 v5.22  2026-11-15  OTV5 r124 (AM.13 + AM.14) — FIZZLE NEVER READS THE WHOLE SESSION, AND A LOST DIAL IS SAID. AM.13: when
       _entry_epoch() could not read entry_time (0.0), or the since-entry bar filter raised, the `t0 > 0` guard and an
       `except: pass` let fizzle grade EVERY closed bar of the day, pre-entry bars included (a "since entry" VWAP that
@@ -1081,6 +1093,20 @@ MINUTES_PER_CALENDAR_DAY = 1440    # theta greek is $/share/CALENDAR day (not th
 # reusing `_live_exit_alerted` made a debug-only handler read as "pages". A
 # census you can mislead by choosing a variable name is not a census.
 _telemetry_logged: set = set()
+
+# 🔴 r128 (ERC.1 / FA.2) — A CLOSE WHOSE place_order REPLY WAS LOST. The record's _live_exit_order_id holds
+# LOST_CLOSE_TAG + the post's start (epoch seconds) instead of an order id, and is kept in the row's live_exit_state, so
+# no pass and no restart posts a second close beside one that may be working. ExitEngine._resolve_lost_close reads the
+# broker's book: a closing order on the record's legs received no earlier than LOST_CLOSE_SLACK_S before the post is
+# ADOPTED (polled, cancelled at the deadline, harvested - the ordinary close machinery); with none, nothing posts for
+# LOST_CLOSE_GRACE_S (an order still in flight), then a fresh close posts only while the broker still HOLDS the position.
+LOST_CLOSE_TAG = "LOST:"
+LOST_CLOSE_GRACE_S = 10.0
+LOST_CLOSE_SLACK_S = 60.0
+
+
+def _is_lost_close_id(oid) -> bool:
+    return isinstance(oid, str) and oid.startswith(LOST_CLOSE_TAG)
 
 
 @dataclass
@@ -3634,6 +3660,8 @@ class ExitEngine:
         for k in ("order_id", "last_order_id"):
             if st.get(k):
                 record[f"_live_exit_{k}"] = st[k]
+        if st.get("posted_ids"):                               # r128 (ERC.1)
+            record["_live_exit_posted_ids"] = [str(x) for x in st["posted_ids"]]
         logger.warning(f"LIVE exit {record['trade_id'][:8]}: restored partial-exit "
                        f"state from the row — {sum(q for q, _ in fills):g} already "
                        f"closed, order {st.get('order_id')}")
@@ -3644,11 +3672,14 @@ class ExitEngine:
         oid = record.get("_live_exit_order_id")
         st = None
         if fills or oid is not None:
-            st = json.dumps({"fills": fills,
-                             "order_id": str(oid) if oid is not None else None,
-                             "last_order_id": (str(record["_live_exit_last_order_id"])
-                                               if record.get("_live_exit_last_order_id")
-                                               is not None else None)})
+            st = {"fills": fills,
+                  "order_id": str(oid) if oid is not None else None,
+                  "last_order_id": (str(record["_live_exit_last_order_id"])
+                                    if record.get("_live_exit_last_order_id")
+                                    is not None else None)}
+            if record.get("_live_exit_posted_ids"):       # r128 (ERC.1): a lost close never adopts one of these
+                st["posted_ids"] = [str(x) for x in record["_live_exit_posted_ids"]]
+            st = json.dumps(st)
         if record.get("live_exit_state") == st:
             return
         record["live_exit_state"] = st
@@ -3717,7 +3748,20 @@ class ExitEngine:
         # ── 1. Resume a still-working prior order, else submit fresh ─────────
         order_id = record.get("_live_exit_order_id")
         placed   = None
-        if order_id is not None:
+        if _is_lost_close_id(order_id):
+            # r128 (ERC.1): a prior post's reply was lost. Read the book: adopt the order, or post fresh ONLY when the
+            # book shows none and the broker still holds the position.
+            placed, why = self._resolve_lost_close(record, session, account, order_id, remaining)
+            if placed is None and why:
+                return FillResult(confirmed=False, partial=done_qty > 0, detail=why)
+            order_id = placed.id if placed is not None else None
+            if order_id is None:
+                record.pop("_live_exit_order_id", None)
+            else:
+                record["_live_exit_order_id"] = order_id
+                record["_live_exit_last_order_id"] = order_id
+                self._exit_state_save(record)
+        elif order_id is not None:
             try:
                 placed = sdk_result(account.get_order(session, order_id))   # B0
                 logger.info(f"LIVE exit {trade_id[:8]}: resuming order {order_id} "
@@ -3747,6 +3791,9 @@ class ExitEngine:
                                              reason=reason)
             if placed is None and record.pop("_exit_nomark_hold", None):
                 return FillResult(confirmed=False, detail="no mark before the cross; nothing posted")   # F3
+            if placed is None and _is_lost_close_id(record.get("_live_exit_order_id")):
+                return FillResult(confirmed=False, partial=done_qty > 0,
+                                  detail="close reply lost; the broker's book is read before any new close")   # r128
             if placed is None:
                 self._alert_live_exit_once(
                     trade_id, "submit",
@@ -3756,6 +3803,7 @@ class ExitEngine:
             order_id = placed.id
             record["_live_exit_order_id"]      = order_id
             record["_live_exit_last_order_id"] = order_id
+            record.setdefault("_live_exit_posted_ids", []).append(str(order_id))   # r128: never adopted twice
             self._exit_state_save(record)    # B3: a kill mid-poll resumes THIS order
             logger.info(f"LIVE exit {trade_id[:8]}: close submitted, order "
                         f"{order_id}, qty={remaining} — awaiting broker fill")
@@ -3841,6 +3889,87 @@ class ExitEngine:
                                       detail="deadline; cancel unresolved; resuming next tick")
             time.sleep(poll)
 
+    def _resolve_lost_close(self, record, session, account, lost_id, remaining):
+        """r128 (ERC.1) — a prior close post's reply was lost. Returns (order, "") to ADOPT a close the broker holds,
+        (None, "") when the book shows none and the broker still holds the position (post fresh), or (None, why) when
+        nothing may post this pass (an order may still be in flight, the book or the positions are unreadable, or the
+        position is gone). Never raises."""
+        from execution.order_guard import _opened_ts, _has_fills
+        tid = str(record.get("trade_id", ""))
+        try:
+            t0 = float(str(lost_id)[len(LOST_CLOSE_TAG):])
+        except (TypeError, ValueError):
+            t0 = 0.0                                           # no instant: every close order on the legs counts
+        syms = {str(record.get(k) or "").strip() for k in
+                ("option_symbol", "short_symbol", "long_symbol", "lower_symbol", "center_symbol", "upper_symbol")}
+        syms.discard("")
+        known = {str(x) for x in (record.get("_live_exit_posted_ids") or [])}
+        if record.get("_live_exit_last_order_id") is not None:
+            known.add(str(record["_live_exit_last_order_id"]))
+        try:
+            orders = sdk_result(account.get_live_orders(session)) or []
+        except Exception as e:                                 # noqa: BLE001
+            self._alert_live_exit_once(tid, "lost-book",
+                                       f"LIVE close {tid[:8]}: reply lost and the broker's book is UNREADABLE ({e}) "
+                                       f"— nothing posts until it reads; position stays OPEN")
+            return None, f"lost close: book unreadable ({e}); nothing posted"
+        cands = []
+        for o in orders:
+            oid = str(getattr(o, "id", "") or "")
+            legs = getattr(o, "legs", None) or []
+            if not oid or oid in known or not legs:
+                continue
+            if not any(str(getattr(lg, "symbol", "") or "").strip() in syms for lg in legs):
+                continue
+            acts = [getattr(lg, "action", "") for lg in legs]
+            acts = [str(getattr(a, "value", None) or getattr(a, "name", None) or a).upper().replace(" ", "_")
+                    for a in acts]
+            if not all("CLOSE" in a for a in acts):
+                continue                                       # an opening order is the entry guard's, never a close
+            ts = _opened_ts(o)
+            if ts is not None and t0 and ts < t0 - LOST_CLOSE_SLACK_S:
+                continue
+            if getattr(o, "status", None) in self._DEAD_STATES | {OrderStatus.REJECTED} and not _has_fills(o):
+                continue                                       # died with nothing filled: not a close
+            cands.append(o)
+        if cands:
+            cands.sort(key=lambda o: _opened_ts(o) or 0.0)
+            live = [o for o in cands if getattr(o, "status", None) not in self._DEAD_STATES | {OrderStatus.FILLED}]
+            pick = (live or cands)[-1]
+            if len(cands) > 1:
+                self._alert_live_exit_once(tid, "lost-many",
+                                           f"LIVE close {tid[:8]}: reply lost and the book holds {len(cands)} close "
+                                           f"orders on its legs ({', '.join(str(o.id) for o in cands)}) — adopting "
+                                           f"{pick.id}; check the broker")
+            logger.warning(f"LIVE exit {tid[:8]}: the lost close is order {pick.id} "
+                           f"(status={getattr(pick, 'status', None)}) — ADOPTED, no new close posted")
+            return pick, ""
+        age = time.time() - t0 if t0 else LOST_CLOSE_GRACE_S
+        if age < LOST_CLOSE_GRACE_S:
+            return None, (f"lost close: no order in the book yet, waiting "
+                          f"{LOST_CLOSE_GRACE_S - age:.0f}s more; nothing posted")
+        try:
+            held = {}
+            for p in (sdk_result(account.get_positions(session)) or []):
+                s = str(getattr(p, "symbol", "") or "").strip()
+                if s in syms:
+                    held[s] = held.get(s, 0.0) + abs(float(getattr(p, "quantity", 0) or 0))
+        except Exception as e:                                 # noqa: BLE001
+            self._alert_live_exit_once(tid, "lost-pos",
+                                       f"LIVE close {tid[:8]}: reply lost, no order in the book, and the positions "
+                                       f"are UNREADABLE ({e}) — nothing posts until they read; position stays OPEN")
+            return None, f"lost close: positions unreadable ({e}); nothing posted"
+        short = sorted(s for s in syms if held.get(s, 0.0) < remaining)
+        if short:
+            self._alert_live_exit_once(tid, "lost-gone",
+                                       f"LIVE close {tid[:8]}: reply lost, no close order in the book, and the broker "
+                                       f"no longer holds {remaining} of {', '.join(short)} — NO new close (it could "
+                                       f"open a short); the reconcile settles the row. Check the broker.")
+            return None, "lost close: no order in the book and the position is not held; nothing posted"
+        logger.warning(f"LIVE exit {tid[:8]}: the lost close left no order at the broker and the position is still "
+                       f"held — a fresh close posts")
+        return None, ""
+
     def _resolve_dead_order(self, record, placed, prior, total,
                             order_id, trade_id) -> FillResult:
         """A close order reached a terminal non-FILLED state. Harvest whatever
@@ -3888,7 +4017,7 @@ class ExitEngine:
         qty = sum(q for q, _ in fills)
         wavg = sum(q * p for q, p in fills) / qty
         for k in ("_live_exit_fills", "_live_exit_order_id", "_live_exit_last_order_id",
-                  "_exit_last_limit"):
+                  "_exit_last_limit", "_live_exit_posted_ids"):
             record.pop(k, None)
         self._exit_walk_done(record)      # r105 — no stale ratchet outlives a fill
         logger.info(f"LIVE exit {record['trade_id'][:8]}: CONFIRMED fill "
@@ -4152,24 +4281,39 @@ class ExitEngine:
         # structure crosses at 15:55. See _exit_policy.
         force_market = ("hard_close" in (reason or "").lower()
                         and hard_close_order_mode(now_et()) == "market")   # r149: credits cross too
+        self._close_post_t0 = None
+        placed = None
         try:
             session = get_session()
             account = get_account()
             if is_tent(record):
-                return self._close_tent(session, account, record, contracts,
-                                        mark_price, reason=reason)
-            is_vertical = (bool(record.get("is_condor_leg"))
-                           or record.get("strategy") == "IronCondorStrategy"
-                           or (record.get("short_symbol") and record.get("long_symbol")))
-            if is_vertical:
-                return self._close_vertical(session, account, record,
-                                            contracts, mark_price, force_market,
-                                            reason=reason)
-            return self._close_single_leg(session, account, record, contracts,
-                                          mark_price, force_market, reason=reason)
+                placed = self._close_tent(session, account, record, contracts,
+                                          mark_price, reason=reason)
+            elif (bool(record.get("is_condor_leg"))
+                  or record.get("strategy") == "IronCondorStrategy"
+                  or (record.get("short_symbol") and record.get("long_symbol"))):
+                placed = self._close_vertical(session, account, record,
+                                              contracts, mark_price, force_market,
+                                              reason=reason)
+            else:
+                placed = self._close_single_leg(session, account, record, contracts,
+                                                mark_price, force_market, reason=reason)
         except Exception as e:
             logger.error(f"Live close submit failed for {record['trade_id'][:8]}: {e}")
-            return None
+            placed = None
+        # 🔴 r128 (ERC.1 / FA.2) — place_order RAISED (a lost reply) or answered with no order id: the close may be
+        # working at the broker with no id here. Stamp the record LOST (persisted by _exit_state_save) so the next pass
+        # reads the broker's book before it posts anything (_resolve_lost_close).
+        t0 = getattr(self, "_close_post_t0", None)
+        self._close_post_t0 = None
+        if placed is None and t0 is not None:
+            record["_live_exit_order_id"] = f"{LOST_CLOSE_TAG}{t0:.3f}"
+            self._alert_live_exit_once(
+                record.get("trade_id", ""), "lost-close",
+                f"LIVE close {str(record.get('trade_id', ''))[:8]}: the close order's reply was LOST — it may be "
+                f"working at the broker; NO new close posts until the broker's book is read (adopt, or confirmed "
+                f"absent with the position still held)")
+        return placed
 
     @staticmethod
     def _tick_for(record: TradeRecord) -> float:
@@ -4192,15 +4336,20 @@ class ExitEngine:
         return max(tick, round(round(price / tick) * tick, 2))
 
     def _place(self, session, account, order, what: str) -> Optional["object"]:
+        # r128 (ERC.1): the post's start instant, kept until the broker's reply is read. Still set when
+        # _submit_live_close ends (place_order raised, or a reply with no order id) -> the close may be LIVE.
+        self._close_post_t0 = time.time()
         response = sdk_result(account.place_order(session, order, dry_run=False))   # B0
         if getattr(response, "errors", None):
+            self._close_post_t0 = None                     # the broker answered: refused, nothing working
             logger.error(f"{what} order errors: {response.errors}")
             return None
         placed = getattr(response, "order", None)
         if placed is None or getattr(placed, "id", None) is None:
             logger.error(f"{what} order: no order id in response — cannot poll; "
-                         f"treating as submit failure")
+                         f"treating as a LOST close (r128): the broker is read before any new close")
             return None
+        self._close_post_t0 = None
         return placed
 
     def _nomark_hold(self, record, mark_price, symbol: str) -> bool:

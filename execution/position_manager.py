@@ -1,5 +1,14 @@
 """
-execution/position_manager.py  v5.38
+execution/position_manager.py  v5.39
+v5.39  2026-11-16  OTV5 r128 (MC.1 / FA.4, the cold audit 2026-11-15) — A BOOKING WRITE THAT RAISES AFTER A CONFIRMED CLOSE
+      RETRIES ONLY THE WRITE, NEVER THE ORDER. At r127 _execute_exit called log_exit unwrapped after the fill was
+      confirmed (the exit engine had already dropped the fills and the row's live_exit_state), so a raise (sqlite I/O
+      error, full disk) left the record managed with nothing remembered and the next pass posted a fresh close for
+      contracts the account no longer held. Now the confirmed FillResult and decision are kept in _BOOK_PENDING by trade
+      id (survives a re-read of the open records), the operator is paged once, and every later pass - _manage_one first
+      thing, flatten_all through _execute_exit - re-writes the SAME fill without calling place_exit_order. The steps after
+      a successful write (risk tally, exit alert, trail cleanup) now log a failure instead of raising, so a booked close
+      can never stay managed. The normal path, paper and live, is unchanged. Gate tests/check_double_close.py B1-B6.
 v5.38  2026-11-14  OTV5 (OGAP.1) — OGAP joins the admission table: its window (config.ENTRY_WINDOWS["OGAP"], 09:46-10:32), one open, one try per session, cap-exempt (its own $500 budget), as PARK. Every other row is unchanged.
 v5.37  2026-11-14  OTV5 r113 (AM.7) — the excursion (mfe/mae and their bars) sees EVERY priced tick, including the one
       the management plan exits on: _manage_one calls exit_engine._track_excursion before decide() (a plan CLOSE skipped
@@ -401,6 +410,11 @@ def _vertical_close_due() -> bool:
 
 logger = logging.getLogger(__name__)
 _HELD_LOGGED: set = set()      # r36 (EOD.2): trade ids whose intended EOD hold has been named once
+# 🔴 r128 (MC.1 / FA.4) — trade id -> {"fill", "decision"} of a CONFIRMED close whose log_exit RAISED (sqlite I/O
+# error, full disk). The position is gone at the broker; only the WRITE is retried (every pass, from _manage_one and
+# flatten_all through _execute_exit), never the order. Process memory, keyed by trade id, so a reload of the open
+# records from the DB (still 'open' there) cannot forget it; a restart's boot reconcile finds the position gone.
+_BOOK_PENDING: dict = {}
 _WARNED_LEG_COUNT: set = set()   # SWALLOW T1: warn once on an unreadable count
 
 
@@ -1039,6 +1053,9 @@ class PositionManager:
                     vol_state=None, trend=None) -> bool:
         """Manage one record. Returns True if it should remain open."""
         trade_id = record["trade_id"]
+        if trade_id in _BOOK_PENDING:                # r128 (MC.1): closed at the broker; only the write is owed
+            return not self._execute_exit(record, _BOOK_PENDING[trade_id]["decision"],
+                                          record.get("current_premium"))
 
         current_premium = self._fetch_current_premium(record, chain)
         if current_premium is None:
@@ -1399,7 +1416,12 @@ class PositionManager:
         trade_id = record["trade_id"]
 
         exit_eng = get_exit_engine(self.paper_trading)
-        fill     = exit_eng.place_exit_order(record, decision.exit_reason,
+        _pend = _BOOK_PENDING.get(trade_id)
+        if _pend is not None:
+            # r128 (MC.1): this close already FILLED and only its booking write failed — retry the WRITE, no order.
+            fill, decision = _pend["fill"], _pend["decision"]
+        else:
+            fill = exit_eng.place_exit_order(record, decision.exit_reason,
                                              mark_price=current_premium)
 
         if not fill.confirmed:
@@ -1442,13 +1464,33 @@ class PositionManager:
         _exc = {k: record.get(k) for k in
                 ("mfe_premium", "mfe_bars", "mae_premium", "mae_bars")
                 if record.get(k) is not None} if isinstance(record, dict) else None
-        self._trade_logger.log_exit(
-            trade_id    = trade_id,
-            exit_price  = fill_price,
-            pnl_usd     = pnl_usd,
-            exit_reason = decision.exit_reason,
-            excursion   = _exc or None,
-        )
+        try:
+            self._trade_logger.log_exit(
+                trade_id    = trade_id,
+                exit_price  = fill_price,
+                pnl_usd     = pnl_usd,
+                exit_reason = decision.exit_reason,
+                excursion   = _exc or None,
+            )
+        except Exception as _le:                                  # noqa: BLE001
+            # 🔴 r128 (MC.1 / FA.4) — the close is DONE (confirmed fill); a raise here used to leave the record
+            # managed with no exit state, so the next pass posted a fresh full-size close. Keep the fill, page once,
+            # and let every later pass retry ONLY this write.
+            _first = trade_id not in _BOOK_PENDING
+            _BOOK_PENDING[trade_id] = {"fill": fill, "decision": decision}
+            logger.error(f"Exit {trade_id[:8]} FILLED @ {fill_price:.2f} but the booking write FAILED "
+                         f"({type(_le).__name__}: {_le}) — no new close; retrying the write each pass")
+            if _first:
+                try:
+                    get_alert_manager()._send(
+                        f"\U0001F6A8 Exit {trade_id[:8]} FILLED @ {fill_price:.2f} ({decision.exit_reason}) but the "
+                        f"trade row could NOT be written ({type(_le).__name__}: {_le}). No new close is sent; the "
+                        f"write retries each pass. Check the disk / trades.db.")
+                except Exception:                                 # noqa: BLE001
+                    pass
+            return False
+        if _BOOK_PENDING.pop(trade_id, None) is not None:
+            logger.warning(f"Exit {trade_id[:8]}: the pending booking write went through")
         # r195 (AUD.4) — THE EXIT-SIDE QUOTE, FINALLY WRITTEN. set_exit_contract existed
         # since v3.13 and NOTHING CALLED IT: exit_bid / exit_ask / exit_iv were empty on
         # 237 of 237 closed trades, so neither the exit's spread cost nor IV crush could
@@ -1466,23 +1508,34 @@ class PositionManager:
                 logger.warning("exit quote capture raised (%s: %s) - warned once",
                                type(_xe).__name__, _xe)
 
-        risk_mgr = get_risk_manager()
-        if pnl_usd >= 0:
-            risk_mgr.record_win(pnl_usd)
-        else:
-            risk_mgr.record_loss(pnl_usd)
+        # r128 (MC.1): the row is BOOKED from here — a raise below must not leave the record managed (the next pass
+        # would post a fresh close for a position that is gone). Each step logs its failure and the close stands.
+        try:
+            risk_mgr = get_risk_manager()
+            if pnl_usd >= 0:
+                risk_mgr.record_win(pnl_usd)
+            else:
+                risk_mgr.record_loss(pnl_usd)
+        except Exception as _re:                                  # noqa: BLE001
+            logger.error(f"Exit {trade_id[:8]} booked, but the risk tally FAILED ({type(_re).__name__}: {_re})")
 
-        get_alert_manager().send_exit_alert(
-            trade_id      = trade_id,
-            setup_type    = record.get("setup_type", ""),
-            exit_premium  = fill_price,
-            entry_premium = entry_prem,
-            pnl_usd       = pnl_usd,
-            contracts     = contracts,
-            reason        = decision.exit_reason,
-        )
+        try:
+            get_alert_manager().send_exit_alert(
+                trade_id      = trade_id,
+                setup_type    = record.get("setup_type", ""),
+                exit_premium  = fill_price,
+                entry_premium = entry_prem,
+                pnl_usd       = pnl_usd,
+                contracts     = contracts,
+                reason        = decision.exit_reason,
+            )
+        except Exception as _ae:                                  # noqa: BLE001
+            logger.error(f"Exit {trade_id[:8]} booked, but the exit alert FAILED ({type(_ae).__name__}: {_ae})")
 
-        exit_eng.clear_trail(trade_id)
+        try:
+            exit_eng.clear_trail(trade_id)
+        except Exception as _ce:                                  # noqa: BLE001
+            logger.error(f"Exit {trade_id[:8]} booked, but the trail cleanup FAILED ({type(_ce).__name__}: {_ce})")
 
         # EOD.3 (r42) — exit= is the BOOKED fill, the price pnl was computed from.
         # It printed current_premium (the mark): CVX 006f6eca 2026-10-27 logged
