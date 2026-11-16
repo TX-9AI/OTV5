@@ -1,6 +1,17 @@
 #!/usr/bin/env python3
 """
-warehouse/retention_purge.py  v5.3
+warehouse/retention_purge.py  v5.4
+v5.4  2026-11-16  OTV5 r130 (VAC.1) — THE VACUUM AFTER THE PURGE RUNS ONLY ON A QUIET BOX, INSIDE A BOUND, AND SAYS WHAT
+      IT DID ON THE BOX'S OWN DISK. AMD 2026-11-16: feed_store.db 1.83 GB, 52% of its pages free, after the 11-13 close
+      whose purge the conductor killed at its 900 s per-box timeout; the verdict went to a tmpfs file the halt erased.
+      reclaim() vacuums only when _vacuum_blocked finds nothing: outside Monday-Friday 08:00-16:00 ET (the boot and
+      the session), optionsbot and candle-feed both stopped (`systemctl is-active`; an unreadable answer skips), and
+      no other process holding the file or its WAL (/proc). _vacuum_budget gives it min(600 s, 860 s after the purge
+      started) and an estimate at the measured 10 MB/s of live pages; it is not started if it cannot finish, and a
+      progress handler interrupts it at the bound, so SQLite rolls it back and the file is left as it was. The space
+      gate (2.2x live) still runs first and unchanged. Every verdict is appended to <box>/logs/reclaim.log. Constants
+      in this file only - no env key, no configure.sh item. Gate tests/check_feed_vacuum.py F1-F12 F2b; the
+      operator, 2026-11-16: "Yes, build it".
 v5.3  2026-11-08  OTV5 r94 (CAP.1) — tools/capture_all.py's local spool (data/capture_spool) is purged at 3 days by mtime;
       a capture object leaves it on a successful PUT, so only a long S3 failure leaves anything for this to find.
 v5.2  2026-11-07  OTV5 r77 (RET.2) — THE BOX KEEPS TWO WEEKS OF PLAN ROWS AND A MONTH OF NOTES; S3 KEEPS EVERYTHING.
@@ -594,6 +605,164 @@ def _vacuum_min_free() -> int:
         return VACUUM_MIN_FREE_MB * 1024 * 1024
 
 
+# ── r130 (VAC.1) — THE VACUUM RUNS ONLY WHEN NOTHING ELSE HOLDS THE STORE, NEVER IN THE TRADING DAY, AND INSIDE A BOUND.
+# AMD 2026-11-16: feed_store.db 1.83 GB with 52% of its pages free after the 11-13 close, whose purge the conductor
+# killed at its 900 s per-box timeout, so the vacuum below either never started or was killed part-way, and nothing
+# said which (the verdict went to a tmpfs file the halt erased). Constants in this file only - no env key, no
+# configure.sh item (the operator's rule).
+# The trading day plus the boot before it: Monday-Friday, 08:00 to 16:00 ET. The fleet wakes at 09:15 and the bot
+# and the feed start behind the wake, so a vacuum there would hold their writes (r275: the feed's 5 s sqlite timeout
+# lost to a VACUUM and it crash-looped). Both close paths run after 16:00; a half day's earlier close skips the
+# vacuum and the next close does it.
+VACUUM_DAY_ET = (8, 16)
+# Units that write these stores. The conductor (stop_services) and self_close stop both before the purge; the
+# box-local timer (install_retention_purge_timer.sh) stops only the feed, so there the vacuum now skips while the
+# bot runs.
+VACUUM_WRITER_UNITS = ("optionsbot", "candle-feed")
+# The conductor TERMs the whole purge 900 s after it starts (dtp eod_conductor_v2 VERIFY_TIMEOUT_S) and KILLs it
+# 10 s later. A vacuum must END before that, so it must finish by 860 s after this module was imported (the
+# purge's own start) and never runs longer than VACUUM_MAX_S. Past its bound SQLite interrupts it and rolls it
+# back: the database is left as it was, and the next close tries again.
+VACUUM_RUN_LIMIT_S = 860
+VACUUM_MAX_S = 600
+# The rate used to decide, before starting, whether a vacuum can finish inside its bound. MEASURED 2026-11-16 on
+# control (gp3) on a quote_series-shaped WAL store sized like AMD's: 771 MB live / 756 MB free, VACUUM 77.1 s =
+# 10.0 MB/s of live pages. The estimate only saves starting a vacuum that cannot finish; if it is optimistic the
+# bound above still stops the vacuum, rolled back, before the conductor's kill.
+VACUUM_RATE_MBS = 10.0
+_T0 = time.monotonic()
+
+
+def _vacuum_day(now_et) -> bool:
+    """True inside the weekday 08:00-16:00 ET window where a vacuum never runs."""
+    return now_et.weekday() < 5 and VACUUM_DAY_ET[0] <= now_et.hour < VACUUM_DAY_ET[1]
+
+
+def _units_active(run=None):
+    """-> the VACUUM_WRITER_UNITS that are running, or None when that cannot be told (the caller then skips)."""
+    import subprocess
+    run = run or subprocess.run
+    try:
+        r = run(["systemctl", "is-active"] + list(VACUUM_WRITER_UNITS),
+                capture_output=True, text=True, timeout=20)
+        states = (r.stdout or "").split()
+    except Exception:                                          # noqa: BLE001
+        return None
+    if len(states) != len(VACUUM_WRITER_UNITS):
+        return None
+    return [u for u, s in zip(VACUUM_WRITER_UNITS, states)
+            if s in ("active", "activating", "deactivating", "reloading", "refreshing")]
+
+
+def _holders(path: str, proc: str = "/proc") -> list:
+    """-> ["pid (name)", ...] for every OTHER process holding `path` or its WAL open. Every writer runs as ubuntu,
+    as the purge does, so their fd tables are readable; a process whose table is not readable is skipped."""
+    want = set()
+    for p in (path, path + "-wal"):
+        want.add(os.path.realpath(p))
+    me = str(os.getpid())
+    out = []
+    try:
+        pids = [p for p in os.listdir(proc) if p.isdigit() and p != me]
+    except OSError:
+        return out
+    for pid in pids:
+        fd_dir = os.path.join(proc, pid, "fd")
+        try:
+            fds = os.listdir(fd_dir)
+        except OSError:
+            continue
+        for fd in fds:
+            try:
+                tgt = os.readlink(os.path.join(fd_dir, fd))
+            except OSError:
+                continue
+            if tgt in want:
+                try:
+                    with open(os.path.join(proc, pid, "comm"), encoding="utf-8") as fh:
+                        name = fh.read().strip()
+                except OSError:
+                    name = "?"
+                out.append("%s (%s)" % (pid, name))
+                break
+    return out
+
+
+def _vacuum_blocked(path: str, now_et=None, units=None, holders=None):
+    """-> the reason a vacuum of `path` must not run now, or None. Read-only; any doubt is a reason."""
+    if now_et is None:
+        from datetime import datetime
+        from zoneinfo import ZoneInfo
+        now_et = datetime.now(ZoneInfo("America/New_York"))
+    if _vacuum_day(now_et):
+        return "inside the trading day (%s ET; weekdays %02d:00-%02d:00)" % (
+            now_et.strftime("%a %H:%M"), VACUUM_DAY_ET[0], VACUUM_DAY_ET[1])
+    up = (units or _units_active)()
+    if up is None:
+        return "cannot tell whether %s are stopped" % "/".join(VACUUM_WRITER_UNITS)
+    if up:
+        return "%s still running" % ", ".join(up)
+    held = (holders or _holders)(path)
+    if held:
+        return "held open by %s" % ", ".join(held)
+    return None
+
+
+def _vacuum_budget(live_bytes: int, now_mono: float = None):
+    """-> (seconds the vacuum may run, seconds it is estimated to need)."""
+    now_mono = time.monotonic() if now_mono is None else now_mono
+    left = VACUUM_RUN_LIMIT_S - (now_mono - _T0)
+    return min(float(VACUUM_MAX_S), left), live_bytes / (VACUUM_RATE_MBS * 1048576)
+
+
+def _vacuum_bounded(path: str, budget_s: float) -> str:
+    """VACUUM `path`, interrupted past `budget_s`. -> verdict. Never raises. SQLite rolls back an interrupted or
+    failed vacuum, so the file is left as it was; nothing here deletes or replaces a file."""
+    os.environ["SQLITE_TMPDIR"] = os.path.dirname(path) or "."
+    c = None
+    t = time.monotonic()
+    ok = False
+    try:
+        c = sqlite3.connect(path, timeout=10)
+        c.execute("pragma busy_timeout=10000")
+        stop = t + budget_s
+        c.set_progress_handler(lambda: 1 if time.monotonic() > stop else 0, 20000)
+        c.execute("vacuum")
+        ok = True
+        return "vacuumed in %.0fs" % (time.monotonic() - t)
+    except Exception as exc:                                    # noqa: BLE001
+        if "interrupt" in str(exc).lower():
+            return ("vacuum STOPPED at its %.0fs bound and rolled back; the store is unchanged"
+                    % budget_s)
+        return "vacuum FAILED: %s (rolled back; the store is unchanged)" % exc
+    finally:
+        if c is not None:
+            try:
+                c.set_progress_handler(None, 0)
+                if not ok:
+                    # A rolled-back vacuum leaves its frames in the WAL; return them (a no-op if anything holds it).
+                    c.execute("pragma busy_timeout=0")
+                    c.execute("pragma wal_checkpoint(TRUNCATE)")
+            except Exception:                                   # noqa: BLE001
+                pass
+            try:
+                c.close()
+            except Exception:                                   # noqa: BLE001
+                pass
+
+
+def _record(log_path: str, name: str, verdict: str) -> None:
+    """Append one reclaim verdict to the box's own log (the conductor's copy is on tmpfs). Best effort."""
+    if not log_path:
+        return
+    try:
+        os.makedirs(os.path.dirname(log_path), exist_ok=True)
+        with open(log_path, "a", encoding="utf-8") as fh:
+            fh.write("%s %s %s\n" % (time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), name, verdict))
+    except OSError:
+        pass
+
+
 def _mb(n) -> str:
     n = float(n or 0)
     return "%.0fMB" % (n / 1048576) if n < 1073741824 else "%.2fGB" % (n / 1073741824)
@@ -699,7 +868,7 @@ def _db_stat(path: str) -> dict:
     return out
 
 
-def reclaim(paths, apply: bool) -> dict:
+def reclaim(paths, apply: bool, log_path: str = "", blocked=None) -> dict:
     """CHECKPOINT then GATED VACUUM. -> {path: one-line verdict}.
 
     🔑 ORDER IS THE DESIGN, NOT A PREFERENCE. The checkpoint is cheap, needs no
@@ -711,7 +880,13 @@ def reclaim(paths, apply: bool) -> dict:
     ⚠️ NEITHER STEP MAY BLOCK THE HALT. Every failure is caught and reported;
     the box still comes down, because a box left running all night costs money
     and a large file does not (`purge_verified`'s rule, applied here).
+
+    r130 (VAC.1): the vacuum also needs nothing else holding the store (`blocked`, default _vacuum_blocked: outside
+    the weekday 08:00-16:00 ET day, both writer units stopped, no other process with the file open) and a budget it
+    can finish in (_vacuum_budget); it is interrupted past that budget and rolled back. Each verdict is appended to
+    `log_path` (purge() passes the box's logs/reclaim.log).
     """
+    blocked = blocked or _vacuum_blocked
     out = {}
     for path in paths:
         if not os.path.exists(path):
@@ -766,18 +941,29 @@ def reclaim(paths, apply: bool) -> dict:
         elif not apply:
             note.append("[dry] would vacuum, reclaiming ~%s" % _mb(st["free"]))
         else:
-            # ⚠️ SQLITE_TMPDIR ON THE DATA DIRECTORY. /tmp is a 476 MB tmpfs and
-            # a 1.8 GB rewrite cannot fit in it — measured on MU, NVDA and QQQ,
-            # 2026-08-27.
-            os.environ["SQLITE_TMPDIR"] = os.path.dirname(path) or "."
+            # ⚠️ SQLITE_TMPDIR ON THE DATA DIRECTORY (inside _vacuum_bounded). /tmp is a 476 MB tmpfs and a 1.8 GB
+            # rewrite cannot fit in it — measured on MU, NVDA and QQQ, 2026-08-27.
+            # r130 (VAC.1): only with no other writer, outside the trading day, and inside a bound it can finish in.
             try:
-                c = sqlite3.connect(path, timeout=60)
-                c.execute("vacuum")
-                c.close()
-                note.append("vacuumed, reclaimed ~%s" % _mb(st["free"]))
+                why = blocked(path)
             except Exception as exc:                            # noqa: BLE001
-                note.append("vacuum FAILED: %s" % exc)
+                why = "the writer check failed (%s)" % exc
+            if why:
+                note.append("vacuum skipped: %s (%s reclaimable)" % (why, _mb(st["free"])))
+            else:
+                budget, est = _vacuum_budget(st["live"])
+                if est > budget:
+                    note.append("vacuum skipped: ~%.0fs estimated for %s live, %.0fs left before the purge's "
+                                "bound (%s reclaimable)" % (est, _mb(st["live"]), max(budget, 0), _mb(st["free"])))
+                else:
+                    v = _vacuum_bounded(path, budget)
+                    if v.startswith("vacuumed"):
+                        v += ", reclaimed ~%s, file %s -> %s" % (
+                            _mb(st["free"]), _mb(st["live"] + st["free"]), _mb(os.path.getsize(path)))
+                    note.append(v)
         out[os.path.basename(path)] = " | ".join(note)
+        if apply:
+            _record(log_path, os.path.basename(path), out[os.path.basename(path)])
     return out
 
 
@@ -1033,7 +1219,8 @@ def purge(apply: bool = False, feed_db: str = "", derived_db: str = "") -> dict:
     # WAL that the deletes immediately refill, and a vacuum before them would
     # copy rows that are about to go.
     removed["_reclaim"] = reclaim(
-        [feed_db, derived_db, TRADES_DB], apply)
+        [feed_db, derived_db, TRADES_DB], apply,
+        log_path=os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(feed_db))), "logs", "reclaim.log"))
 
     # ── r255: WHAT REMAINS, so the next tuning decision is a query ──────────
     # ⚠️ THIS IS NOT DECORATION. Nothing in a deletion count explains why MU

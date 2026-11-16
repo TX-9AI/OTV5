@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""tests/check_purge_reclaim.py — v5.1
+"""tests/check_purge_reclaim.py — v5.2
+v5.2  2026-11-16  OTV5 r130 (VAC.1) — every reclaim() here passes blocked=_no_writer: the vacuum now also waits for
+      a quiet box (outside the weekday 08:00-16:00 ET day, optionsbot and candle-feed stopped, no other holder), so
+      R3b would follow the wall clock and the box it runs on; this file tests the checkpoint and the space gate, and
+      tests/check_feed_vacuum.py tests the quiet-box gate itself. No check changed.
 v5.1  2026-11-07  OTV5 RET.2 — R7 re-pointed: strategy_note joins plan_tick and plan_check in DERIVED_CDC_DAYS
       (the operator's 2026-11-07 ruling took it out of NEVER_PURGE); R7c still pins plan_ledger as protected.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
@@ -86,6 +90,11 @@ def _rig(tmp):
     return d, f, g
 
 
+def _no_writer(_path):
+    """r130 (VAC.1): the quiet-box gate, opened. Its own checks are tests/check_feed_vacuum.py."""
+    return None
+
+
 def _sz(p):
     try:
         return os.path.getsize(p)
@@ -129,7 +138,7 @@ def main():
         # returns busy=1 while ANY other connection holds a read mark, and the
         # WAL is only partly reclaimed. The fixture keeps its writer open on
         # purpose, because that is a box whose services are still up.
-        verdict = rp.reclaim([feed], apply=True)["feed_store.db"]
+        verdict = rp.reclaim([feed], apply=True, blocked=_no_writer)["feed_store.db"]
         wal_live = _sz(feed + "-wal")
         check("R2 a checkpoint with the store still open does NOT fully "
               "truncate, and reports it rather than claiming success",
@@ -141,7 +150,7 @@ def main():
         # only worth what the checkpoint reclaims, and the checkpoint is only
         # whole once nothing holds the store open. Filed rather than assumed.
         fconn.close()
-        rp.reclaim([feed], apply=True)
+        rp.reclaim([feed], apply=True, blocked=_no_writer)
         wal_after = _sz(feed + "-wal")
         check("R2b with no reader holding it, the checkpoint returns the WAL",
               wal_after < wal_before / 4,
@@ -160,14 +169,14 @@ def main():
         # Floor raised so the vacuum SKIPS: this measures the state the fleet is
         # actually in — checkpointed, purged, and still holding its free pages.
         os.environ["OT_VACUUM_MIN_FREE_MB"] = "999999"
-        rp.reclaim([feed], apply=True)
+        rp.reclaim([feed], apply=True, blocked=_no_writer)
         st = rp._db_stat(feed)
         size_before = _sz(feed)
         check("R3 a checkpoint alone leaves the free pages inside the file",
               st["free"] > 1_000_000, f"{st['free']/1048576:.1f}MB free")
         # ⚠️ THE FLOOR MOVES THROUGH THE ENV, WHICH IS THE REAL RESOLUTION PATH.
         os.environ["OT_VACUUM_MIN_FREE_MB"] = "1"
-        rp.reclaim([feed], apply=True)
+        rp.reclaim([feed], apply=True, blocked=_no_writer)
         check("R3b ...and only a vacuum returns them to the filesystem",
               _sz(feed) < size_before * 0.9,
               f"{size_before/1048576:.1f}MB -> {_sz(feed)/1048576:.1f}MB")
@@ -189,7 +198,7 @@ def main():
 
         os.statvfs = lambda _p: _Tiny()
         try:
-            verdict = rp.reclaim([feed], apply=True)["feed_store.db"]
+            verdict = rp.reclaim([feed], apply=True, blocked=_no_writer)["feed_store.db"]
         finally:
             os.statvfs = real_statvfs
         check("R4 a vacuum with no room REFUSES and prints the arithmetic",
