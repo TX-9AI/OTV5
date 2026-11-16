@@ -1,5 +1,6 @@
 """
-main.py  v5.26
+main.py  v5.27
+v5.27  2026-11-16  OTV5 r131 (OGAP.2) — OGAP's sizer budget is config.RISK_PER_TRADE_USD (the ramp MIN, OT_RISK_USD), not the deleted flat $500 OGAP_BUDGET_USD; still on the ASK, still its own budget_usd line, only for strategy_name OGAP. The operator, 2026-11-16: "Do me a favor and size the OGAP to whatever the ramp minimum (risk per trade) is set at instead of a flat $500. That $500 is Park's (my friend) preferred position size. I like 1050 for most trades." Every other strategy sizes exactly as before.
 v5.26  2026-11-16  OTV5 r129 (LOP.2, FA.3; the cold audit 2026-11-15, critical, live-only) — A BROKER POSITION NO ROW EXPLAINS
       IS ADOPTED INTRADAY. _intraday_reconcile returned at once when nothing of ours was open and otherwise inspected only
       the rows it had; the one adoption was the boot reconcile, so an unrecorded fill (r127's lost reply that FILLED, a
@@ -5301,9 +5302,10 @@ def _execute_entry_signal(signal, ctx, ms, state, _sigj=None, *, additive: bool 
     # the caution log's scaling-off count is THIS call repeated with scaled=False - never a re-derivation.
     from analysis import commitment as _cm
     _size_rec = _cm.SizeCall(risk_mgr)
-    # OGAP.1 - Park's book sizes on the ASK with its own budget: floor(OGAP_BUDGET_USD / (ask x 100)).
+    # OGAP.1 - Park's book sizes on the ASK with its own budget line; r131 (OGAP.2) that budget IS the ramp MIN:
+    # floor(RISK_PER_TRADE_USD / (ask x 100)) (OT_RISK_USD; was a flat $500 OGAP_BUDGET_USD).
     _ogap_ask = getattr(signal, "ogap_ask", None) if signal.strategy_name == "OGAP" else None
-    from config import OGAP_BUDGET_USD as _OGAP_BUDGET
+    from config import RISK_PER_TRADE_USD as _OGAP_BUDGET
     sizing = _size_rec.size_for(
         _struct,
         premium             = float(_ogap_ask) if _ogap_ask else signal.entry_premium,

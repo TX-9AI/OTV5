@@ -65,7 +65,7 @@ Fixtures are real bars from backtest days with known results (`park_orbgap_20261
 | break and retest | QQQ 11-05 PUT 09:48 signal; 10-30 PUT 10:22 | signal minute equal; a close on the edge isn't a break; the 21st bar after the break isn't a retest |
 | one row a day | a day with both sides signalling | the earliest allowed side; a refused-side signal writes a shadow and doesn't block |
 | stale skip | a tick first seen at signal + 2 | `ogap_stale`, no order |
-| sizing | asks 0.49 / 0.50 / 2.27 / 5.00 / 5.01 | refused / 10 / 2 / 1 / refused (0 contracts), on `OGAP_BUDGET_USD`, not RISK_PER_TRADE |
+| sizing | asks 0.49 / 0.50 / 2.27 / 5.00 / 5.01 | refused / 10 / 2 / 1 / refused (0 contracts), at $500 (r131: on `RISK_PER_TRADE_USD`, the ramp MIN; `OGAP_BUDGET_USD` deleted; `tests/check_ogap_size.py`) |
 | exits | the QQQ 11-05 trail; 11-02 1.2× lock; 11-04 14:00 sweep; a 15:45 bell row | reason and exit bid equal the backtest's when fed the same minute bids |
 | restart | an open OGAP rehydrated with max_bid_seen at 1.7× | the lock floor 1.2× is re-armed |
 | isolation | the decay stop, management.decide, the cap | none acts on OGAP; the cap total excludes it |

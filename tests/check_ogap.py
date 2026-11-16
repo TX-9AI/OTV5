@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 """
-tests/check_ogap.py  v5.2
+tests/check_ogap.py  v5.3
+v5.3  2026-11-16  OTV5 r131 (OGAP.2) — OGAP sizes on RISK_PER_TRADE_USD (the ramp MIN); OGAP_BUDGET_USD is deleted. This gate
+      pins OT_RISK_USD=500 (Park's own size, the basis of the replay R1-R5 and the O6/O7 pins), so every pin holds; O6
+      reads config.RISK_PER_TRADE_USD; O10 moves to mark 2.45 / ask 2.55 so ask vs mark still differ at $500 (OGAP 1,
+      PARK 2). The sizing at other ramp MINs (1050) is tests/check_ogap_size.py.
 v5.2  2026-11-15  OTV5 r123 (HYG.27) — OT_RESTING_DB leaves the scratch env (r118 deleted execution/resting_orders.py, its only reader).
 v5.1  2026-11-14  OTV5 r117 (HYG §5.3) — O7b NEW: a one-sided quote (bid 0.00 / ask 4.26, and bid 4.23 / ask 0.00) at the
       fill minute gives no signal. ogap_plan.prepare and ogap.generate_signal each refuse it (`ask >= bid > 0`, two
@@ -10,7 +14,7 @@ v5.0  2026-11-14  OTV5 (OGAP.1) — THE OGAP GATE. The operator, 2026-11-14: "le
       O1-O5   the read (strategy/ogap_plan.ogap_read): range bars, gate-G 0.25 vs 0.24 and fail-open, a close ON the edge
               is no break, the 21st bar after the break is no retest, one real row (the earliest allowed side; a
               refused-side retest is a shadow that never blocks), stale.
-      O6      sizing: contracts_for(0.50 / 2.27 / 5.00 / 5.01) = 10 / 2 / 1 / 0 on OGAP_BUDGET_USD (not RISK_PER_TRADE);
+      O6      sizing: contracts_for(0.50 / 2.27 / 5.00 / 5.01) = 10 / 2 / 1 / 0 on RISK_PER_TRADE_USD (pinned 500 here; r131);
               size_for("long_debit", premium=ask, budget_usd=500) agrees; every caller without budget_usd is unchanged.
       O7      the plan end to end on a feed-less fixture: QQQ 11-05 at the fill minute -> a TAKE signal (put, the strike
               nearest the fill-minute open, notes carry ask=, ogap_ask set); one minute later -> ogap_stale, no signal;
@@ -19,8 +23,8 @@ v5.0  2026-11-14  OTV5 (OGAP.1) — THE OGAP GATE. The operator, 2026-11-14: "le
       O8      the exit walk (execution/exit_engine.ogap_exit_step) and _evaluate_ogap on a record: the lock, the trail,
               the 14:00 sweep once, the 15:45 bell; a restart seeds the peak from max_premium_seen (1.7x -> the 1.2x
               floor is armed); fill = entry_ask, else notes' ask=, else the mark.
-      O10     the REAL entry funnel (main._execute_entry_signal, a spy entry engine): an OGAP signal (mark 2.25, ogap_ask
-              2.27) is sized by the real RiskManager on the ASK with OGAP_BUDGET_USD -> 2 contracts; the same signal named
+      O10     the REAL entry funnel (main._execute_entry_signal, a spy entry engine): an OGAP signal (mark 2.45, ogap_ask
+              2.55) is sized by the real RiskManager on the ASK with RISK_PER_TRADE_USD (500) -> 1 contract; the same signal named
               PARK is sized on the mark with the box's own risk (unchanged).
       O11     the dispatch, DRIVEN: attempt_new_entry() asks _attempt_ogap WITH the chain on the normal path, and the
               capped branch asks it (by text, beside _attempt_park).
@@ -48,6 +52,7 @@ os.environ["OT_SIGNAL_JOURNAL_DIR"] = os.path.join(_TD, "sj")
 CF = os.path.join(_TD, "cf")
 os.environ["OT_COUNTERFACTUAL_DIR"] = CF
 os.environ.setdefault("OT_INSTRUMENT", "QQQ")
+os.environ["OT_RISK_USD"] = "500"          # r131: OGAP sizes on the ramp MIN; Park's $500 is the replay's basis
 FAILED, RAN = [], []
 FIX = os.path.join(ROOT, "tests", "fixtures", "ogap", "replay5.json")
 
@@ -149,9 +154,9 @@ def main():
     import risk.risk_manager as RM
     rm = RM.RiskManager() if hasattr(RM, "RiskManager") else None
     sz = [OP.contracts_for(a) for a in (0.50, 2.27, 5.00, 5.01)]
-    s1 = rm.size_for("long_debit", premium=2.27, budget_usd=config.OGAP_BUDGET_USD, grade="UNGRADED") if rm else None
+    s1 = rm.size_for("long_debit", premium=2.27, budget_usd=config.RISK_PER_TRADE_USD, grade="UNGRADED") if rm else None
     s2 = rm.size_for("long_debit", premium=2.27, grade="UNGRADED") if rm else None
-    s5 = [rm.size_for("long_debit", premium=a, budget_usd=config.OGAP_BUDGET_USD, grade="UNGRADED") for a in (0.50, 5.00, 5.01)]
+    s5 = [rm.size_for("long_debit", premium=a, budget_usd=config.RISK_PER_TRADE_USD, grade="UNGRADED") for a in (0.50, 5.00, 5.01)]
     exp2 = int(float(rm.risk_per_trade if hasattr(rm, "risk_per_trade") else rm._risk_per_trade) // 227) if rm else None
     check("O6 sizing: 0.50/2.27/5.00/5.01 -> 10/2/1/0; size_for(budget_usd=500) at 2.27 -> 2; without it the box's "
           "own risk (unchanged)",
@@ -260,10 +265,10 @@ def main():
 
     def funnel(name):
         sg = OptionsSignal(strategy_name=name, setup_type="ogap_long", direction="long", option_side="call",
-                           underlying_entry=600.0, underlying_stop=0.0, strike=600.0, entry_premium=2.25,
+                           underlying_entry=600.0, underlying_stop=0.0, strike=600.0, entry_premium=2.45,
                            stop_loss_pct=1.0)
         if name == "OGAP":
-            sg.ogap_ask = 2.27
+            sg.ogap_ask = 2.55
         spy = _Spy()
         _ge = MN.get_entry_engine
         MN.get_entry_engine = lambda *a, **kw: spy
@@ -276,10 +281,10 @@ def main():
     f_og = funnel("OGAP")
     _rpt = float(getattr(MN.get_risk_manager(), "_risk_per_trade", 0) or 0)
     f_pk = funnel("PARK")
-    exp_pk = int(_rpt // 225)
-    check("O10 the real funnel: OGAP (mark 2.25, ask 2.27) -> 2 contracts on $500; PARK, same signal -> sized on the "
+    exp_pk = int(_rpt // 245)
+    check("O10 the real funnel: OGAP (mark 2.45, ask 2.55) -> 1 contract on $500; PARK, same signal -> sized on the "
           "mark with the box's risk ($%.0f -> %d)" % (_rpt, exp_pk),
-          f_og == [("OGAP", 2)] and (f_pk == [("PARK", exp_pk)] or (exp_pk < 1 and f_pk == [])),
+          f_og == [("OGAP", 1)] and (f_pk == [("PARK", exp_pk)] or (exp_pk < 1 and f_pk == [])),
           f"ogap={f_og} park={f_pk}")
 
     # ── O11 the dispatch asks OGAP ──

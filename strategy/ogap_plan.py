@@ -1,5 +1,8 @@
 """
-strategy/ogap_plan.py  v5.0
+strategy/ogap_plan.py  v5.1
+v5.1  2026-11-16  OTV5 r131 (OGAP.2) — contracts_for sizes on config.RISK_PER_TRADE_USD (the ramp MIN, OT_RISK_USD), not the
+      deleted flat $500 OGAP_BUDGET_USD; the feasibility gate follows (an ask above RISK_PER_TRADE_USD / 100 buys none).
+      The operator, 2026-11-16: "size the OGAP to whatever the ramp minimum (risk per trade) is set at instead of a flat $500".
 v5.0  2026-11-14  OTV5 (OGAP.1) — THE OGAP PLAN: READS THE TAPE, PICKS THE CONTRACT, BUILDS THE SIGNAL. The operator,
       2026-11-14: "let's design & paper trade the OGAP on QQQ". OGAP is a faithful paper copy of Park's ORB-GAP (his
       spec of record 2026-11-13, docs/OGAP_SPEC.md); its signal, sizing and exits are his, unchanged.
@@ -22,7 +25,7 @@ v5.0  2026-11-14  OTV5 (OGAP.1) — THE OGAP PLAN: READS THE TAPE, PICKS THE CON
                   the refused side is a SHADOW: recorded, never traded, never blocking.
         fill    - in the minute right after the signal bar, or never (stale: the tick that first sees it is later).
         contract- today's expiry only; the listed strike nearest the fill-minute open (a tie goes lower); ask >=
-                  OGAP_MIN_ASK; contracts = floor(OGAP_BUDGET_USD / (ask x 100)) >= 1 (an ask over $5.00 buys none).
+                  OGAP_MIN_ASK; contracts = floor(RISK_PER_TRADE_USD / (ask x 100)) >= 1 (an ask over RISK_PER_TRADE_USD / 100 buys none).
 """
 
 from __future__ import annotations
@@ -47,7 +50,7 @@ GATES = {
     "OGAP_RETEST_W":      "FOUNDATIONAL",
     "OGAP_GATE_G_W":      "FOUNDATIONAL",
     "OGAP_MIN_ASK":       "FEASIBILITY",
-    "OGAP_BUDGET_USD":    "FEASIBILITY",
+    "RISK_PER_TRADE_USD": "FEASIBILITY",                  # r131 OGAP.2: the ramp MIN is OGAP's budget
 }
 
 
@@ -167,7 +170,7 @@ def pick_strike(rows, spot: float):
 
 
 def contracts_for(ask: float) -> int:
-    """floor(OGAP_BUDGET_USD / (ask x 100)); 0 = refused (never rounded up to 1)."""
+    """floor(RISK_PER_TRADE_USD / (ask x 100)); 0 = refused (never rounded up to 1). r131 OGAP.2: the ramp MIN."""
     try:
         a = float(ask)
     except (TypeError, ValueError):
@@ -175,7 +178,7 @@ def contracts_for(ask: float) -> int:
     if not a > 0:
         return 0
     import math
-    return int(math.floor(float(config.OGAP_BUDGET_USD) / (a * 100.0) + 1e-9))
+    return int(math.floor(float(config.RISK_PER_TRADE_USD) / (a * 100.0) + 1e-9))
 
 
 def today_bars(symbol: str, day):
@@ -397,7 +400,7 @@ class OgapPlan:
         n = contracts_for(ask)
         t.check("contracts", float(n), n >= 1)
         if n < 1:
-            return t.refuse("ogap_ask_band", "ask %.2f buys 0 contracts on $%.0f" % (ask, config.OGAP_BUDGET_USD)) or prep
+            return t.refuse("ogap_ask_band", "ask %.2f buys 0 contracts on $%.0f" % (ask, config.RISK_PER_TRADE_USD)) or prep
         prep.contract, prep.bid, prep.ask, prep.contracts = k, bid, ask, n
         prep.premium = int((bid + ask) / 2.0 * 100.0 + 1e-9) / 100.0          # the mark, floored to the cent (PARK.4)
         prep.ready = True

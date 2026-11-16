@@ -1,5 +1,7 @@
 # TRADES — the specs
 
+**`TRADES.md` v5.19 · 2026-11-16 · OTV5 r131 (OGAP.2) — section 10: OGAP sizes on the ramp MIN, floor(`RISK_PER_TRADE_USD` / (ask x 100)) (`OT_RISK_USD`), not a flat $500; `OGAP_BUDGET_USD` is deleted. The operator, 2026-11-16: "Do me a favor and size the OGAP to whatever the ramp minimum (risk per trade) is set at instead of a flat $500. That $500 is Park's (my friend) preferred position size. I like 1050 for most trades."**
+
 **`TRADES.md` v5.18 · 2026-11-14 · OTV5 r115 (HYG §5.1) — §0's stops line drops the butterfly stop constant (deleted from config.py; nothing read it since r107); two bold stops remain (`check_docs_roster` R5). Docs only in this file.**
 
 **`TRADES.md` v5.17 · 2026-11-14 · OTV5 (OGAP.1) — OGAP joins the roster: Park's friend's ORB-GAP, a faithful paper copy on the QQQ box only (section 10; docs/OGAP_SPEC.md). The operator, 2026-11-14: "let's design & paper trade the OGAP on QQQ".**
@@ -664,8 +666,8 @@ SPX is refused by his $5.00 ask band on every row; every other box writes one `o
 - the retest: within the 20 bars after the break (and by 10:30): a call's low <= high + 0.10W closing above the high
   (a put mirrored). The earliest allowed retest is the signal bar; the fill is the NEXT minute or never (`ogap_stale`);
 - the contract: today's expiry only (`ogap_no_0dte`), the strike nearest the fill-minute open (a tie goes lower), ask >=
-  $0.50 (`ogap_ask_floor`), contracts = floor($500 / (ask x 100)) on the ASK with its own `OGAP_BUDGET_USD` (an ask
-  over $5.00 buys none: `ogap_ask_band`). Paper books the mark, like every setup; the ask and the bid are on the row.
+  $0.50 (`ogap_ask_floor`), contracts = floor(`RISK_PER_TRADE_USD` / (ask x 100)) on the ASK, the ramp MIN (r131; an
+  ask over `RISK_PER_TRADE_USD` / 100 buys none: `ogap_ask_band`). Paper books the mark, like every setup; the ask and the bid are on the row.
 
 **Exits (`exit_engine._evaluate_ogap`), on the bid against the entry ASK, first match wins:** peak >= 2.0x -> floor
 0.60 x peak (ratchets); peak >= 1.6x -> floor 1.2x; bid <= floor sells (`ogap_trail` / `ogap_lock`); the first tick at

@@ -1,5 +1,6 @@
 """
-strategy/ogap.py  v5.0
+strategy/ogap.py  v5.1
+v5.1  2026-11-16  OTV5 r131 (OGAP.2) — the ogap_contract description reads RISK_PER_TRADE_USD (the ramp MIN), not the deleted OGAP_BUDGET_USD.
 v5.0  2026-11-14  OTV5 (OGAP.1) — OGAP, PARK'S FRIEND'S ORB-GAP: THE SPECIFICATION. The operator, 2026-11-14: "let's
       design & paper trade the OGAP on QQQ". A faithful PAPER copy of a borrowed trade (docs/OGAP_SPEC.md; Park's spec
       of record 2026-11-13): its signal, sizing and exits are his, unchanged; only the plumbing is ours.
@@ -42,7 +43,7 @@ class Ogap:
                               f"{config.OGAP_RETEST_BARS} bars at +/-{config.OGAP_RETEST_W:.2f}W closing back beyond "
                               f"the level; filled the next minute or never"),
         "ogap_contract":     (f"today's expiry, the strike nearest the fill-minute open (tie lower), two-sided, ask >= "
-                              f"{config.OGAP_MIN_ASK:.2f}, floor({config.OGAP_BUDGET_USD:.0f} / (ask x 100)) >= 1"),
+                              f"{config.OGAP_MIN_ASK:.2f}, floor({config.RISK_PER_TRADE_USD:.0f} / (ask x 100)) >= 1"),
     }
 
     PERSISTENT = ()

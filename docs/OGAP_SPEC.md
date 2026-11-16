@@ -3,9 +3,10 @@
 **Status:** BUILT (OTV5 OGAP.1, 2026-11-14). The operator, 2026-11-14: "let's design & paper trade the OGAP on QQQ" (decision D1) and, on D2-D5, the recommendations below. The code is the authority: `strategy/ogap.py`, `strategy/ogap_plan.py`, `execution/exit_engine._evaluate_ogap` / `ogap_exit_step`; gate `tests/check_ogap.py`.
 
 **As built, where it differs from this design (the code wins):**
+- **The size is the ramp MIN (r131, OGAP.2).** The operator, 2026-11-16: "Do me a favor and size the OGAP to whatever the ramp minimum (risk per trade) is set at instead of a flat $500. That $500 is Park's (my friend) preferred position size. I like 1050 for most trades." `OGAP_BUDGET_USD` is deleted; contracts = floor(`RISK_PER_TRADE_USD` / (ask × 100)) on the ask (`OT_RISK_USD`, the configure.sh "Risk per trade / ramp START (MIN)" key, set per box). Still its own `budget_usd` line, cap-exempt, one a session, QQQ only; the $500 below is the design as built at OGAP.1. Gate `tests/check_ogap_size.py`.
 - **No new trade columns.** Park's basis is the AM.1 executable columns every row carries (ask in, bid out), with the mark (`pnl_usd`) beside it; `pnl_ask_bid_usd` and `max_bid_seen` were NOT added (decision 4: "use AM.1's exec columns, don't invent a parallel set").
 - **The restart re-seed** reads the persisted best MARK (`max_premium_seen`) once, as PARK's r291 does: slightly looser than the bid, stated. The in-process peak is the best bid seen.
-- **The decision basis** (`fill`) is the entry ask: `entry_ask` on the row, else the `ask=` the plan writes into `notes`, else the mark (`exit_engine.ogap_fill_of`). The sizer is asked on the ask with `OGAP_BUDGET_USD` (`size_for(..., budget_usd=)`).
+- **The decision basis** (`fill`) is the entry ask: `entry_ask` on the row, else the `ask=` the plan writes into `notes`, else the mark (`exit_engine.ogap_fill_of`). The sizer is asked on the ask with `RISK_PER_TRADE_USD` (`size_for(..., budget_usd=)`; r131, was `OGAP_BUDGET_USD`).
 - **Plan check rows** are all named `ogap_*` (TRADES section 10, PLAN_SPEC §44); the gate-G shadow is the `ogap_gateg_shadow` check row plus one line in `data/counterfactual/ogap_shadow.jsonl`.
 - **PIN_EXEMPT** names OGAP (Park's book was measured without the pin gate); the pin counterfactual row is still written on every OGAP entry.
 - **No nightly shadow pricer yet:** the shadow rows are recorded; pricing them is the Saturday brief's §1.9 read.
@@ -73,11 +74,11 @@ spec.
 | Window | `ENTRY_WINDOWS["OGAP"] = ((9, 46), (10, 32))`, half-open. The last signal bar is 10:30 and the last fill 10:31. |
 | Fill price (decision basis) | **The ask** at the fill minute. Sizing and every exit threshold are computed from it, as in Park's book. |
 | Minimum premium | ask ≥ $0.50, else no trade (`ogap_ask_floor`) |
-| Size | contracts = floor(`OGAP_BUDGET_USD` / (ask × 100)), with `OGAP_BUDGET_USD` = 500, a constant in config.py. It is its own constant, **not** `RISK_PER_TRADE_USD`, `ORB_BUDGET_USD` or the ramp. No grade multiplier, and no deploy cap. |
-| Too expensive | 0 contracts (ask > $5.00) means no trade (`ogap_ask_band`). It is never rounded up to 1. |
+| Size | contracts = floor(`RISK_PER_TRADE_USD` / (ask × 100)): the box's ramp MIN (`OT_RISK_USD`), since r131 (OGAP.2; at OGAP.1 it was its own `OGAP_BUDGET_USD` = 500, now deleted). Not `BREAKOUT_BUDGET_USD` or the ramp top. No grade multiplier, and no deploy cap. |
+| Too expensive | 0 contracts (ask > `RISK_PER_TRADE_USD` / 100, e.g. $10.50 at $1,050) means no trade (`ogap_ask_band`). It is never rounded up to 1. |
 | Booking | Paper books **both** fills, so neither is lost (§6). |
 
-The sizing routes through `risk_manager.size_for("long_debit", premium=ask, budget_usd=OGAP_BUDGET_USD)` on the
+The sizing routes through `risk_manager.size_for("long_debit", premium=ask, budget_usd=RISK_PER_TRADE_USD)` on the
 budget rule. That needs a `budget_usd` pass-through added to `_size_budget`. It is a single argument, and every other
 caller keeps `self._risk_per_trade`.
 
@@ -204,7 +205,7 @@ ENTRY_WINDOWS["OGAP"] = ((9, 46), (10, 32))
 OGAP_RANGE_ET = ((9, 30), (9, 44)); OGAP_RANGE_MIN_BARS = 10
 OGAP_BREAK_ET = ((9, 45), (10, 30)); OGAP_RETEST_BARS = 20; OGAP_RETEST_W = 0.10
 OGAP_GATE_G_W = 0.25
-OGAP_BUDGET_USD = 500.0; OGAP_MIN_ASK = 0.50
+OGAP_MIN_ASK = 0.50   (r131: the budget is RISK_PER_TRADE_USD; OGAP_BUDGET_USD deleted)
 OGAP_LOCK_ARM = 1.6; OGAP_LOCK_FLOOR = 1.2; OGAP_TRAIL_ARM = 2.0; OGAP_TRAIL_KEEP = 0.60
 OGAP_SWEEP_ET = (14, 0); OGAP_SWEEP_BELOW = 0.75; OGAP_CLOSE_ET = (15, 45)
 ```
