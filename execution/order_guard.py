@@ -1,5 +1,17 @@
 """
-execution/order_guard.py  v5.2
+execution/order_guard.py  v5.3
+v5.3  2026-11-16  OTV5 r127 (LOP.1, FA.1; the cold audit 2026-11-15, critical) — A place_order THAT RAISES NO LONGER LETS THE
+      SAME INTENT POST AGAIN BESIDE A LIVE ORDER. after_failure covers an error AFTER place_order returned; an error FROM
+      it (the reply lost, run_async's 30 s TimeoutError while the coroutine completes, a reset mid-read) left no order id,
+      no suspect and a clean boot state, so the next tick posted the next rung while the first could be live: two
+      contracts at the broker, one in the DB. NEW after_lost_post(key, symbols, session, account, what): the intent
+      becomes a LOST suspect (no order id) and is resolved at once and on every clear_to_post from the broker's own book
+      (get_live_orders): any OPENING order on the intent's legs received since LOST_SLACK_S before the failed post is
+      the candidate. A working candidate is CANCELLED and blocks until it reads dead; a FILLED one (or a dead one with
+      leg fills) blocks the intent and pages once (unrecorded, nothing is posted beside it); an unreadable book blocks;
+      with no candidate the intent clears only after LOST_GRACE_S, so an order still in flight cannot slip past.
+      Live only: paper never places, so it never registers one. Gate tests/check_lost_post.py on the shared
+      misbehaving-broker fixture tests/broker_harness.py.
 v5.2  2026-11-14  OTV5 r118 (HYG §5.4, HYG.23) — _kept_order_ids no longer reads the standing-offer store: execution/resting_orders
       is deleted (r76 removed its only writer, the ORB standing offer, so the read always returned nothing). It keeps
       every open row's live_exit_state order ids, as before. No behaviour change.
@@ -104,6 +116,110 @@ def after_failure(key: str, placed, session, account, what: str) -> None:
                  "the order is dead", what, oid, "requested" if cancelled else "FAILED")
     _page(f"⚠️ ORDER GUARD — {what}: order {oid} was placed, then an error. Cancel "
           f"{'requested' if cancelled else 'FAILED'}; no re-post until it is confirmed dead.")
+
+
+# r127 (LOP.1) — a post whose place_order RAISED. The broker may hold the order; the reply never said.
+LOST_GRACE_S = 10.0     # with no candidate in the book, the intent stays blocked this long (an order still in flight)
+LOST_SLACK_S = 60.0     # a candidate was received no earlier than this before the failed post (clock skew)
+
+
+def after_lost_post(key: str, symbols, session, account, what: str, exc=None) -> None:
+    """place_order RAISED, so the order may be live at the broker with no id here. Remember the intent as a
+    LOST suspect and try to resolve it now (cancel what the book shows). Never raises."""
+    syms = sorted({str(x).strip() for x in (symbols or []) if str(x or "").strip()})
+    _SUSPECT[key] = {"order_id": "", "lost": True, "symbols": syms, "ts": time.time(), "what": what,
+                     "paged_fill": False, "paged_working": False, "ids": []}
+    logger.error("[guard] %s: place_order RAISED (%s) - the order may be live at the broker; this intent "
+                 "posts nothing until the broker's book shows no working or filled order on %s",
+                 what, f"{type(exc).__name__}: {exc}" if exc is not None else "no detail", ", ".join(syms))
+    if account is None:
+        return
+    try:
+        _resolve_lost(key, _SUSPECT[key], session, account)
+    except Exception as e:                                     # noqa: BLE001
+        logger.warning("[guard] %s: book read after the failed post failed (%s); clear_to_post retries",
+                       what, e)
+
+
+def _opened_ts(o):
+    for name in ("received_at", "in_flight_at", "live_at"):
+        v = getattr(o, name, None)
+        if v is not None:
+            try:
+                return float(v.timestamp())
+            except Exception:                                  # noqa: BLE001
+                continue
+    return None
+
+
+def _is_lost_candidate(o, s: dict) -> bool:
+    legs = getattr(o, "legs", None) or []
+    if not legs:
+        return False
+    if not any(str(getattr(lg, "symbol", "") or "").strip() in s["symbols"] for lg in legs):
+        return False
+    for lg in legs:                                            # opening orders only: never a close
+        a = getattr(lg, "action", "")
+        a = str(getattr(a, "value", None) or getattr(a, "name", None) or a).upper().replace(" ", "_")
+        if "OPEN" not in a:
+            return False
+    t = _opened_ts(o)
+    return t is None or t >= s["ts"] - LOST_SLACK_S          # no timestamp -> a candidate (fail closed)
+
+
+def _has_fills(o) -> bool:
+    for lg in (getattr(o, "legs", None) or []):
+        for f in (getattr(lg, "fills", None) or []):
+            try:
+                if float(getattr(f, "quantity", 0) or 0) > 0:
+                    return True
+            except Exception:                                  # noqa: BLE001
+                return True
+    return False
+
+
+def _resolve_lost(key: str, s: dict, session, account) -> tuple:
+    """(ok, why) for a LOST suspect, read from the broker's book. Raises when the book is unreadable."""
+    orders = sdk_result(account.get_live_orders(session)) or []
+    filled, working, pending = [], [], []
+    for o in orders:
+        if not _is_lost_candidate(o, s):
+            continue
+        oid = str(getattr(o, "id", "") or "?")
+        if oid not in s["ids"]:
+            s["ids"].append(oid)
+        st = _norm_status(o)
+        if st == "FILLED" or (st in _DEAD_N and _has_fills(o)):
+            filled.append(oid)
+        elif st in _WORKING:
+            working.append(oid)
+        elif st not in _DEAD_N:
+            pending.append(f"{oid} {st or 'unknown'}")           # cancel requested, or a status not known here
+    for oid in working:
+        try:
+            sdk_result(account.delete_order(session, oid))
+            logger.warning("[guard] %s: cancelled order %s left working by a failed post", s["what"], oid)
+        except Exception as exc:                               # noqa: BLE001
+            logger.error("[guard] %s: cancel of %s (left by a failed post) FAILED: %s", s["what"], oid, exc)
+    if filled:
+        if not s["paged_fill"]:
+            s["paged_fill"] = True
+            _page(f"🔴 ORDER GUARD — {s['what']}: place_order raised but the broker FILLED order(s) "
+                  f"{', '.join(filled)} on {', '.join(s['symbols'])}. NOT in the DB; no new entry on this intent.")
+        return False, f"lost post: {', '.join(filled)} FILLED but unrecorded"
+    if working or pending:
+        if working and not s["paged_working"]:
+            s["paged_working"] = True
+            _page(f"⚠️ ORDER GUARD — {s['what']}: place_order raised but order(s) {', '.join(working)} reached "
+                  f"the broker; cancel requested, no re-post until they read dead.")
+        return False, f"lost post: {', '.join(working + pending)} still working"
+    age = time.time() - s["ts"]
+    if age < LOST_GRACE_S:
+        return False, f"lost post: no order in the book yet, waiting {LOST_GRACE_S - age:.0f}s more"
+    _SUSPECT.pop(key, None)
+    logger.info("[guard] %s: the failed post left no live or filled order (%s) - intent cleared",
+                s["what"], ", ".join(s["ids"]) or "none seen")
+    return True, "lost post: nothing at the broker"
 
 
 # r495 / B4 — the states a working (cancellable) order reads, normalised: tastytrade's
@@ -282,6 +398,11 @@ def clear_to_post(key: str, session, account) -> tuple:
     s = _SUSPECT.get(key)
     if not s:
         return True, ""
+    if s.get("lost"):                                           # r127 (LOP.1)
+        try:
+            return _resolve_lost(key, s, session, account)
+        except Exception as exc:                               # noqa: BLE001
+            return False, f"lost post: broker book unreadable ({type(exc).__name__})"
     try:
         placed = sdk_result(account.get_order(session, s["order_id"]))
         status = _status_name(placed)

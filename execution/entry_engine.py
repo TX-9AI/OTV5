@@ -1,5 +1,10 @@
 """
-execution/entry_engine.py  v5.3
+execution/entry_engine.py  v5.4
+v5.4  2026-11-16  OTV5 r127 (LOP.1, FA.1; the cold audit 2026-11-15, critical) — A single-leg place_order THAT RAISES now
+      registers the intent with order_guard.after_lost_post (the order may be live at the broker with no id here), so the
+      next tick cancels or blocks on what the broker's book shows instead of posting the next rung beside it. Before,
+      the except ran after_failure only when a response had come back (_placed), and a lost reply left nothing behind.
+      Live only (paper returns before this code). Gate tests/check_lost_post.py.
 v5.3  2026-11-14  OTV5 r118 (HYG.23) — DOCSTRING ONLY: _record_kwargs no longer describes the standing-offer supervisor as a
       second caller (removed r76; its store and supervisor deleted r118). AST identical to r117.
 v5.2  2026-11-11  OTV5 r107 (RETIRE.5 follow-up) — THE GENERIC BUTTERFLY ENTRY GOES with the fly strategy removed at r103: the enter() butterfly branch, the fly record fields (lower/center/upper strike and symbol, net_debit, max_profit), _place_butterfly, _paper_fill_butterfly and the fly-only _mark_cap. No live strategy emits a butterfly signal since r103; every entry takes the single-leg path, unchanged. The trades schema keeps its fly columns (history). The operator, 2026-11-07: "Running dead code and logging dead code activity is unnecessary drag."
@@ -514,6 +519,7 @@ class EntryEngine:
             return self._paper_fill_single(signal, contracts)
 
         _placed = _key = limit = None                                   # B2
+        _posting = False                                                # r127 LOP.1
         try:
             session  = get_session()
             account  = get_account()
@@ -564,7 +570,9 @@ class EntryEngine:
                 price         = Decimal(str(-limit)),   # - = DEBIT paid to open
                 legs          = [leg],
             )
+            _posting = True                                             # r127 LOP.1
             response = sdk_result(account.place_order(session, order, dry_run=False))   # B0
+            _posting = False
             if response.errors:
                 logger.error(f"Order errors: {response.errors}")
                 return None, "", 0
@@ -592,6 +600,8 @@ class EntryEngine:
             if _placed is not None:                                     # B2
                 self._walk_refused(_key, limit)
                 _guard.after_failure(_key, _placed, session, account, "single-leg entry")
+            elif _posting:                                              # r127 LOP.1
+                _guard.after_lost_post(_key, [symbol], session, account, "single-leg entry", e)
             return None, "", 0
 
     def _record_kwargs(self, signal) -> dict:

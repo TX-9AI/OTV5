@@ -1,5 +1,10 @@
 """
-main.py  v5.24
+main.py  v5.25
+v5.25  2026-11-16  OTV5 r127 (LOP.1, FA.1; the cold audit 2026-11-15, critical) — _post_credit_vertical: a placer that RAISES
+      (the reply lost, a 30 s run_async timeout) registers the intent with order_guard.after_lost_post before the error
+      goes up, so the next call (the entry's next tick, or the remainder supervisor) cancels or blocks on what the
+      broker's book shows instead of posting a second vertical beside a live one. Live only (paper never calls it; an
+      injected placer with no account is untouched). Gate tests/check_lost_post.py.
 v5.24  2026-11-15  OTV5 r125 (HYG.28) — THE RAMP TOP'S KEY IS OT_BREAKOUT_BUDGET_USD: main reads config.BREAKOUT_BUDGET_USD / BREAKOUT_BUDGET_IS_DEFAULT (was ORB_BUDGET_*), and the service start logs ONE WARNING line when the value came from the deprecated OT_ORB_BUDGET_USD (names only, never a value). The banner's ramp_top= is the same number. No decision changes.
 v5.23  2026-11-14  OTV5 r120 (HYG §5.7, HYG.25) — RETIRED NAMES LEAVE THE LIVE PATHS. (1) _orb_release_due drops its scan for an open "ORB" record: nothing that can be on a book carries the name (ORBStrategy opens nothing since r76, adopted positions are "ADOPTED", no open ORB row on any box: CRM read-only and the S3 trade warehouse 08-15..11-14); the book read stays as the fail-closed probe, so an unreadable book still holds the engine this tick. (2) _open_credit_legs / _open_credit_sides drop r204's OpeningRangeCreditSpread filter (no ORCS row can be open). (3) _L1_BREAKDOWN_FOR and its lookup go: the one row named ContinuationStrategy, which no live setup is, so no fire carried a breakdown since r58; the score vector is journalled as before. No decision changes.
 v5.22  2026-11-14  OTV5 r118 (HYG §5.4, HYG.23) — THE STANDING-OFFER SUPERVISOR IS DELETED. The operator concurred (2026-11-14) on deleting the dead resting-offer entry code: r76 removed its only writer (entry_engine's ORB standing offer), so data/resting_orders.db had no new row since 2026-09-25 (CRM, read-only) and _supervise_offers polled an empty store every tick. _supervise_offers and its call before the has_open_position() split go; _orb_offer_working goes and _orb_release_due asks only the book (no ORB position open), exactly as before on an empty store. execution/resting_orders.py is deleted. No behaviour change.
@@ -2768,7 +2773,14 @@ def _post_credit_vertical(short_contract, long_contract, contracts: int,
         if not _bok:
             logger.warning(f"[bp] credit vertical not posted: {_bwhy}")
             return EntryFill(filled=False, detail=f"buying power: {_bwhy}"), _limit, _lwhy
-    response = placer(_legs, _limit)
+    try:
+        response = placer(_legs, _limit)
+    except Exception as _pexc:
+        # r127 (LOP.1) — the order may be live at the broker with no id here: never post beside it.
+        if _acct is not None:
+            _guard.after_lost_post(lkey, [short_contract.symbol, long_contract.symbol],
+                                   _sess, _acct, what, _pexc)
+        raise
     if getattr(response, "errors", None):
         logger.error(f"Condor leg order failed: {response.errors}")
         return EntryFill(filled=False, detail=f"rejected: {response.errors}"), _limit, _lwhy
