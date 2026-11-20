@@ -1,5 +1,19 @@
 """
-execution/entry_engine.py  v5.5
+execution/entry_engine.py  v5.6
+v5.6  2026-11-20  OTV5 r133 (D2 + D3; the forward-edge study 2026-11-20) — THE LIVE ENTRY WALK POSTS ITS NEXT RUNG AS SOON AS
+      THE LAST ONE IS READ DEAD, NOT ON THE NEXT 15 s TICK, AND THE CONTRACT IS FROZEN FOR THE WALK'S LIFE. At r132 each rung
+      rested ~5 s (_rung_deadline) and nothing was working for ~10 s until the next tick. _place_single_leg now loops, live
+      only: rest (confirm_order_fill, 2 s polls, unchanged) -> cancel and read dead (the same call) -> refuse -> re-read the
+      STREAMED quote (chain_marks via OptionsChainFetcher._read_marks, no broker call) -> next_price on the same LadderState
+      and key -> post. It stops on a fill (a fill in the cancel race included, booked once), the mark rung refused (the
+      terminal rung, which the next tick re-offers as before), a rejection, the strategy's window ending
+      (config.ENTRY_WINDOWS; the walk is cleared), no fresh quote, an unconfirmed cancel (now held by order_guard
+      .after_failure, so the next tick cannot post beside it), or one tick's budget (POLL_INTERVAL_SECONDS: no rung starts
+      whose rest would end past it). Cancel-confirm-post, never replace. D3: module freeze_contract(), called by main
+      before sizing, puts a signal that re-picked its strike back on the contract its walk is on (_PINS, per strategy /
+      side / direction, idle after PIN_IDLE_S = 45 s). The ladder's rules (25% start, ratchet, mark cap after it, never
+      worse than mark, the underlying's grid) are entry_ladder's, untouched; paper unchanged; exits untouched. In memory:
+      a restart loses the ratchet and the pin; the boot sweep still cancels a working rung. Gate tests/check_entry_ladder_5s.py.
 v5.5  2026-11-20  OTV5 r132 (TICK.3; the forward-edge study 2026-11-20, D1) — THE ENTRY LADDER'S TICK GRID IS LOOKED UP
       UNDER THE UNDERLYING (INSTRUMENT), AS EXITS DO, NOT UNDER THE OCC SYMBOL. _place_single_leg passed
       signal.contract.symbol to _walk_price -> ladder_registry.price_for -> entry_ladder._increment -> tick_size.resolve,
@@ -198,6 +212,7 @@ mark ± PAPER_FILL_SLIPPAGE_PCT when the stress knob is set). No real order.
 
 
 
+import copy
 import logging
 import time
 import uuid
@@ -226,7 +241,8 @@ from config import (
     CONTRACT_MULTIPLIER, INSTRUMENT,
     LIMIT_IMPROVE_TICKS
 )
-from utils.time_utils import ts_for_db, fmt_et_short, entries_open
+from utils.time_utils import ts_for_db, fmt_et_short, entries_open, now_et
+from utils.heartbeat import touch as _hb_touch                     # r133 D2: never raises
 
 
 def _cfg_entry_open():
@@ -239,6 +255,18 @@ def _cfg_entry_open():
         return (9, 35)
 
 logger = logging.getLogger(__name__)
+
+# r133 D3 — the contract each strategy is walking, live only, in memory (lost on a restart, like the walk itself).
+# (strategy_name, option_side, direction) -> {"contract", "key", "seen" (monotonic, the last rung posted)}.
+_PINS: dict = {}
+# A pin with no rung posted for three ticks (3 x POLL_INTERVAL_SECONDS) is a walk the strategy stopped asking for.
+PIN_IDLE_S = 45.0
+
+
+def _pin_id(signal) -> tuple:
+    return (str(getattr(signal, "strategy_name", "") or ""),
+            str(getattr(signal, "option_side", "") or "").lower(),
+            str(getattr(signal, "direction", "") or "").lower())
 
 
 class EntryEngine:
@@ -517,6 +545,110 @@ class EntryEngine:
         except Exception as exc:                               # noqa: BLE001
             logger.debug("[ladder] clear failed: %s", exc)
 
+    # ─── r133 D2 / D3 — THE 5-SECOND WALK, ON A CONTRACT FROZEN FOR ITS LIFE ──
+    # 🔴 THE DUTY CYCLE WAS A THIRD. Each rung rested ~5 s (_rung_deadline) and
+    # then NOTHING was working until the next 15 s tick: the forward-edge study
+    # 2026-11-20 (D2, ~/reviews/studies/forward_edge_20261120/REPORT.md) measured
+    # strict-touch fills 79% at 36 s mean, and 89% at 21 s with the gap removed.
+    # The operator, 2026-11-20: "If the ladder was fast enough to update every 5
+    # seconds, I would prefer that" and "Yes to both".
+    # 🔑 THE LOOP, live only: post a rung, rest it on the 2 s poll grid
+    # (confirm_order_fill, unchanged), CANCEL it and READ IT DEAD (the same call:
+    # it returns only on a broker status of Filled, Rejected or dead, or with
+    # working_order_id set when the cancel could not be confirmed), refuse it,
+    # re-read the STREAMED quote (feed_store.db chain_marks — the store the tick's
+    # chain is built from; a local read, no broker quote call), price the next
+    # rung with the SAME LadderState under the SAME key, and post it.
+    # ⚠️ NO LADDER RULE CHANGES. next_price is called exactly as a tick calls it;
+    # the 25% start, the ratchet, the mark cap after the ratchet, never worse than
+    # mark and the venue grid are entry_ladder's, untouched. Only WHEN the next
+    # rung is asked for changes: now, instead of in ~10 s.
+    # ⚠️ IT STOPS, AND HANDS THE WALK BACK TO THE TICK, on: a fill (any quantity —
+    # a partial is booked, as before); the MARK RUNG REFUSED (the walk's terminal
+    # rung: the rung a tick re-offers forever, so the next tick resumes it exactly
+    # as before); a rejection or no order id; the strategy's entry window ending
+    # (config.ENTRY_WINDOWS, the admission table's own source; the walk is then
+    # cleared); no fresh streamed quote; an unconfirmed cancel (the order guard
+    # then holds the intent until the broker reads it dead); or the TICK BUDGET.
+    # ⚠️ THE BUDGET IS ONE TICK. No rung starts unless its rest ends inside
+    # POLL_INTERVAL_SECONDS (15 s) of the call's start, so one call posts at most
+    # two rungs (~6-7 s apart on the 2 s poll grid) and an open position's next
+    # manage pass is late by at most one tick. The heartbeat is touched on every
+    # poll (confirm_order_fill) and between rungs; the watchdog's floor is 180 s.
+    # ⚠️ ORDER RATE: per rung one place, one balance read, ~5 status reads and
+    # one cancel — about 1.2 requests a second for a walking box. tastytrade
+    # publishes no limit; a raising place_order ends the loop through the r127
+    # lost-post guard (the intent is held at least LOST_GRACE_S, 10 s), a raising
+    # poll retries on the 2 s grid, a raising cancel at most three times.
+    # ⚠️ A RESTART MID-WALK LOSES THE RATCHET AND THE FREEZE (both in memory, as
+    # ladder_registry's header records); the boot sweep (r495 B4) still cancels
+    # any working rung before anything posts.
+
+    @staticmethod
+    def _walk_budget_s() -> float:
+        """Wall seconds one call may walk: one main-loop tick (config.POLL_INTERVAL_SECONDS)."""
+        try:
+            import config as _c
+            return float(getattr(_c, "POLL_INTERVAL_SECONDS", 15) or 15)
+        except Exception:                                      # noqa: BLE001
+            return 15.0
+
+    @staticmethod
+    def _fresh_quote(contract) -> Optional[Tuple[float, float]]:
+        """(bid, ask) re-read from the streamed store the tick's chain comes from (chain_marks through
+        OptionsChainFetcher._read_marks, its OT_CHAIN_STALE_S floor unchanged). None when the contract has no
+        streamer symbol, the row is missing or stale, the book is unusable, or the read fails."""
+        sym = str(getattr(contract, "streamer_symbol", "") or "")
+        if not sym:
+            return None
+        try:
+            from data.options_chain import get_chain_fetcher
+            _greeks, quotes = get_chain_fetcher()._read_marks([sym])
+            q = quotes.get(sym)
+            if q is None:
+                return None
+            b, a = float(q.bid_price or 0.0), float(q.ask_price or 0.0)
+        except Exception as exc:                               # noqa: BLE001
+            logger.debug("[ladder] streamed quote unreadable for %s: %s", sym, exc)
+            return None
+        if a <= 0 or b < 0 or a < b:
+            return None
+        return b, a
+
+    @staticmethod
+    def _window_open(strategy_name) -> Tuple[bool, str]:
+        """(open, why). The strategy's entry window from config.ENTRY_WINDOWS (half-open, the admission table's
+        own source) and entries_open(). A strategy with no row there has no window to read: closed, so its
+        walk keeps one rung per call."""
+        try:
+            import config as _c
+            win = (getattr(_c, "ENTRY_WINDOWS", None) or {}).get(str(strategy_name or ""))
+            if not win:
+                return False, f"no entry window on record for {strategy_name!r}"
+            if not entries_open():
+                return False, "entries are closed"
+            n = now_et()
+            (sh, sm), (eh, em) = win
+            t = n.hour * 60 + n.minute
+            if not (sh * 60 + sm <= t < eh * 60 + em):
+                return False, f"its entry window {sh}:{sm:02d}-{eh}:{em:02d} ET has ended"
+            return True, ""
+        except Exception as exc:                               # noqa: BLE001
+            return False, f"entry window unreadable ({type(exc).__name__})"
+
+    @staticmethod
+    def _is_mark_rung(price: float, why: str, bid: float, ask: float) -> bool:
+        """True when `price` was the walk's TERMINAL rung on its quote: the mark snapped in our favour (the
+        table's last rung, or next_price's mark clamp), or the one-increment $0.00 exception. Unreadable: True."""
+        if str(why or "").startswith("mark"):
+            return True
+        try:
+            from execution.entry_ladder import rungs
+            table = rungs(bid, ask, "buy", INSTRUMENT)
+        except Exception:                                      # noqa: BLE001
+            return True
+        return (not table) or float(price) >= float(table[-1]) - 1e-9
+
     # ─── Order Placement ──────────────────────────────────────────────────────
 
     def _place_single_leg(self, signal: OptionsSignal,
@@ -524,7 +656,10 @@ class EntryEngine:
         """Returns (fill_price, order_id, filled_qty). Live fill price is READ
         BACK from the broker's fills — a market order has no .price, so the
         old `placed.price or signal.entry_premium` always booked the signal
-        mark. filled_qty==0 means record NOTHING."""
+        mark. filled_qty==0 means record NOTHING.
+
+        r133 (D2): live, it walks rung after rung inside this call until a stop
+        (see the block above); paper is unchanged and returns first."""
         if self.paper_trading:
             return self._paper_fill_single(signal, contracts)
 
@@ -562,54 +697,93 @@ class EntryEngine:
             from execution import ladder_registry as _lr
             _bid, _ask = self._quote_of(signal.contract)
             _key = _lr.intent_key(symbol, "open", "single")
-            _ok, _gwhy = _guard.clear_to_post(_key, session, account)   # B2
-            if not _ok:
-                logger.warning("[guard] single-leg %s not posted: %s", symbol, _gwhy)
-                return None, "", 0
-            # 🔴 r132 TICK.3 — THE GRID IS THE UNDERLYING'S, NOT THE CONTRACT'S. The venue
-            # rule is cached under the underlying (options_chain._get_chain_structure) and
-            # PENNY_CLASSES lists underlyings, so the OCC symbol always missed and priced
-            # every entry on the non-penny grid (QQQ 3.40/3.50: [3.40], not [3.42..3.45]).
-            # Exits pass record["symbol"] = INSTRUMENT; the entry now does too. The walk
-            # KEY above stays the contract's.
-            limit, _why = self._walk_price(_key, "buy", _bid, _ask, INSTRUMENT, mid)
-            _bok, _bwhy = _bp.affordable(float(limit) * int(contracts) * 100.0,
-                                         session, account, f"single-leg {symbol}")   # F5
-            if not _bok:
-                logger.warning("[bp] single-leg %s not posted: %s", symbol, _bwhy)
-                return None, "", 0
-            logger.info("[ladder] %s BUY %s @ %.2f — %s (bid %.2f / ask %.2f)",
-                        symbol, "single", limit, _why, _bid, _ask)
-            order = NewOrder(
-                time_in_force = OrderTimeInForce.DAY,
-                order_type    = OrderType.LIMIT,
-                price         = Decimal(str(-limit)),   # - = DEBIT paid to open
-                legs          = [leg],
-            )
-            _posting = True                                             # r127 LOP.1
-            response = sdk_result(account.place_order(session, order, dry_run=False))   # B0
-            _posting = False
-            if response.errors:
-                logger.error(f"Order errors: {response.errors}")
-                return None, "", 0
-            _placed = response.order                                    # B2
+            _pid = _pin_id(signal)                                      # r133 D3
+            _t0 = time.monotonic()                                      # r133 D2: the call's budget clock
+            _budget = self._walk_budget_s()
+            _n = 0
+            while True:                                                 # r133 D2: rung after rung, bounded
+                _n += 1
+                _ok, _gwhy = _guard.clear_to_post(_key, session, account)   # B2
+                if not _ok:
+                    logger.warning("[guard] single-leg %s not posted: %s", symbol, _gwhy)
+                    return None, "", 0
+                # 🔴 r132 TICK.3 — THE GRID IS THE UNDERLYING'S, NOT THE CONTRACT'S. The venue
+                # rule is cached under the underlying (options_chain._get_chain_structure) and
+                # PENNY_CLASSES lists underlyings, so the OCC symbol always missed and priced
+                # every entry on the non-penny grid (QQQ 3.40/3.50: [3.40], not [3.42..3.45]).
+                # Exits pass record["symbol"] = INSTRUMENT; the entry now does too. The walk
+                # KEY above stays the contract's.
+                limit, _why = self._walk_price(_key, "buy", _bid, _ask, INSTRUMENT, mid)
+                _bok, _bwhy = _bp.affordable(float(limit) * int(contracts) * 100.0,
+                                             session, account, f"single-leg {symbol}")   # F5
+                if not _bok:
+                    logger.warning("[bp] single-leg %s not posted: %s", symbol, _bwhy)
+                    return None, "", 0
+                logger.info("[ladder] %s BUY %s @ %.2f — %s (bid %.2f / ask %.2f)%s",
+                            symbol, "single", limit, _why, _bid, _ask,
+                            f" [rung {_n} of this tick]" if _n > 1 else "")
+                order = NewOrder(
+                    time_in_force = OrderTimeInForce.DAY,
+                    order_type    = OrderType.LIMIT,
+                    price         = Decimal(str(-limit)),   # - = DEBIT paid to open
+                    legs          = [leg],
+                )
+                _posting = True                                         # r127 LOP.1
+                response = sdk_result(account.place_order(session, order, dry_run=False))   # B0
+                _posting = False
+                if response.errors:
+                    logger.error(f"Order errors: {response.errors}")
+                    return None, "", 0
+                _placed = response.order                                # B2
+                _PINS[_pid] = {"contract": signal.contract, "key": _key,
+                               "seen": time.monotonic()}                # r133 D3: the walk's contract
 
-            fill = confirm_order_fill(session, account, response.order,
-                                      [(symbol, 1, +1)],
-                                      what=f"single-leg entry (LADDER {limit:.2f} — {_why})",
-                                      deadline_s=self._rung_deadline())
-            if not fill.filled or fill.net_price is None:
+                fill = confirm_order_fill(session, account, response.order,
+                                          [(symbol, 1, +1)],
+                                          what=f"single-leg entry (LADDER {limit:.2f} — {_why})",
+                                          deadline_s=self._rung_deadline())
+                if fill.filled and fill.net_price is not None:
+                    # A fill — during the rest OR during the cancel race — is the
+                    # walk's end: booked once, at the broker's own fills.
+                    self._walk_done(_key)
+                    _PINS.pop(_pid, None)
+                    return fill.net_price, fill.order_id or "", fill.quantity
                 self._page_if_working(fill, "single-leg entry")
                 # ⚠️ A REFUSAL, NOT AN ABANDONMENT. The rung did not fill, so
-                # it is off the table for good (rule 1) and the next tick posts
-                # the next rung against a fresh quote (rule 2). An entry that
-                # never fills still costs nothing.
+                # it is off the table for good (rule 1) and the next rung is
+                # priced against a fresh quote (rule 2). An entry that never
+                # fills still costs nothing.
                 self._walk_refused(_key, limit)
-                logger.info("[ladder] %s rung %.2f REFUSED (%s) — next rung on "
-                            "the next tick", symbol, limit, fill.detail)
-                return None, "", 0
-            self._walk_done(_key)
-            return fill.net_price, fill.order_id or "", fill.quantity
+                _dead, _placed = _placed, None
+                if fill.working_order_id:
+                    # r133 — THE CANCEL WAS NOT CONFIRMED (or the fills were unreadable):
+                    # the order may still be live or filled. Nothing posts beside it —
+                    # not in this call, and not next tick: the order guard holds the
+                    # intent until the broker reads that order dead (B2).
+                    _guard.after_failure(_key, _dead, session, account,
+                                         "single-leg entry (cancel unconfirmed)")
+                    logger.info("[ladder] %s rung %.2f REFUSED (%s) — cancel unconfirmed; "
+                                "the intent is held by the order guard", symbol, limit, fill.detail)
+                    return None, "", 0
+                _stop, _end = self._walk_stop(signal, limit, _why, _bid, _ask, fill, _t0, _budget)
+                if _stop:
+                    if _end:
+                        self._walk_done(_key)
+                        _PINS.pop(_pid, None)
+                    logger.info("[ladder] %s rung %.2f REFUSED (%s) — %s; %s", symbol, limit,
+                                fill.detail, _stop,
+                                "the walk is over" if _end else "next rung on the next tick")
+                    return None, "", 0
+                _hb_touch("entry ladder")
+                _q = self._fresh_quote(signal.contract)
+                if _q is None:
+                    logger.info("[ladder] %s rung %.2f REFUSED (%s) — no fresh streamed quote; "
+                                "next rung on the next tick", symbol, limit, fill.detail)
+                    return None, "", 0
+                logger.info("[ladder] %s rung %.2f REFUSED (%s) — next rung now, on the streamed "
+                            "quote %.2f / %.2f", symbol, limit, fill.detail, _q[0], _q[1])
+                _bid, _ask = _q
+                mid = round((_bid + _ask) / 2.0, 4)
 
         except Exception as e:
             logger.error(f"Single-leg order failed: {e}")
@@ -619,6 +793,23 @@ class EntryEngine:
             elif _posting:                                              # r127 LOP.1
                 _guard.after_lost_post(_key, [symbol], session, account, "single-leg entry", e)
             return None, "", 0
+
+    def _walk_stop(self, signal, limit, why, bid, ask, fill, t0, budget) -> Tuple[str, bool]:
+        """(why the walk hands back to the tick, or "", and whether the walk is OVER). r133 D2."""
+        detail = str(getattr(fill, "detail", "") or "")
+        if detail.startswith("rejected"):
+            return "the broker rejected the rung", False
+        if not getattr(fill, "order_id", None):
+            return "no order id came back", False
+        if self._is_mark_rung(limit, why, bid, ask):
+            return "the mark rung was refused (the terminal rung; the next tick re-offers it)", False
+        ok, w = self._window_open(getattr(signal, "strategy_name", ""))
+        if not ok:
+            return w, w.startswith("its entry window")
+        used = time.monotonic() - t0
+        if used + self._rung_deadline() > budget:
+            return f"the tick budget ({used:.0f} s of {budget:.0f} s used)", False
+        return "", False
 
     def _record_kwargs(self, signal) -> dict:
         """The record fields that come from the SIGNAL, not from the fill.
@@ -679,6 +870,55 @@ class EntryEngine:
         execution/limit_ladder.paper_fill_price."""
         fill_price = paper_fill_price(float(signal.entry_premium or 0.0), floor=0.01)
         return fill_price, f"PAPER-{uuid.uuid4().hex[:8].upper()}", contracts
+
+
+def freeze_contract(signal, paper_trading: bool = PAPER_TRADING) -> bool:
+    """r133 D3 — A WALK IN FLIGHT KEEPS ITS CONTRACT. Runaway and the Hunt re-pick the strike every tick
+    (gamma_leverage_pick over the live spot and run), and the walk key is the contract's, so a new strike
+    started a fresh walk at the 25% opener and dropped the old one's ratchet. main._execute_entry_signal calls it
+    before sizing: when this strategy (same side, same direction) has a walk posted inside PIN_IDLE_S and the signal names a
+    different contract, the signal is put back on the walking one, re-quoted from the stream, so sizing, the
+    order and the record all name it. True when it swapped. Paper never walks: a no-op there. Never raises."""
+    if paper_trading:
+        return False
+    try:
+        pid = _pin_id(signal)
+        pin = _PINS.get(pid)
+        if pin is None:
+            return False
+        if time.monotonic() - pin["seen"] > PIN_IDLE_S:
+            _PINS.pop(pid, None)
+            return False
+        pc = pin["contract"]
+        occ = str(getattr(pc, "symbol", "") or "")
+        cur = str(getattr(getattr(signal, "contract", None), "symbol", "") or "")
+        if not occ or cur == occ:
+            return False
+        q = EntryEngine._fresh_quote(pc)
+        if q is None:
+            _PINS.pop(pid, None)
+            logger.warning("[ladder] D3 the walk on %s is abandoned - no fresh streamed quote for it; the "
+                           "re-pick %s starts its own walk", occ, cur)
+            return False
+        b, a = q
+        c = copy.copy(pc)
+        c.bid, c.ask = b, a
+        mark = (b + a) / 2.0 if b > 0 and a > 0 else (b or a)
+        if hasattr(c, "mark"):
+            c.mark = mark
+        signal.contract = c
+        signal.strike = getattr(c, "strike", getattr(signal, "strike", None))
+        signal.expiry = getattr(c, "expiry", getattr(signal, "expiry", ""))
+        signal.entry_premium = mark
+        if getattr(signal, "ogap_ask", None) is not None:
+            signal.ogap_ask = a
+        logger.warning("[ladder] D3 %s re-picked %s mid-walk - the walk stays on %s (bid %.2f / ask %.2f); the "
+                       "contract is frozen until it fills, its window ends or it goes idle %.0f s",
+                       pid[0], cur, occ, b, a, PIN_IDLE_S)
+        return True
+    except Exception as exc:                               # noqa: BLE001
+        logger.warning("[ladder] D3 freeze skipped (%s: %s)", type(exc).__name__, exc)
+        return False
 
 
 _entry_engine: Optional[EntryEngine] = None

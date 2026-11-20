@@ -1,5 +1,7 @@
 # TRADES — the specs
 
+**`TRADES.md` v5.21 · 2026-11-20 · OTV5 r133 (LADDER.1, D2 + D3) — section 6: the live entry walk posts rung after rung inside one tick (~6 s apart, cancel-confirm-post, bounded by one 15 s tick, back to the tick on a fill, the mark rung refused, the window's end, no fresh quote, an unconfirmed cancel), and the contract is frozen for the walk's life. The ladder's rules are unchanged. The operator, 2026-11-20: "Yes to both".**
+
 **`TRADES.md` v5.20 · 2026-11-20 · OTV5 r132 (TICK.3) — section 6: the entry walk steps one VENUE increment of the UNDERLYING's grid (the rule cached under INSTRUMENT, as exits use), never the OCC symbol's; at r131 every live entry fell back to the non-penny grid (QQQ 3.40/3.50 posted 3.40 every tick; now 3.42 -> 3.45). The ladder's rules are unchanged. The operator, 2026-11-20: "Yes to both".**
 
 **`TRADES.md` v5.19 · 2026-11-16 · OTV5 r131 (OGAP.2) — section 10: OGAP sizes on the ramp MIN, floor(`RISK_PER_TRADE_USD` / (ask x 100)) (`OT_RISK_USD`), not a flat $500; `OGAP_BUDGET_USD` is deleted. The operator, 2026-11-16: "Do me a favor and size the OGAP to whatever the ramp minimum (risk per trade) is set at instead of a flat $500. That $500 is Park's (my friend) preferred position size. I like 1050 for most trades."**
@@ -464,7 +466,22 @@ price it.
   **The grid is the UNDERLYING's** (r132 TICK.3): the venue rule is cached
   under the underlying, so entries and exits both resolve it with INSTRUMENT;
   the walk's KEY may still name the contract.
-· **ONE RUNG PER TICK.** A refusal is *"didn't completely fill at that price"* —
+· **RUNG AFTER RUNG, ~6 s APART, INSIDE ONE TICK** (r133 D2; the operator,
+  2026-11-20: *"If the ladder was fast enough to update every 5 seconds, I would
+  prefer that"*). Live, a rung rests ~5 s (2 s polls), is cancelled and READ
+  DEAD, and the next rung is priced on the re-read streamed quote and posted at
+  once — cancel-confirm-post, never a replace. The call hands back to the tick on
+  a fill (a fill in the cancel race is booked once), the mark rung refused (the
+  next tick re-offers it), a rejection, the strategy's entry window ending (the
+  walk is cleared), no fresh quote, an unconfirmed cancel (the order guard holds
+  the intent), or one tick's budget (15 s: no rung starts whose rest would end
+  past it). Paper is unchanged (it books the mark at once).
+· **THE CONTRACT IS FROZEN FOR THE WALK** (r133 D3): a strategy that re-picks its
+  strike mid-walk is put back on the contract it is walking before sizing; the
+  freeze lapses on a fill, the window's end, or 45 s with no rung posted. A
+  restart loses the walk and the freeze (in memory); the boot sweep still
+  cancels a working rung.
+· A refusal is *"didn't completely fill at that price"* —
   a partial counts as a refusal for the remainder.
 · **RATCHET** — a refused price never returns, even if the market moves back
   through it. *"If it's not accepting 80 at the first attempt, it won't accept

@@ -1,5 +1,6 @@
 """
-main.py  v5.27
+main.py  v5.28
+v5.28  2026-11-20  OTV5 r133 (D2/D3; the forward-edge study 2026-11-20) — _execute_entry_signal calls entry_engine.freeze_contract(signal, state.paper_trading) right after the validity check and before ENT.1 and sizing: a strategy that re-picked its strike while its live entry walk is in flight is put back on the walking contract (D3). One call; paper is a no-op. Gate tests/check_entry_ladder_5s.py.
 v5.27  2026-11-16  OTV5 r131 (OGAP.2) — OGAP's sizer budget is config.RISK_PER_TRADE_USD (the ramp MIN, OT_RISK_USD), not the deleted flat $500 OGAP_BUDGET_USD; still on the ASK, still its own budget_usd line, only for strategy_name OGAP. The operator, 2026-11-16: "Do me a favor and size the OGAP to whatever the ramp minimum (risk per trade) is set at instead of a flat $500. That $500 is Park's (my friend) preferred position size. I like 1050 for most trades." Every other strategy sizes exactly as before.
 v5.26  2026-11-16  OTV5 r129 (LOP.2, FA.3; the cold audit 2026-11-15, critical, live-only) — A BROKER POSITION NO ROW EXPLAINS
       IS ADOPTED INTRADAY. _intraday_reconcile returned at once when nothing of ours was open and otherwise inspected only
@@ -1738,6 +1739,7 @@ from risk.risk_manager import init_risk_manager, get_risk_manager
 from risk.session_guard import get_session_guard
 
 from execution.entry_engine import get_entry_engine
+from execution.entry_engine import freeze_contract as _freeze_contract   # r133 D3
 from execution.position_manager import get_position_manager
 
 from database.trade_logger import get_trade_logger
@@ -5116,6 +5118,10 @@ def _execute_entry_signal(signal, ctx, ms, state, _sigj=None, *, additive: bool 
             except Exception:
                 pass
         return
+    # r133 (D3) — A WALK IN FLIGHT KEEPS ITS CONTRACT: a strategy that re-picked its strike mid-walk is put back on
+    # the contract it is walking (re-quoted from the stream) BEFORE sizing, so the size, the order and the record all
+    # name it. Live only (paper never walks); never raises. execution/entry_engine.freeze_contract.
+    _freeze_contract(signal, state.paper_trading)
 
     # ── 🔴 ENT.1 (r61) — NO TRADE OPENS ALREADY THROUGH ITS OWN STOP ─────────
     # Operator's ruling, 2026-09-19: *"any strategy check on the firing tick one
