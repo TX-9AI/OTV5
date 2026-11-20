@@ -1,6 +1,20 @@
 #!/usr/bin/env python3
 """
-tools/capture_all.py  v5.8 — EVERYTHING TASTYTRADE SERVES THAT THE FEED DOES NOT ALREADY KEEP, INTO THE WAREHOUSE.
+tools/capture_all.py  v5.9 — EVERYTHING TASTYTRADE SERVES THAT THE FEED DOES NOT ALREADY KEEP, INTO THE WAREHOUSE.
+v5.9  2026-11-20  OTV5 r134 (CAP.9) — THE CONTEXT SYMBOLS' 1-MINUTE BARS, EVERY NIGHT. A study of Park's CONT rest-break
+      rule reads SPY's first-hour move, and the warehouse held SPY 1m only through 11-10 (one pull for the study,
+      raw/candles_full/interval=1m/sym=SPY/pulled=2026-11-10_park.csv.gz): candles-recent asked the CONTEXT symbols at
+      1d / 1d_eth / 1h / 5m only, and the feed streams only each box's own symbol (plus VIX on the SPX box). TastyTrade
+      serves 1m RTH history only about 21 sessions back (an 8,000-bar cap per subscription, measured 10-25), so a day not
+      pulled within a month is gone. The operator, 2026-11-20: "Yeah, I think it's worth gathering." Now, on the SPX box,
+      candles-recent ends with ONE more stream (RECENT_CONTEXT): 1m RTH, 5 calendar days back (a missed night or two is
+      healed by the next), for CONTEXT minus FEED_1M (VIX and QQQ, which the feed already keeps at 1m in raw/candles),
+      written under the key every 1m reader already lists - raw/candles_full/interval=1m/sym=<S>/pulled=<day>_recent.csv.gz
+      (the _park / _hunt / backfill / _opt objects there are never that key). It runs LAST, after the four existing
+      lookbacks, so a run cut at the 300 s bound keeps them; a session-limit refusal is retried RECENT_RETRIES times
+      (RECENT_RETRY_S x attempt). The box's own symbol gets no 1m here (the feed keeps it), and nothing else changes.
+      `candles` takes an optional --tag (pulled=<day>_<tag>.csv.gz) so a one-off backfill can never share a key; without
+      it the key is unchanged.
 v5.8  2026-11-10  OTV5 r106 (CAP.8) — A FAILED CHAIN BATCH IS ASKED AGAIN, AND WHY IT FAILED IS KEPT. Measured in the
       warehouse 11-09 and 11-10: every box, every chain run (09:42 / 12:30 / 16:15) lost 2-21 of its by-type batches of
       100 (UNH 4-10 of 19; AMD 12-21 of 69; CVX 300 of 1,188 options at 12:30 on 11-10), a different count each run on the
@@ -91,11 +105,13 @@ conductor and by self_close after the close):
            -> raw/corporate_events/kind=<earnings|dividends|risk_free>/sym=<SYM>/pulled=<ET day>.json.gz
   candles  DXLink Candle with EVERY field (OHLC, volume, vwap, bid/ask volume, imp_volatility, open_interest, count)
            for --symbols at --interval from --since. -> raw/candles_full/interval=<i>/sym=<SYM>/pulled=<day>.csv.gz
+           (v5.9: --tag T -> pulled=<day>_T.csv.gz, for a one-off backfill beside objects already there)
            (the feed's raw/candles keeps OHLCV only: vwap / bid-ask volume / imp_volatility / OI were never stored).
   candles-recent  the same Candle fields over a LOOKBACK (RECENT below), with the bot AND the feed stopped (it refuses
            while either is active): the box's own symbol, plus CONTEXT and the front futures on the SPX box.
            -> raw/candles_full/interval=<1d|1d_eth|1h|5m>/sym=<SYM>/pulled=<ET day>_recent.csv.gz (v5.3: never the
-              `candles` key, which r98-r99 shared and so overwrote the backfill)
+              `candles` key, which r98-r99 shared and so overwrote the backfill); v5.9: on the SPX box, one more stream of
+              1m RTH (5 days) for CONTEXT minus FEED_1M -> raw/candles_full/interval=1m/sym=<SYM>/pulled=<day>_recent.csv.gz
   option-candles  (v5.6) every Candle field for each contract of the box's front-expiry chain, strikes within 15% of
            spot, for each day not yet captured: 1m quote candles (bid / ask / mark), then 1m, 5m, 1h, 1d trade candles,
            with the bot and the feed stopped (refuses like candles-recent).
@@ -103,7 +119,7 @@ conductor and by self_close after the close):
               pulled=<ET day>_opt.csv.gz, and one run manifest -> raw/option_candles_runs/dt=<ET day>/sym=<box>/HHMMSS.json.gz
 
 Usage:  python3 tools/capture_all.py metrics|chain|events|candles-recent|option-candles [--symbols A,B] [--max-dte N] [--dry-run] [--force]
-        python3 tools/capture_all.py candles --symbols SPX,VIX --interval 1d --since 2015-01-01
+        python3 tools/capture_all.py candles --symbols SPX,VIX --interval 1d --since 2015-01-01 [--tag backfill]
 """
 from __future__ import annotations
 
@@ -140,6 +156,12 @@ CONTEXT = ["VIX", "VIX9D", "VVIX", "VIX3M", "SPY", "QQQ", "IWM", "DIA", "TLT", "
 # candles-recent: (interval, lookback days, extended hours, stored interval label). The RTH daily lags two sessions at
 # TastyTrade for equities (measured 11-08), so 21 days of lookback re-pulls it until it has been published.
 RECENT = (("1d", 21, False, "1d"), ("1d", 21, True, "1d_eth"), ("1h", 5, False, "1h"), ("5m", 3, False, "5m"))
+# v5.9: the SPX box's CONTEXT symbols at 1m RTH, one stream after RECENT (so a cut keeps RECENT). 5 calendar days: 3-5
+# sessions, so a night or two missed is healed; TastyTrade serves 1m RTH only ~21 sessions back (measured 10-25).
+RECENT_CONTEXT = (("1m", 5, False, "1m"),)
+FEED_1M = ("VIX", "QQQ")        # kept at 1m by the candle feed already (raw/candles: VIX on the SPX box, QQQ on its own)
+RECENT_RETRIES = 3              # a session-limit refusal of the 1m stream is retried ...
+RECENT_RETRY_S = 20.0           # ... after RECENT_RETRY_S x attempt seconds (20 + 40: inside the 300 s bound)
 # Front-month futures the SPX box pulls (the 11-08 backfill's set), resolved to streamer symbols each run.
 FUT_PRODUCTS = ("ES", "NQ", "RTY", "YM", "ZN", "ZB", "CL", "GC", "6E", "VX")
 # option-candles (v5.6): (interval string asked, stored label), most perishable first - the quote candles keep about two
@@ -229,7 +251,7 @@ def gz_json(obj) -> bytes:
 
 def meta(mode: str, **kw) -> dict:
     return {"source": "tastytrade", "mode": mode, "captured_at": datetime.now(timezone.utc).isoformat(),
-            "box": box_symbol(), "tool": "tools/capture_all.py v5.8", **kw}
+            "box": box_symbol(), "tool": "tools/capture_all.py v5.9", **kw}
 
 
 # ── REST modes ─────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -396,8 +418,9 @@ def _write_candles(got, label, dry, suffix=""):
         print(f"CANDLES {r} {sym} {label} rows={len(ts)} {first}..{last} with_iv={iv}", flush=True)
 
 
-def do_candles(session, symbols, interval, since, dry):
-    _write_candles(asyncio.run(_candles(session, symbols, interval, since)), interval, dry)
+def do_candles(session, symbols, interval, since, dry, tag=""):
+    _write_candles(asyncio.run(_candles(session, symbols, interval, since)), interval, dry,
+                   suffix=f"_{tag}" if tag else "")
 
 
 def streams_active() -> bool:
@@ -440,9 +463,10 @@ async def _front_futures(session, products=FUT_PRODUCTS):
     return out
 
 
-async def _candles_recent(session, symbols, today, futures=False, sink=None):
+async def _candles_recent(session, symbols, today, futures=False, sink=None, context=False):
     """Each lookback in RECENT order; `sink(label, got)` is called as soon as its stream ends (v5.4), so a run cut short
-    keeps every interval that finished. Returns {label: got} as well."""
+    keeps every interval that finished. Returns {label: got} as well. context (v5.9, the SPX box): then RECENT_CONTEXT
+    for CONTEXT minus FEED_1M, one stream, retried on the session-limit refusal."""
     if futures:
         symbols = list(symbols) + [f for f in await _front_futures(session) if f not in symbols]
     got = {}
@@ -451,12 +475,20 @@ async def _candles_recent(session, symbols, today, futures=False, sink=None):
         got[label] = await _candles(session, symbols, iv, since, eth=eth)
         if sink is not None:
             sink(label, got[label])
+    if context:
+        ctx = [c for c in CONTEXT if c not in FEED_1M]
+        for iv, days, eth, label in RECENT_CONTEXT:
+            since = datetime.combine(today - timedelta(days=days), datetime.min.time(), tzinfo=timezone.utc)
+            got[label] = await _pull_retrying(session, ctx, iv, since, idle_s=20.0, eth=eth,
+                                              retries=RECENT_RETRIES, retry_s=RECENT_RETRY_S, who="CANDLES-RECENT 1m")
+            if sink is not None:
+                sink(label, got[label])
     return got
 
 
-def do_candles_recent(session, symbols, dry, futures=False):
+def do_candles_recent(session, symbols, dry, futures=False, context=False):
     asyncio.run(_candles_recent(session, symbols, et_now().date(), futures,
-                                sink=lambda label, g: _write_candles(g, label, dry, suffix="_recent")))
+                                sink=lambda label, g: _write_candles(g, label, dry, suffix="_recent"), context=context))
 
 
 # ── option candles (v5.6) ──────────────────────────────────────────────────────────────────────────────────────────
@@ -538,15 +570,21 @@ def _session_limited(exc) -> bool:
     return any(_session_limited(e) for e in getattr(exc, "exceptions", ()) or ())
 
 
-async def _pull_retrying(session, part, interval, since, sleep=asyncio.sleep):
-    for attempt in range(1, OPT_RETRIES + 1):
+async def _pull_retrying(session, part, interval, since, sleep=asyncio.sleep, idle_s=None, eth=False, retries=None,
+                         retry_s=None, who="OPTION-CANDLES"):
+    """One _candles pull, retried on the session-limit refusal only. Defaults are option-candles' (OPT_IDLE_S,
+    OPT_RETRIES, OPT_RETRY_S); v5.9 candles-recent's 1m stream passes its own."""
+    idle_s = OPT_IDLE_S if idle_s is None else idle_s
+    retries = OPT_RETRIES if retries is None else retries
+    retry_s = OPT_RETRY_S if retry_s is None else retry_s
+    for attempt in range(1, retries + 1):
         try:
-            return await _candles(session, part, interval, since, idle_s=OPT_IDLE_S)
+            return await _candles(session, part, interval, since, idle_s=idle_s, eth=eth)
         except Exception as exc:                                  # noqa: BLE001 - only the session limit is retried
-            if not _session_limited(exc) or attempt == OPT_RETRIES:
+            if not _session_limited(exc) or attempt == retries:
                 raise
-            print(f"OPTION-CANDLES session limit - retry {attempt} in {OPT_RETRY_S * attempt:.0f}s", flush=True)
-            await sleep(OPT_RETRY_S * attempt)
+            print(f"{who} session limit - retry {attempt} in {retry_s * attempt:.0f}s", flush=True)
+            await sleep(retry_s * attempt)
 
 
 async def _option_candles(session, plan, dry, st, state_path, streams=None):
@@ -609,7 +647,12 @@ def main(argv=None) -> int:
     ap.add_argument("--interval", default="1d")
     ap.add_argument("--since", default="2015-01-01")
     ap.add_argument("--dry-run", action="store_true")
+    ap.add_argument("--tag", default="", help="candles: key pulled=<day>_<tag> (a one-off backfill beside existing objects)")
     a = ap.parse_args(argv)
+    if a.tag and (not a.tag.isalnum() or not a.tag.islower() or a.tag in ("recent", "opt")):
+        print("--tag must be lowercase letters/digits and not recent/opt (keys candles-recent / option-candles own)",
+              flush=True)
+        return 2
     _load_service_env()
     me = box_symbol()
     if a.symbols:
@@ -638,12 +681,12 @@ def main(argv=None) -> int:
         do_events(session, syms, a.dry_run)
     elif a.mode == "candles":
         since = datetime.fromisoformat(a.since).replace(tzinfo=timezone.utc)
-        do_candles(session, syms, a.interval, since, a.dry_run)
+        do_candles(session, syms, a.interval, since, a.dry_run, tag=a.tag)
     elif a.mode == "candles-recent":
         spx = me == "SPX" and not a.symbols
         if spx:
             syms = syms + [c for c in CONTEXT if c not in syms]
-        do_candles_recent(session, syms, a.dry_run, futures=spx)
+        do_candles_recent(session, syms, a.dry_run, futures=spx, context=spx)
     elif a.mode == "option-candles":
         do_option_candles(session, a.dry_run)
     return 0

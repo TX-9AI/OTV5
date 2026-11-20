@@ -1,6 +1,14 @@
 #!/usr/bin/env python3
 """
-tests/check_capture_all.py  v5.8
+tests/check_capture_all.py  v5.9
+v5.9  2026-11-20  OTV5 r134 (CAP.9) — the CONTEXT symbols' 1m bars every night: M1 on the SPX box candles-recent opens the
+      four RECENT streams exactly as before and then ONE 1m RTH stream, 5 days back, for CONTEXT minus FEED_1M (SPY in it;
+      VIX, QQQ, SPX and the futures not); M2 it writes raw/candles_full/interval=1m/sym=SPY/pulled=<day>_recent.csv.gz and
+      every object already there (the 11-10 _park pull, a same-day backfill, _hunt, a _tag backfill) survives byte-identical;
+      M3 off the SPX box, or with --symbols, no 1m stream; M4 the 1m stream refused for the session limit is retried and
+      written, any other error in it leaves the four lookbacks written; M5 `candles --tag backfill` writes
+      pulled=<day>_backfill, a bad or reserved tag (recent / opt) is refused before any session; M6 nothing else moved
+      (RECENT, the OPT_* constants and _pull_retrying's option-candles defaults are r133's).
 v5.8  2026-11-10  OTV5 r106 (CAP.8) — B2 a by-type chain batch refused twice is asked again and served (batches_retried,
       errors kept); B3 a batch failing every attempt counts once in batches_failed, the rest kept.
 v5.7  2026-11-09  OTV5 r105 (CAP.7) — O4 one stream per box (OPT_STREAMS = 1: the session limit is shared by 14 boxes);
@@ -57,6 +65,7 @@ v5.0  2026-11-08  OTV5 r94 (CAP.1) — new. tools/capture_all.py records everyth
   F1  pick_front / _front_futures: the active-month contract per product, else the nearest; none -> skipped, not guessed
   W1  on the SPX box candles-recent adds CONTEXT and the front futures (looked up in the same loop); elsewhere only its own
   O1-O8  option-candles (v5.6): see the v5.6 line above
+  M1-M6  candles-recent 1m for CONTEXT (v5.9): see the v5.9 line above
   R1  retention_purge: spool files older than 3 days are counted (dry) / removed (apply); fresh files and dirs untouched
 """
 from __future__ import annotations
@@ -369,6 +378,99 @@ def main() -> int:
     check("W1 the SPX box adds CONTEXT and the front futures, looked up inside the streams' own event loop",
           rc_w == 0 and syms_spx[:1] == ("SPX",) and set(ca.CONTEXT) <= set(syms_spx) and "/ESZ26:XCME" in syms_spx
           and len(FakeSession.loops) == 1, f"rc={rc_w} {syms_spx} loops={len(FakeSession.loops)}")
+
+    # ── M1-M6 (v5.9): the CONTEXT symbols' 1m, on the SPX box only, under a key nothing else writes ──
+    def _main(argv):
+        try:
+            return ca.main(argv)
+        except BaseException as exc:                       # noqa: BLE001 - an older tool may not know the flag
+            return f"{type(exc).__name__}: {exc}"
+    streams_w = [o for o in opened if o != "SESSION"]
+    ctx_want = tuple(c for c in ca.CONTEXT if c not in ("VIX", "QQQ"))
+    first4 = [(o[1], (today - o[2]).days, o[3]) for o in streams_w[:4]]
+    m1_last = streams_w[4] if len(streams_w) > 4 else None
+    check("M1 SPX box: the four RECENT streams unchanged (same symbols each), then ONE 1m RTH stream 5 days back for "
+          "CONTEXT minus VIX/QQQ (SPY in; SPX and futures out)",
+          len(streams_w) == 5 and first4 == [("1d", 21, False), ("1d", 21, True), ("1h", 5, False), ("5m", 3, False)]
+          and len({o[0] for o in streams_w[:4]}) == 1 and m1_last is not None and m1_last[1] == "1m"
+          and (today - m1_last[2]).days == 5 and m1_last[3] is False and m1_last[0] == ctx_want and "SPY" in m1_last[0]
+          and not any(x in m1_last[0] for x in ("SPX", "VIX", "QQQ", "/ESZ26:XCME")),
+          f"{[(o[1], len(o[0])) for o in streams_w]} last={m1_last}")
+    seeded = {"raw/candles_full/interval=1m/sym=SPY/pulled=2026-11-10_park.csv.gz": b"PARK",
+              f"raw/candles_full/interval=1m/sym=SPY/pulled={today}.csv.gz": b"BACKFILL",
+              f"raw/candles_full/interval=1m/sym=SPY/pulled={today}_backfill.csv.gz": b"TAGGED",
+              "raw/candles_full/interval=1m/sym=SPY/pulled=2026-11-11_hunt.csv.gz": b"HUNT",
+              f"raw/candles_full/interval=1m/sym=.SPY{today:%y%m%d}C600/pulled={today}_opt.csv.gz": b"OPT"}
+    raw_store.clear()
+    raw_store.update(seeded)
+    opened.clear()
+    rc_m2 = _main(["candles-recent"])
+    new_1m = sorted(k for k in raw_store if k not in seeded and "/interval=1m/" in k)
+    check("M2 SPY 1m lands at raw/candles_full/interval=1m/sym=SPY/pulled=<day>_recent.csv.gz; the 11-10 _park pull, a "
+          "same-day backfill, a _backfill tag, _hunt and _opt objects survive byte-identical",
+          rc_m2 == 0 and all(raw_store.get(k) == v for k, v in seeded.items())
+          and f"raw/candles_full/interval=1m/sym=SPY/pulled={today}_recent.csv.gz" in new_1m
+          and len(new_1m) == len(ctx_want) and all(k.endswith(f"pulled={today}_recent.csv.gz") for k in new_1m),
+          f"rc={rc_m2} new={len(new_1m)} {new_1m[:2]}")
+    opened.clear()
+    rc_m3a = _main(["candles-recent", "--symbols", "SPX"])
+    m3a = [o[1] for o in opened if o != "SESSION"]
+    os.environ["OT_INSTRUMENT"] = "NVDA"
+    opened.clear()
+    rc_m3b = _main(["candles-recent"])
+    m3b = [o[1] for o in opened if o != "SESSION"]
+    os.environ["OT_INSTRUMENT"] = "SPX"
+    check("M3 no 1m stream off the SPX box (its own symbol is the feed's) or with --symbols",
+          rc_m3a == 0 and rc_m3b == 0 and m3a == ["1d", "1d", "1h", "5m"] and m3b == ["1d", "1d", "1h", "5m"],
+          f"{m3a} {m3b}")
+    tries = {"n": 0}
+
+    async def refuse_1m(_s, symbols, interval, since, idle_s=20.0, max_s=600.0, eth=False):
+        if interval == "1m" and tries["n"] < 2:
+            tries["n"] += 1
+            raise ExceptionGroup("unhandled errors in a TaskGroup", [RuntimeError(
+                "Fatal streamer error: The number of user sessions has exceeded the configured limit, user=x")])
+        return await fake_candles(_s, symbols, interval, since, idle_s=idle_s, eth=eth)
+
+    async def bad_1m(_s, symbols, interval, since, idle_s=20.0, max_s=600.0, eth=False):
+        if interval == "1m":
+            tries["n"] += 1
+            raise ValueError("bad symbol")
+        return await fake_candles(_s, symbols, interval, since, idle_s=idle_s, eth=eth)
+    real_rs = getattr(ca, "RECENT_RETRY_S", None)
+    ca.RECENT_RETRY_S = 0.01
+    ca._candles = refuse_1m
+    raw_store.clear()
+    rc_m4a = _main(["candles-recent"])
+    m4a = tries["n"] == 2 and any("/interval=1m/sym=SPY/" in k for k in raw_store)
+    tries["n"] = 0
+    ca._candles = bad_1m
+    raw_store.clear()
+    rc_m4b = _main(["candles-recent"])
+    labels4 = sorted({re.search(r"interval=([^/]+)/", k).group(1) for k in raw_store})
+    ca.RECENT_RETRY_S = real_rs
+    ca._candles = fake_candles
+    check("M4 the 1m stream refused twice for the session limit is retried and written; any other 1m error is not "
+          "retried and the four lookbacks are already written",
+          rc_m4a == 0 and m4a and isinstance(rc_m4b, str) and "ValueError" in rc_m4b and tries["n"] == 1
+          and labels4 == ["1d", "1d_eth", "1h", "5m"], f"rc={rc_m4a}/{rc_m4b} tries={tries} {labels4}")
+    raw_store.clear()
+    opened.clear()
+    rc_m5 = _main(["candles", "--symbols", "SPY", "--interval", "1m", "--since", "2026-11-10", "--tag", "backfill"])
+    k5 = set(raw_store)
+    opened.clear()
+    bad5 = [_main(["candles", "--symbols", "SPY", "--interval", "1m", "--tag", t]) for t in ("recent", "opt", "Bad-1")]
+    check("M5 candles --tag backfill -> pulled=<day>_backfill.csv.gz; recent / opt / a non-alnum tag refused before a "
+          "session",
+          rc_m5 == 0 and k5 == {f"raw/candles_full/interval=1m/sym=SPY/pulled={today}_backfill.csv.gz"}
+          and bad5 == [2, 2, 2] and opened == [], f"rc={rc_m5} {k5} bad={bad5} opened={opened}")
+    psrc = open(os.path.join(ROOT, "tools", "capture_all.py")).read()
+    check("M6 nothing else moved: RECENT, OPT_IDLE_S/RETRIES/RETRY_S/STREAMS/CHUNK and option-candles' retry defaults "
+          "are r133's",
+          ca.RECENT == (("1d", 21, False, "1d"), ("1d", 21, True, "1d_eth"), ("1h", 5, False, "1h"), ("5m", 3, False, "5m"))
+          and (ca.OPT_IDLE_S, ca.OPT_RETRIES, ca.OPT_RETRY_S, ca.OPT_STREAMS, ca.OPT_CHUNK) == (8.0, 6, 20.0, 1, 60)
+          and "_pull_retrying(session, part, interval, since)" in psrc and getattr(ca, "FEED_1M", None) == ("VIX", "QQQ"),
+          "")
     ca._candles = real_candles
 
     # ── I1 ──
