@@ -1,5 +1,7 @@
 # TRADES — the specs
 
+**`TRADES.md` v5.20 · 2026-11-20 · OTV5 r132 (TICK.3) — section 6: the entry walk steps one VENUE increment of the UNDERLYING's grid (the rule cached under INSTRUMENT, as exits use), never the OCC symbol's; at r131 every live entry fell back to the non-penny grid (QQQ 3.40/3.50 posted 3.40 every tick; now 3.42 -> 3.45). The ladder's rules are unchanged. The operator, 2026-11-20: "Yes to both".**
+
 **`TRADES.md` v5.19 · 2026-11-16 · OTV5 r131 (OGAP.2) — section 10: OGAP sizes on the ramp MIN, floor(`RISK_PER_TRADE_USD` / (ask x 100)) (`OT_RISK_USD`), not a flat $500; `OGAP_BUDGET_USD` is deleted. The operator, 2026-11-16: "Do me a favor and size the OGAP to whatever the ramp minimum (risk per trade) is set at instead of a flat $500. That $500 is Park's (my friend) preferred position size. I like 1050 for most trades."**
 
 **`TRADES.md` v5.18 · 2026-11-14 · OTV5 r115 (HYG §5.1) — §0's stops line drops the butterfly stop constant (deleted from config.py; nothing read it since r107); two bold stops remain (`check_docs_roster` R5). Docs only in this file.**
@@ -459,6 +461,9 @@ price it.
 · **Step ONE VENUE INCREMENT toward mark.** Granularity falls out of the
   increment, not a fraction list — a nickel grid on a $1.00 spread gives six
   rungs, a dime grid three.
+  **The grid is the UNDERLYING's** (r132 TICK.3): the venue rule is cached
+  under the underlying, so entries and exits both resolve it with INSTRUMENT;
+  the walk's KEY may still name the contract.
 · **ONE RUNG PER TICK.** A refusal is *"didn't completely fill at that price"* —
   a partial counts as a refusal for the remainder.
 · **RATCHET** — a refused price never returns, even if the market moves back

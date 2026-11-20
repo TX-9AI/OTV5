@@ -1,5 +1,12 @@
 """
-execution/entry_engine.py  v5.4
+execution/entry_engine.py  v5.5
+v5.5  2026-11-20  OTV5 r132 (TICK.3; the forward-edge study 2026-11-20, D1) — THE ENTRY LADDER'S TICK GRID IS LOOKED UP
+      UNDER THE UNDERLYING (INSTRUMENT), AS EXITS DO, NOT UNDER THE OCC SYMBOL. _place_single_leg passed
+      signal.contract.symbol to _walk_price -> ladder_registry.price_for -> entry_ladder._increment -> tick_size.resolve,
+      and the venue rule is cached under the underlying (PENNY_CLASSES lists underlyings), so every live entry missed and
+      priced on the non-penny grid: QQQ bid 3.40 / ask 3.50 walked [3.40] instead of [3.42, 3.43, 3.44, 3.45]. Only the
+      grid symbol changes; the walk key (intent_key on the contract), the 25% start, the ratchet, the mark cap and the
+      rounding in our favour are untouched. Paper unchanged (books the mark). Gate tests/check_entry_tick_grid.py.
 v5.4  2026-11-16  OTV5 r127 (LOP.1, FA.1; the cold audit 2026-11-15, critical) — A single-leg place_order THAT RAISES now
       registers the intent with order_guard.after_lost_post (the order may be live at the broker with no id here), so the
       next tick cancels or blocks on what the broker's book shows instead of posting the next rung beside it. Before,
@@ -478,7 +485,10 @@ class EntryEngine:
     def _walk_price(self, key: str, side: str, bid: float, ask: float,
                     symbol: str, mark_fallback: float) -> Tuple[float, str]:
         """The price to post THIS attempt, and why. Falls back to the mark when
-        the quote is unusable — never to a guess, and never worse than mark."""
+        the quote is unusable — never to a guess, and never worse than mark.
+
+        `symbol` is the GRID symbol — the UNDERLYING (INSTRUMENT), the name the
+        venue rule is cached under — never the OCC contract (r132 TICK.3)."""
         try:
             from execution import ladder_registry as _lr
             got = _lr.price_for(key, side, bid, ask, symbol)
@@ -556,7 +566,13 @@ class EntryEngine:
             if not _ok:
                 logger.warning("[guard] single-leg %s not posted: %s", symbol, _gwhy)
                 return None, "", 0
-            limit, _why = self._walk_price(_key, "buy", _bid, _ask, symbol, mid)
+            # 🔴 r132 TICK.3 — THE GRID IS THE UNDERLYING'S, NOT THE CONTRACT'S. The venue
+            # rule is cached under the underlying (options_chain._get_chain_structure) and
+            # PENNY_CLASSES lists underlyings, so the OCC symbol always missed and priced
+            # every entry on the non-penny grid (QQQ 3.40/3.50: [3.40], not [3.42..3.45]).
+            # Exits pass record["symbol"] = INSTRUMENT; the entry now does too. The walk
+            # KEY above stays the contract's.
+            limit, _why = self._walk_price(_key, "buy", _bid, _ask, INSTRUMENT, mid)
             _bok, _bwhy = _bp.affordable(float(limit) * int(contracts) * 100.0,
                                          session, account, f"single-leg {symbol}")   # F5
             if not _bok:
