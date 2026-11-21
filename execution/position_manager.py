@@ -1,5 +1,15 @@
 """
-execution/position_manager.py  v5.41
+execution/position_manager.py  v5.42
+v5.42  2026-11-21  OTV5 r139 (EXIT.17; the live exit polling audit 2026-11-21 S3, live only) — A PRICED RECORD CARRIES ITS
+      QUOTE'S OWN TIME. The 10 s freshness rule (exit_engine._fresh_quote) timed the moment _stash_quote copied the
+      quote onto the record (unchanged: it guards the copy), so the k-th close of a tick or of the 15:50 loop priced off marks (k-1) x 10-14 s old
+      (the copy, not the store, was the stale thing). _fetch_current_premium now
+      clears and re-stamps every pass: _stamp_mark puts the legs behind the mark (streamer symbol, sign) and the
+      oldest leg's quote time (OptionContract.quote_epoch, the feed store's updated_epoch) on the record
+      (_mark_legs / _mark_epoch); a REST mark is stamped with its read time. exit_engine v5.27 re-reads those legs
+      from the store just before a live close posts and refuses only a quote older than the feed's own staleness
+      rule (OT_CHAIN_STALE_S, 120 s; dxFeed is event-driven, so an unchanged quote is the current quote). A contract with no quote time (a hand-built chain) leaves the record unstamped: priced as before. No
+      decision changes (the tick's mark is the same number); paper unchanged; no broker call added.
 v5.41  2026-11-21  OTV5 r138 (EXIT.13; the live exit polling audit 2026-11-21 M3, live only) — A CLOSE THAT HAS STARTED
       FINISHES. _manage_one ran the exit only while the plan's trigger said exit, so after a partial close (1 of 3) a
       trigger flipping back (the mark back above PARK's lock floor, the delta back above its floor) left the remainder
@@ -369,6 +379,31 @@ def _quote_stamp(record) -> None:
         pass
 
 
+def _stamp_mark(record, legs) -> None:
+    """r139 (EXIT.17, audit S3) — stamp a priced record with the legs behind its mark and the quote's OWN time.
+
+    legs: [(OptionContract, sign)] with mark = sum(sign x leg mark). Stamped only when every leg carries the feed
+    store's quote time (quote_epoch) and a streamer symbol: exit_engine._post_mark re-reads those legs from the store
+    just before a live close posts (no broker call) and refuses a quote older than EXIT_QUOTE_MAX_AGE_S. A leg with
+    no quote time (a hand-built chain) leaves the record unstamped: its mark is used as before."""
+    try:
+        eps = [float(getattr(c, "quote_epoch", 0.0) or 0.0) for c, _ in legs]
+        syms = [str(getattr(c, "streamer_symbol", "") or "") for c, _ in legs]
+        if legs and all(e > 0 for e in eps) and all(syms):
+            record["_mark_legs"] = [(sy, int(sg)) for sy, (_, sg) in zip(syms, legs)]
+            record["_mark_epoch"] = min(eps)
+    except (TypeError, ValueError, AttributeError):
+        pass
+
+
+def _unstamp_mark(record) -> None:
+    try:
+        record.pop("_mark_legs", None)
+        record.pop("_mark_epoch", None)
+    except AttributeError:
+        pass
+
+
 def _stash_quote(record, bid: float, ask: float) -> None:
     """r105 — put a two-sided quote on the record for the exit ladder.
 
@@ -381,6 +416,8 @@ def _stash_quote(record, bid: float, ask: float) -> None:
     the walk and its clamp ran on whatever quote an earlier tick left. It is stamped
     here (_quote_stamp) and exit_engine._exit_quote ignores it unless it was written
     by THIS pricing pass and is under EXIT_QUOTE_MAX_AGE_S old.
+    r139 (EXIT.17): the copy's freshness rule is unchanged; a live close re-reads the store's quote just before
+    it posts (exit_engine._post_mark), which re-stashes it, so the k-th close of a tick never prices off this copy.
     """
     try:
         if ask and ask > 0:
@@ -1192,6 +1229,7 @@ class PositionManager:
             record["_px_seq"] = int(record.get("_px_seq") or 0) + 1
         except (TypeError, ValueError, AttributeError):
             pass
+        _unstamp_mark(record)          # r139 (EXIT.17): a mark is stamped by the pass that priced it, or not at all
 
         if chain is not None:
             try:
@@ -1225,6 +1263,7 @@ class PositionManager:
                             ask=max(0.0, (getattr(_sc, "ask", 0.0) or 0.0)
                                     - (getattr(_lc, "bid", 0.0) or 0.0)
                                     - (getattr(_hc, "bid", 0.0) or 0.0)))
+                        _stamp_mark(record, [(_sc, 1), (_lc, -1), (_hc, -1)])   # r139 (EXIT.17)
                         _note_quote(record, record.get("_exit_bid"), record.get("_exit_ask"),
                                     getattr(_sc, "iv", None))        # r195: the SHORT leg's IV
                         return _sc.mark - _lc.mark - _hc.mark
@@ -1254,6 +1293,7 @@ class PositionManager:
                                     - (getattr(_lc, "ask", 0.0) or 0.0)),
                             ask=max(0.0, (getattr(_sc, "ask", 0.0) or 0.0)
                                     - (getattr(_lc, "bid", 0.0) or 0.0)))
+                        _stamp_mark(record, [(_sc, 1), (_lc, -1)])             # r139 (EXIT.17)
                         _note_quote(record, record.get("_exit_bid"), record.get("_exit_ask"),
                                     getattr(_sc, "iv", None))        # r195: the SHORT leg's IV
                         return short_m - long_m   # current spread value (credit basis)
@@ -1268,6 +1308,7 @@ class PositionManager:
                         _stash_quote(record,
                                      bid=float(getattr(match, "bid", 0.0) or 0.0),
                                      ask=float(getattr(match, "ask", 0.0) or 0.0))
+                        _stamp_mark(record, [(match, 1)])                        # r139 (EXIT.17)
                         # stash live theta so the exit engine's theta-bleed
                         # detector can see it (single-leg longs only)
                         record["current_theta"] = float(getattr(match, "theta", 0.0) or 0.0)
@@ -1328,7 +1369,14 @@ class PositionManager:
             )
             return record.get("entry_premium", 0.0)
 
-        return self._rest_premium(record)
+        _rp = self._rest_premium(record)
+        if _rp is not None:
+            # r139 (EXIT.17): a REST mark is the broker's quote as of this read; its time is now.
+            try:
+                record["_mark_epoch"] = time.time()
+            except (TypeError, AttributeError):
+                pass
+        return _rp
 
     def _rest_premium(self, record: TradeRecord) -> Optional[float]:
         """The no-chain REST pricing (the live branch of _fetch_current_premium, moved here unchanged by r74 so a

@@ -1,5 +1,6 @@
 """
-data/options_chain.py  v5.1
+data/options_chain.py  v5.2
+v5.2  2026-11-21  OTV5 r139 (EXIT.17; the live exit polling audit 2026-11-21 S3) — OptionContract.quote_epoch: _read_marks carries each chain_marks row's updated_epoch on its quote and _apply_market_data puts it on the contract (0.0 unknown), so a live close can measure the quote's own age. Every other field, the 120 s OT_CHAIN_STALE_S refusal and the mark rule are unchanged.
 v5.1  2026-11-14  OTV5 r119 (HYG §5.5, HYG.24) — OptionsChainFetcher.get_iv_rank goes (uncalled). No caller anywhere (OTV5 code, tests, tools, docs, dtp: token scan + grep on r118). Nothing else changes; the module's behaviour is identical.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v4.7  2026-10-18  OTV4TEST r301 (LOG.1) — A ZERO-MARKS CHAIN OUTSIDE RTH IS SAID ONCE AT INFO, NOT EVERY MINUTE AT ERROR.
@@ -181,6 +182,7 @@ class OptionContract:
     open_interest:  int     = 0
     volume:         int     = 0
     streamer_symbol: str    = ""    # DXFeed streamer symbol
+    quote_epoch:    float   = 0.0   # r139 (EXIT.17): the quote's own update time (chain_marks.updated_epoch); 0 unknown
 
 
 @dataclass
@@ -633,7 +635,8 @@ class OptionsChainFetcher:
             _, bid, ask, delta, gamma, theta, vega, iv, _ep = r
             if (bid or 0) > 0 or (ask or 0) > 0:
                 quote_map[sym] = SimpleNamespace(
-                    event_symbol=sym, bid_price=bid or 0.0, ask_price=ask or 0.0)
+                    event_symbol=sym, bid_price=bid or 0.0, ask_price=ask or 0.0,
+                    updated_epoch=_ep or 0.0)                   # r139 (EXIT.17): the quote's own time
             if any((delta, gamma, theta, vega, iv)):
                 greeks_map[sym] = SimpleNamespace(
                     event_symbol=sym, delta=delta or 0.0, gamma=gamma or 0.0,
@@ -670,6 +673,10 @@ class OptionsChainFetcher:
                 oc.bid  = bid
                 oc.ask  = ask
                 oc.mark = (bid + ask) / 2 if bid > 0 and ask > 0 else (bid or ask)
+                try:                                            # r139 (EXIT.17)
+                    oc.quote_epoch = float(getattr(quote, "updated_epoch", 0.0) or 0.0)
+                except (TypeError, ValueError):
+                    oc.quote_epoch = 0.0
 
     # ─── Strike Selection ─────────────────────────────────────────────────────
 

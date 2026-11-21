@@ -1,5 +1,7 @@
 # TRADES — the specs
 
+**`TRADES.md` v5.26 · 2026-11-21 · OTV5 r139 (EXIT.15 + EXIT.16 + EXIT.17 + EXIT.18; the live exit polling audit 2026-11-21 S1-S4, live only) — section 6, the live close does what the spec says: a stop counts ITS OWN attempts (refused and rejected ones included, a lock exit's walk never; a different exit reason starts again; a restart continues), so it posts at the mark, the mark, then the bid, then MARKET; every close is priced off the feed store's mark re-read just before it posts (the freshest stored mark, its age logged; an unchanged quote is the current quote, since the feed sends a quote only when it changes), and only a quote past the feed's own 120 s staleness rule goes as a close with no mark; a broker refusal is a refusal (the reason paged), not a lost reply; and a cancel refused because the order just filled books in the same pass. The operator, 2026-11-21: "Yes, in that order". The order itself (the mark, 2 s polls, 8 s deadline, cancel-confirm-dead, the stop steps 2 and 3, the 15:55 cross) is unchanged.**
+
 **`TRADES.md` v5.25 · 2026-11-21 · OTV5 r138 (EXIT.11 + EXIT.12 + EXIT.13 + EXIT.14; the live exit polling audit 2026-11-21 M1-M3, live only) — section 6, a live close that has started: an unreadable read of the kept close order posts nothing (the id is kept and re-read next pass) until the end-of-day close, when the broker's own book and positions decide (every working order on the contract cancelled and confirmed dead, the broker-held remainder closed, the 15:55 cross intact); an order FILLED whose fills cannot be read keeps its id and books once when they read; and while a position holds partial-close fills or a kept close order it keeps closing under its last exit reason until flat, even when the trigger flips back, a restart included. The operator, 2026-11-21: "Yes, in that order" / "I don't want partial opens or partial closes to be the norm". The exit order itself (the mark, 2 s polls, 8 s deadline, cancel-confirm-dead, the stop escalation, the 15:55 cross) is unchanged.**
 
 **`TRADES.md` v5.24 · 2026-11-21 · OTV5 r137 (CAP.10 + LOCK.1) — the day and sections 9-10: PARK and OGAP fall under the daily catastrophic cap both ways (their closes count toward it; at the cap their entries are refused like every other strategy's), and PARK's +60% / +20% lock arms and exits on the MARK, not the bid. The operator, 2026-11-21: "both trades should fall under the catastrophic cap & any profit locks need to be on mark". Every number unchanged; the exit order (exit-at-mark, the stop escalation, the 15:55 cross) unchanged.**
@@ -591,6 +593,32 @@ The operator, 2026-11-21: *"I don't want partial opens or partial closes to be t
   delta back above its floor). The reason is kept in the row's `live_exit_state`
   beside the fills, so a restart mid-close finishes it the same way. A trigger that
   still says exit decides as before. Live only; paper fills whole at the mark.
+
+### The live close does what the spec says (r139, EXIT.15-18)
+
+· **The stop counts its own attempts (EXIT.15).** The spec: the mark, the mark, then
+  the bid (`LIVE_STOP_AT_BID_AFTER` = 2), then MARKET (`LIVE_STOP_MARKET_AFTER` = 3).
+  An attempt counts when it did not close the position (unfilled, partial, rejected,
+  refused by the broker) and only under a floor-policy reason (a stop). A lock exit's
+  or a target's walk never counts toward a stop. A different exit reason starts the
+  count again (the P&L a reason carries each tick does not make it a different
+  reason); the same reason continues it, a restart included (`live_exit_state`).
+· **The price is the store's newest (EXIT.17).** Just before a close posts, its legs
+  are re-read from the feed store (local, no broker call) and it posts at that mark,
+  not at a copy taken earlier in the tick; the quote's own age is logged on the post
+  line. The feed sends a quote only when it changes, so a quiet quote is still the
+  current quote and is used. Only a quote past the feed's own staleness rule
+  (`OT_CHAIN_STALE_S`, 120 s, the rule the chain already applies) goes as a close
+  with no mark does (before the 15:55 cross nothing posts, one page, it retries each
+  tick; at the cross it crosses).
+· **A refusal is a refusal (EXIT.16).** A broker error the SDK could read (a 4xx
+  "code: message") means nothing is working: the reason pages once, the rung is
+  refused, the next pass re-prices. A timeout, a connection error, a 5xx or an
+  unreadable reply is still a lost reply (the broker's book is read before anything
+  posts). Entries keep their own rule: any raise there is an unknown order.
+· **A cancel that lost to a fill books at once (EXIT.18).** When the deadline cancel
+  raises, the order is read once; filled (or dead) it is settled in that pass, with no
+  "UNFILLED" page.
 
 **r315 (2026-09-08) — THREE CORRECTIONS ON THE CREDIT PATH, war-gamed first.**
 · **The credit rung gets the per-rung slice**, `max(4, 20/4)` = 5s, the same

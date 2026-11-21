@@ -1,5 +1,37 @@
 """
-execution/exit_engine.py  v5.26
+execution/exit_engine.py  v5.27
+v5.27  2026-11-21  OTV5 r139 (EXIT.15 + EXIT.16 + EXIT.17 + EXIT.18; the live exit polling audit 2026-11-21 S1-S4, live only) —
+      THE LIVE CLOSE DOES WHAT THE OPERATOR'S SPEC SAYS. The operator, 2026-11-21: "Yes, in that order" (the second
+      build). EXIT.15 (S2, the stop spec: mark, mark, then the bid after LIVE_STOP_AT_BID_AFTER = 2, then MARKET from
+      LIVE_STOP_MARKET_AFTER = 3): _stop_unfilled counted every unfilled pass of every close and nothing else, so a
+      refused or rejected stop never escalated, a lock exit's unfilled walk counted (the first hard-stop attempt could
+      post MARKET), and a restart reset it. Now _count_stop_attempt counts an attempt that did not close the position
+      (unfilled, partial, rejected, refused, or a kept order that died between passes) ONLY under a floor-policy
+      reason (_exit_policy, a declared pricing included), for that reason: _confirm_and_book_live_exit starts the count
+      again when the reason changes (_stop_key: the reason with its numbers taken out, so "hard_stop_20% pnl=-21.4%"
+      each tick is one reason), and the count and its reason ride in live_exit_state (stop_unfilled / stop_reason), so
+      a restart continues it; cleared at the booking. The constants and the steps (_stop_escalation) are unchanged.
+      EXIT.16 (S1): the SDK raises on every non-2xx, so a broker REFUSAL took r128's lost-reply path (LOST tag, the
+      10 s wait, a book read). _broker_refusal: a TastytradeError whose every line is "code: message" (the SDK's
+      parse of the error body) and whose HTTP status, read from the raising frame, is a 4xx (or unknown) is a refusal:
+      no LOST tag, the rung refused, the stop attempt counted, the broker's reason paged once per distinct reason per
+      trade ("refused:<reason>"); a reply carrying errors goes the same way. A timeout, a connection error, a 5xx (even
+      with a JSON body) and an unparseable reply ("Couldn't parse response: ...") keep the lost-reply path. Entries
+      are a different helper (entry_engine's own place_order and order_guard.after_lost_post) and are unchanged: any
+      raise there is still a suspect (r135 GUARD.1). EXIT.17 (S3): _post_mark re-reads the record's legs from the
+      feed store's chain_marks (execution.fill_observers._marks, the existing local read-only read; no broker call)
+      immediately before every close posts and prices it off the FRESHEST stored mark, not the tick's copy; the quote's
+      OWN age (updated_epoch) is logged on every post, and the mark is treated as missing only past the feed's own
+      staleness rule (options_chain OT_CHAIN_STALE_S, 120 s; dxFeed is event-driven, so an unchanged quote is the
+      current quote - no 10 s block); the re-read two-sided quote is re-stashed for the walk and the stop's touch
+      step. Past 120 s -> mark None, today's no-mark close (single leg before the cross:
+      nothing posts, one "nomark" page, retried each tick; at/after the 15:55 cross: MARKET; a vertical: the
+      width-capped limit; a tent: nothing before the cross). A record position_manager did not stamp (a hand-built one)
+      is priced as before. EXIT.18 (S4): a deadline cancel that raises is followed by ONE read of the order; FILLED ->
+      booked in that pass, dead -> resolved in that pass (no "UNFILLED ... cancel failed" page); still working or
+      unreadable -> as before (kept, page). The exit order (post at the mark, 2 s polls, 8 s deadline,
+      cancel-confirm-dead before a re-post, the 15:55 cross) is unchanged; no new config key; paper unchanged; no extra
+      broker call when nothing is wrong. Gate tests/check_exit_correctness.py C1-C17.
 v5.26  2026-11-21  OTV5 r138 (EXIT.11 + EXIT.12 + EXIT.13 + EXIT.14; the live exit polling audit 2026-11-21 M1 M2 M3, live only) —
       A LIVE CLOSE NEVER POSTS BESIDE ITSELF ON AN UNREADABLE READ, NEVER SELLS TWICE ON LATE FILLS, AND A STARTED CLOSE
       FINISHES. The operator, 2026-11-21: "Yes, in that order" (all three). EXIT.11 (M1): resuming a kept close-order id,
@@ -1009,6 +1041,7 @@ Exit triggers by strategy:
 
 import json
 import logging
+import re
 import time
 from dataclasses import dataclass
 from decimal import Decimal
@@ -1148,6 +1181,72 @@ LOST_CLOSE_SLACK_S = 60.0
 
 def _is_lost_close_id(oid) -> bool:
     return isinstance(oid, str) and oid.startswith(LOST_CLOSE_TAG)
+
+
+# 🔴 r139 (EXIT.16, audit S1) — A BROKER REFUSAL IS NOT A LOST REPLY. The SDK raises TastytradeError on every non-2xx
+# (tastytrade/utils.py validate_response): a JSON error body becomes one "code: message" (or "domain: reason") line per
+# error; a body it cannot parse becomes "Couldn't parse response: ..." (nginx's 429 page, a 502). Only a PARSED error on
+# a 4xx is a refusal (the broker read the order and said no: nothing is working). A 5xx (even with a JSON body), a
+# timeout, a connection error, any other exception, or an unparseable reply keeps the r128 lost-reply path.
+_REFUSAL_LINE = re.compile(r"^[A-Za-z][\w.\-]*: \S.*$")
+
+
+def _http_status_of(exc) -> Optional[int]:
+    """The HTTP status the SDK saw, from the `response` local of the frame that raised (validate_response), or None."""
+    tb = getattr(exc, "__traceback__", None)
+    status = None
+    while tb is not None:
+        try:
+            r = tb.tb_frame.f_locals.get("response")
+            code = getattr(r, "status_code", None)
+            if isinstance(code, int):
+                status = code
+        except Exception:                                      # noqa: BLE001
+            pass
+        tb = tb.tb_next
+    return status
+
+
+def _broker_refusal(exc) -> Optional[str]:
+    """The broker's own reason when `exc` is a parsed broker refusal, else None (the outcome stays unknown)."""
+    try:
+        try:
+            from tastytrade.utils import TastytradeError as _TE
+            if not isinstance(exc, _TE):
+                return None
+        except ImportError:                                    # pragma: no cover - the venv always has it
+            if type(exc).__name__ != "TastytradeError":
+                return None
+        text = str(exc or "")
+        if not text.strip() or text.startswith("Couldn't parse response"):
+            return None
+        lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
+        if not lines or not all(_REFUSAL_LINE.match(ln) for ln in lines):
+            return None
+        status = _http_status_of(exc)
+        if status is not None and status // 100 != 4:
+            return None                                        # a 5xx: the broker may hold it - unknown
+        return "; ".join(lines)[:240]
+    except Exception:                                          # noqa: BLE001
+        return None
+
+
+def _stop_key(reason) -> str:
+    """r139 (EXIT.15, audit S2) — the exit reason with its numbers taken out ("hard_stop_20% pnl=-21.4%" ->
+    "hard_stop_#% pnl=#%"), so the live P&L a reason carries each tick is the SAME reason; a different rule is a
+    different reason."""
+    return re.sub(r"[-+]?\$?\d+(?:[.:]\d+)*", "#", str(reason or "")).strip()
+
+
+def _stored_marks(streamer_symbols) -> dict:
+    """r139 (EXIT.17, audit S3) — {streamer_symbol: (bid, ask, updated_epoch)} from the feed store's chain_marks, the
+    existing LOCAL read-only read (execution.fill_observers._marks). No broker call. {} on any failure."""
+    try:
+        from execution.fill_observers import _marks
+        from utils.paths import feed_db_path                   # stdlib only: no feed SDK in the bot process
+        return _marks(list(streamer_symbols), feed_db_path()) or {}
+    except Exception:                                          # noqa: BLE001
+        return {}
 
 
 @dataclass
@@ -3677,9 +3776,18 @@ class ExitEngine:
     def _exit_state_load(self, record: TradeRecord) -> None:
         """After a restart the record has no in-memory exit state; adopt what the
         row kept: the filled portions and the order that may still be working."""
+        raw = record.get("live_exit_state")
+        if raw and "_stop_unfilled" not in record:
+            # r139 (EXIT.15): the stop's attempt count and the reason it counts for survive a restart.
+            try:
+                _st = json.loads(raw) or {}
+                if int(_st.get("stop_unfilled") or 0) > 0:
+                    record["_stop_unfilled"] = int(_st["stop_unfilled"])
+                    record["_stop_reason"] = str(_st.get("stop_reason") or "")
+            except Exception:                                  # noqa: BLE001
+                pass                                           # the unreadable-state page below says it
         if "_live_exit_fills" in record or "_live_exit_order_id" in record:
             return
-        raw = record.get("live_exit_state")
         if not raw:
             return
         try:
@@ -3704,9 +3812,10 @@ class ExitEngine:
             record["_live_exit_reason"] = str(st["reason"])
             if st.get("pricing") in ("floor", "walk"):
                 record["_live_exit_pricing"] = st["pricing"]
-        logger.warning(f"LIVE exit {record['trade_id'][:8]}: restored partial-exit "
-                       f"state from the row — {sum(q for q, _ in fills):g} already "
-                       f"closed, order {st.get('order_id')}")
+        if fills or st.get("order_id"):                       # r139: a stop count alone is not a partial exit
+            logger.warning(f"LIVE exit {record['trade_id'][:8]}: restored partial-exit "
+                           f"state from the row — {sum(q for q, _ in fills):g} already "
+                           f"closed, order {st.get('order_id')}")
 
     def _exit_state_save(self, record: TradeRecord) -> None:
         """Write the in-memory exit state to the row; NULL once nothing is left."""
@@ -3727,6 +3836,12 @@ class ExitEngine:
                 st["reason"] = str(record["_live_exit_reason"])
                 if record.get("_live_exit_pricing") in ("floor", "walk"):
                     st["pricing"] = record["_live_exit_pricing"]
+        _n = int(record.get("_stop_unfilled") or 0)
+        if _n > 0:                                         # r139 (EXIT.15): a restart continues the stop's count
+            st = st if st is not None else {}
+            st["stop_unfilled"] = _n
+            st["stop_reason"] = str(record.get("_stop_reason") or "")
+        if st is not None:
             st = json.dumps(st)
         if record.get("live_exit_state") == st:
             return
@@ -3767,6 +3882,17 @@ class ExitEngine:
         """B3 (r467) — the live close, with its partial-exit memory loaded from
         and saved to the trade row around every pass."""
         self._exit_state_load(record)
+        # 🔴 r139 (EXIT.15, audit S2): the stop escalation counts the attempts of ONE stop. A different exit reason
+        # (numbers aside, _stop_key) starts its count again; the same reason, a restart included, continues it.
+        _key = _stop_key(reason)
+        _prev = record.get("_stop_reason")
+        self._stop_carry = (not _prev) or _prev == _key       # a kept attempt that died since counts for this stop
+        if _prev != _key:
+            if int(record.get("_stop_unfilled") or 0) > 0:
+                logger.info(f"LIVE exit {str(record.get('trade_id', ''))[:8]}: exit reason changed "
+                            f"({record.get('_stop_reason')!r} -> {_key!r}) - the stop's attempt count starts again")
+            record["_stop_unfilled"] = 0
+            record["_stop_reason"] = _key
         # r138 (EXIT.13): the reason this pass closes under (and the pricing a management intent declared for it), kept
         # with the close's state so a close that has started finishes under it even when the trigger flips back.
         record["_live_exit_reason"] = reason
@@ -3881,6 +4007,8 @@ class ExitEngine:
                 if remaining <= 0:
                     return self._book_from_fills(record, prior, total,
                                                  record.get("_live_exit_last_order_id"))
+            if getattr(self, "_stop_carry", True):
+                self._count_stop_attempt(record, reason)     # r139 (EXIT.15): that attempt ended unfilled
 
         if placed is None and record.get("_live_exit_held_check"):
             # r138 (EXIT.14): after a give-up found the broker holding LESS than the record's remainder, every fresh
@@ -3895,8 +4023,18 @@ class ExitEngine:
                                   detail="give-up: the broker holds none (or unreadable); nothing posted")
             remaining = min(remaining, int(held))
         if placed is None:
+            # 🔴 r139 (EXIT.17, audit S3): the close is priced off the feed store's marks as they stand NOW (a local
+            # read, no broker call), and only when the quote itself is under EXIT_QUOTE_MAX_AGE_S old. No fresh mark
+            # -> the no-mark close (before the cross nothing posts and it pages once; at the cross it crosses).
+            mark_price = self._post_mark(record, mark_price)
             placed = self._submit_live_close(record, remaining, mark_price,
                                              reason=reason)
+            _refused = record.pop("_exit_refused", None)
+            if placed is None and _refused:
+                # r139 (EXIT.16, audit S1): the broker answered and said no - nothing is working. The rung is
+                # refused, the attempt counts toward a stop's escalation, the broker's reason pages once per reason.
+                self._on_refusal(record, reason, _refused, trade_id)
+                return FillResult(confirmed=False, partial=done_qty > 0, detail=f"refused: {_refused}")
             if placed is None and record.pop("_exit_nomark_hold", None):
                 return FillResult(confirmed=False, detail="no mark before the cross; nothing posted")   # F3
             if placed is None and _is_lost_close_id(record.get("_live_exit_order_id")):
@@ -3920,12 +4058,16 @@ class ExitEngine:
         poll     = max(0.0, float(getattr(_cfg, "LIVE_FILL_POLL_SECONDS", 2.0)))
         deadline = time.monotonic() + float(getattr(_cfg, "LIVE_FILL_DEADLINE_SECONDS", 30.0))
         cancel_requested = False
+        _pre_read = None                     # r139 (EXIT.18): the read taken after a cancel that raised
         while True:
             _hb_touch("live-exit poll")      # r295 (LIVE.2): the watchdog must not read a laddering bot as hung
-            try:
-                placed = sdk_result(account.get_order(session, order_id))   # B0
-            except Exception as e:
-                logger.warning(f"LIVE exit {trade_id[:8]}: poll error ({e}) — retrying")
+            if _pre_read is not None:
+                placed, _pre_read = _pre_read, None
+            else:
+                try:
+                    placed = sdk_result(account.get_order(session, order_id))   # B0
+                except Exception as e:
+                    logger.warning(f"LIVE exit {trade_id[:8]}: poll error ({e}) — retrying")
             status = placed.status
 
             if status == OrderStatus.FILLED:
@@ -3952,6 +4094,7 @@ class ExitEngine:
 
             if status == OrderStatus.REJECTED:
                 record.pop("_live_exit_order_id", None)
+                self._count_stop_attempt(record, reason)     # r139 (EXIT.15): a rejected stop attempt counts
                 why = getattr(placed, "reject_reason", None) or "unknown"
                 self._alert_live_exit_once(
                     trade_id, "reject",
@@ -3962,7 +4105,7 @@ class ExitEngine:
 
             if status in self._DEAD_STATES:
                 return self._resolve_dead_order(record, placed, prior, total,
-                                                order_id, trade_id)
+                                                order_id, trade_id, reason=reason)
 
             # Still working.
             if time.monotonic() >= deadline:
@@ -3980,6 +4123,20 @@ class ExitEngine:
                                        f"resolving race")
                         continue
                     except Exception as e:
+                        # 🔴 r139 (EXIT.18, audit S4): a cancel the broker refused because the order JUST FILLED (or
+                        # died) is not an unfilled close. Read the order once - only on this path - and let the
+                        # loop book or resolve it now; still working (or unreadable) -> as before.
+                        try:
+                            _after = sdk_result(account.get_order(session, order_id))   # B0
+                        except Exception:                              # noqa: BLE001
+                            _after = None
+                        if _after is not None and (getattr(_after, "status", None) == OrderStatus.FILLED
+                                                   or getattr(_after, "status", None) in self._DEAD_STATES
+                                                   or getattr(_after, "status", None) == OrderStatus.REJECTED):
+                            logger.info(f"LIVE exit {trade_id[:8]}: cancel of {order_id} raised ({e}); the order "
+                                        f"reads {_after.status} - resolved this pass")
+                            _pre_read = _after
+                            continue
                         # Cancel failed — the order may still be working. Keep
                         # the order id on the record so the NEXT tick RESUMES
                         # this order rather than double-submitting.
@@ -4201,7 +4358,7 @@ class ExitEngine:
         return None, ""
 
     def _resolve_dead_order(self, record, placed, prior, total,
-                            order_id, trade_id) -> FillResult:
+                            order_id, trade_id, reason=None) -> FillResult:
         """A close order reached a terminal non-FILLED state. Harvest whatever
         partial fills it made, then either book (if cumulative fills now cover
         the position — the cancel/fill race can end here), report a partial, or
@@ -4213,10 +4370,11 @@ class ExitEngine:
             record["_live_exit_fills"] = prior
             if sum(q for q, _ in prior) >= total:
                 return self._book_from_fills(record, prior, total, order_id)
-            record["_stop_unfilled"] = int(record.get("_stop_unfilled") or 0) + 1   # r112 (AM.2): a partial escalates too
+            self._count_stop_attempt(record, reason)     # r112 (AM.2): a partial escalates too
             return self._partial_result(record, prior, total, order_id, trade_id)
         # r112 (AM.2): one more unfilled pass - a floor-policy stop escalates on it (_close_single_leg).
-        record["_stop_unfilled"] = int(record.get("_stop_unfilled") or 0) + 1
+        # r139 (EXIT.15): only an attempt made under a floor-policy reason counts (a walk's misses never do).
+        self._count_stop_attempt(record, reason)
         # r105 — the rung did not fill: refuse it so the next tick posts the
         # NEXT rung rather than re-offering a price the book already declined.
         try:
@@ -4230,6 +4388,107 @@ class ExitEngine:
             f"re-pricing and retrying")
         return FillResult(confirmed=False, order_id=str(order_id),
                           detail=f"not filled ({placed.status}); re-price and retry")
+
+    def _count_stop_attempt(self, record: TradeRecord, reason) -> None:
+        """r139 (EXIT.15, audit S2) — one more attempt of a STOP that did not close the position (unfilled, partial,
+        rejected or refused). Counted only under a floor-policy reason (_exit_policy, the declared pricing included),
+        for that reason (_stop_key); kept in live_exit_state, so a restart continues the count."""
+        if reason is None:
+            reason = record.get("_live_exit_reason") or ""
+        try:
+            if self._exit_policy(record, reason) != "floor":
+                return
+        except Exception:                                      # noqa: BLE001
+            return
+        record["_stop_unfilled"] = int(record.get("_stop_unfilled") or 0) + 1
+        record["_stop_reason"] = _stop_key(reason)
+
+    def _on_refusal(self, record: TradeRecord, reason: str, why: str, trade_id: str) -> None:
+        """r139 (EXIT.16, audit S1) — the broker refused the close post (its parsed error, or a reply carrying
+        errors). Nothing is working, so no LOST tag. The rung is refused (the next pass posts the next one), a
+        stop's attempt counts, and the broker's reason pages once per distinct reason per trade."""
+        try:
+            self._exit_walk_refused(record, float(record.get("_exit_last_limit") or 0.0))
+        except Exception:                                      # noqa: BLE001
+            pass
+        self._count_stop_attempt(record, reason)
+        self._alert_live_exit_once(
+            trade_id, f"refused:{_stop_key(why)[:80]}",
+            f"LIVE close REFUSED {trade_id[:8]} by the broker: {why} — nothing working; position stays OPEN; "
+            f"the next pass re-prices and retries")
+
+    def _post_mark(self, record: TradeRecord, mark_price: Optional[float]) -> Optional[float]:
+        """r139 (EXIT.17, audit S3) — the mark this close posts at, re-read from the feed store just before it posts.
+
+        position_manager stamps a priced record with the legs behind its mark (_mark_legs: [(streamer symbol, sign)])
+        and the quote's OWN update time (_mark_epoch, the store's updated_epoch; a REST mark: the read's time). Here
+        the legs are re-read from chain_marks (local, read-only; no broker call) and the FRESHEST stored mark is used,
+        whatever the tick copied. dxFeed is event-driven, so an unchanged quote is still the current quote: the mark
+        is treated as missing (today's no-mark close) only when its real age exceeds the feed's own staleness rule,
+        options_chain.OT_CHAIN_STALE_S (120 s, the rule _read_marks applies; no new threshold). The re-read two-sided
+        quote is re-stashed for the walk and the stop's touch step. The quote's age is logged on every post
+        (_exit_mark_age_s rides the post's [ladder] line). A mark with no stamp (a hand-built record) is used as
+        before."""
+        record.pop("_exit_mark_age_s", None)
+        legs = record.get("_mark_legs")
+        ep = record.get("_mark_epoch")
+        if not legs and ep is None:
+            return mark_price
+        try:
+            from data.options_chain import OT_CHAIN_STALE_S as _limit
+        except Exception:                                      # noqa: BLE001
+            _limit = 120.0
+        now = time.time()
+        tid = str(record.get("trade_id", ""))[:8]
+        if legs:
+            rows = _stored_marks([s for s, _ in legs])
+            try:
+                got = []
+                for sym, coef in legs:
+                    r = rows.get(sym)
+                    if r is None:
+                        got = None
+                        break
+                    bid, ask, upd = float(r[0] or 0.0), float(r[1] or 0.0), float(r[2] or 0.0)
+                    m = (bid + ask) / 2 if bid > 0 and ask > 0 else (bid or ask)
+                    if not (0 < m < 1e6):
+                        got = None
+                        break
+                    got.append((float(coef), bid, ask, m, upd))
+            except (TypeError, ValueError):
+                got = None
+            if got:
+                oldest = min(g[4] for g in got)
+                age = max(0.0, now - oldest)
+                if age <= _limit:
+                    mark = sum(c * m for c, _, _, m, _ in got)
+                    bid = sum(c * (b if c > 0 else a) for c, b, a, _, _ in got)
+                    ask = sum(c * (a if c > 0 else b) for c, b, a, _, _ in got)
+                    if len(got) > 1:
+                        bid, ask = max(0.0, bid), max(0.0, ask)
+                    if ask > 0:
+                        record["_exit_bid"], record["_exit_ask"] = round(bid, 4), round(ask, 4)
+                        record["_exit_q_seq"] = int(record.get("_px_seq") or 0)
+                        record["_exit_q_mono"] = time.monotonic()
+                    record["_mark_epoch"] = oldest
+                    record["_exit_mark_age_s"] = round(age, 1)
+                    logger.info(f"[ladder] {tid}: close priced off the stored mark {mark:.4f} (quote {age:.1f} s old; "
+                                f"the tick priced {mark_price})")
+                    return float(mark)
+        try:
+            if ep is not None and 0 <= now - float(ep) <= _limit:
+                record["_exit_mark_age_s"] = round(now - float(ep), 1)
+                logger.info(f"[ladder] {tid}: close priced off the tick's mark {mark_price} "
+                            f"(quote {now - float(ep):.1f} s old; no newer stored row)")
+                return mark_price
+            age_txt = f"{now - float(ep):.1f} s old" if ep is not None else "no quote time"
+        except (TypeError, ValueError):
+            age_txt = "unreadable quote time"
+        if ("stale-mark", tid) not in _telemetry_logged:
+            _telemetry_logged.add(("stale-mark", tid))
+            logger.warning(f"[ladder] {tid}: no current mark for the close ({age_txt}, over the feed's "
+                           f"{_limit:.0f} s staleness rule) - routed as a no-mark close")
+        return None
 
     def _partial_result(self, record, prior, total, order_id, trade_id) -> FillResult:
         done = sum(q for q, _ in prior)
@@ -4249,7 +4508,8 @@ class ExitEngine:
         for k in ("_live_exit_fills", "_live_exit_order_id", "_live_exit_last_order_id",
                   "_exit_last_limit", "_live_exit_posted_ids",
                   "_live_exit_reason", "_live_exit_pricing",             # r138 (EXIT.13)
-                  "_live_exit_held_check"):                               # r138 (EXIT.14)
+                  "_live_exit_held_check",                                # r138 (EXIT.14)
+                  "_stop_unfilled", "_stop_reason"):                      # r139 (EXIT.15)
             record.pop(k, None)
         self._exit_walk_done(record)      # r105 — no stale ratchet outlives a fill
         logger.info(f"LIVE exit {record['trade_id'][:8]}: CONFIRMED fill "
@@ -4514,6 +4774,7 @@ class ExitEngine:
         force_market = ("hard_close" in (reason or "").lower()
                         and hard_close_order_mode(now_et()) == "market")   # r149: credits cross too
         self._close_post_t0 = None
+        self._close_refusal = None           # r139 (EXIT.16): the broker's own "no" to this post, when it said one
         placed = None
         try:
             session = get_session()
@@ -4533,6 +4794,16 @@ class ExitEngine:
         except Exception as e:
             logger.error(f"Live close submit failed for {record['trade_id'][:8]}: {e}")
             placed = None
+            # 🔴 r139 (EXIT.16, audit S1): the SDK raises on every non-2xx. A PARSED 4xx broker error is a REFUSAL
+            # (nothing working at the broker): no LOST tag. A timeout, a connection error, a 5xx or an unparseable
+            # reply keeps r128's lost-reply path below.
+            _why = _broker_refusal(e) if getattr(self, "_close_post_t0", None) is not None else None
+            if _why:
+                self._close_post_t0 = None
+                self._close_refusal = _why
+        if placed is None and getattr(self, "_close_refusal", None):
+            record["_exit_refused"] = self._close_refusal
+        self._close_refusal = None
         # 🔴 r128 (ERC.1 / FA.2) — place_order RAISED (a lost reply) or answered with no order id: the close may be
         # working at the broker with no id here. Stamp the record LOST (persisted by _exit_state_save) so the next pass
         # reads the broker's book before it posts anything (_resolve_lost_close).
@@ -4575,6 +4846,7 @@ class ExitEngine:
         if getattr(response, "errors", None):
             self._close_post_t0 = None                     # the broker answered: refused, nothing working
             logger.error(f"{what} order errors: {response.errors}")
+            self._close_refusal = str(response.errors)[:240] or "order errors"   # r139 (EXIT.16)
             return None
         placed = getattr(response, "order", None)
         if placed is None or getattr(placed, "id", None) is None:
@@ -4695,8 +4967,10 @@ class ExitEngine:
             _lim, _why = self._exit_limit(record, reason, mark_price, _side, "single")
         limit = self._round_to_tick(_lim, record, single_leg=True)   # TICK.1
         record["_exit_last_limit"] = limit
-        logger.info("[ladder] single CLOSE %s @ %.2f — %s",
-                    str(record.get("trade_id", ""))[:8], limit, _why)
+        logger.info("[ladder] single CLOSE %s @ %.2f — %s; quote age %s",
+                    str(record.get("trade_id", ""))[:8], limit, _why,
+                    f"{record['_exit_mark_age_s']:.1f} s" if record.get("_exit_mark_age_s") is not None
+                    else "unknown")
         # SDK signed convention: SELL_TO_CLOSE receives a CREDIT (positive);
         # BUY_TO_CLOSE on an adopted short PAYS a debit (negative).
         signed = limit if action == OrderAction.SELL_TO_CLOSE else -limit
@@ -4768,8 +5042,10 @@ class ExitEngine:
             return None
         limit = self._round_to_tick(limit, record)
         record["_exit_last_limit"] = limit
-        logger.info("[ladder] vertical CLOSE %s @ %.2f — %s",
-                    str(record.get("trade_id", ""))[:8], limit, _why)
+        logger.info("[ladder] vertical CLOSE %s @ %.2f — %s; quote age %s",
+                    str(record.get("trade_id", ""))[:8], limit, _why,
+                    f"{record['_exit_mark_age_s']:.1f} s" if record.get("_exit_mark_age_s") is not None
+                    else "unknown")
         legs = [
             Leg(instrument_type=InstrumentType.EQUITY_OPTION,
                 symbol=short_sym, action=OrderAction.BUY_TO_CLOSE,  quantity=contracts),
@@ -4822,8 +5098,10 @@ class ExitEngine:
                                            "buy", "tent")
         limit = self._round_to_tick(limit, record)
         record["_exit_last_limit"] = limit
-        logger.info("[ladder] TENT CLOSE %s @ %.2f — %s",
-                    str(record.get("trade_id", ""))[:8], limit, _why)
+        logger.info("[ladder] TENT CLOSE %s @ %.2f — %s; quote age %s",
+                    str(record.get("trade_id", ""))[:8], limit, _why,
+                    f"{record['_exit_mark_age_s']:.1f} s" if record.get("_exit_mark_age_s") is not None
+                    else "unknown")
         legs = [
             Leg(instrument_type=InstrumentType.EQUITY_OPTION,
                 symbol=short_sym, action=OrderAction.BUY_TO_CLOSE,  quantity=contracts),
