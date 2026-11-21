@@ -1,5 +1,7 @@
 # TRADES — the specs
 
+**`TRADES.md` v5.25 · 2026-11-21 · OTV5 r138 (EXIT.11 + EXIT.12 + EXIT.13 + EXIT.14; the live exit polling audit 2026-11-21 M1-M3, live only) — section 6, a live close that has started: an unreadable read of the kept close order posts nothing (the id is kept and re-read next pass) until the end-of-day close, when the broker's own book and positions decide (every working order on the contract cancelled and confirmed dead, the broker-held remainder closed, the 15:55 cross intact); an order FILLED whose fills cannot be read keeps its id and books once when they read; and while a position holds partial-close fills or a kept close order it keeps closing under its last exit reason until flat, even when the trigger flips back, a restart included. The operator, 2026-11-21: "Yes, in that order" / "I don't want partial opens or partial closes to be the norm". The exit order itself (the mark, 2 s polls, 8 s deadline, cancel-confirm-dead, the stop escalation, the 15:55 cross) is unchanged.**
+
 **`TRADES.md` v5.24 · 2026-11-21 · OTV5 r137 (CAP.10 + LOCK.1) — the day and sections 9-10: PARK and OGAP fall under the daily catastrophic cap both ways (their closes count toward it; at the cap their entries are refused like every other strategy's), and PARK's +60% / +20% lock arms and exits on the MARK, not the bid. The operator, 2026-11-21: "both trades should fall under the catastrophic cap & any profit locks need to be on mark". Every number unchanged; the exit order (exit-at-mark, the stop escalation, the 15:55 cross) unchanged.**
 
 **`TRADES.md` v5.23 · 2026-11-21 · OTV5 r136 (OGAP.3) — section 10: OGAP reads the MARK wherever Park's spec reads the ask or the bid: the $0.50 floor, the size floor(`RISK_PER_TRADE_USD` / (mark x 100)), the band, the booked fill, the peak, the 1.6x / 2.0x lines, the 1.2x and 0.60 x peak floors, the 14:00 sweep under 0.75x; his numbers unchanged. The operator, 2026-11-20: "Ours needs the modification to account for how I would trade it, never pay the spread." / "Mark is the worst buy or sell we accept."**
@@ -563,6 +565,32 @@ per tick means the walk IS multi-tick. Keyed per open order intent; cleared on
 fill or abandon. **Lost on restart**, which costs at most one re-offer of an
 already-refused price. Recorded here rather than defended: it does not ride a
 column, and WORKING_AGREEMENT 22 says state that must survive a restart does.
+
+### A live close that has started finishes (r138, EXIT.11-13)
+
+The operator, 2026-11-21: *"I don't want partial opens or partial closes to be the norm."*
+· **An unreadable read posts nothing.** A pass that resumes a kept close order and
+  cannot read it (429, timeout, 5xx, any error) keeps the order id, posts nothing,
+  pages once and re-reads it next pass. Before r138 it dropped the id and posted a
+  second full close beside the live one.
+· **…but never past the end-of-day close (EXIT.14).** Once the EOD close drives the
+  position (15:45 assignment risk, 15:50 everything else, the 15:55 cross) the
+  unreadable order no longer decides: the broker's book is read, every working
+  order on the contract is cancelled and confirmed dead, the kept order's fills are
+  taken from the book (filled there: booked once, nothing posted), and the
+  broker-held remainder is closed on the EOD path, so the 15:55 cross still happens
+  (an unclosed ITM long would auto-exercise). Never more than the broker holds;
+  holding none, nothing posts and it pages. Book unreadable too: nothing posts, page.
+· **FILLED with unreadable fills is not a miss.** The order id is kept (in the row
+  too); each later pass re-reads that order's fills and books them once when they
+  read, paging once. Before r138 the next pass sold again on a closed position.
+· **A started close finishes.** While a position holds partial-close fills or a kept
+  close order (working, a lost reply, unread fills), it keeps closing under its LAST
+  exit reason, with that reason's ladder and stop escalation, until flat, even when
+  the trigger that started it flips back (PARK's mark back above the lock floor, the
+  delta back above its floor). The reason is kept in the row's `live_exit_state`
+  beside the fills, so a restart mid-close finishes it the same way. A trigger that
+  still says exit decides as before. Live only; paper fills whole at the mark.
 
 **r315 (2026-09-08) — THREE CORRECTIONS ON THE CREDIT PATH, war-gamed first.**
 · **The credit rung gets the per-rung slice**, `max(4, 20/4)` = 5s, the same

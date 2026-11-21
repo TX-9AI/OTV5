@@ -1,5 +1,14 @@
 """
-execution/position_manager.py  v5.40
+execution/position_manager.py  v5.41
+v5.41  2026-11-21  OTV5 r138 (EXIT.13; the live exit polling audit 2026-11-21 M3, live only) — A CLOSE THAT HAS STARTED
+      FINISHES. _manage_one ran the exit only while the plan's trigger said exit, so after a partial close (1 of 3) a
+      trigger flipping back (the mark back above PARK's lock floor, the delta back above its floor) left the remainder
+      open with no working order. Now, when the trigger does not say exit, exit_engine.started_close(record) is asked
+      (live only, no broker call, the row's live_exit_state after a restart): while the record holds partial-close
+      fills or a kept close-order id, the tick closes under the LAST exit reason, with the pricing a management intent
+      declared for it, so its ladder and stop escalation are the ones it already had, until flat. A trigger that says
+      exit decides as before; paper is unchanged. The operator, 2026-11-21: "I don't want partial opens or partial
+      closes to be the norm" / "Yes, in that order". Gate tests/check_exit_resume_safety.py R7-R12.
 v5.40  2026-11-21  OTV5 r137 (CAP.10) — PARK AND OGAP ARE NO LONGER CAP-EXEMPT: their admission rows drop cap_exempt=True, so at the
       daily catastrophic cap decide() refuses them at catastrophic_cap like every other strategy (one plan row each). The
       operator, 2026-11-21: "both trades should fall under the catastrophic cap". AdmissionRule.cap_exempt stays (default
@@ -419,6 +428,7 @@ _HELD_LOGGED: set = set()      # r36 (EOD.2): trade ids whose intended EOD hold 
 # flatten_all through _execute_exit), never the order. Process memory, keyed by trade id, so a reload of the open
 # records from the DB (still 'open' there) cannot forget it; a restart's boot reconcile finds the position gone.
 _BOOK_PENDING: dict = {}
+_STARTED_LOGGED: set = set()   # r138 (EXIT.13): trade ids whose started close was named once as finishing
 _WARNED_LEG_COUNT: set = set()   # SWALLOW T1: warn once on an unreadable count
 
 
@@ -1122,6 +1132,31 @@ class PositionManager:
             # every trail exit as a hard stop (F5).
             self._trade_logger.update_trail_stop(trade_id, decision.new_trail_stop)
             record["trail_stop"] = decision.new_trail_stop
+
+        # 🔴 r138 (EXIT.13, M3) — A CLOSE THAT HAS STARTED FINISHES. At r137 the exit ran only while the trigger said
+        # exit, so after a partial (1 of 3 filled) a trigger flipping back (the mark back above PARK's lock floor, the
+        # delta back above its floor) left the remainder open with no working order. While the record holds
+        # partial-close fills or a kept close-order id (exit_engine.started_close, live only, no broker call), it keeps
+        # closing under the LAST exit reason and that reason's declared pricing, so the ladder and the stop escalation
+        # are the ones that close already had. A trigger that still says exit decides as before.
+        if not decision.should_exit:
+            _started = None
+            try:
+                _sc = getattr(exit_eng, "started_close", None)
+                _started = _sc(record) if callable(_sc) else None
+            except Exception:                                   # noqa: BLE001
+                _started = None
+            if _started:
+                _reason, _pricing = _started
+                if _pricing:
+                    record["_exit_pricing"] = (_reason, _pricing)
+                if trade_id not in _STARTED_LOGGED:
+                    _STARTED_LOGGED.add(trade_id)
+                    logger.warning(f"Position [{trade_id[:8]}]: the trigger no longer says exit, but a close has "
+                                   f"started ({_reason}) — finishing it until flat")
+                decision = ExitDecision(should_exit=True, exit_reason=_reason,
+                                        current_pnl_pct=decision.current_pnl_pct,
+                                        current_pnl_usd=decision.current_pnl_usd)
 
         if decision.should_exit:
             closed = self._execute_exit(record, decision, current_premium)

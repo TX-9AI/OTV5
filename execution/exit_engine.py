@@ -1,5 +1,28 @@
 """
-execution/exit_engine.py  v5.25
+execution/exit_engine.py  v5.26
+v5.26  2026-11-21  OTV5 r138 (EXIT.11 + EXIT.12 + EXIT.13 + EXIT.14; the live exit polling audit 2026-11-21 M1 M2 M3, live only) —
+      A LIVE CLOSE NEVER POSTS BESIDE ITSELF ON AN UNREADABLE READ, NEVER SELLS TWICE ON LATE FILLS, AND A STARTED CLOSE
+      FINISHES. The operator, 2026-11-21: "Yes, in that order" (all three). EXIT.11 (M1): resuming a kept close-order id,
+      a failed get_order (429, timeout, 5xx, any exception) dropped the id and posted a fresh full close beside the live
+      one; now the id is kept, nothing posts this pass, the pass returns unconfirmed and pages once ("resume-read"), and
+      the next pass re-reads and resumes (r128's lost-close spirit). EXIT.12 (M2): an order reading FILLED with fills
+      that could not be read dropped its id, so the next pass posted a new sell-to-close on a closed position; now the id
+      is kept (in the row's live_exit_state too), each later pass re-reads THAT order, it books once when the fills
+      read, and it pages once ("fills-unreadable"). EXIT.13 (M3): every live pass records its reason (and the pricing a
+      management intent declared for it) as _live_exit_reason / _live_exit_pricing, kept in live_exit_state beside the
+      fills and the order id and cleared at the booking; started_close(record) answers (reason, pricing) while a LIVE
+      record holds partial-close fills or a kept close-order id (no broker call; None on paper), which position_manager
+      v5.41 uses to keep closing under the last reason. EXIT.14: a kept id that stays unreadable stops blocking once
+      the END-OF-DAY close drives it (a hard_close reason - flatten_all's, from 15:45 assignment risk / 15:50 else,
+      and the 15:55 cross - or _eod_due by the clock): _give_up_kept_order reads the broker's book (get_live_orders),
+      cancels every working order on the contract and confirms each dead, reads the positions, harvests the kept
+      order's fills from the book (FILLED there -> books once, posts nothing), and closes the broker-held remainder
+      under the EOD reason (never more than held: held none -> nothing, page once; held less -> that much, and
+      later fresh closes are sized from the positions, held_check in the row). Book or positions unreadable -> as
+      before, nothing posts, page once. The exit ORDER is unchanged: post at the mark, the 2 s polls, the
+      8 s deadline, cancel-confirm-dead before a re-post, the stop escalation (its count untouched), the 15:55 cross.
+      No new config key; paper unchanged; no extra broker call when nothing is wrong. Gate
+      tests/check_exit_resume_safety.py R1-R17.
 v5.25  2026-11-21  OTV5 r137 (LOCK.1) — PARK'S +60% / +20% LOCK DECIDES ON THE MARK, NOT THE BID. The operator, 2026-11-21:
       "any profit locks need to be on mark" (and 2026-11-19: "Mark is the worst buy or sell we accept."). _evaluate_park
       armed when the r105 bid stash (_exit_bid) reached entry x 1.60 and exited when it fell to entry x 1.20; it now
@@ -3675,6 +3698,12 @@ class ExitEngine:
                 record[f"_live_exit_{k}"] = st[k]
         if st.get("posted_ids"):                               # r128 (ERC.1)
             record["_live_exit_posted_ids"] = [str(x) for x in st["posted_ids"]]
+        if st.get("held_check"):                               # r138 (EXIT.14)
+            record["_live_exit_held_check"] = 1
+        if st.get("reason"):                                   # r138 (EXIT.13): the started close's own reason
+            record["_live_exit_reason"] = str(st["reason"])
+            if st.get("pricing") in ("floor", "walk"):
+                record["_live_exit_pricing"] = st["pricing"]
         logger.warning(f"LIVE exit {record['trade_id'][:8]}: restored partial-exit "
                        f"state from the row — {sum(q for q, _ in fills):g} already "
                        f"closed, order {st.get('order_id')}")
@@ -3692,6 +3721,12 @@ class ExitEngine:
                                     is not None else None)}
             if record.get("_live_exit_posted_ids"):       # r128 (ERC.1): a lost close never adopts one of these
                 st["posted_ids"] = [str(x) for x in record["_live_exit_posted_ids"]]
+            if record.get("_live_exit_held_check"):       # r138 (EXIT.14): fresh closes sized from the positions
+                st["held_check"] = 1
+            if record.get("_live_exit_reason"):           # r138 (EXIT.13): a restart finishes under the same reason
+                st["reason"] = str(record["_live_exit_reason"])
+                if record.get("_live_exit_pricing") in ("floor", "walk"):
+                    st["pricing"] = record["_live_exit_pricing"]
             st = json.dumps(st)
         if record.get("live_exit_state") == st:
             return
@@ -3704,11 +3739,42 @@ class ExitEngine:
                 f"LIVE exit {str(record.get('trade_id', ''))[:8]}: partial-exit state "
                 f"NOT saved ({exc}) — a restart now would forget it")
 
+    STARTED_CLOSE_FALLBACK_REASON = "started_close_resume"
+
+    def started_close(self, record: TradeRecord) -> Optional[Tuple[str, Optional[str]]]:
+        """r138 (EXIT.13, M3) — (reason, declared pricing or None) when this LIVE record holds a close that has STARTED
+        and is not finished: partial-close fills, or a kept close-order id (a working order, a lost reply, or a FILLED
+        order whose fills have not read yet). None otherwise, and always None on paper. The state comes from memory or,
+        after a restart, from the row's live_exit_state (_exit_state_load). Reads no broker; never raises. The caller
+        keeps closing the record under that reason until it is flat (the operator, 2026-11-21: "I don't want partial
+        opens or partial closes to be the norm")."""
+        if self.paper_trading:
+            return None
+        try:
+            self._exit_state_load(record)
+            fills = record.get("_live_exit_fills") or []
+            if not fills and record.get("_live_exit_order_id") is None:
+                return None
+            reason = str(record.get("_live_exit_reason") or "") or self.STARTED_CLOSE_FALLBACK_REASON
+            pricing = record.get("_live_exit_pricing")
+            return reason, (pricing if pricing in ("floor", "walk") else None)
+        except Exception as exc:                               # noqa: BLE001
+            logger.warning(f"started-close read failed for {str(record.get('trade_id', ''))[:8]} ({exc})")
+            return None
+
     def _confirm_and_book_live_exit(self, record: TradeRecord, reason: str,
                                     mark_price: Optional[float]) -> FillResult:
         """B3 (r467) — the live close, with its partial-exit memory loaded from
         and saved to the trade row around every pass."""
         self._exit_state_load(record)
+        # r138 (EXIT.13): the reason this pass closes under (and the pricing a management intent declared for it), kept
+        # with the close's state so a close that has started finishes under it even when the trigger flips back.
+        record["_live_exit_reason"] = reason
+        _decl = record.get("_exit_pricing")
+        if isinstance(_decl, tuple) and len(_decl) == 2 and _decl[0] == reason and _decl[1] in ("floor", "walk"):
+            record["_live_exit_pricing"] = _decl[1]
+        else:
+            record.pop("_live_exit_pricing", None)
         try:
             return self._confirm_and_book_live_exit_pass(record, reason, mark_price)
         finally:
@@ -3780,9 +3846,26 @@ class ExitEngine:
                 logger.info(f"LIVE exit {trade_id[:8]}: resuming order {order_id} "
                             f"(status={placed.status})")
             except Exception as e:
-                logger.error(f"LIVE exit {trade_id[:8]}: cannot fetch prior order "
-                             f"{order_id}: {e} — will submit fresh")
-                record.pop("_live_exit_order_id", None)
+                # 🔴 r138 (EXIT.11, M1): the kept order may still be WORKING; an unreadable read (429, timeout, 5xx,
+                # anything) is not a dead order. Keep its id, post NOTHING this pass, and re-read it on the next one
+                # (the spirit of r128's lost-close rule). At r137 the id was dropped here and a fresh full close
+                # posted beside the live one: two closes for one position.
+                self._alert_live_exit_once(
+                    trade_id, "resume-read",
+                    f"LIVE close {trade_id[:8]}: the kept close order {order_id} could not be read ({e}) — "
+                    f"nothing posted; it is re-read next pass, position stays OPEN")
+                if not self._kept_read_give_up_due(record, reason):
+                    return FillResult(confirmed=False, partial=done_qty > 0, order_id=str(order_id),
+                                      detail="kept close order unreadable; nothing posted; re-read next pass")
+                # r138 (EXIT.14): the end-of-day close has begun - the order's own read no longer decides; the
+                # broker's book and positions do (cancel every working order on the contract, confirm each dead,
+                # then close what the broker still holds, so the 15:55 cross still happens).
+                res = self._give_up_kept_order(record, session, account, order_id, prior, total, trade_id)
+                if isinstance(res, FillResult):
+                    return res
+                prior = list(record.get("_live_exit_fills") or [])
+                done_qty = sum(q for q, _ in prior)
+                remaining = int(res)
                 order_id, placed = None, None
 
         if placed is not None and placed.status in self._DEAD_STATES:
@@ -3799,6 +3882,18 @@ class ExitEngine:
                     return self._book_from_fills(record, prior, total,
                                                  record.get("_live_exit_last_order_id"))
 
+        if placed is None and record.get("_live_exit_held_check"):
+            # r138 (EXIT.14): after a give-up found the broker holding LESS than the record's remainder, every fresh
+            # close is sized from the broker's positions (never more than it holds: no short), nothing when gone.
+            held = self._held_qty(record, session, account)
+            if held is None or held <= 0:
+                self._alert_live_exit_once(
+                    trade_id, "giveup-gone",
+                    f"LIVE close {trade_id[:8]}: the broker holds none of this position (or its positions are "
+                    f"unreadable) — NO new close; the reconcile settles the row. Check the broker.")
+                return FillResult(confirmed=False, partial=done_qty > 0,
+                                  detail="give-up: the broker holds none (or unreadable); nothing posted")
+            remaining = min(remaining, int(held))
         if placed is None:
             placed = self._submit_live_close(record, remaining, mark_price,
                                              reason=reason)
@@ -3835,14 +3930,19 @@ class ExitEngine:
 
             if status == OrderStatus.FILLED:
                 fill = self._net_fill_price(record, placed)
-                record.pop("_live_exit_order_id", None)
                 if fill is None or fill[0] <= 0:
                     # Broker says filled but fills unreadable — refuse to book
-                    # fiction; reconcile/retry will resolve against the broker.
-                    logger.error(f"LIVE exit {trade_id[:8]}: order {order_id} "
-                                 f"FILLED but fills unreadable — NOT booking")
-                    return FillResult(confirmed=False, order_id=str(order_id),
-                                      detail="filled but fills unreadable; refusing to book")
+                    # fiction. 🔴 r138 (EXIT.12, M2): KEEP the order id (it stays in the row's live_exit_state), so
+                    # the next pass re-reads THIS order's fills and books them once, and never posts a second
+                    # close on a position the broker already closed. At r137 the id was dropped here and the next
+                    # pass posted a fresh sell-to-close. One page per trade.
+                    self._alert_live_exit_once(
+                        trade_id, "fills-unreadable",
+                        f"LIVE close {trade_id[:8]}: order {order_id} reads FILLED but its fills are unreadable — "
+                        f"NOT booked, nothing new posted; its fills are re-read each pass until they read")
+                    return FillResult(confirmed=False, partial=done_qty > 0, order_id=str(order_id),
+                                      detail="filled but fills unreadable; refusing to book; re-read next pass")
+                record.pop("_live_exit_order_id", None)
                 prior.append(fill)
                 record["_live_exit_fills"] = prior
                 if sum(q for q, _ in prior) >= total:
@@ -3901,6 +4001,123 @@ class ExitEngine:
                                       order_id=str(order_id),
                                       detail="deadline; cancel unresolved; resuming next tick")
             time.sleep(poll)
+
+    @staticmethod
+    def _kept_read_give_up_due(record: TradeRecord, reason: str) -> bool:
+        """r138 (EXIT.14) — when an unreadable kept close order stops blocking: once the END-OF-DAY close drives it
+        (a hard_close reason, which flatten_all sends from 15:45 for assignment risk and 15:50 for everything else,
+        and the 15:55 cross), or this position's EOD close has begun by the clock (_eod_due). The operator's own
+        schedule; no new number. Before then nothing posts beside the kept order (EXIT.11)."""
+        try:
+            return "hard_close" in (reason or "").lower() or bool(_eod_due(record))
+        except Exception:                                      # noqa: BLE001
+            return "hard_close" in (reason or "").lower()
+
+    def _leg_symbols(self, record):
+        syms = {str(record.get(k) or "").strip() for k in
+                ("option_symbol", "short_symbol", "long_symbol", "lower_symbol", "center_symbol", "upper_symbol")}
+        syms.discard("")
+        return syms
+
+    def _held_qty(self, record, session, account) -> Optional[float]:
+        """r138 (EXIT.14) — the broker-reported quantity still held on EVERY leg (the smallest), None if unreadable."""
+        syms = self._leg_symbols(record)
+        try:
+            held = {}
+            for p in (sdk_result(account.get_positions(session)) or []):
+                sy = str(getattr(p, "symbol", "") or "").strip()
+                if sy in syms:
+                    held[sy] = held.get(sy, 0.0) + abs(float(getattr(p, "quantity", 0) or 0))
+        except Exception:                                      # noqa: BLE001
+            return None
+        return min(held.get(sy, 0.0) for sy in syms) if syms else None
+
+    def _give_up_kept_order(self, record, session, account, order_id, prior, total, trade_id):
+        """r138 (EXIT.14) — the kept close order cannot be read and the end-of-day close has begun. Resolve from the
+        broker's OWN book instead of the order: read the live orders, cancel EVERY working order on the contract and
+        confirm each dead (the same grace as the deadline cancel), read the positions, harvest the kept order's
+        fills from the book's copy (a kept order FILLED there books once and posts nothing), and return the
+        quantity to close - the broker-reported remainder, never more than it holds. Returns a FillResult when nothing may post
+        this pass (the book or the positions unreadable: today's behaviour, page once; a cancel unconfirmed; the
+        position gone). Runs only on this abnormal path; never raises."""
+        syms = self._leg_symbols(record)
+
+        def _book():
+            return sdk_result(account.get_live_orders(session)) or []
+
+        def _on_contract(o):
+            return any(str(getattr(lg, "symbol", "") or "").strip() in syms for lg in (getattr(o, "legs", None) or []))
+        try:
+            orders = _book()
+        except Exception as e:                                 # noqa: BLE001
+            self._alert_live_exit_once(trade_id, "giveup-book",
+                                       f"LIVE close {trade_id[:8]}: the kept close order {order_id} is unreadable at "
+                                       f"the end-of-day close and the broker's book is UNREADABLE too ({e}) — nothing "
+                                       f"posts until one reads; position may still be OPEN. Check the broker.")
+            return FillResult(confirmed=False, partial=bool(prior), order_id=str(order_id),
+                              detail=f"give-up: book unreadable ({e}); nothing posted")
+        kept = next((o for o in orders if str(getattr(o, "id", "")) == str(order_id)), None)
+        working = [o for o in orders if _on_contract(o) and getattr(o, "status", None) in self._WORKING_STATES]
+        for o in working:
+            try:
+                sdk_result(account.delete_order(session, o.id))
+            except Exception as e:                             # noqa: BLE001
+                logger.warning(f"LIVE exit {trade_id[:8]}: give-up cancel of {o.id} raised ({e}); the book decides")
+        if working:
+            poll = max(0.0, float(getattr(_cfg, "LIVE_FILL_POLL_SECONDS", 2.0)))
+            until = time.monotonic() + max(3 * poll, 6.0)
+            while True:
+                try:
+                    orders = _book()
+                except Exception:                              # noqa: BLE001
+                    orders = None
+                if orders is not None and not any(_on_contract(o) and getattr(o, "status", None)
+                                                  in self._WORKING_STATES for o in orders):
+                    break
+                if time.monotonic() >= until:
+                    self._alert_live_exit_once(trade_id, "giveup-cancel",
+                                               f"LIVE close {trade_id[:8]}: give-up could not confirm every working "
+                                               f"order on the contract dead — nothing posted; retried next pass")
+                    return FillResult(confirmed=False, partial=bool(prior), order_id=str(order_id),
+                                      detail="give-up: a working order on the contract is not confirmed dead; "
+                                             "nothing posted")
+                time.sleep(poll)
+            kept = next((o for o in orders if str(getattr(o, "id", "")) == str(order_id)), kept)
+        held = self._held_qty(record, session, account)
+        if held is None:
+            self._alert_live_exit_once(trade_id, "giveup-pos",
+                                       f"LIVE close {trade_id[:8]}: give-up cannot read the positions — nothing "
+                                       f"posted; retried next pass")
+            return FillResult(confirmed=False, partial=bool(prior), order_id=str(order_id),
+                              detail="give-up: positions unreadable; nothing posted")
+        # Every order on the contract is dead: the kept order is finished. What it filled (the book's copy):
+        kfill = self._net_fill_price(record, kept) if kept is not None else None
+        kfill = kfill if (kfill is not None and kfill[0] > 0) else None
+        remaining = total - int(sum(q for q, _ in prior) + (kfill[0] if kfill else 0))
+        if remaining > 0 and held <= 0:
+            # Nothing held and the fills do not explain it: post NOTHING (never a short). The kept id stays (with
+            # held_check, in the row too), so every later pass ends here, or sizes from the positions.
+            record["_live_exit_held_check"] = 1
+            self._alert_live_exit_once(trade_id, "giveup-gone",
+                                       f"LIVE close {trade_id[:8]}: the kept order {order_id} is dead and the broker "
+                                       f"holds none of the position — NO new close; the reconcile settles the row. "
+                                       f"Check the broker.")
+            return FillResult(confirmed=False, partial=bool(prior), order_id=str(order_id),
+                              detail="give-up: the broker holds none; nothing posted")
+        record.pop("_live_exit_order_id", None)
+        if kfill:
+            prior.append(kfill)
+            record["_live_exit_fills"] = prior
+        if remaining <= 0:
+            return self._book_from_fills(record, prior, total, order_id)
+        if held < remaining:
+            record["_live_exit_held_check"] = 1
+            self._alert_live_exit_once(trade_id, "giveup-short",
+                                       f"LIVE close {trade_id[:8]}: the broker holds {held:g}, the record expects "
+                                       f"{remaining} — closing {held:g} only (never a short); check the broker")
+        logger.warning(f"LIVE exit {trade_id[:8]}: kept order {order_id} unreadable at the end-of-day close — every "
+                       f"order on the contract confirmed dead; closing the broker-held {min(remaining, int(held))}")
+        return min(remaining, int(held))
 
     def _resolve_lost_close(self, record, session, account, lost_id, remaining):
         """r128 (ERC.1) — a prior close post's reply was lost. Returns (order, "") to ADOPT a close the broker holds,
@@ -4030,7 +4247,9 @@ class ExitEngine:
         qty = sum(q for q, _ in fills)
         wavg = sum(q * p for q, p in fills) / qty
         for k in ("_live_exit_fills", "_live_exit_order_id", "_live_exit_last_order_id",
-                  "_exit_last_limit", "_live_exit_posted_ids"):
+                  "_exit_last_limit", "_live_exit_posted_ids",
+                  "_live_exit_reason", "_live_exit_pricing",             # r138 (EXIT.13)
+                  "_live_exit_held_check"):                               # r138 (EXIT.14)
             record.pop(k, None)
         self._exit_walk_done(record)      # r105 — no stale ratchet outlives a fill
         logger.info(f"LIVE exit {record['trade_id'][:8]}: CONFIRMED fill "
