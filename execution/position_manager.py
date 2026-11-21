@@ -1,5 +1,9 @@
 """
-execution/position_manager.py  v5.39
+execution/position_manager.py  v5.40
+v5.40  2026-11-21  OTV5 r137 (CAP.10) — PARK AND OGAP ARE NO LONGER CAP-EXEMPT: their admission rows drop cap_exempt=True, so at the
+      daily catastrophic cap decide() refuses them at catastrophic_cap like every other strategy (one plan row each). The
+      operator, 2026-11-21: "both trades should fall under the catastrophic cap". AdmissionRule.cap_exempt stays (default
+      False; config.ADMISSION_RULES can still only turn one off), held by no rule now. Every other term is unchanged.
 v5.39  2026-11-16  OTV5 r128 (MC.1 / FA.4, the cold audit 2026-11-15) — A BOOKING WRITE THAT RAISES AFTER A CONFIRMED CLOSE
       RETRIES ONLY THE WRITE, NEVER THE ORDER. At r127 _execute_exit called log_exit unwrapped after the fill was
       confirmed (the exit engine had already dropped the fills and the row's live_exit_state), so a raise (sqlite I/O
@@ -470,7 +474,9 @@ class AdmissionRule:
     blocks: frozenset = field(default_factory=frozenset)      # I block these from opening
     blocked_by: frozenset = field(default_factory=frozenset)  # these block me
     # r178 (CAP.2) — True: the daily catastrophic loss cap does not refuse this
-    # strategy. The two butterflies (ruling 2026-09-30) and PARK (r288, 2026-10-17).
+    # strategy. Held by the two butterflies (ruling 2026-09-30; gone r103), PARK
+    # (r288 to r136) and OGAP (OGAP.1 to r136); r137 (CAP.10): by NO rule - every
+    # strategy is under the cap. Kept, inert, so a future ruling is one flag.
     cap_exempt: bool = False
 
 
@@ -533,11 +539,12 @@ _DEFAULT_RULES = {
     # RETIRE.3 (r88): the TCS row (EXCEPTION 1, vertical spreads) is deleted with the TCS.
     # the GEX fly's cutoff was raised from 14:00 to 15:00 by the operator
     # RETIRE.5 (r103): the GEX pin butterfly's row (EXCEPTION 2, one per session, cap-exempt) is deleted with the fly.
-    # r288 (PARK.1) — one per session, and its own budget: the cap neither refuses it nor counts its P&L
-    # (config.CAP_EXCLUDED_STRATEGIES).
-    PARK:    AdmissionRule(config.ENTRY_WINDOWS[PARK], max_open_of_type=1, max_tries_per_session=1, cap_exempt=True),
-    # OGAP.1 — one per session, its own $500 budget: the cap neither refuses it nor counts its P&L.
-    OGAP:    AdmissionRule(config.ENTRY_WINDOWS[OGAP], max_open_of_type=1, max_tries_per_session=1, cap_exempt=True),
+    # r288 (PARK.1) — one per session. r137 (CAP.10): under the cap like every strategy (it was cap-exempt and
+    # outside the cap's P&L from r288 to r136); the operator, 2026-11-21: "both trades should fall under the
+    # catastrophic cap".
+    PARK:    AdmissionRule(config.ENTRY_WINDOWS[PARK], max_open_of_type=1, max_tries_per_session=1),
+    # OGAP.1 — one per session. r137 (CAP.10): under the cap (cap-exempt from OGAP.1 to r136).
+    OGAP:    AdmissionRule(config.ENTRY_WINDOWS[OGAP], max_open_of_type=1, max_tries_per_session=1),
 }
 
 
@@ -622,8 +629,8 @@ def decide(f: Facts, table: Optional[dict] = None) -> Verdict:
         # the universal floor for EVERY strategy: nothing trades inside the
         # opening range, and the ORB itself cannot be read before it exists.
         return Verdict(False, "orb_range", "opening range not established yet")
-    # r178 (CAP.2): the cap refuses every strategy except a cap-exempt one (the
-    # two butterflies). An unknown strategy has no rule and is refused here too.
+    # r178 (CAP.2): the cap refuses every strategy except a cap-exempt one (r137
+    # CAP.10: none is). An unknown strategy has no rule and is refused here too.
     if not f.cap_intact and not getattr(table.get(f.strategy), "cap_exempt", False):
         return Verdict(False, "catastrophic_cap", "catastrophic cap reached — no new entries")
     if f.past_hard_close:

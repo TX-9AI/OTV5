@@ -1,5 +1,6 @@
 """
-strategy/ogap.py  v5.2
+strategy/ogap.py  v5.3
+v5.3  2026-11-21  OTV5 r137 (CAP.10) — TEXT ONLY: OGAP is no longer cap-exempt (v5.0 below): its closes count toward the daily catastrophic cap and the cap refuses its entry (config v5.26). The operator, 2026-11-21: "both trades should fall under the catastrophic cap". The conditions are unchanged.
 v5.2  2026-11-21  OTV5 r136 (OGAP.3) — the ogap_contract condition reads the MARK (mark >= OGAP_MIN_ASK, floor(RISK_PER_TRADE_USD / (mark x 100)) >= 1), not the ask: the operator, 2026-11-20, "never pay the spread". The two-sided quote check is unchanged (a mark needs both sides).
 v5.1  2026-11-16  OTV5 r131 (OGAP.2) — the ogap_contract description reads RISK_PER_TRADE_USD (the ramp MIN), not the deleted OGAP_BUDGET_USD.
 v5.0  2026-11-14  OTV5 (OGAP.1) — OGAP, PARK'S FRIEND'S ORB-GAP: THE SPECIFICATION. The operator, 2026-11-14: "let's

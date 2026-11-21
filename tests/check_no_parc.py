@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_no_parc.py  v5.6
+tests/check_no_parc.py  v5.7
+v5.7  2026-11-21  OTV5 r137 (CAP.10) — RE-POINTED (WA section 38.4), the two cap facts only: N1 pins CAP_EXCLUDED_STRATEGIES == () (PARK and OGAP are under the cap; the operator, 2026-11-21: "both trades should fall under the catastrophic cap"); N5 flips exactly the golden's admission cap_exempt and cap_excludes_park from True to False (after asserting they were True) and the rest must still equal 93c7f93's. Every PARC assertion unchanged.
 v5.6  2026-11-15  OTV5 r125 (HYG.28) — the ramp TOP's key is OT_BREAKOUT_BUDGET_USD (was OT_ORB_BUDGET_USD); the scratch env sets the new key. Same value.
 v5.5  2026-11-15  OTV5 r123 (HYG.27) — OT_RESTING_DB leaves the scratch env (r118 deleted execution/resting_orders.py, its only reader).
 v5.4  2026-11-14  OTV5 (OGAP.1) — N1 pins CAP_EXCLUDED_STRATEGIES = (PARK, OGAP): OGAP's own budget is outside the cap, as PARK's. Every PARC assertion unchanged.
@@ -229,8 +230,8 @@ def main():
                     if not line.lstrip().startswith("#") and re.search(r"\bOT_PARC\b", line):
                         readers.append(f"{os.path.relpath(fp, ROOT)}:{i}")
     check("N1 config: no ENTRY_WINDOWS['PARC'], no PARC_MODE / PARC_ENV_REFUSED / PARC_MIN_CREDIT, "
-          "CAP_EXCLUDED_STRATEGIES == ('PARK', 'OGAP') (OGAP.1), and nothing reads OT_PARC",
-          n1.get("ew") is False and n1.get("attrs") == [] and n1.get("cap") == ["PARK", "OGAP"] and not readers,
+          "CAP_EXCLUDED_STRATEGIES == () (r137 CAP.10), and nothing reads OT_PARC",
+          n1.get("ew") is False and n1.get("attrs") == [] and n1.get("cap") == [] and not readers,
           f"{n1} readers={readers[:6]}")
 
     # ── N2 plan_state ─────────────────────────────────────────────────────────
@@ -323,6 +324,13 @@ def main():
             for fk, fv in _fly_defaults.items():
                 if fk in _sg and _sg.pop(fk) != fv:
                     c8_open = False
+    # r137 (CAP.10): PARK is under the daily catastrophic cap both ways (the operator, 2026-11-21: "both trades should
+    # fall under the catastrophic cap"). Exactly two golden facts flip, after asserting they were the r288 values.
+    _adm = want.get("admission") if isinstance(want.get("admission"), dict) else {}
+    if _adm.get("cap_exempt") is not True or want.get("cap_excludes_park") is not True:
+        c8_open = False
+    _adm["cap_exempt"] = False
+    want["cap_excludes_park"] = False
     diff = sorted(k for k in set(want) | set(got) if want.get(k) != got.get(k))
     if not c8_open:
         diff.append("c8_not_fail_open")

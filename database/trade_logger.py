@@ -1,5 +1,6 @@
 """
-database/trade_logger.py  v5.8
+database/trade_logger.py  v5.9
+v5.9  2026-11-21  OTV5 r137 (CAP.10) — DOCSTRINGS ONLY: realized_pnl_today and today_summary no longer say the cap leaves PARK out; config.CAP_EXCLUDED_STRATEGIES is () (every strategy counts toward the daily catastrophic cap), so the cap's number equals today_summary's total_pnl. No code changes.
 v5.8  2026-11-14  OTV5 r119 (HYG §5.5, HYG.24) — get_open_trades_today goes (the deprecated alias of get_open_trades_live; uncalled). No caller anywhere (OTV5 code, tests, tools, docs, dtp: token scan + grep on r118). Nothing else changes; the module's behaviour is identical.
 v5.7  2026-11-14  OTV5 r115 (HYG §5.1) — the [spent] report's TrendCredit branch is deleted: the TCS was removed at r88, so the branch could never run on a live close, and it was the last reader of strategy/sweep_credit_spread.is_breach_exit (module deleted). The Runaway [spent] line is unchanged.
 v5.6  2026-11-14  OTV5 r111 (AM.1) — THE EXECUTABLE-PRICE BASIS, BESIDE THE MARK. Paper books the mark in and out (100%
@@ -1408,7 +1409,8 @@ class TradeLogger:
         """DEFINITIVE realized net closed P&L for today's ET session (wins
         offset losses). This is the number the daily loss limit gates on.
         r288: `exclude_strategies` drops those strategies' rows - the cap passes
-        config.CAP_EXCLUDED_STRATEGIES; every other caller passes nothing."""
+        config.CAP_EXCLUDED_STRATEGIES (r137: (), so nothing is dropped); every
+        other caller passes nothing."""
         ex = set(exclude_strategies or ())
 
         def _strategy(r):                 # a row without the column (a fixture) is never excluded
@@ -1421,11 +1423,10 @@ class TradeLogger:
 
     def today_summary(self) -> dict:
         """Counts + net P&L for today's ET session, EVERY strategy - the displays' figure.
-        r298: NOT the circuit breaker's number since r288: the cap reads
+        r298: from r288 to r136 NOT the circuit breaker's number: the cap reads
         realized_pnl_today(exclude_strategies=config.CAP_EXCLUDED_STRATEGIES), which
-        leaves PARK out; the two differ by PARK's P&L on a day PARK traded, by design
-        (TRADES §9). This docstring said "identical" for ten days after that stopped
-        being true (audit 2026-10-18 T3-10)."""
+        left PARK (and from OGAP.1 OGAP) out (audit 2026-10-18 T3-10). r137 (CAP.10):
+        the tuple is (), so the two are equal again."""
         rows = self._closed_today_rows()
         wins   = sum(1 for r in rows if (r["pnl_usd"] or 0) > 0)
         losses = sum(1 for r in rows if (r["pnl_usd"] or 0) < 0)

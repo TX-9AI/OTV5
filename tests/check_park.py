@@ -1,6 +1,14 @@
 #!/usr/bin/env python3
 """
-tests/check_park.py  v5.5
+tests/check_park.py  v5.6
+v5.6  2026-11-21  OTV5 r137 (CAP.10 + LOCK.1) — THE LOCK IS ON THE MARK AND PARK IS UNDER THE CAP. The operator,
+      2026-11-21: "both trades should fall under the catastrophic cap & any profit locks need to be on mark". K10a: mark
+      1.21 holds; mark 1.60 (bid 1.50) ARMS; armed, mark 1.22 (bid 1.18, under the floor) HOLDS; mark 1.20 (bid 1.15)
+      exits park_lock "mark ...". K10a2 (was "the bid arms, not the mark"): mark 1.70 / bid 1.50 ARMS, mark 1.20 / bid
+      1.25 exits. K10b: the rehydrated row (max_premium_seen 1.65) at mark 1.19 / bid 1.25 exits park_lock. K11a: the
+      admission rule is NOT cap-exempt; K11b: the cap's day P&L counts PARK (-2,500 = the displays'); K11c: the restart
+      seed reads -2,500 and latches the halt at the 1,050 limit. K13: the capped branch asks nothing. The cap's refusal
+      itself is driven in tests/check_cap_all.py; the mark lock's bid/mark disagreements in tests/check_lock_mark.py.
 v5.5  2026-11-15  OTV5 r123 (HYG.27) — OT_RESTING_DB leaves the scratch env (r118 deleted execution/resting_orders.py, its only reader).
 v5.4  2026-11-14  OTV5 (OGAP.1) — K13 pins PIN_EXEMPT = (PARK, OGAP): OGAP is measured without the pin gate, as PARK. Every PARK check unchanged.
 v5.3  2026-11-09  OTV5 r103 (RETIRE.5 step 2) — K13a intercepts _attempt_park alone: _attempt_butterfly is removed with the GEX fly. Every check unchanged.
@@ -44,17 +52,17 @@ v1.0  2026-10-18  OTV4TEST r288. The operator, 2026-10-17 18:21 ET: "Trade it, d
   K8  OT_PARK=log: generate_signal returns NOTHING to execute and writes one park_signal.jsonl row
   K9  the size is the box's own risk, flat: $1,050 at premium 1.62 -> 6; $2,500 at ask 9.00 -> 2 (RiskManager.size_for)
   K10 exits (the REAL ExitEngine.evaluate routes PARK to _evaluate_park):
-      a. the lock: bid 1.19 x entry before arming HOLDS; after bid >= 1.60 x entry, bid 1.20 x entry EXITS park_lock
+      a. the lock (r137: on the MARK): 1.21 x entry before arming HOLDS; after mark >= 1.60 x entry, mark 1.20 x entry
+         EXITS park_lock; an armed mark above the floor holds whatever the bid says
       b. a restart re-arms from the persisted mfe_premium
       c. the delta floor: |delta| 0.29 at 11:29 HOLDS, at 11:30 EXITS park_delta_floor; None / 0.0 HOLD
       d. NO premium stop and NO trail: mark at 10% of entry, delta 0.35, 12:00 -> HOLDS
       e. the close: 15:44 holds, 15:45 EXITS park_close_15:45_ET
       f. one park_exit.jsonl row per trade
-  K11 its own budget: the admission rule is cap-exempt, one try, window 11:01-11:03; the cap's day P&L leaves PARK out
-      (a -2,000 PARK close and a -500 Breakout close -> -500), the displays' realized P&L does not (-2,500)
+  K11 (r137) under the cap: the admission rule is NOT cap-exempt, one try, window 11:01-11:03; the cap's day P&L counts
+      PARK (a -2,000 PARK close and a -500 Breakout close -> -2,500), as the displays' realized P&L does (-2,500)
   K12 config: OT_PARK unset -> trade; log / OFF honoured; junk -> log, refused named; ENTRY_WINDOWS["PARK"] = 11:01-11:03
-  K13 main: PARK is declared long_debit, PIN_EXEMPT names it, and the capped branch asks _attempt_park before
-      returning
+  K13 main: PARK is declared long_debit, PIN_EXEMPT names it, and (r137) the capped branch asks nothing
   K14 THE SPLIT: strategy/park.py reads no store and no chain; the plan registers on construction
   K15 the pin gate's COUNTERFACTUAL on every PARK entry (the operator, 2026-10-17 20:06 ET: "I want a counterfactual
       on the pin gate recorded on the entries"): main._record_pin_counterfactual writes pin_gate.jsonl - would-refuse,
@@ -243,20 +251,25 @@ def main():
             r["_exit_bid"] = bid
         return eng.evaluate(r, mark)
 
+    # r137 (LOCK.1): the lock arms and exits on the MARK; the bid beside it decides nothing.
     ra = rec("k10a")
     d_pre = ev(ra, 1.21, 12, 0, bid=1.19)
-    d_arm = ev(ra, 1.62, 12, 5, bid=1.60)
-    d_out = ev(ra, 1.22, 12, 10, bid=1.20)
-    check("K10a the lock: 1.19 before arming holds; armed at bid 1.60; bid 1.20 exits park_lock",
-          not d_pre.should_exit and not d_arm.should_exit and d_out.should_exit
-          and d_out.exit_reason.startswith("park_lock"), f"{d_pre.exit_reason!r} {d_arm.exit_reason!r} {d_out.exit_reason!r}")
+    d_arm = ev(ra, 1.60, 12, 5, bid=1.50)
+    d_hold = ev(ra, 1.22, 12, 8, bid=1.18)
+    d_out = ev(ra, 1.20, 12, 10, bid=1.15)
+    check("K10a the lock on the MARK: 1.21 holds; mark 1.60 (bid 1.50) arms; armed, mark 1.22 (bid 1.18) holds; "
+          "mark 1.20 exits park_lock",
+          not d_pre.should_exit and not d_arm.should_exit and not d_hold.should_exit and d_out.should_exit
+          and d_out.exit_reason.startswith("park_lock: mark 1.20"),
+          f"{d_pre.exit_reason!r} {d_arm.exit_reason!r} {d_hold.exit_reason!r} {d_out.exit_reason!r}")
 
-    # r291 (PARK.2): the bid arms, not the mark. A tick whose MARK prints +70% while the BID is +50% must not arm.
+    # r137 (LOCK.1): r291's "the bid arms, not the mark" is reversed - a mark at +70% with the bid at +50% ARMS.
     ra2 = rec("k10a2")
     d_m1 = ev(ra2, 1.70, 12, 20, bid=1.50)
-    d_m2 = ev(ra2, 1.22, 12, 25, bid=1.20)
-    check("K10a2 mark 1.70 / bid 1.50 does NOT arm (bid rule); the next bid 1.20 holds, no park_lock",
-          not d_m1.should_exit and not d_m2.should_exit, f"{d_m1.exit_reason!r} {d_m2.exit_reason!r}")
+    d_m2 = ev(ra2, 1.20, 12, 25, bid=1.25)
+    check("K10a2 mark 1.70 / bid 1.50 ARMS (mark rule); the next mark 1.20 / bid 1.25 exits park_lock",
+          not d_m1.should_exit and d_m2.should_exit and d_m2.exit_reason.startswith("park_lock"),
+          f"{d_m1.exit_reason!r} {d_m2.exit_reason!r}")
 
     # r291 (PARK.2): the restart re-arm, through the real store - log_entry, per-tick update_current_premium, then
     # get_open_trades() rehydrates the row (mfe_premium is NULL on an open row; max_premium_seen carries the best mark).
@@ -271,9 +284,9 @@ def main():
     rb = _rows[0] if _rows else rec("k10b-missing")
     rb["current_delta"] = 0.5
     _mfe0, _best0 = rb.get("mfe_premium"), rb.get("max_premium_seen")     # as rehydrated, before evaluate() touches it
-    d_b = ev(rb, 1.21, 13, 0, bid=1.19)
+    d_b = ev(rb, 1.19, 13, 0, bid=1.25)
     check("K10b a restart re-arms from the PERSISTED best mark: get_open_trades() row (mfe_premium NULL, "
-          "max_premium_seen 1.65) at bid 1.19 exits park_lock",
+          "max_premium_seen 1.65) at mark 1.19 (bid 1.25) exits park_lock",
           bool(_rows) and _mfe0 is None and float(_best0 or 0) == 1.65
           and d_b.should_exit and d_b.exit_reason.startswith("park_lock"),
           f"rows={len(_rows)} mfe={_mfe0!r} best={_best0!r} {d_b.exit_reason!r}")
@@ -310,8 +323,8 @@ def main():
 
     from execution import position_manager as PM
     rl = PM.rules().get("PARK")
-    check("K11a admission: PARK is cap-exempt, one try, one open, window 11:01-11:03",
-          rl is not None and rl.cap_exempt and rl.max_tries_per_session == 1 and rl.max_open_of_type == 1
+    check("K11a admission: PARK is NOT cap-exempt (r137), one try, one open, window 11:01-11:03",
+          rl is not None and not rl.cap_exempt and rl.max_tries_per_session == 1 and rl.max_open_of_type == 1
           and tuple(map(tuple, rl.window)) == ((11, 1), (11, 3)), f"{rl}")
     from database.trade_logger import get_trade_logger
     TL = get_trade_logger()
@@ -323,14 +336,14 @@ def main():
                   "('b1','Breakout','closed',-500,?,1)", (now_iso,))
     cap = RiskManager(risk_per_trade=1050.0, paper_trading=True).day_realized_pnl()
     disp = TL.realized_pnl_today()
-    check("K11b its own budget: the cap's day P&L is -500 (PARK left out), the displays' is -2,500",
-          abs(cap + 500) < 1e-6 and abs(disp + 2500) < 1e-6, f"cap={cap} display={disp}")
+    check("K11b under the cap (r137): the cap's day P&L counts PARK (-2,500), as the displays' (-2,500)",
+          abs(cap + 2500) < 1e-6 and abs(disp + 2500) < 1e-6, f"cap={cap} display={disp}")
     # r298 (CAP.4): the RESTART SEED is the cap's number too. A fresh RiskManager booting on these rows must read
     # -500 and NOT halted (limit 1,050); it read -2,500 and halted, then logged a RE-ARMED event nothing had hit.
     _rm2 = RiskManager(risk_per_trade=1050.0, paper_trading=True)
     _rm2._ensure_seeded()
-    check("K11c the restart seed reads the cap's -500 (PARK left out) and does not latch the halt",
-          _rm2._seeded is True and abs(_rm2._session_pnl_usd + 500) < 1e-6 and _rm2._session_halted is False,
+    check("K11c the restart seed reads the cap's -2,500 (PARK counted, r137) and latches the halt at 1,050",
+          _rm2._seeded is True and abs(_rm2._session_pnl_usd + 2500) < 1e-6 and _rm2._session_halted is True,
           f"seeded={_rm2._seeded} pnl={_rm2._session_pnl_usd} halted={_rm2._session_halted} limit={_rm2._daily_loss_limit}")
 
     def probe(env):
@@ -347,10 +360,11 @@ def main():
 
     src = open(os.path.join(ROOT, "main.py")).read()
     capped = src[src.index("    if _cap_hit:\n        if not _adm_ok:"):]
-    capped = capped[:capped.index("        return\n\n")]
-    check("K13 main: PARK declared long_debit, PIN_EXEMPT names it, the capped branch asks _attempt_park",
+    capped = capped[:capped.index("    # ── Fetch options chain")]
+    check("K13 main: PARK declared long_debit, PIN_EXEMPT names it, the capped branch asks nothing (r137)",
           '"PARK":                 "long_debit"' in src and 'PIN_EXEMPT = ("PARK", "OGAP")' in src
-          and "_attempt_park(ctx, ms, state)" in capped and "def _attempt_park(" in src, capped[-300:])
+          and "_attempt_park(" not in capped and "_attempt_ogap(" not in capped
+          and capped.rstrip().endswith("return") and "def _attempt_park(" in src, capped[-300:])
 
     # r292 (GATE.1) — K13a DRIVES THE NORMAL-DAY DISPATCH. K13 pinned the capped branch by text and nothing pinned
     # main.py's uncapped `_attempt_park(ctx, ms, state, chain=chain)`: deleting it left this checker green (audit

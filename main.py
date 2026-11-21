@@ -1,5 +1,6 @@
 """
-main.py  v5.30
+main.py  v5.31
+v5.31  2026-11-21  OTV5 r137 (CAP.10) — AT THE DAILY CATASTROPHIC CAP NOTHING IS ASKED: the capped branch no longer calls _attempt_park and _attempt_ogap (they were cap-exempt, PARK from r288, OGAP from OGAP.1); it returns after the admission table has refused every strategy at catastrophic_cap (one plan row each), and still fails closed when the table is unavailable. The cap-hit log line no longer names exemptions. The operator, 2026-11-21: "both trades should fall under the catastrophic cap & any profit locks need to be on mark". The normal dispatch asks PARK and OGAP exactly as before.
 v5.30  2026-11-21  OTV5 r136 (OGAP.3) — OGAP IS SIZED ON THE MARK: _execute_entry_signal asks the sizer, for strategy_name OGAP only, with premium = signal.entry_premium (the plan's mark; the D3 freeze re-reads it) and budget_usd = config.RISK_PER_TRADE_USD (unchanged), i.e. floor(RISK_PER_TRADE_USD / (mark x 100)); the signal's ogap_ask is gone and is never read. The operator, 2026-11-20: "Ours needs the modification to account for how I would trade it, never pay the spread." Every other strategy sizes exactly as before.
 v5.29  2026-11-20  OTV5 r135 (GUARD.1; the live-readiness audit 2026-11-20 C3 + I3, live only) — A SUSPECT ENTRY ORDER IS RESOLVED EVERY TICK AND BOOKED UNDER ITS STRATEGY. NEW _resolve_entry_suspects(state), called on every RTH tick before the intraday reconcile (live only; no broker call unless order_guard holds a suspect): order_guard.resolve_suspects reads each suspect from the broker, then _hand_booked_to_manager hands every record it booked to the position manager (appended, as an entry is) and sends the entry alert. _execute_entry_signal hands them over after enter() too (a booking can happen inside another entry's clear_to_post). _intraday_adopt resolves first and DEFERS (paged once a day) while a bookable suspect not yet given up touches a leg it would adopt, so the fill keeps its plan instead of becoming ADOPTED; after the guard gives up (RESOLVE_GIVEUP_S) adopt proceeds and the guard clears on the ADOPTED row. Paper unchanged. Gate tests/check_entry_suspect_block.py.
 v5.28  2026-11-20  OTV5 r133 (D2/D3; the forward-edge study 2026-11-20) — _execute_entry_signal calls entry_engine.freeze_contract(signal, state.paper_trading) right after the validity check and before ENT.1 and sizing: a strategy that re-picked its strike while its live entry walk is in flight is put back on the walking contract (D3). One call; paper is a no-op. Gate tests/check_entry_ladder_5s.py.
@@ -4111,16 +4112,16 @@ def attempt_new_entry(ctx: dict, ms: MarketState, state: BotState):
     # Daily catastrophic loss cap: while the day's REALIZED net P&L is down by
     # the limit, take no new trades (open positions keep being managed to exit).
     # r162: it re-opens once closes bring the loss back under the limit.
-    # r178 (CAP.2): the two butterflies are exempt. The operator, 2026-09-30:
-    # "Allow both flies to fire even if we've hit the cap." So this no longer
-    # returns here; the capped branch below (after admission) asks ONLY the
-    # butterfly path and returns before any other strategy.
+    # r178 (CAP.2) let cap-exempt strategies through (the butterflies, then PARK
+    # and OGAP); r137 (CAP.10): none is exempt. This still does not return here:
+    # the capped branch below (after admission, so every strategy gets its
+    # catastrophic_cap plan row) returns before any strategy is asked.
     _cap_hit = risk_mgr.is_halted()
     _adm_ok = False
     if _cap_hit:
         logger.info("Entry blocked: DAILY CATASTROPHIC LOSS CAP reached — no new entries "
-                    "until the realized loss is back under the limit (the two "
-                    "butterflies are exempt and keep their own window and quota).")
+                    "until the realized loss is back under the limit (every strategy, "
+                    "PARK and OGAP included).")
 
     # r102 — OUTSIDE RTH THIS IS A REHEARSAL, NOT A TRADING PASS. can_enter
     # short-circuited on the RTH gate and returned at DEBUG, so r101's
@@ -4259,10 +4260,12 @@ def attempt_new_entry(ctx: dict, ms: MarketState, state: BotState):
             logger.info("[admission] may be asked: %s",
                         ", ".join(_eligible) if _eligible else "(none)")
 
-    # ══ r178 (CAP.2) — AT THE CAP, ONLY THE CAP-EXEMPT ARE ASKED ══════════════
-    # The admission table has already refused every strategy but a cap-exempt
-    # one (gate catastrophic_cap, one plan row each). This branch asks PARK
-    # (the GEX fly went with RETIRE.5, r103) and RETURNS, so no other strategy below is reached.
+    # ══ r178 (CAP.2) / r137 (CAP.10) — AT THE CAP, NOTHING IS ASKED ═══════════
+    # The admission table has already refused every strategy (gate
+    # catastrophic_cap, one plan row each). r178-r136 this branch asked the
+    # cap-exempt (the GEX fly to r103, PARK from r288, OGAP from OGAP.1); r137:
+    # PARK and OGAP are under the cap (the operator, 2026-11-21: "both trades
+    # should fall under the catastrophic cap"), so it asks nothing and RETURNS.
     # ⚠️ FAILS CLOSED. The admission block above fails OPEN when the table
     # cannot be computed (every name passes); at the cap that would let every
     # strategy trade, so here an uncomputed table means nothing is asked.
@@ -4271,8 +4274,6 @@ def attempt_new_entry(ctx: dict, ms: MarketState, state: BotState):
             _plan_skip_all("CATASTROPHIC LOSS CAP reached and the admission table is "
                            "unavailable — nothing is asked", gate="catastrophic_cap")
             return
-        _attempt_park(ctx, ms, state)                    # r288 (PARK.1): cap-exempt, its own budget
-        _attempt_ogap(ctx, ms, state)                    # OGAP.1: cap-exempt, its own budget (RISK_PER_TRADE_USD)
         return
 
     # ── Fetch options chain (shared across strategies) ────────────────────────
@@ -4741,8 +4742,8 @@ def _release_unfilled_hunt(sig, state) -> None:
 
 def _attempt_park(ctx, ms, state, chain=None) -> None:
     """r288 (PARK.1) — ask PARK (its plan is dormant outside 11:01-11:03) and, on a fire, execute it ADDITIVE.
-    Called from the normal dispatch AND the capped branch: PARK is cap-exempt (admission) and its P&L is outside
-    the cap (config.CAP_EXCLUDED_STRATEGIES). One per session on this box, DB-backed (fails closed).
+    Called from the normal dispatch only (r137 CAP.10: PARK is under the daily catastrophic cap both ways; the capped
+    branch asks nothing). One per session on this box, DB-backed (fails closed).
     OT_PARK=off: never asked. OT_PARK=log: asked, the would-be fire recorded by the strategy, nothing executed."""
     from config import PARK_MODE
     if PARK_MODE == "off":
@@ -4754,7 +4755,7 @@ def _attempt_park(ctx, ms, state, chain=None) -> None:
     try:
         _t = now_et()
         _hhmm = _t.strftime("%H:%M")
-        if _ch is None and (11, 0) <= (_t.hour, _t.minute) < (11, 5):   # the capped branch has no chain
+        if _ch is None and (11, 0) <= (_t.hour, _t.minute) < (11, 5):   # a caller without a chain (r137: no production caller)
             _ch = ctx.get("chain") or get_chain_fetcher().fetch_chain()
     except Exception:                                   # noqa: BLE001
         _ch = chain
@@ -4771,8 +4772,8 @@ def _attempt_park(ctx, ms, state, chain=None) -> None:
 
 def _attempt_ogap(ctx, ms, state, chain=None) -> None:
     """OGAP.1 — ask OGAP (its plan is dormant outside 09:46-10:32 and on every box but OGAP_SYMBOLS) and, on a fire,
-    execute it ADDITIVE. Called from the normal dispatch AND the capped branch: OGAP is cap-exempt (admission) and its
-    P&L is outside the cap (config.CAP_EXCLUDED_STRATEGIES). One per session on this box, DB-backed (fails closed)."""
+    execute it ADDITIVE. Called from the normal dispatch only (r137 CAP.10: OGAP is under the daily catastrophic cap
+    both ways; the capped branch asks nothing). One per session on this box, DB-backed (fails closed)."""
     if _one_per_session_used("OGAP"):
         _plan_skip("OGAP", "one per session on this box — already traded today", gate="tries_per_session")
         return
@@ -4782,7 +4783,7 @@ def _attempt_ogap(ctx, ms, state, chain=None) -> None:
         _hhmm = _t.strftime("%H:%M")
         from config import ENTRY_WINDOWS as _EW
         _w0, _w1 = _EW["OGAP"]
-        if _ch is None and tuple(_w0) <= (_t.hour, _t.minute) < tuple(_w1):   # the capped branch has no chain
+        if _ch is None and tuple(_w0) <= (_t.hour, _t.minute) < tuple(_w1):   # a caller without a chain (r137: no production caller)
             _ch = ctx.get("chain") or get_chain_fetcher().fetch_chain()
     except Exception:                                   # noqa: BLE001
         _ch = chain

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_park_late_shadow.py  v5.6
+tests/check_park_late_shadow.py  v5.7
+v5.7  2026-11-21  OTV5 r137 (LOCK.1) — B1 RE-POINTED (WA section 38.4), three pins, each a legitimate source change: _evaluate_park 11f87bb5bfe16b82 -> a34b22afa65186d4 (the +60% / +20% lock reads the MARK, not the bid stash; the operator, 2026-11-21: "any profit locks need to be on mark"; the bid is kept for the counterfactual row only), _park_cf af8d04371db47fb8 -> d39f69ea2bd4580e (the row gains basis "mark" and its docstring says so), _evaluate_route 69d56af628818235 -> 5b3943c2f5ee1185 (one comment: the OGAP arm reads the mark since r136, it said the bid). _decay_read unchanged. D1 (shadow ON vs OFF) and every other check unchanged; the lock's own mark basis is tests/check_lock_mark.py.
 v5.6  2026-11-15  OTV5 r123 (HYG.27) — OT_RESTING_DB leaves the scratch env (r118 deleted execution/resting_orders.py, its only reader).
 v5.5  2026-11-14  OTV5 (OGAP.1) — B1's _evaluate_route pin RE-POINTED (WA section 38.4): 1127111d9e2e2b11 -> 69d56af628818235, the OGAP route arm added beside PARK's; _evaluate_park, _park_cf and _decay_read unchanged; DECAY_STOP_EXEMPT gains OGAP.
 v5.4  2026-11-11  OTV5 r107 (RETIRE.5 follow-up) — B1's _evaluate_route pin RE-POINTED (WA section 38.4): 1855505efa2e697f -> 1127111d9e2e2b11,
@@ -177,8 +178,8 @@ check("C1 config: on / (14, 30) / 0.50 / 0.20 by default; OT_PARK_LATE_SHADOW=0 
       and _o == ["False (15, 0) 1.0 0.25"], f"env -> {_o}")
 
 # ── B byte-for-byte ──────────────────────────────────────────────────────────────────────────────────
-PINNED = {"_evaluate_park": "11f87bb5bfe16b82", "_park_cf": "af8d04371db47fb8",
-          "_decay_read": "e2379a457c018f91", "_evaluate_route": "69d56af628818235"}       # 0e4d240; route: r67 (PARC arm removed), r76 (ORB / VOLT arms removed), r107 (fly arm removed), OGAP.1 (OGAP arm added)
+PINNED = {"_evaluate_park": "a34b22afa65186d4", "_park_cf": "d39f69ea2bd4580e",
+          "_decay_read": "e2379a457c018f91", "_evaluate_route": "5b3943c2f5ee1185"}       # 0e4d240; route: r67 (PARC arm removed), r76 (ORB / VOLT arms removed), r107 (fly arm removed), OGAP.1 (OGAP arm added), r137 (OGAP arm comment); park / park_cf: r137 (LOCK.1, the lock on the mark)
 got = {n: h16(getattr(XE.ExitEngine, n)) for n in PINNED}
 check("B1 PARK's exits, the decay read and the route are byte-for-byte 0e4d240's; PARK stays decay-exempt; PARK knobs",
       got == PINNED and tuple(config.DECAY_STOP_EXEMPT) == ("RunawayContinuation", "PARK", "OGAP")

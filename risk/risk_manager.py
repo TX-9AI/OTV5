@@ -1,5 +1,6 @@
 """
-risk/risk_manager.py  v5.7
+risk/risk_manager.py  v5.8
+v5.8  2026-11-21  OTV5 r137 (CAP.10) — the two CAP_EXCLUDED_STRATEGIES getattr defaults (day_realized_pnl, _ensure_seeded) are () - config's value now (was ("PARK",)): PARK and OGAP count toward the daily catastrophic cap. The operator, 2026-11-21: "both trades should fall under the catastrophic cap". The limit (DAILY_LOSS_LIMIT_USD / OT_DAILY_LOSS_LIMIT, else the risk per trade) is unchanged.
 v5.7  2026-11-15  OTV5 r125 (HYG.28) — the BUDGET rule reads config.BREAKOUT_BUDGET_USD (was ORB_BUDGET_USD; key OT_BREAKOUT_BUDGET_USD, the old key read as a fallback in config). Same number, same sizing.
 v5.6  2026-11-14  OTV5 r119 (HYG §5.5, HYG.24) — check_circuit_breaker, its CircuitBreakerState dataclass and the _check_daily_loss_limit back-compat shim go (uncalled). The daily-loss halt is is_halted(), unchanged. No caller anywhere (OTV5 code, tests, tools, docs, dtp: token scan + grep on r118). Nothing else changes; the module's behaviour is identical.
 v5.5  2026-11-14  OTV5 (OGAP.1) — size_for passes budget_usd through to the BUDGET rule (_size_budget(budget_usd=...)): None (every existing caller) keeps self._risk_per_trade; OGAP passes OGAP_BUDGET_USD. The geometry rule's budget_usd is unchanged.
@@ -330,7 +331,7 @@ class RiskManager:
         try:
             from database.trade_logger import get_trade_logger
             return float(get_trade_logger().realized_pnl_today(
-                exclude_strategies=getattr(config, "CAP_EXCLUDED_STRATEGIES", ("PARK",))))   # r298: default = config's
+                exclude_strategies=getattr(config, "CAP_EXCLUDED_STRATEGIES", ())))   # r298 / r137: default = config's
         except Exception:
             # If the DB is briefly unavailable, fall back to the in-memory tally.
             return float(self._session_pnl_usd)
@@ -744,14 +745,14 @@ class RiskManager:
             summary = _tl.today_summary()
             pnl = float(summary.get("total_pnl", 0.0) or 0.0)
             # r298 (CAP.4) — THE SEED IS THE CAP'S NUMBER, NOT THE DISPLAY'S. today_summary() counts every
-            # strategy (the displays' figure); the cap excludes CAP_EXCLUDED_STRATEGIES (PARK, r288). Seeding
+            # strategy (the displays' figure); the cap excludes CAP_EXCLUDED_STRATEGIES (PARK r288-r136; r137: none). Seeding
             # from the display meant a boot after a PARK loss past the limit read HALTED, and the first
             # is_halted() then logged a RE-ARMED event nothing had hit (audit 2026-10-18 A5 / T3-2).
             # The getattr keeps check_risk_seed_retry's shared fixture (a book with today_summary only)
             # honest; the production logger always has realized_pnl_today.
             _rp = getattr(_tl, "realized_pnl_today", None)
             if callable(_rp):
-                pnl = float(_rp(exclude_strategies=getattr(config, "CAP_EXCLUDED_STRATEGIES", ("PARK",))))
+                pnl = float(_rp(exclude_strategies=getattr(config, "CAP_EXCLUDED_STRATEGIES", ())))   # r137: ()
             self._session_pnl_usd = pnl
             if self._session_pnl_usd <= -self._daily_loss_limit:
                 self._session_halted = True

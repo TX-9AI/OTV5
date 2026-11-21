@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_cap_counterfactual.py  v5.2
+tests/check_cap_counterfactual.py  v5.3
+v5.3  2026-11-21  OTV5 r137 (CAP.10) — K3: PARK is under the cap (the operator, 2026-11-21: "both trades should fall under the catastrophic cap"), so its row reads exempt 0; the column still reads the admission flag, proved on a scratch rule table with one cap_exempt rule (exempt 1). Every other check unchanged.
 v5.2  2026-11-15  OTV5 r123 (HYG.27) — FIXTURES RE-POINTED (the Saturday brief 11-14 section 5 item 10): OpeningRangeCreditSpread -> IronCondorStrategy; what each check proves is unchanged; OT_RESTING_DB leaves the scratch env (r118 deleted execution/resting_orders.py, its only reader).
 v5.1  2026-11-09  OTV5 r103 (RETIRE.5 step 2) — K3's exempt example is PARK (cap-exempt, its own budget) where it was the GEX fly, removed. Every other check unchanged.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
@@ -18,7 +19,7 @@ v1.0  2026-10-03  OTV4TEST r208 (CAP.4) — THE CAP COUNTERFACTUAL IS RECORDED F
       at max loss 1,000 - would refuse on both, and the line says so
   K2  the same entry with the day flat: would refuse on neither; STILL recorded
   K3  a credit vertical has no stop risk; max loss 672 against headroom 500
-      would refuse; a cap-exempt butterfly is marked exempt
+      would refuse; (r137) PARK is not exempt; a cap_exempt rule (scratch table) is marked exempt
   K4  it never raises and never refuses: an unwritable path warns, returns None
   K5  the file is BESIDE the logger's trades.db (a checker's scratch takes it)
   K6  both entry paths call it right after log_entry (a source check, stated
@@ -107,10 +108,23 @@ def main():
         rm.note_entry_risk({"trade_id": "cccccccc-1", "strategy": "PARK", "entry_premium": 0.50,   # r103: was the removed GEX fly
                             "stop_premium": 0.0, "contracts": 4, "total_cost": 200.0, "max_loss": 200.0})
         b = lines()[-1]
-        check("K3 a credit vertical has NO stop risk and its max loss 672 > headroom 500 would refuse; PARK (cap-exempt) is exempt",
+        # r137 (CAP.10): no live rule is cap-exempt; the column still reads the flag (a scratch table with one).
+        import dataclasses as _dc
+        import execution.position_manager as _PM
+        _orig_rules = _PM.rules
+        _PM.rules = lambda: {"PARK": _dc.replace(_orig_rules()["PARK"], cap_exempt=True)}
+        try:
+            rm.note_entry_risk({"trade_id": "dddddddd-1", "strategy": "PARK", "entry_premium": 0.50,
+                                "stop_premium": 0.0, "contracts": 4, "total_cost": 200.0, "max_loss": 200.0})
+        finally:
+            _PM.rules = _orig_rules
+        x = lines()[-1]
+        check("K3 a credit vertical has NO stop risk and its max loss 672 > headroom 500 would refuse; PARK is NOT "
+              "exempt (r137); a cap_exempt rule still reads exempt 1",
               c.get("risk_stop") is None and c.get("risk_max") == 672.0 and c.get("refuse_stop") == 1
-              and c.get("refuse_max") == 1 and c.get("exempt") == 0 and b.get("exempt") == 1 and b.get("refuse_max") == 0,
-              f"credit {c}; PARK {b}")
+              and c.get("refuse_max") == 1 and c.get("exempt") == 0 and b.get("exempt") == 0 and b.get("refuse_max") == 0
+              and x.get("trade_id") == "dddddddd-1" and x.get("exempt") == 1,
+              f"credit {c}; PARK {b}; scratch {x}")
     except Exception as exc:                                  # noqa: BLE001
         check("K1 (did not run)", False, f"{type(exc).__name__}: {exc}")
 

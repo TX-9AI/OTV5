@@ -1,5 +1,9 @@
 """
-strategy/park.py  v5.3
+strategy/park.py  v5.4
+v5.4  2026-11-21  OTV5 r137 (CAP.10 + LOCK.1) — TEXT ONLY, two lines of the v1.0 spec below are superseded: PARK is no longer
+      outside the catastrophic cap (its closes count toward it and the cap refuses its entry, config v5.26), and the
+      +60% / +20% lock reads the MARK, not the bid (execution/exit_engine v5.25). The operator, 2026-11-21: "both trades
+      should fall under the catastrophic cap & any profit locks need to be on mark". The conditions are unchanged.
 v5.3  2026-11-08  OTV5 r93 (C8.1) — NOT AFTER THE FIRST HOUR HAS ALREADY BEEN OUTRUN. The operator, 2026-11-08: "Yes, to
       both". One more condition, index and equity alike: c8_first_hour_extended - a call needs the 10:59 1m close NOT
       above the 09:30-10:29 high, a put NOT below their low (unknown fails open). BLIND (18 sealed days, frozen

@@ -1,5 +1,6 @@
 """
-config.py  v5.25
+config.py  v5.26
+v5.26  2026-11-21  OTV5 r137 (CAP.10) — CAP_EXCLUDED_STRATEGIES = () (was ("PARK", "OGAP")): PARK and OGAP fall under the daily catastrophic cap both ways - their realized P&L counts toward it and, once it is hit, their entries are refused like every other strategy's (execution/position_manager v5.40 drops their cap_exempt; main v5.31 asks nothing in the capped branch). The operator, 2026-11-21: "both trades should fall under the catastrophic cap & any profit locks need to be on mark". The mechanism stays (realized_pnl_today's exclude_strategies, the empty tuple); DAILY_LOSS_LIMIT_USD and every other value unchanged; no new key.
 v5.25  2026-11-21  OTV5 r136 (OGAP.3) — COMMENT ONLY: the OGAP block says every price is the MARK (the 0.50 floor OGAP_MIN_ASK, its name kept, the size floor(RISK_PER_TRADE_USD / (mark x 100)), the exits on the mark vs the booked fill); no constant, value or key changes. The operator, 2026-11-20: "never pay the spread".
 v5.24  2026-11-16  OTV5 r131 (OGAP.2) — OGAP_BUDGET_USD IS DELETED: OGAP sizes on RISK_PER_TRADE_USD (OT_RISK_USD, the configure.sh "Risk per trade / ramp START (MIN)" key), floor(RISK_PER_TRADE_USD / (ask x 100)) on the ask. No new key. The operator, 2026-11-16: "Do me a favor and size the OGAP to whatever the ramp minimum (risk per trade) is set at instead of a flat $500. That $500 is Park's (my friend) preferred position size. I like 1050 for most trades." Every other value is unchanged.
 v5.23  2026-11-15  OTV5 r125 (HYG.28) — THE RAMP TOP'S KEY IS OT_BREAKOUT_BUDGET_USD (was OT_ORB_BUDGET_USD, named after the ORB trade retired at r76). BREAKOUT_BUDGET_USD / BREAKOUT_BUDGET_IS_DEFAULT replace ORB_BUDGET_USD / ORB_BUDGET_IS_DEFAULT; the old key is read as a fallback (new key first, BREAKOUT_BUDGET_FROM_OLD_KEY), so every box sizes exactly as before. The value and the default (RISK_PER_TRADE_USD) are unchanged.
@@ -1063,11 +1064,13 @@ PARK_LATE_SHADOW = os.environ.get("OT_PARK_LATE_SHADOW", "1").strip() != "0"    
 PARK_LATE_FROM_ET = tuple(int(x) for x in os.environ.get("OT_PARK_LATE_FROM", "14,30").split(","))
 PARK_LATE_ARM = float(os.environ.get("OT_PARK_LATE_ARM", "0.50"))                # best mark >= entry x (1 + ARM) arms
 PARK_LATE_X = float(os.environ.get("OT_PARK_LATE_X", "0.20"))                    # would exit at p <= peak_p x (1 - X)
-# Its own budget, outside the morning's catastrophic cap (the operator, 2026-10-17):
-# a PARK close never counts toward the cap's realized P&L, and the cap never refuses
-# PARK (position_manager: cap_exempt). Sizing is the box's own RISK_PER_TRADE_USD,
-# flat: floor(risk / (mark x 100)) (r60 PARK.4: the mark, was the ask).
-CAP_EXCLUDED_STRATEGIES = ("PARK", "OGAP")   # r67 (PARC.4): PARC removed (r46 had added it); OGAP.1: its own budget line (r131: = RISK_PER_TRADE_USD)
+# r137 (CAP.10) — EVERY STRATEGY IS UNDER THE DAILY CATASTROPHIC CAP. From r288 (the operator, 2026-10-17: PARK "on its
+# own budget") to r136 PARK, and from OGAP.1 OGAP, sat outside it: their closes never counted toward the cap's realized
+# P&L and the cap never refused them. The operator, 2026-11-21: "both trades should fall under the catastrophic cap".
+# Now both count and both are refused at the cap (position_manager: no cap_exempt rule). The tuple is kept, empty: the
+# cap's one statement of which strategies it leaves out (risk_manager.day_realized_pnl / _ensure_seeded read it).
+# PARK still sizes on the box's own RISK_PER_TRADE_USD, flat: floor(risk / (mark x 100)) (r60 PARK.4).
+CAP_EXCLUDED_STRATEGIES = ()   # r137 (CAP.10): was ("PARK", "OGAP") (r288 PARK; r67 PARC removed; OGAP.1 OGAP)
 # ── OGAP.1 — PARK'S FRIEND'S ORB-GAP, A FAITHFUL PAPER COPY (docs/OGAP_SPEC.md) ─────────────────────────────────────
 # The operator, 2026-11-14: "let's design & paper trade the OGAP on QQQ". Constants only, no env key, no configure.sh item
 # (the operator, 2026-10-31: no study toggles). Signal: the 09:30-09:44 1m range (>= OGAP_RANGE_MIN_BARS bars, W > 0);

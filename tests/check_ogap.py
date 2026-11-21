@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_ogap.py  v5.4
+tests/check_ogap.py  v5.5
+v5.5  2026-11-21  OTV5 r137 (CAP.10) — OGAP IS UNDER THE CAP (the operator, 2026-11-21: "both trades should fall under the catastrophic cap"). O9: OGAP is NOT in CAP_EXCLUDED_STRATEGIES and its admission rule is NOT cap-exempt (every other isolation term unchanged). O11: the capped branch asks NOTHING (no _attempt_ogap, no _attempt_park; it returns); the normal path still asks OGAP with the chain. The cap's refusal and P&L for OGAP are driven in tests/check_cap_all.py.
 v5.4  2026-11-21  OTV5 r136 (OGAP.3) — OGAP READS THE MARK (the operator, 2026-11-20: "never pay the spread"). O7: the
       signal books entry_premium = the mark 4.24 (4.23 / 4.26), notes carry mark=, no ogap_ask; the band case moves to
       5.01 / 5.03 (mark 5.02 buys 0 on $500; 4.99 / 5.01 is a 5.00 mark and buys 1). O8b: the restart seed arms the 1.2x
@@ -34,10 +35,10 @@ v5.0  2026-11-14  OTV5 (OGAP.1) — THE OGAP GATE. The operator, 2026-11-14: "le
       O10     the REAL entry funnel (main._execute_entry_signal, a spy entry engine): an OGAP signal (mark 2.45, a stray
               ogap_ask 2.55) is sized by the real RiskManager on the MARK with RISK_PER_TRADE_USD (500) -> 2 (r136); the same signal named
               PARK is sized on the mark with the box's own risk (unchanged).
-      O11     the dispatch, DRIVEN: attempt_new_entry() asks _attempt_ogap WITH the chain on the normal path, and the
-              capped branch asks it (by text, beside _attempt_park).
-      O9      isolation: OGAP in DECAY_STOP_EXEMPT, CAP_EXCLUDED_STRATEGIES, PIN_EXEMPT, the admission table (one per
-              session, cap-exempt), management covers() False, _STRUCTURE_BY_NAME long_debit, QQQ only.
+      O11     the dispatch, DRIVEN: attempt_new_entry() asks _attempt_ogap WITH the chain on the normal path; (r137) the
+              capped branch asks nothing (by text).
+      O9      isolation: OGAP in DECAY_STOP_EXEMPT, PIN_EXEMPT, the admission table (one per session; r137: NOT
+              cap-exempt, NOT in CAP_EXCLUDED_STRATEGIES), management covers() False, _STRUCTURE_BY_NAME long_debit, QQQ only.
       R1-R5   THE REPLAY (OGAP_PLAN.md §3): the code reproduces Park's backtest rows (~/reviews/studies/
               park_orbgap_20261113, fixture tests/fixtures/ogap/replay5.json) on QQQ 10-30, 11-02, 11-04, 11-05 and
               11-09 - the same signal minute, side, strike, contracts, exit reason, exit minute and P&L within $1.
@@ -248,11 +249,11 @@ def main():
     from strategy import plan_state as PS
     rl = PM.rules().get("OGAP")
     mn_src = open(os.path.join(ROOT, "main.py")).read()
-    check("O9 isolation: decay-exempt, cap-excluded, pin-exempt, admission one/one cap-exempt, management does not "
+    check("O9 isolation: decay-exempt, UNDER the cap (r137), pin-exempt, admission one/one not cap-exempt, management does not "
           "cover it, long_debit, QQQ only, plan ACTIVE",
-          "OGAP" in tuple(config.DECAY_STOP_EXEMPT) and "OGAP" in tuple(config.CAP_EXCLUDED_STRATEGIES)
+          "OGAP" in tuple(config.DECAY_STOP_EXEMPT) and "OGAP" not in tuple(config.CAP_EXCLUDED_STRATEGIES)
           and 'PIN_EXEMPT = ("PARK", "OGAP")' in mn_src and '"OGAP":                 "long_debit"' in mn_src
-          and rl is not None and rl.max_open_of_type == 1 and rl.max_tries_per_session == 1 and rl.cap_exempt
+          and rl is not None and rl.max_open_of_type == 1 and rl.max_tries_per_session == 1 and not rl.cap_exempt
           and MG.covers({"strategy": "OGAP"}) is False and tuple(config.OGAP_SYMBOLS) == ("QQQ",)
           and PS.state("OGAP") == PS.ACTIVE,
           f"rule={rl}")
@@ -327,10 +328,11 @@ def main():
         MN._attempt_ogap = _orig
         for _m, _n in _sw:
             setattr(_m, _n, _real[_n])
-    _cap = mn_src[mn_src.index("if _cap_hit:"):]
-    _cap = _cap[:_cap.index("return", _cap.index("_attempt_park(ctx, ms, state)")) + 6]
-    check("O11 DRIVEN: attempt_new_entry() asks _attempt_ogap WITH the chain; the capped branch asks it",
-          ("ogap", True) in _calls and not _err and "_attempt_ogap(ctx, ms, state)" in _cap,
+    _cap = mn_src[mn_src.index("    if _cap_hit:\n        if not _adm_ok:"):]
+    _cap = _cap[:_cap.index("    # ── Fetch options chain")]
+    check("O11 DRIVEN: attempt_new_entry() asks _attempt_ogap WITH the chain; the capped branch asks nothing (r137)",
+          ("ogap", True) in _calls and not _err and "_attempt_ogap(" not in _cap and "_attempt_park(" not in _cap
+          and _cap.rstrip().endswith("return"),
           f"calls={_calls} err={_err}")
 
     # ── R1-R5 the replay ──

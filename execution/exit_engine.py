@@ -1,5 +1,15 @@
 """
-execution/exit_engine.py  v5.24
+execution/exit_engine.py  v5.25
+v5.25  2026-11-21  OTV5 r137 (LOCK.1) — PARK'S +60% / +20% LOCK DECIDES ON THE MARK, NOT THE BID. The operator, 2026-11-21:
+      "any profit locks need to be on mark" (and 2026-11-19: "Mark is the worst buy or sell we accept."). _evaluate_park
+      armed when the r105 bid stash (_exit_bid) reached entry x 1.60 and exited when it fell to entry x 1.20; it now
+      reads the tick's mark (current_premium) for both, against the booked entry_premium (paper the mark, live the
+      ladder's fill). The numbers (PARK_LOCK_ARM 0.60, PARK_LOCK_FLOOR 0.20), the delta floor, the 15:45 close and the
+      EOD backstop are unchanged; the restart seed (max_premium_seen, the best mark) is now the same basis as the walk.
+      The park_exit counterfactual row keeps the tick bid beside the mark and adds basis "mark" (record only). The
+      OGAP route arm's comment says the mark (r136 made it so). Every other exit rule already read the mark (audited:
+      the ORB evaluator for Runaway / the Hunt, the sweep defaults for Breakout, the decay stop, the PARK late shadow,
+      the excursion peaks). The exit ORDER (exit-at-mark, the stop escalation, the 15:55 cross) is untouched.
 v5.24  2026-11-21  OTV5 r136 (OGAP.3) — OGAP'S EXITS READ THE MARK, MEASURED FROM THE BOOKED FILL. The operator, 2026-11-20:
       "Ours needs the modification to account for how I would trade it, never pay the spread." / "Mark is the worst buy
       or sell we accept." ogap_fill_of is the row's entry_premium (paper: the mark at the fill; live: the ladder's fill,
@@ -1792,7 +1802,7 @@ class ExitEngine:
             # r288 (PARK.1) — its own exits; none of the sweep defaults (25% stop, trail) apply.
             return self._evaluate_park(record, current_premium)
         elif strategy == "OGAP":
-            # OGAP.1 — Park's friend's ORB-GAP: its own exits on the BID vs the entry ASK; none of the defaults apply.
+            # OGAP.1 — Park's friend's ORB-GAP: its own exits on the MARK vs the booked fill (r136); no defaults apply.
             return self._evaluate_ogap(record, current_premium)
         else:
             # Unknown directional strategies take the sweep rules (25% stop,
@@ -1818,14 +1828,16 @@ class ExitEngine:
 
     def _evaluate_park(self, record: TradeRecord, current_premium: float) -> ExitDecision:
         """PARK exits (r288). FIRST MATCH WINS:
-          1. LOCK        - armed once the BID reaches entry x (1 + PARK_LOCK_ARM); armed, out when the bid falls
+          1. LOCK        - armed once the MARK reaches entry x (1 + PARK_LOCK_ARM); armed, out when the mark falls
                            to entry x (1 + PARK_LOCK_FLOOR). After a restart the persisted best MARK
-                           (max_premium_seen, written every tick) re-arms it once - slightly looser than the
-                           bid, stated (r291; r288 read mfe_premium, a column written only at the close).
+                           (max_premium_seen, written every tick) re-arms it once - the same basis (r137 LOCK.1;
+                           r288-r136 the lock walked the bid and this seed was the looser one).
           2. DELTA FLOOR - |delta| <= PARK_DELTA_FLOOR from PARK_DELTA_FROM_ET. None or 0.0 is UNREAD: hold.
           3. THE CLOSE   - at PARK_CLOSE_ET.
           4. EOD         - the schedule's own close, a backstop only.
-        The bid is the r105 stash (_exit_bid); without one the mark stands in."""
+        The mark is the tick's current_premium; entry is the booked entry_premium. The r105 bid stash (_exit_bid)
+        is only recorded beside the exit in the counterfactual row; it decides nothing (the operator, 2026-11-21:
+        "any profit locks need to be on mark")."""
         from config import (PARK_LOCK_ARM, PARK_LOCK_FLOOR, PARK_DELTA_FLOOR, PARK_DELTA_FROM_ET,
                             PARK_CLOSE_ET)
         from utils.time_utils import ET as _ET
@@ -1835,8 +1847,13 @@ class ExitEngine:
         if e > 0:
             decision.current_pnl_pct = (current_premium - e) / e
             decision.current_pnl_usd = (current_premium - e) * n * CONTRACT_MULTIPLIER
-        bid = record.get("_exit_bid")
-        bid = float(bid) if bid not in (None, 0, 0.0) else float(current_premium or 0.0)
+        bid = record.get("_exit_bid")                       # record only (the counterfactual row), r137
+        try:
+            mark = float(current_premium) if current_premium is not None else None
+        except (TypeError, ValueError):
+            mark = None
+        if mark is not None and not mark > 0:
+            mark = None                                     # no mark is no lock reading (never a 0.00 exit)
         hm = datetime.now(_ET)
         hm = (hm.hour, hm.minute)
         why = ""
@@ -1844,16 +1861,9 @@ class ExitEngine:
             arm = e * (1 + PARK_LOCK_ARM)
             if not record.get("_park_seeded"):
                 # r291 (PARK.2) — THE RESTART SEED, ONCE PER PROCESS, FROM THE COLUMN THAT IS
-                # ACTUALLY WRITTEN. r288 read `mfe_premium` here, but trade_logger writes that
-                # column only in log_exit (the CLOSE); the per-tick best mark lives in
-                # `max_premium_seen` (update_current_premium), which SELECT * rehydrates. And
-                # r288's `or mfe >= arm` ran on EVERY tick with the in-memory mark MFE, so the
-                # lock armed on the mark's best print, not the bid the frozen study armed on.
-                # Now: the persisted best mark is consulted once (a rehydrated record), stated
-                # as a mark; afterwards only the BID arms.
-                # ⚠️ max_premium_seen ONLY. The in-memory record carries mfe_premium from
-                # _track_excursion (the mark, this very tick), so reading it here would arm
-                # on the mark again; max_premium_seen is never set in memory, only read back.
+                # ACTUALLY WRITTEN: the per-tick best mark lives in `max_premium_seen`
+                # (update_current_premium), which SELECT * rehydrates (`mfe_premium` is written only
+                # at the close). r137: the walk is on the mark too, so the seed is the same basis.
                 record["_park_seeded"] = 1
                 try:
                     best = float(record.get("max_premium_seen") or 0.0)
@@ -1863,12 +1873,12 @@ class ExitEngine:
                     record["_park_armed"] = 1
                     logger.info("[park] %s lock RE-ARMED after a restart: persisted best mark %.2f >= %.2f",
                                 str(record.get("trade_id", ""))[:8], best, arm)
-            if not record.get("_park_armed") and bid >= arm:
+            if mark is not None and not record.get("_park_armed") and mark >= arm:
                 record["_park_armed"] = 1
-                logger.info("[park] %s lock ARMED: bid %.2f >= %.2f",
-                            str(record.get("trade_id", ""))[:8], bid, arm)
-            if record.get("_park_armed") and bid <= e * (1 + PARK_LOCK_FLOOR):
-                why = f"park_lock: bid {bid:.2f} <= {e * (1 + PARK_LOCK_FLOOR):.2f} after +{PARK_LOCK_ARM:.0%}"
+                logger.info("[park] %s lock ARMED: mark %.2f >= %.2f",
+                            str(record.get("trade_id", ""))[:8], mark, arm)
+            if mark is not None and record.get("_park_armed") and mark <= e * (1 + PARK_LOCK_FLOOR):
+                why = f"park_lock: mark {mark:.2f} <= {e * (1 + PARK_LOCK_FLOOR):.2f} after +{PARK_LOCK_ARM:.0%}"
         d = record.get("current_delta")
         d = abs(float(d)) if d not in (None, "") else None
         if not why and hm >= tuple(PARK_DELTA_FROM_ET) and d and d <= PARK_DELTA_FLOOR:
@@ -1959,7 +1969,8 @@ class ExitEngine:
             logger.warning("[ogap] exit counterfactual row NOT written for %s: %s", tid[:8], exc)
 
     def _park_cf(self, record, why, bid, mark, delta) -> None:
-        """Once per trade per process: data/counterfactual/park_exit.jsonl. Never raises."""
+        """Once per trade per process: data/counterfactual/park_exit.jsonl (r137: basis "mark" - the mark decided,
+        the tick bid beside it, record only). Never raises."""
         tid = str(record.get("trade_id", "") or "")
         if not tid or tid in ExitEngine._PARK_CF_SAID:
             return
@@ -1970,7 +1981,7 @@ class ExitEngine:
                 _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))), "data", "counterfactual")
             _os.makedirs(d, exist_ok=True)
             out = {"ts_epoch": _time.time(), "trade_id": tid, "symbol": record.get("symbol"), "rule": "park_exit",
-                   "reason": why, "bid": bid, "mark": mark, "delta": delta,
+                   "reason": why, "basis": "mark", "bid": bid, "mark": mark, "delta": delta,
                    "entry_premium": record.get("entry_premium"), "contracts": record.get("contracts"),
                    "option_symbol": record.get("option_symbol"), "streamer_symbol": record.get("streamer_symbol"),
                    "mfe_premium": record.get("mfe_premium")}

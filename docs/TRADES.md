@@ -1,5 +1,7 @@
 # TRADES — the specs
 
+**`TRADES.md` v5.24 · 2026-11-21 · OTV5 r137 (CAP.10 + LOCK.1) — the day and sections 9-10: PARK and OGAP fall under the daily catastrophic cap both ways (their closes count toward it; at the cap their entries are refused like every other strategy's), and PARK's +60% / +20% lock arms and exits on the MARK, not the bid. The operator, 2026-11-21: "both trades should fall under the catastrophic cap & any profit locks need to be on mark". Every number unchanged; the exit order (exit-at-mark, the stop escalation, the 15:55 cross) unchanged.**
+
 **`TRADES.md` v5.23 · 2026-11-21 · OTV5 r136 (OGAP.3) — section 10: OGAP reads the MARK wherever Park's spec reads the ask or the bid: the $0.50 floor, the size floor(`RISK_PER_TRADE_USD` / (mark x 100)), the band, the booked fill, the peak, the 1.6x / 2.0x lines, the 1.2x and 0.60 x peak floors, the 14:00 sweep under 0.75x; his numbers unchanged. The operator, 2026-11-20: "Ours needs the modification to account for how I would trade it, never pay the spread." / "Mark is the worst buy or sell we accept."**
 
 **`TRADES.md` v5.22 · 2026-11-20 · OTV5 r135 (GUARD.1; the live-readiness audit C3 + I3) — section 6: while ANY opening order's fate is unknown (an unconfirmed cancel, a lost reply, a fill whose fills cannot be read) no opening order posts on the instrument (any strategy, any strike; exits never wait); the unknown is read from the broker every tick, a fill (or the partial an unconfirmed cancel leaves) is booked once as the ORIGINATING strategy's trade at the broker's fills, a dead order clears; unresolved after 120 s (or at all once the day's last entry window, PARK's 11:03, is 120 s behind) it pages once and reconcile adopts it. The ladder's rules are unchanged. The operator, 2026-11-20: "Yes, let's fix it smartly."**
@@ -123,7 +125,9 @@ paper; a live box only logs); the caution size after the session's first directi
 (`OT_CAUTION_SIZE`). Rows in data/counterfactual/.
 
 **The day.** New entries stop while the day's net loss is at or past the daily catastrophic
-loss cap (`OT_DAILY_LOSS_LIMIT`), and it re-arms if the day recovers (r162).
+loss cap (`OT_DAILY_LOSS_LIMIT`, else the box's `OT_RISK_USD`), and it re-arms if the day recovers (r162).
+Every strategy counts and every strategy is refused, PARK and OGAP included (r137 CAP.10; they sat outside
+the cap from r288 / OGAP.1 to r136).
 
 ---
 
@@ -674,11 +678,13 @@ the contract and builds the signal.
   by configure item 2 (an unaffordable contract is no trade: AMD 11-03/11-05 at $1,050). No scaling, no pin-proximity gate (PIN_EXEMPT); what the gate would have said is a
   counterfactual row on every PARK entry, `data/counterfactual/pin_gate.jsonl`.
 
-**Its own budget.** PARK is cap-exempt (admission) and its closes are left out of the
-catastrophic cap's day P&L (`config.CAP_EXCLUDED_STRATEGIES`). Displays still count it.
+**Under the cap (r137 CAP.10).** PARK's closes count toward the daily catastrophic cap and, once it is hit,
+the 11:01 entry is refused like any other (it was cap-exempt and outside the cap's day P&L from r288 to
+r136). So a morning loss at or past the limit means no PARK that day unless closes bring the day back under.
 
-**Exits, first match wins (`exit_engine._evaluate_park`):** the lock - armed once the bid reaches
-+60%, out when the bid falls to +20% (after a restart the persisted best MARK, `max_premium_seen`, re-arms it once - r291); the delta floor - |delta| <= 0.30 from 11:30 (unread delta
+**Exits, first match wins (`exit_engine._evaluate_park`):** the lock, on the MARK (r137 LOCK.1; r288-r136 it
+walked the bid) - armed once the mark reaches +60% of the booked entry, out when the mark falls to +20% (after
+a restart the persisted best mark, `max_premium_seen`, re-arms it once - r291, now the same basis); the delta floor - |delta| <= 0.30 from 11:30 (unread delta
 holds); the close at 15:45. No premium stop, no trail. Every exit writes
 `data/counterfactual/park_exit.jsonl` so Saturday prices what holding to 15:45 would have done.
 
@@ -722,7 +728,8 @@ the bid against the ask), first match wins:** peak (the best mark) >= 2.0x -> fl
 never reached 1.6x and the mark is under 0.75x, sells (`ogap_sweep_1400`); 15:45 sells (`ogap_close_1545`); the EOD
 schedule is only a backstop. The close goes out through the normal path (paper at the mark, live exit-at-mark). No
 stop before 1.6x, no take-profit, no decay stop, no management plan, no pin gate (PIN_EXEMPT, the counterfactual row
-still written). Cap-exempt and out of the cap's day P&L. One look per tick (his book looks once a minute): every exit
+still written). Under the daily catastrophic cap both ways (r137 CAP.10; cap-exempt and out of the cap's day P&L
+from OGAP.1 to r136). One look per tick (his book looks once a minute): every exit
 is written to `ogap_exit.jsonl` with the deciding mark, the tick bid beside it, the fill, the floor and the peak. A
 restart seeds the peak from the persisted best mark once (now the walk's own basis).
 
