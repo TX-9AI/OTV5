@@ -1,5 +1,6 @@
 """
-execution/entry_engine.py  v5.7
+execution/entry_engine.py  v5.8
+v5.8  2026-11-21  OTV5 r136 (OGAP.3) — freeze_contract no longer re-stamps signal.ogap_ask: OGAP carries none (it sizes and exits on the mark, entry_premium, which the freeze already re-reads). The operator, 2026-11-20: "never pay the spread". Nothing else changes.
 v5.7  2026-11-20  OTV5 r135 (GUARD.1; the live-readiness audit 2026-11-20 C3 + I3, live only) — A SUSPECT ENTRY ORDER IS
       BOOKED AS ITS OWN STRATEGY'S TRADE. enter()'s record-building tail moves, unchanged, into _book_fill (the one place a
       confirmed entry fill becomes a row), and _place_single_leg hands order_guard a booking (_suspect_booking: the
@@ -947,9 +948,7 @@ def freeze_contract(signal, paper_trading: bool = PAPER_TRADING) -> bool:
         signal.contract = c
         signal.strike = getattr(c, "strike", getattr(signal, "strike", None))
         signal.expiry = getattr(c, "expiry", getattr(signal, "expiry", ""))
-        signal.entry_premium = mark
-        if getattr(signal, "ogap_ask", None) is not None:
-            signal.ogap_ask = a
+        signal.entry_premium = mark                        # r136 OGAP.3: OGAP sizes on this mark too
         logger.warning("[ladder] D3 %s re-picked %s mid-walk - the walk stays on %s (bid %.2f / ask %.2f); the "
                        "contract is frozen until it fills, its window ends or it goes idle %.0f s",
                        pid[0], cur, occ, b, a, PIN_IDLE_S)

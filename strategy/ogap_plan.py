@@ -1,5 +1,13 @@
 """
-strategy/ogap_plan.py  v5.1
+strategy/ogap_plan.py  v5.2
+v5.2  2026-11-21  OTV5 r136 (OGAP.3) — OGAP READS THE MARK WHEREVER PARK'S SPEC READS THE ASK. The operator, 2026-11-20:
+      "Ours needs the modification to account for how I would trade it, never pay the spread." / "Mark is the worst buy
+      or sell we accept." The mark (the two-sided mid, floored to the cent as PARK.4) is computed before the gates, and
+      the 0.50 floor (OGAP_MIN_ASK, its name kept, ogap_ask_floor), the size floor(RISK_PER_TRADE_USD / (mark x 100))
+      and the band (0 contracts above RISK_PER_TRADE_USD / 100, ogap_ask_band) read it; the signal no longer carries
+      ogap_ask (main sizes OGAP on entry_premium, the mark); the FIRE line names the mark first. The ask and the bid are
+      still read for the two-sided check and still written to notes and the plan rows, as record only. Park's numbers
+      and every other rule unchanged.
 v5.1  2026-11-16  OTV5 r131 (OGAP.2) — contracts_for sizes on config.RISK_PER_TRADE_USD (the ramp MIN, OT_RISK_USD), not the
       deleted flat $500 OGAP_BUDGET_USD; the feasibility gate follows (an ask above RISK_PER_TRADE_USD / 100 buys none).
       The operator, 2026-11-16: "size the OGAP to whatever the ramp minimum (risk per trade) is set at instead of a flat $500".
@@ -25,7 +33,8 @@ v5.0  2026-11-14  OTV5 (OGAP.1) — THE OGAP PLAN: READS THE TAPE, PICKS THE CON
                   the refused side is a SHADOW: recorded, never traded, never blocking.
         fill    - in the minute right after the signal bar, or never (stale: the tick that first sees it is later).
         contract- today's expiry only; the listed strike nearest the fill-minute open (a tie goes lower); ask >=
-                  OGAP_MIN_ASK; contracts = floor(RISK_PER_TRADE_USD / (ask x 100)) >= 1 (an ask over RISK_PER_TRADE_USD / 100 buys none).
+                  OGAP_MIN_ASK; contracts = floor(RISK_PER_TRADE_USD / (mark x 100)) >= 1 (a mark over RISK_PER_TRADE_USD / 100 buys none).
+                  r136 (OGAP.3): every price here is the MARK (two-sided mid, floored to the cent), never the ask.
 """
 
 from __future__ import annotations
@@ -49,7 +58,7 @@ GATES = {
     "OGAP_RETEST_BARS":   "FOUNDATIONAL",
     "OGAP_RETEST_W":      "FOUNDATIONAL",
     "OGAP_GATE_G_W":      "FOUNDATIONAL",
-    "OGAP_MIN_ASK":       "FEASIBILITY",
+    "OGAP_MIN_ASK":       "FEASIBILITY",                  # r136 OGAP.3: applied to the MARK (name kept)
     "RISK_PER_TRADE_USD": "FEASIBILITY",                  # r131 OGAP.2: the ramp MIN is OGAP's budget
 }
 
@@ -169,10 +178,20 @@ def pick_strike(rows, spot: float):
     return best[1] if best else None
 
 
-def contracts_for(ask: float) -> int:
-    """floor(RISK_PER_TRADE_USD / (ask x 100)); 0 = refused (never rounded up to 1). r131 OGAP.2: the ramp MIN."""
+def mark_of(bid, ask) -> Optional[float]:
+    """r136 (OGAP.3) - THE price OGAP reads: the two-sided mid floored to the cent (PARK.4's rounding). None unless
+    ask >= bid > 0."""
+    b, a = _f(bid), _f(ask)
+    if b is None or a is None or not (a >= b > 0):
+        return None
+    return int((b + a) / 2.0 * 100.0 + 1e-9) / 100.0
+
+
+def contracts_for(mark: float) -> int:
+    """floor(RISK_PER_TRADE_USD / (mark x 100)); 0 = refused (never rounded up to 1). r131 OGAP.2: the ramp MIN;
+    r136 OGAP.3: called with the MARK (Park's book used the ask)."""
     try:
-        a = float(ask)
+        a = float(mark)
     except (TypeError, ValueError):
         return 0
     if not a > 0:
@@ -255,21 +274,22 @@ class OgapPreparation:
 
     def notes_line(self) -> str:
         r = self.read or {}
-        return ("ogap gap=%s W=%s brk=%s sig=%s side=%s allowed=%s ask=%s bid=%s" % (
+        return ("ogap gap=%s W=%s brk=%s sig=%s side=%s allowed=%s mark=%s ask=%s bid=%s" % (
             "n/a" if r.get("gap") is None else "%.3f" % r["gap"],
             "n/a" if r.get("W") is None else "%.4f" % r["W"],
             next((hhmm(s["brk"]) for s in r.get("sides", []) if s["side"] == r.get("side")), "n/a"),
             hhmm(r["signal"]) if r.get("signal") is not None else "n/a",
             r.get("side", ""), ",".join(r.get("allowed", [])),
+            "n/a" if self.premium is None else "%.2f" % self.premium,
             "n/a" if self.ask is None else "%.2f" % self.ask,
             "n/a" if self.bid is None else "%.2f" % self.bid))
 
     def trade_line(self) -> str:
         if not self.ready:
             return "no trade prepared"
-        return (f"buy {self.contracts} x {float(self.contract.strike):g}{self.side[0].upper()} @ ask {self.ask:.2f} "
-                f"(mark {self.premium:.2f}, bid {self.bid:.2f}) - signal {hhmm(self.read['signal'])}, gap "
-                f"{self.read.get('gap')}; exits: 1.6x -> floor 1.2x, 2.0x -> floor 0.60 x peak, 14:00 sweep < 0.75x, "
+        return (f"buy {self.contracts} x {float(self.contract.strike):g}{self.side[0].upper()} @ mark {self.premium:.2f} "
+                f"(bid {self.bid:.2f}, ask {self.ask:.2f}) - signal {hhmm(self.read['signal'])}, gap "
+                f"{self.read.get('gap')}; exits on the mark: 1.6x -> floor 1.2x, 2.0x -> floor 0.60 x peak, 14:00 sweep < 0.75x, "
                 f"15:45 bell")
 
     def emit(self, strategy_name: str):
@@ -291,8 +311,8 @@ class OgapPreparation:
             stop_loss_pct=1.0,                   # no premium stop (stop_premium = 0)
         )
         sig.notes = self.notes_line()
-        # the decision basis (Park's book): sizing and every exit threshold are computed from the ASK
-        sig.ogap_ask = float(self.ask)
+        # r136 (OGAP.3): the decision basis is the MARK (entry_premium): main sizes OGAP on it and the exits measure every
+        # line from the booked fill. No ogap_ask any more (Park's book read the ask; the operator: "never pay the spread").
         sig.ogap_contracts = int(self.contracts)
         logger.info("[ogap] FIRE %s — %s", self.direction, self.trade_line())
         return self.tick.take(sig)
@@ -395,14 +415,17 @@ class OgapPlan:
         kexp = str(getattr(k, "expiry", "") or "")
         if kexp and kexp != day.isoformat():
             return t.refuse("ogap_no_0dte", f"the contract expires {kexp}, not today") or prep
-        if ask < float(config.OGAP_MIN_ASK):
-            return t.refuse("ogap_ask_floor", "ask %.2f < %.2f" % (ask, config.OGAP_MIN_ASK)) or prep
-        n = contracts_for(ask)
+        mark = mark_of(bid, ask)                                      # r136 OGAP.3: THE price every gate reads
+        if mark is None:
+            return t.refuse("ogap_contract", "no two-sided ATM contract") or prep
+        if mark < float(config.OGAP_MIN_ASK):
+            return t.refuse("ogap_ask_floor", "mark %.2f < %.2f" % (mark, config.OGAP_MIN_ASK)) or prep
+        n = contracts_for(mark)
         t.check("contracts", float(n), n >= 1)
         if n < 1:
-            return t.refuse("ogap_ask_band", "ask %.2f buys 0 contracts on $%.0f" % (ask, config.RISK_PER_TRADE_USD)) or prep
+            return t.refuse("ogap_ask_band", "mark %.2f buys 0 contracts on $%.0f" % (mark, config.RISK_PER_TRADE_USD)) or prep
         prep.contract, prep.bid, prep.ask, prep.contracts = k, bid, ask, n
-        prep.premium = int((bid + ask) / 2.0 * 100.0 + 1e-9) / 100.0          # the mark, floored to the cent (PARK.4)
+        prep.premium = mark                                           # the mark, floored to the cent (PARK.4)
         prep.ready = True
         t.anchor(trigger=spot)
         return prep

@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""tests/check_ogap_size.py — v5.0
+"""tests/check_ogap_size.py — v5.1
+v5.1  2026-11-21  OTV5 r136 (OGAP.3) — OGAP sizes on the MARK (the operator, 2026-11-20: "never pay the spread"). S2's quotes
+      are read as marks (3.18 / 3.21 -> 3.19 -> 3; 5.97 / 6.00 -> 5.98 -> 1; 10.95 / 11.00 -> 10.97 -> none); S3: mark 3.15
+      -> 3 and mark 3.45 (a stray ogap_ask 3.55, never read) -> 3 (r131 bought 2 on the ask). S1/S4-S6 unchanged.
 v5.0  2026-11-16  OTV5 r131 (OGAP.2) — OGAP SIZES ON THE RAMP MIN (RISK_PER_TRADE_USD, OT_RISK_USD), NOT A FLAT $500.
       The operator, 2026-11-16: "Do me a favor and size the OGAP to whatever the ramp minimum (risk per trade) is set at
       instead of a flat $500. That $500 is Park's (my friend) preferred position size. I like 1050 for most trades."
@@ -9,8 +12,8 @@ v5.0  2026-11-16  OTV5 r131 (OGAP.2) — OGAP SIZES ON THE RAMP MIN (RISK_PER_TR
 S1   OT_RISK_USD=1050: contracts_for(3.21 / 6.00 / 10.50 / 11.00) = 3 / 1 / 1 / 0 (floor(1050 / (ask x 100)))
 S2   OT_RISK_USD=1050: the plan end to end (strategy.ogap) at ask 3.21 -> a TAKE signal with ogap_contracts 3; ask 6.00
      -> 1; ask 11.00 -> no signal (ogap_ask_band, the feasibility gate follows the ramp MIN)
-S3   OT_RISK_USD=1050: the real funnel sizes an OGAP signal on the ASK with the ramp MIN: ask 3.21 -> 3; mark 3.45 /
-     ask 3.55 -> 2 (the ask, not the mark: 1050/345 would be 3)
+S3   OT_RISK_USD=1050: the real funnel sizes an OGAP signal on the MARK with the ramp MIN (r136): mark 3.15 -> 3; mark
+     3.45 with a stray ogap_ask 3.55 -> 3 (the mark: 1050/345; r131 bought 2 on the ask)
 S4   OT_RISK_USD unset: OGAP follows RISK_PER_TRADE_USD's default (contracts_for(a) == floor(default / (a x 100)) at
      0.50 / 1.00 / 2.27, and the default is the one config.py declares for OT_RISK_USD)
 S5   no separate knob: config has no OGAP_BUDGET_USD, no module reads one, and no OT_OGAP* env key is read
@@ -159,11 +162,11 @@ def main():
     cf = hi["cf"]
     check("S1 OT_RISK_USD=1050: contracts_for 3.21 / 6.00 / 10.50 / 11.00 -> 3 / 1 / 1 / 0",
           hi["risk"] == 1050.0 and [cf["3.21"], cf["6.0"], cf["10.5"], cf["11.0"]] == [3, 1, 1, 0], f"{hi['risk']} {cf}")
-    check("S2 OT_RISK_USD=1050: the plan at ask 3.21 -> 3 contracts, 6.00 -> 1, 11.00 -> no signal (ogap_ask_band)",
+    check("S2 OT_RISK_USD=1050: the plan at mark 3.19 -> 3 contracts, 5.98 -> 1, 10.97 -> no signal (ogap_ask_band)",
           hi["plan"] == {"3.21": 3, "6.0": 1, "11.0": None}, f"{hi['plan']}")
     f = hi["funnel"]
-    check("S3 OT_RISK_USD=1050: the real funnel sizes OGAP on the ask with the ramp MIN: ask 3.21 -> 3; mark 3.45 / "
-          "ask 3.55 -> 2", f["OGAP@3.21"] == [["OGAP", 3]] and f["OGAP@3.55"] == [["OGAP", 2]], f"{f}")
+    check("S3 OT_RISK_USD=1050: the real funnel sizes OGAP on the MARK with the ramp MIN: mark 3.15 -> 3; mark 3.45 "
+          "(stray ask 3.55) -> 3", f["OGAP@3.21"] == [["OGAP", 3]] and f["OGAP@3.55"] == [["OGAP", 3]], f"{f}")
 
     src = open(os.path.join(ROOT, "config.py"), encoding="utf-8").read()
     m = re.search(r'^RISK_PER_TRADE_USD\s*=\s*float\(os\.environ\.get\("OT_RISK_USD",\s*"([0-9.]+)"\)\)', src, re.M)

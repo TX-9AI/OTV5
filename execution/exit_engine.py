@@ -1,5 +1,13 @@
 """
-execution/exit_engine.py  v5.23
+execution/exit_engine.py  v5.24
+v5.24  2026-11-21  OTV5 r136 (OGAP.3) — OGAP'S EXITS READ THE MARK, MEASURED FROM THE BOOKED FILL. The operator, 2026-11-20:
+      "Ours needs the modification to account for how I would trade it, never pay the spread." / "Mark is the worst buy
+      or sell we accept." ogap_fill_of is the row's entry_premium (paper: the mark at the fill; live: the ladder's fill,
+      mark or better), no longer entry_ask or the notes' ask=; ogap_exit_step walks the MARK (the tick's current_premium),
+      not the _exit_bid stash: the peak is the best mark, the 2.0x trail (0.60 x peak), the 1.6x lock (1.2x floor), the
+      14:00 sweep (< 0.75x) and the 15:45 bell are Park's numbers on the mark. The restart seed (max_premium_seen, the
+      best mark) is now the same basis, not a looser one. The ogap_exit counterfactual row keeps the tick bid beside
+      the mark (record only). Exits still go out through the normal path (paper at the mark, live exit-at-mark).
 v5.23  2026-11-16  OTV5 r128 (ERC.1 / FA.2, the cold audit 2026-11-15, critical, live-only) — A CLOSE WHOSE place_order
       REPLY WAS LOST IS NEVER POSTED A SECOND TIME BESIDE ITSELF. At r127 _submit_live_close swallowed the raise and
       returned None with no order id stored, so the next pass posted a fresh full-size close (at 15:55 a second MARKET
@@ -1414,48 +1422,36 @@ def _bars_in_session(df) -> Optional[int]:
 
 
 def ogap_fill_of(record) -> float:
-    """OGAP's decision basis: the entry ASK. The persisted entry_ask column when present, else the `ask=` the plan
-    wrote into notes, else the booked mark (stated: a mark basis is looser than Park's). 0.0 when none is readable."""
-    try:
-        a = record.get("entry_ask")
-        if a not in (None, "", 0, 0.0):
-            return float(a)
-    except (TypeError, ValueError, AttributeError):
-        pass
-    try:
-        import re as _re
-        m = _re.search(r"\bask=([0-9]+(?:\.[0-9]+)?)", str(record.get("notes", "") or ""))
-        if m:
-            return float(m.group(1))
-    except Exception:                                           # noqa: BLE001
-        pass
+    """OGAP's decision basis (r136 OGAP.3): the BOOKED fill, entry_premium - paper books the mark at the fill, live the
+    ladder's fill (mark or better). Never the ask (Park's book; the operator: "never pay the spread"). 0.0 when none."""
     try:
         return float(record.get("entry_premium") or 0.0)
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, AttributeError):
         return 0.0
 
 
-def ogap_exit_step(st: dict, fill: float, bid: float, hm) -> str:
+def ogap_exit_step(st: dict, fill: float, mark: float, hm) -> str:
     """ONE look of Park's exit walk (orbgap.walk), PURE: updates `st` {"peak", "floor", "swept"} and returns the exit
     reason or "". `hm` = (hour, minute) ET of this look. The order is his: peak, the 2.0x trail, the 1.6x lock, the
-    floor, the 14:00 sweep (once), the 15:45 bell."""
+    floor, the 14:00 sweep (once), the 15:45 bell. r136 (OGAP.3): `mark` is the price walked (Park's book walked the bid)
+    and `fill` the booked fill (the mark at entry); his numbers are unchanged."""
     from config import (OGAP_TRAIL_ARM, OGAP_TRAIL_KEEP, OGAP_LOCK_ARM, OGAP_LOCK_FLOOR, OGAP_SWEEP_ET,
                         OGAP_SWEEP_BELOW, OGAP_CLOSE_ET)
-    if bid is None or not fill > 0:
+    if mark is None or not fill > 0:
         return ""
-    st["peak"] = max(float(st.get("peak") or 0.0), float(bid))
+    st["peak"] = max(float(st.get("peak") or 0.0), float(mark))
     peak = st["peak"]
     if peak >= OGAP_TRAIL_ARM * fill:
         st["floor"] = max(st.get("floor") or 0.0, OGAP_TRAIL_KEEP * peak)
     if peak >= OGAP_LOCK_ARM * fill:
         st["floor"] = max(st.get("floor") or 0.0, OGAP_LOCK_FLOOR * fill)
-    if st.get("floor") is not None and bid <= st["floor"]:
+    if st.get("floor") is not None and mark <= st["floor"]:
         return ("ogap_trail" if peak >= OGAP_TRAIL_ARM * fill else "ogap_lock") + \
-            f": bid {bid:.2f} <= floor {st['floor']:.2f} (fill {fill:.2f}, peak {peak:.2f})"
+            f": mark {mark:.2f} <= floor {st['floor']:.2f} (fill {fill:.2f}, peak {peak:.2f})"
     if tuple(hm) >= tuple(OGAP_SWEEP_ET) and not st.get("swept"):
         st["swept"] = True
-        if peak < OGAP_LOCK_ARM * fill and bid < OGAP_SWEEP_BELOW * fill:
-            return f"ogap_sweep_1400: bid {bid:.2f} < {OGAP_SWEEP_BELOW:.2f} x fill {fill:.2f}, peak {peak:.2f}"
+        if peak < OGAP_LOCK_ARM * fill and mark < OGAP_SWEEP_BELOW * fill:
+            return f"ogap_sweep_1400: mark {mark:.2f} < {OGAP_SWEEP_BELOW:.2f} x fill {fill:.2f}, peak {peak:.2f}"
     if tuple(hm) >= tuple(OGAP_CLOSE_ET):
         return "ogap_close_%02d%02d" % tuple(OGAP_CLOSE_ET)
     return ""
@@ -1891,17 +1887,17 @@ class ExitEngine:
     _OGAP_CF_SAID: set = set()
 
     def _evaluate_ogap(self, record: TradeRecord, current_premium: float) -> ExitDecision:
-        """OGAP exits (OGAP.1, Park's spec of record §5), FIRST MATCH WINS, on the BID against `fill` = the entry ASK
-        (Park's decision basis; ogap_fill_of reads it off the record):
+        """OGAP exits (OGAP.1, Park's spec of record §5), FIRST MATCH WINS, on the MARK (current_premium) against
+        `fill` = the booked entry_premium (r136 OGAP.3; Park's book read the bid against the ask; ogap_fill_of):
           1. peak >= OGAP_TRAIL_ARM x fill -> floor = max(floor, OGAP_TRAIL_KEEP x peak), ratcheting
           2. peak >= OGAP_LOCK_ARM x fill  -> floor = max(floor, OGAP_LOCK_FLOOR x fill)
-          3. bid <= floor                  -> ogap_trail (step 1 armed) / ogap_lock
-          4. the first tick at/after OGAP_SWEEP_ET (once): peak never >= 1.6x and bid < OGAP_SWEEP_BELOW x fill
+          3. mark <= floor                 -> ogap_trail (step 1 armed) / ogap_lock
+          4. the first tick at/after OGAP_SWEEP_ET (once): peak never >= 1.6x and mark < OGAP_SWEEP_BELOW x fill
           5. OGAP_CLOSE_ET                 -> ogap_close_1545
           6. EOD                           -> the schedule's backstop only
         No stop before 1.6x, no take-profit, no decay stop (DECAY_STOP_EXEMPT), no management plan. After a restart the
-        persisted best MARK (max_premium_seen) seeds the peak once - slightly looser than the bid, stated (PARK r291's
-        rule). The bid is the r105 stash (_exit_bid); without one the mark stands in."""
+        persisted best MARK (max_premium_seen) seeds the peak once - the same basis as the walk (r136). The r105 bid
+        stash (_exit_bid) is only recorded beside the exit in the counterfactual row; it decides nothing."""
         from utils.time_utils import ET as _ET
         decision = ExitDecision()
         e = float(record.get("entry_premium", 0.0) or 0.0)
@@ -1909,8 +1905,13 @@ class ExitEngine:
         if e > 0:
             decision.current_pnl_pct = (current_premium - e) / e
             decision.current_pnl_usd = (current_premium - e) * n * CONTRACT_MULTIPLIER
-        bid = record.get("_exit_bid")
-        bid = float(bid) if bid not in (None, 0, 0.0) else float(current_premium or 0.0)
+        bid = record.get("_exit_bid")                       # record only (the counterfactual row), r136
+        try:
+            mark = float(current_premium) if current_premium is not None else None
+        except (TypeError, ValueError):
+            mark = None
+        if mark is not None and not mark > 0:
+            mark = None
         fill = ogap_fill_of(record)
         now = datetime.now(_ET)
         st = record.get("_ogap_state")
@@ -1925,19 +1926,20 @@ class ExitEngine:
                 logger.info("[ogap] %s peak SEEDED from the persisted best mark %.2f (restart)",
                             str(record.get("trade_id", ""))[:8], best)
             record["_ogap_state"] = st
-        why = ogap_exit_step(st, fill, bid, (now.hour, now.minute)) if fill > 0 else ""
+        why = ogap_exit_step(st, fill, mark, (now.hour, now.minute)) if fill > 0 else ""
         if not why and _eod_due(record):
             why = _eod_label(record)
         if why:
             decision.should_exit = True
             decision.exit_reason = why
-            self._ogap_cf(record, why, bid, current_premium, fill, st)
+            self._ogap_cf(record, why, bid, mark, fill, st)
             logger.info("[ogap] %s EXIT %s", str(record.get("trade_id", ""))[:8], why)
         return decision
 
     def _ogap_cf(self, record, why, bid, mark, fill, st) -> None:
-        """Once per trade per process: data/counterfactual/ogap_exit.jsonl (the tick bid, the floor, the peak - so the
-        tick-vs-minute difference with Park's book is recorded, not hidden). Never raises."""
+        """Once per trade per process: data/counterfactual/ogap_exit.jsonl (the tick mark that decided, the tick bid
+        beside it, the floor, the peak - so the tick-vs-minute difference with Park's book is recorded, not hidden;
+        r136: `fill` is the booked fill (was `fill_ask`), `basis` "mark"). Never raises."""
         tid = str(record.get("trade_id", "") or "")
         if not tid or tid in ExitEngine._OGAP_CF_SAID:
             return
@@ -1948,7 +1950,7 @@ class ExitEngine:
                 _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))), "data", "counterfactual")
             _os.makedirs(d, exist_ok=True)
             out = {"ts_epoch": _time.time(), "trade_id": tid, "symbol": record.get("symbol"), "rule": "ogap_exit",
-                   "reason": why, "bid": bid, "mark": mark, "fill_ask": fill, "peak": (st or {}).get("peak"),
+                   "reason": why, "basis": "mark", "bid": bid, "mark": mark, "fill": fill, "peak": (st or {}).get("peak"),
                    "floor": (st or {}).get("floor"), "entry_premium": record.get("entry_premium"),
                    "contracts": record.get("contracts"), "option_symbol": record.get("option_symbol")}
             with open(_os.path.join(d, "ogap_exit.jsonl"), "a") as fh:

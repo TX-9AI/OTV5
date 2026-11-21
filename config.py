@@ -1,5 +1,6 @@
 """
-config.py  v5.24
+config.py  v5.25
+v5.25  2026-11-21  OTV5 r136 (OGAP.3) — COMMENT ONLY: the OGAP block says every price is the MARK (the 0.50 floor OGAP_MIN_ASK, its name kept, the size floor(RISK_PER_TRADE_USD / (mark x 100)), the exits on the mark vs the booked fill); no constant, value or key changes. The operator, 2026-11-20: "never pay the spread".
 v5.24  2026-11-16  OTV5 r131 (OGAP.2) — OGAP_BUDGET_USD IS DELETED: OGAP sizes on RISK_PER_TRADE_USD (OT_RISK_USD, the configure.sh "Risk per trade / ramp START (MIN)" key), floor(RISK_PER_TRADE_USD / (ask x 100)) on the ask. No new key. The operator, 2026-11-16: "Do me a favor and size the OGAP to whatever the ramp minimum (risk per trade) is set at instead of a flat $500. That $500 is Park's (my friend) preferred position size. I like 1050 for most trades." Every other value is unchanged.
 v5.23  2026-11-15  OTV5 r125 (HYG.28) — THE RAMP TOP'S KEY IS OT_BREAKOUT_BUDGET_USD (was OT_ORB_BUDGET_USD, named after the ORB trade retired at r76). BREAKOUT_BUDGET_USD / BREAKOUT_BUDGET_IS_DEFAULT replace ORB_BUDGET_USD / ORB_BUDGET_IS_DEFAULT; the old key is read as a fallback (new key first, BREAKOUT_BUDGET_FROM_OLD_KEY), so every box sizes exactly as before. The value and the default (RISK_PER_TRADE_USD) are unchanged.
 v5.22  2026-11-14  OTV5 r117 (HYG §5.3) — COMMENT ONLY: the long-debit cutoff's comment block still described the 11:00/11:30 afternoon block (and ORB, VOLT, the butterfly and condor as live). It now states the rule in force since OTV4TEST r149 - every long_debit entry may be placed until EOD_SCHEDULE["entries_stop"] 15:40, `>=` - with the 08-13/08-20/08-30 history marked superseded. No value changes.
@@ -1072,10 +1073,12 @@ CAP_EXCLUDED_STRATEGIES = ("PARK", "OGAP")   # r67 (PARC.4): PARC removed (r46 h
 # (the operator, 2026-10-31: no study toggles). Signal: the 09:30-09:44 1m range (>= OGAP_RANGE_MIN_BARS bars, W > 0);
 # gate-G at |gap| >= OGAP_GATE_G_W x W (gap = 09:30 open - prior RTH close), the refused side a shadow; the first 1m CLOSE
 # beyond the range 09:45-10:30, then a retest within OGAP_RETEST_BARS bars (low <= level + 0.10W and close > level for a
-# call; mirrored for a put); fill the minute after the signal bar or never (stale). ATM 0DTE, ask >= OGAP_MIN_ASK,
-# contracts = floor(RISK_PER_TRADE_USD / (ask x 100)) on the ASK (r131 OGAP.2: the ramp MIN, OT_RISK_USD; was a flat $500). Exits on the BID vs the entry ask (exit_engine._evaluate_ogap):
-# peak >= 2.0x -> floor 0.60 x peak (ratchets); peak >= 1.6x -> floor 1.2x; bid <= floor sells; the first tick at/after
-# 14:00 with peak never 1.6x and bid < 0.75x sells; 15:45 sells. QQQ only (ogap_equities_20261113: equities FAILED sealed).
+# call; mirrored for a put); fill the minute after the signal bar or never (stale). ATM 0DTE, MARK >= OGAP_MIN_ASK (the
+# name kept), contracts = floor(RISK_PER_TRADE_USD / (mark x 100)) (r131 OGAP.2: the ramp MIN, OT_RISK_USD; was a flat $500;
+# r136 OGAP.3: the MARK, was the ask - the operator, 2026-11-20: "never pay the spread"). Exits on the MARK vs the booked
+# fill (entry_premium; exit_engine._evaluate_ogap; r136, was the bid vs the entry ask):
+# peak >= 2.0x -> floor 0.60 x peak (ratchets); peak >= 1.6x -> floor 1.2x; mark <= floor sells; the first tick at/after
+# 14:00 with peak never 1.6x and mark < 0.75x sells; 15:45 sells. QQQ only (ogap_equities_20261113: equities FAILED sealed).
 OGAP_SYMBOLS = ("QQQ",)
 OGAP_RANGE_ET = ((9, 30), (9, 44))
 OGAP_RANGE_MIN_BARS = 10

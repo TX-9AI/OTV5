@@ -1,5 +1,7 @@
 # TRADES — the specs
 
+**`TRADES.md` v5.23 · 2026-11-21 · OTV5 r136 (OGAP.3) — section 10: OGAP reads the MARK wherever Park's spec reads the ask or the bid: the $0.50 floor, the size floor(`RISK_PER_TRADE_USD` / (mark x 100)), the band, the booked fill, the peak, the 1.6x / 2.0x lines, the 1.2x and 0.60 x peak floors, the 14:00 sweep under 0.75x; his numbers unchanged. The operator, 2026-11-20: "Ours needs the modification to account for how I would trade it, never pay the spread." / "Mark is the worst buy or sell we accept."**
+
 **`TRADES.md` v5.22 · 2026-11-20 · OTV5 r135 (GUARD.1; the live-readiness audit C3 + I3) — section 6: while ANY opening order's fate is unknown (an unconfirmed cancel, a lost reply, a fill whose fills cannot be read) no opening order posts on the instrument (any strategy, any strike; exits never wait); the unknown is read from the broker every tick, a fill (or the partial an unconfirmed cancel leaves) is booked once as the ORIGINATING strategy's trade at the broker's fills, a dead order clears; unresolved after 120 s (or at all once the day's last entry window, PARK's 11:03, is 120 s behind) it pages once and reconcile adopts it. The ladder's rules are unchanged. The operator, 2026-11-20: "Yes, let's fix it smartly."**
 
 **`TRADES.md` v5.21 · 2026-11-20 · OTV5 r133 (LADDER.1, D2 + D3) — section 6: the live entry walk posts rung after rung inside one tick (~6 s apart, cancel-confirm-post, bounded by one 15 s tick, back to the tick on a fill, the mark rung refused, the window's end, no fresh quote, an unconfirmed cancel), and the contract is frozen for the walk's life. The ladder's rules are unchanged. The operator, 2026-11-20: "Yes to both".**
@@ -706,21 +708,28 @@ SPX is refused by his $5.00 ask band on every row; every other box writes one `o
 - the break: per side, the first 1m CLOSE strictly beyond the range, 09:45-10:30; it never re-arms;
 - the retest: within the 20 bars after the break (and by 10:30): a call's low <= high + 0.10W closing above the high
   (a put mirrored). The earliest allowed retest is the signal bar; the fill is the NEXT minute or never (`ogap_stale`);
-- the contract: today's expiry only (`ogap_no_0dte`), the strike nearest the fill-minute open (a tie goes lower), ask >=
-  $0.50 (`ogap_ask_floor`), contracts = floor(`RISK_PER_TRADE_USD` / (ask x 100)) on the ASK, the ramp MIN (r131; an
-  ask over `RISK_PER_TRADE_USD` / 100 buys none: `ogap_ask_band`). Paper books the mark, like every setup; the ask and the bid are on the row.
+- the contract: today's expiry only (`ogap_no_0dte`), the strike nearest the fill-minute open (a tie goes lower), a
+  two-sided quote; **every price below is the MARK** (the mid, floored to the cent) since r136 (OGAP.3; Park's book
+  reads the ask): mark >= $0.50 (`ogap_ask_floor`, the name kept), contracts = floor(`RISK_PER_TRADE_USD` / (mark x
+  100)), the ramp MIN (r131; a mark over `RISK_PER_TRADE_USD` / 100, $10.50 at $1,050, buys none: `ogap_ask_band`).
+  The mark is booked (paper fills at it; live goes through the entry ladder, never worse than the mark); the ask and
+  the bid stay on the row and in notes as record only. The operator, 2026-11-20: *"Ours needs the modification to
+  account for how I would trade it, never pay the spread."*
 
-**Exits (`exit_engine._evaluate_ogap`), on the bid against the entry ASK, first match wins:** peak >= 2.0x -> floor
-0.60 x peak (ratchets); peak >= 1.6x -> floor 1.2x; bid <= floor sells (`ogap_trail` / `ogap_lock`); the first tick at
-or after 14:00, if the peak never reached 1.6x and the bid is under 0.75x, sells (`ogap_sweep_1400`); 15:45 sells
-(`ogap_close_1545`); the EOD schedule is only a backstop. No stop before 1.6x, no take-profit, no decay stop, no
-management plan, no pin gate (PIN_EXEMPT, the counterfactual row still written). Cap-exempt and out of the cap's day
-P&L. One look per tick (his book looks once a minute): every exit is written to `ogap_exit.jsonl` with the tick bid,
-the floor and the peak. A restart seeds the peak from the persisted best mark once (PARK r291's rule).
+**Exits (`exit_engine._evaluate_ogap`), on the MARK against the booked fill (`entry_premium`; r136, Park's book reads
+the bid against the ask), first match wins:** peak (the best mark) >= 2.0x -> floor 0.60 x peak (ratchets); peak >=
+1.6x -> floor 1.2x; mark <= floor sells (`ogap_trail` / `ogap_lock`); the first tick at or after 14:00, if the peak
+never reached 1.6x and the mark is under 0.75x, sells (`ogap_sweep_1400`); 15:45 sells (`ogap_close_1545`); the EOD
+schedule is only a backstop. The close goes out through the normal path (paper at the mark, live exit-at-mark). No
+stop before 1.6x, no take-profit, no decay stop, no management plan, no pin gate (PIN_EXEMPT, the counterfactual row
+still written). Cap-exempt and out of the cap's day P&L. One look per tick (his book looks once a minute): every exit
+is written to `ogap_exit.jsonl` with the deciding mark, the tick bid beside it, the fill, the floor and the peak. A
+restart seeds the peak from the persisted best mark once (now the walk's own basis).
 
 **Measured** (`~/reviews/studies/park_orbgap_20261113`): QQQ T1 real quotes n=7 +$148/row [−124, +454]; T2 n=32
 +$137 [−87, +421]. Gate `tests/check_ogap.py` (O1-O11 and the five-day replay R1-R5, which reproduces his backtest's
-QQQ rows on 10-30, 11-02, 11-04, 11-05 and 11-09 to the dollar).
+QQQ rows on 10-30, 11-02, 11-04, 11-05 and 11-09 to the dollar, fed his ask / bid series through the pure walk);
+`tests/check_ogap_mark.py` (M1-M14, r136) pins every mark-basis read.
 
 ## Not specced, deliberately
 

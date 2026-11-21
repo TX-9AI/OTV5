@@ -1,5 +1,6 @@
 """
-main.py  v5.29
+main.py  v5.30
+v5.30  2026-11-21  OTV5 r136 (OGAP.3) — OGAP IS SIZED ON THE MARK: _execute_entry_signal asks the sizer, for strategy_name OGAP only, with premium = signal.entry_premium (the plan's mark; the D3 freeze re-reads it) and budget_usd = config.RISK_PER_TRADE_USD (unchanged), i.e. floor(RISK_PER_TRADE_USD / (mark x 100)); the signal's ogap_ask is gone and is never read. The operator, 2026-11-20: "Ours needs the modification to account for how I would trade it, never pay the spread." Every other strategy sizes exactly as before.
 v5.29  2026-11-20  OTV5 r135 (GUARD.1; the live-readiness audit 2026-11-20 C3 + I3, live only) — A SUSPECT ENTRY ORDER IS RESOLVED EVERY TICK AND BOOKED UNDER ITS STRATEGY. NEW _resolve_entry_suspects(state), called on every RTH tick before the intraday reconcile (live only; no broker call unless order_guard holds a suspect): order_guard.resolve_suspects reads each suspect from the broker, then _hand_booked_to_manager hands every record it booked to the position manager (appended, as an entry is) and sends the entry alert. _execute_entry_signal hands them over after enter() too (a booking can happen inside another entry's clear_to_post). _intraday_adopt resolves first and DEFERS (paged once a day) while a bookable suspect not yet given up touches a leg it would adopt, so the fill keeps its plan instead of becoming ADOPTED; after the guard gives up (RESOLVE_GIVEUP_S) adopt proceeds and the guard clears on the ADOPTED row. Paper unchanged. Gate tests/check_entry_suspect_block.py.
 v5.28  2026-11-20  OTV5 r133 (D2/D3; the forward-edge study 2026-11-20) — _execute_entry_signal calls entry_engine.freeze_contract(signal, state.paper_trading) right after the validity check and before ENT.1 and sizing: a strategy that re-picked its strike while its live entry walk is in flight is put back on the walking contract (D3). One call; paper is a no-op. Gate tests/check_entry_ladder_5s.py.
 v5.27  2026-11-16  OTV5 r131 (OGAP.2) — OGAP's sizer budget is config.RISK_PER_TRADE_USD (the ramp MIN, OT_RISK_USD), not the deleted flat $500 OGAP_BUDGET_USD; still on the ASK, still its own budget_usd line, only for strategy_name OGAP. The operator, 2026-11-16: "Do me a favor and size the OGAP to whatever the ramp minimum (risk per trade) is set at instead of a flat $500. That $500 is Park's (my friend) preferred position size. I like 1050 for most trades." Every other strategy sizes exactly as before.
@@ -4271,7 +4272,7 @@ def attempt_new_entry(ctx: dict, ms: MarketState, state: BotState):
                            "unavailable — nothing is asked", gate="catastrophic_cap")
             return
         _attempt_park(ctx, ms, state)                    # r288 (PARK.1): cap-exempt, its own budget
-        _attempt_ogap(ctx, ms, state)                    # OGAP.1: cap-exempt, its own $500 budget
+        _attempt_ogap(ctx, ms, state)                    # OGAP.1: cap-exempt, its own budget (RISK_PER_TRADE_USD)
         return
 
     # ── Fetch options chain (shared across strategies) ────────────────────────
@@ -5309,14 +5310,14 @@ def _execute_entry_signal(signal, ctx, ms, state, _sigj=None, *, additive: bool 
     # the caution log's scaling-off count is THIS call repeated with scaled=False - never a re-derivation.
     from analysis import commitment as _cm
     _size_rec = _cm.SizeCall(risk_mgr)
-    # OGAP.1 - Park's book sizes on the ASK with its own budget line; r131 (OGAP.2) that budget IS the ramp MIN:
-    # floor(RISK_PER_TRADE_USD / (ask x 100)) (OT_RISK_USD; was a flat $500 OGAP_BUDGET_USD).
-    _ogap_ask = getattr(signal, "ogap_ask", None) if signal.strategy_name == "OGAP" else None
+    # OGAP.1 - its own budget line; r131 (OGAP.2) that budget IS the ramp MIN (OT_RISK_USD); r136 (OGAP.3) on the MARK:
+    # floor(RISK_PER_TRADE_USD / (mark x 100)), premium = entry_premium like every setup (Park's book read the ask).
+    _is_ogap = signal.strategy_name == "OGAP"
     from config import RISK_PER_TRADE_USD as _OGAP_BUDGET
     sizing = _size_rec.size_for(
         _struct,
-        premium             = float(_ogap_ask) if _ogap_ask else signal.entry_premium,
-        budget_usd          = _OGAP_BUDGET if _ogap_ask else None,
+        premium             = signal.entry_premium,
+        budget_usd          = _OGAP_BUDGET if _is_ogap else None,
         # r131 option 2 — SIZING-ONLY stop premium for a signal carrying
         # `sizing_distance` (VOLT); every other signal gets exactly
         # `_sig_num(signal, "stop_premium")`, as before. The signal's own

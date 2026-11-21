@@ -1,6 +1,14 @@
 #!/usr/bin/env python3
 """
-tests/check_ogap.py  v5.3
+tests/check_ogap.py  v5.4
+v5.4  2026-11-21  OTV5 r136 (OGAP.3) — OGAP READS THE MARK (the operator, 2026-11-20: "never pay the spread"). O7: the
+      signal books entry_premium = the mark 4.24 (4.23 / 4.26), notes carry mark=, no ogap_ask; the band case moves to
+      5.01 / 5.03 (mark 5.02 buys 0 on $500; 4.99 / 5.01 is a 5.00 mark and buys 1). O8b: the restart seed arms the 1.2x
+      floor on the booked fill 1.00 (1.20) and the MARK 1.19 exits (bid 1.15 beside it decides nothing). O8c: the fill
+      basis is entry_premium whatever entry_ask / notes' ask= say. O10: OGAP at mark 2.45 is sized on the mark with
+      RISK_PER_TRADE_USD (500 -> 2), a stray ogap_ask 2.55 ignored. R1-R5 still replay Park's book through the pure walk
+      (ogap_exit_step takes the price series and the fill it is handed: his ask / bid series reproduce his rows). The
+      mark-basis pins of every converted read are tests/check_ogap_mark.py.
 v5.3  2026-11-16  OTV5 r131 (OGAP.2) — OGAP sizes on RISK_PER_TRADE_USD (the ramp MIN); OGAP_BUDGET_USD is deleted. This gate
       pins OT_RISK_USD=500 (Park's own size, the basis of the replay R1-R5 and the O6/O7 pins), so every pin holds; O6
       reads config.RISK_PER_TRADE_USD; O10 moves to mark 2.45 / ask 2.55 so ask vs mark still differ at $500 (OGAP 1,
@@ -23,8 +31,8 @@ v5.0  2026-11-14  OTV5 (OGAP.1) — THE OGAP GATE. The operator, 2026-11-14: "le
       O8      the exit walk (execution/exit_engine.ogap_exit_step) and _evaluate_ogap on a record: the lock, the trail,
               the 14:00 sweep once, the 15:45 bell; a restart seeds the peak from max_premium_seen (1.7x -> the 1.2x
               floor is armed); fill = entry_ask, else notes' ask=, else the mark.
-      O10     the REAL entry funnel (main._execute_entry_signal, a spy entry engine): an OGAP signal (mark 2.45, ogap_ask
-              2.55) is sized by the real RiskManager on the ASK with RISK_PER_TRADE_USD (500) -> 1 contract; the same signal named
+      O10     the REAL entry funnel (main._execute_entry_signal, a spy entry engine): an OGAP signal (mark 2.45, a stray
+              ogap_ask 2.55) is sized by the real RiskManager on the MARK with RISK_PER_TRADE_USD (500) -> 2 (r136); the same signal named
               PARK is sized on the mark with the box's own risk (unchanged).
       O11     the dispatch, DRIVEN: attempt_new_entry() asks _attempt_ogap WITH the chain on the normal path, and the
               capped branch asks it (by text, beside _attempt_park).
@@ -181,13 +189,14 @@ def main():
     s_stale = prep_at(fill + 1)
     s_meta = prep_at(fill, sym="META")
     s_floor = prep_at(fill, bid=0.47, ask=0.49)
-    s_band = prep_at(fill, bid=4.99, ask=5.01)
+    s_band = prep_at(fill, bid=5.01, ask=5.03)                 # r136: mark 5.02 buys 0 on $500
     s_0dte = prep_at(fill, expiry="2026-11-06")
-    check("O7 the plan: QQQ 11-05 at the fill minute -> OGAP put, strike %s, ogap_ask 4.26, notes ask=; +1 min -> "
-          "stale; META -> none; ask 0.49 / 5.01 / not-0DTE -> none" % fx[d]["expect"]["strike"],
+    check("O7 the plan: QQQ 11-05 at the fill minute -> OGAP put, strike %s, entry_premium = the mark 4.24, notes "
+          "mark=, no ogap_ask; +1 min -> stale; META -> none; mark 0.48 / 5.02 / not-0DTE -> none" % fx[d]["expect"]["strike"],
           s_ok is not None and s_ok.strategy_name == "OGAP" and s_ok.option_side == "put"
-          and float(s_ok.strike) == float(fx[d]["expect"]["strike"]) and abs(s_ok.ogap_ask - 4.26) < 1e-9
-          and "ask=4.26" in s_ok.notes and s_ok.ogap_contracts == 1
+          and float(s_ok.strike) == float(fx[d]["expect"]["strike"]) and abs(s_ok.entry_premium - 4.24) < 1e-9
+          and getattr(s_ok, "ogap_ask", None) is None
+          and "mark=4.24" in s_ok.notes and s_ok.ogap_contracts == 1
           and s_stale is None and s_meta is None and s_floor is None and s_band is None and s_0dte is None,
           f"ok={s_ok and (s_ok.option_side, s_ok.strike, s_ok.notes)} stale={s_stale} meta={s_meta} "
           f"floor={s_floor} band={s_band} 0dte={s_0dte}")
@@ -221,17 +230,17 @@ def main():
           and w_nosweep[0] == "" and w_bell[0] == "ogap_close_1545" and w_bell[1] == 945,
           f"{w_lock[:2]} {w_trail[:2]} {w_sweep[:2]} {w_nosweep[:2]} {w_bell[:2]}")
     rec = {"trade_id": "o8-restart", "strategy": "OGAP", "entry_premium": 1.00, "entry_ask": 1.02, "contracts": 1,
-           "max_premium_seen": 1.75, "_exit_bid": 1.20}
+           "max_premium_seen": 1.75, "_exit_bid": 1.15}
     eng = EE.ExitEngine() if hasattr(EE, "ExitEngine") else None
-    dec = eng._evaluate_ogap(rec, 1.21) if eng else None
-    check("O8b restart: max_premium_seen 1.75 >= 1.6 x the entry ask 1.02 -> the 1.2x floor (1.224) is armed and bid "
-          "1.20 exits ogap_lock",
+    dec = eng._evaluate_ogap(rec, 1.19) if eng else None
+    check("O8b restart: max_premium_seen 1.75 >= 1.6 x the booked fill 1.00 -> the 1.2x floor (1.20) is armed and the "
+          "mark 1.19 exits ogap_lock",
           dec is not None and dec.should_exit and dec.exit_reason.startswith("ogap_lock"),
           f"{getattr(dec, 'exit_reason', None)}")
-    check("O8c fill basis: entry_ask, else notes ask=, else the mark",
-          EE.ogap_fill_of({"entry_ask": 2.5, "notes": "ogap ask=2.4", "entry_premium": 2.3}) == 2.5
-          and EE.ogap_fill_of({"notes": "ogap gap=0.1 ask=2.40 bid=2.38", "entry_premium": 2.3}) == 2.4
-          and EE.ogap_fill_of({"entry_premium": 2.3}) == 2.3, "")
+    check("O8c fill basis: the booked entry_premium (the mark), whatever entry_ask or notes' ask= say",
+          EE.ogap_fill_of({"entry_ask": 2.5, "notes": "ogap ask=2.4", "entry_premium": 2.3}) == 2.3
+          and EE.ogap_fill_of({"notes": "ogap gap=0.1 ask=2.40 bid=2.38", "entry_premium": 2.3}) == 2.3
+          and EE.ogap_fill_of({"entry_premium": 2.3}) == 2.3 and EE.ogap_fill_of({}) == 0.0, "")
 
     # ── O9 isolation ──
     import execution.position_manager as PM
@@ -282,9 +291,9 @@ def main():
     _rpt = float(getattr(MN.get_risk_manager(), "_risk_per_trade", 0) or 0)
     f_pk = funnel("PARK")
     exp_pk = int(_rpt // 245)
-    check("O10 the real funnel: OGAP (mark 2.45, ask 2.55) -> 1 contract on $500; PARK, same signal -> sized on the "
-          "mark with the box's risk ($%.0f -> %d)" % (_rpt, exp_pk),
-          f_og == [("OGAP", 1)] and (f_pk == [("PARK", exp_pk)] or (exp_pk < 1 and f_pk == [])),
+    check("O10 the real funnel: OGAP (mark 2.45, a stray ogap_ask 2.55) -> 2 contracts on the mark at $500; PARK, same "
+          "signal -> sized on the mark with the box's risk ($%.0f -> %d)" % (_rpt, exp_pk),
+          f_og == [("OGAP", 2)] and (f_pk == [("PARK", exp_pk)] or (exp_pk < 1 and f_pk == [])),
           f"ogap={f_og} park={f_pk}")
 
     # ── O11 the dispatch asks OGAP ──
