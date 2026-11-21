@@ -1,5 +1,7 @@
 # FEED_MANIFOLD.md — THE FUEL MANIFOLD
 
+**`FEED_MANIFOLD.md` v5.1 · 2026-11-21 · OTV5 r140 (MACRO.2) — the VIX rule's readers: macro (the VIX band, a label) and `vol_state`; SessionGuard's crisis lockout is deleted (the operator, 2026-09-17: "VIX crisis — get rid of it. That is major opportunity."; restated 2026-11-21).**
+
 **`FEED_MANIFOLD.md` v5.0 · 2026-10-25 · OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...**
 **otv4 · created 2026-08-22 · ESSENTIAL READING, same standing as
 WORKING_AGREEMENT.md and TRADES.md.**
@@ -109,8 +111,8 @@ VIX**, nothing else. Exactly one fleet-wide duplicate exists.
 | own instrument | that box | that box |
 | **VIX** | **all 15 boxes** | **SPX only** |
 
-VIX is captured everywhere — macro, `vol_state` and the crisis lockout all read
-it in-process — and published once. Before this rule, Friday shipped 72 VIX 1m
+VIX is captured everywhere — macro and `vol_state` read it in-process (the
+crisis lockout that also did is deleted, r140) — and published once. Before this rule, Friday shipped 72 VIX 1m
 objects from every box: ~14 redundant copies per tenor per day.
 
 **No other duplicate exists.** SPX/QQQ/SPY appear elsewhere in `selector` and

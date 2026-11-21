@@ -1,5 +1,6 @@
 """
-data/candle_feed.py  v5.9
+data/candle_feed.py  v5.10
+v5.10 2026-11-21  OTV5 r140 (MACRO.2) — comment only: the VIX tenor-parity note no longer names SessionGuard's crisis lockout as a VIX reader (deleted at r140; the operator, 2026-09-17: "VIX crisis — get rid of it. That is major opportunity."). No code change.
 v5.9  2026-11-04  OTV5 r74 (ORP.3 + FEED.15) — THE OPENING TAPE IS RE-PULLED WHEN IT IS PARTIAL, AND CONTROL CAN ASSIGN THE
       NODE. ORP.3: _maybe_rescue_opening_range asked only "is there a 09:30 5m row?"; 2026-11-02 AMZN held one, captured
       when the socket dropped at 09:31, so nothing was re-pulled and get_orb_range froze the range from it. It now
@@ -2158,9 +2159,10 @@ class CandleFeed:
             # overwrite the first. Three-tuple, one entry per subscription.
             self.symbol_map[(self.dx_symbol, tf, False)] = INSTRUMENT
         # ── 🔴 MANIFOLD (2026-08-22) — VIX AT FULL TENOR PARITY ──────────────
-        # Was `VIX_INTERVALS = ("1m","1d")` — 2 of 5. VIX feeds macro,
-        # vol_state and SessionGuard's crisis lockout, and none of them could
-        # ever see a 5m/15m/1h VIX because it was never requested.
+        # Was `VIX_INTERVALS = ("1m","1d")` — 2 of 5. VIX feeds macro and
+        # vol_state (and fed SessionGuard's crisis lockout until r140 deleted
+        # it), and neither could ever see a 5m/15m/1h VIX because it was
+        # never requested.
         # ⚠️ CAPTURE ON ALL 15 BOXES, PUBLISH FROM SPX ONLY. VIX is the one
         # fleet-wide duplicate (traced: each box subscribes its own instrument
         # plus VIX, nothing else). It is needed locally everywhere and is

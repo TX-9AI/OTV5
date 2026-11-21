@@ -1,5 +1,6 @@
 """
-data/macro_data.py  v5.3
+data/macro_data.py  v5.4
+v5.4  2026-11-21  OTV5 r140 (MACRO.2) — MacroSnapshot.new_entries_allowed GOES, with its four setters and the "entries=YES/NO" part of the macro snapshot log line: its one reader, session_guard.can_enter's VIX crisis gate, is deleted (the operator, 2026-09-17: "VIX crisis — get rid of it. That is major opportunity."; 2026-11-21: "VIX 'CRISIS' is something that I view as an opportunity not as something we sit out."). The VIX >= 30 branch set nothing the >= 20 branch does not, so the two merge (butterfly_allowed False, RISK_OFF, unchanged). _classify_vix reads config.VIX_CRISIS_THRESHOLD (30, the same number) in place of VIX_NO_ENTRY_THRESHOLD, which config v5.27 removes. vix_band, the bands, butterfly_allowed and macro_context are unchanged.
 v5.3  2026-11-11  OTV5 r107 (RETIRE.5 follow-up) — MacroSnapshot.butterfly_half_size goes: its one reader (main's butterfly sizing argument) is removed with the generic fly path. The VIX bands, butterfly_allowed, macro_context and new_entries_allowed are unchanged.
 v5.2  2026-10-27  OTV5 r43 (MACRO.1) — A RATE-LIMITED VIX FETCH IS RETRIED, AND A DEFAULTED SNAPSHOT IS RE-FETCHED SOON.
       At the 09:15 ET wake on 2026-10-27 all 14 boxes asked TastyTrade GET /market-data/Index/VIX in the same second;
@@ -39,7 +40,7 @@ this block be read before the file is edited.
 options_trader_v3/data/macro_data.py — VIX level, IV rank, and Fed/FOMC
 calendar detection. v3.0
 Fed days are a confluence modifier, not a hard block.
-VIX level gates butterfly strategy and crisis mode.
+VIX level labels the session (vix_band; r140: no entry gate reads it).
 YAHOO-FINANCE PURGE / data stream mapping optimization. VIX now
         routes through the single shared TastyTrade feed: candle_feed.py
         subscribes "VIX" and _fetch_vix reads it via
@@ -66,7 +67,7 @@ from typing import Optional, List
 import requests
 
 from config import (
-    VIX_LOW_THRESHOLD, VIX_BUTTERFLY_DISABLE, VIX_NO_ENTRY_THRESHOLD,
+    VIX_LOW_THRESHOLD, VIX_BUTTERFLY_DISABLE, VIX_CRISIS_THRESHOLD,
     MACRO_FETCH_INTERVAL_MIN, FOREX_FACTORY_URL, FED_EVENT_KEYWORDS,
     IV_RANK_HIGH
 )
@@ -85,8 +86,9 @@ class MacroSnapshot:
     vix:            float = 0.0
     vix_band:       str   = "UNKNOWN"   # LOW / NORMAL / ELEVATED / CRISIS
     # measurement computed from the VIX itself — it never touched the retired
-    # classifier and only carried the poisoned word. SessionGuard's crisis
-    # lockout and setup_scorer read it; the rename touches every reader.
+    # classifier and only carried the poisoned word. It is a label: r140
+    # (MACRO.2) deleted SessionGuard's crisis lockout, and nothing refuses an
+    # entry on it.
     iv_rank:        float = 0.0         # 0–100
     is_fed_day:     bool  = False
     fed_event_name: str   = ""
@@ -94,7 +96,6 @@ class MacroSnapshot:
 
     # Derived gates
     butterfly_allowed:  bool = True
-    new_entries_allowed: bool = True
 
     fetched_at: float = 0.0
     vix_is_default: bool = False        # MACRO.1 — vix is the conservative default, not a measurement
@@ -130,22 +131,17 @@ class MacroManager:
         snap.vix_is_default = self._vix_defaulted
         snap.vix_band = self._classify_vix(snap.vix)
 
-        # Derive gates from VIX
-        if snap.vix >= VIX_NO_ENTRY_THRESHOLD:
-            snap.new_entries_allowed = False
+        # Derive the context labels from VIX. r140 (MACRO.2): no entry gate -
+        # the VIX crisis lockout is deleted (the operator: "VIX crisis - get rid
+        # of it. That is major opportunity."), so VIX >= 30 labels like >= 20.
+        if snap.vix >= VIX_BUTTERFLY_DISABLE:
             snap.butterfly_allowed   = False
-            snap.macro_context       = "RISK_OFF"
-        elif snap.vix >= VIX_BUTTERFLY_DISABLE:
-            snap.butterfly_allowed   = False
-            snap.new_entries_allowed = True
             snap.macro_context       = "RISK_OFF"
         elif snap.vix >= 15:
             snap.butterfly_allowed      = True
-            snap.new_entries_allowed    = True
             snap.macro_context          = "NEUTRAL"
         else:
             snap.butterfly_allowed      = True
-            snap.new_entries_allowed    = True
             snap.macro_context          = "RISK_ON"
 
         # ── Fed Calendar ──────────────────────────────────────────────────────
@@ -163,8 +159,7 @@ class MacroManager:
         logger.info(
             f"Macro snapshot: VIX={snap.vix:.1f} [{snap.vix_band}] "
             f"butterfly={'YES' if snap.butterfly_allowed else 'NO'} "
-            f"fed_day={snap.is_fed_day} "
-            f"entries={'YES' if snap.new_entries_allowed else 'NO'}"
+            f"fed_day={snap.is_fed_day}"
             + (" (VIX DEFAULT)" if snap.vix_is_default else "")
         )
         return snap
@@ -217,7 +212,7 @@ class MacroManager:
             return "LOW"
         if vix < VIX_BUTTERFLY_DISABLE:
             return "NORMAL"
-        if vix < VIX_NO_ENTRY_THRESHOLD:
+        if vix < VIX_CRISIS_THRESHOLD:
             return "ELEVATED"
         return "CRISIS"
 

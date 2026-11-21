@@ -1,5 +1,6 @@
 """
-risk/session_guard.py  v5.2
+risk/session_guard.py  v5.3
+v5.3  2026-11-21  OTV5 r140 (MACRO.2) — THE VIX CRISIS GATE IS DELETED, the second copy of the gate the operator removed on 2026-09-17 ("VIX crisis — get rid of it. That is major opportunity."; restated 2026-11-21: "VIX 'CRISIS' is something that I view as an opportunity not as something we sit out."). can_enter refused every new entry while MacroSnapshot.new_entries_allowed was False (VIX >= 30): on Friday 2026-11-20 from 12:17 ET, VIX 39.53, it blocked every entry on all 14 boxes. The branch goes (and the field with it, macro_data v5.4); the RTH, 09:35 floor and hard-close gates and the rehearsal are unchanged. can_enter keeps its macro parameter, accepted and unused, so no caller breaks. Gate tests/check_no_vix_gate.py.
 v5.2  2026-11-14  OTV5 r119 (HYG §5.5, HYG.24) — must_close_all, seconds_to_open and log_session_state go (uncalled), and the seconds_until_rth_open import only seconds_to_open used. can_enter is unchanged. No caller anywhere (OTV5 code, tests, tools, docs, dtp: token scan + grep on r118). Nothing else changes; the module's behaviour is identical.
 v5.1  2026-11-09  OTV5 r103 (RETIRE.5 step 2) — config.BUTTERFLY_ENTRY_CUTOFF_ET and _BUTTERFLY_CUTOFF go with the GEX pin butterfly: they gated nothing since r209. can_enter keeps its is_butterfly parameter, accepted and unused, so no caller breaks. The operator, 2026-11-08: "I concur on both, in that order".
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
@@ -67,7 +68,8 @@ Entry gates (evaluated in order; first failing gate blocks):
     BUTTERFLY_ENTRY_CUTOFF_ET is now 14:00). Post-14:00 tape turns erratic on
     dealer hedging. NOTE: main.py calls can_enter() without is_butterfly=True,
     so that branch is inert; it is retained only as a future hook.
-  - Macro — VIX-crisis lockout
+  - (no macro gate: the VIX-crisis lockout is deleted, r140 MACRO.2 — the operator's
+    ruling 2026-09-17, restated 2026-11-21; a high VIX is an opportunity, not a sit-out)
 """
 
 import logging
@@ -96,7 +98,7 @@ class SessionGuard:
         Check all pre-entry gates.
 
         Args:
-            macro:        Current macro snapshot
+            macro:        accepted and unused (r140 MACRO.2: no gate reads the macro snapshot)
             is_butterfly: accepted and unused (r209; the cutoff it named is removed, r103)
             rehearsal:    r102 — evaluate EVERY gate instead of stopping at the
                           RTH one, for the outside-RTH dispatch pass. The verdict
@@ -125,9 +127,10 @@ class SessionGuard:
         # because the session is not running, so "outside RTH" and "past the
         # hard close" are the two refusals it cannot honour and still test
         # anything. They are COLLECTED and reported, never dropped. Every other
-        # gate below stays terminal — the 09:35 floor, the butterfly cutoff and
-        # the VIX crisis gate refuse a rehearsal exactly as they refuse a
-        # trading pass, because those are the answers we want tested.
+        # gate below stays terminal — the 09:35 floor refuses a rehearsal
+        # exactly as it refuses a trading pass, because that is the answer we
+        # want tested. (The butterfly cutoff went at r209, the VIX crisis gate
+        # at r140.)
         # 🔴 r73 — NO CLOCK IN A REFUSAL REASON. These two strings used to end
         # with `fmt_et_short()`, and that ONE REDUNDANT DETAIL produced the
         # operator's "20,000 rows of inactive".
@@ -181,9 +184,16 @@ class SessionGuard:
         # r209: the butterfly cutoff that stood here could never run and is deleted;
         # config.ENTRY_WINDOWS (12:00-15:00) bounds the butterflies.
 
-        # ── Macro gates ───────────────────────────────────────────────────────
-        if macro and not macro.new_entries_allowed:
-            return False, f"VIX crisis ({macro.vix:.1f}) — no new entries"
+        # ── No macro gate ─────────────────────────────────────────────────────
+        # ⚠️ THE VIX CRISIS GATE IS GONE, and that is a ruling, not an omission
+        # (r140 MACRO.2; the same ruling as position_manager.decide's note).
+        # Operator, 2026-09-17: *"VIX crisis — get rid of it. That is major
+        # opportunity."*; 2026-11-21: *"VIX 'CRISIS' is something that I view
+        # as an opportunity not as something we sit out."* This copy survived
+        # the admission rewrite and on 2026-11-20 (VIX 39.53 from 12:17 ET)
+        # refused every entry on all 14 boxes. The VIX band is recorded
+        # (macro_data, vix_band, vix_at_entry); nothing refuses an entry on it.
+        # tests/check_no_vix_gate.py keeps it out.
 
         # r102 — every substantive gate passed. If any CLOCK gate was deferred,
         # this is a REHEARSAL PASS and never a permission: the reason names each
