@@ -1,5 +1,14 @@
 """
-execution/entry_engine.py  v5.6
+execution/entry_engine.py  v5.7
+v5.7  2026-11-20  OTV5 r135 (GUARD.1; the live-readiness audit 2026-11-20 C3 + I3, live only) — A SUSPECT ENTRY ORDER IS
+      BOOKED AS ITS OWN STRATEGY'S TRADE. enter()'s record-building tail moves, unchanged, into _book_fill (the one place a
+      confirmed entry fill becomes a row), and _place_single_leg hands order_guard a booking (_suspect_booking: the
+      single-leg basis and a closure over the firing signal) at each of its three suspect sites: the unconfirmed cancel
+      or unreadable fills (after_failure), an error after placement (after_failure) and a lost reply (after_lost_post).
+      When the guard reads that order's fill (whole, or a partial left by an unconfirmed cancel), the closure ends the
+      walk and its pin and books it through _book_fill at the broker's fills, notes "entry fill confirmed by the order
+      guard after the walk". While any suspect exists the guard refuses every opening post on the instrument, so a
+      re-picked strike no longer posts beside it. The ladder, the walk loop, exits and paper are unchanged.
 v5.6  2026-11-20  OTV5 r133 (D2 + D3; the forward-edge study 2026-11-20) — THE LIVE ENTRY WALK POSTS ITS NEXT RUNG AS SOON AS
       THE LAST ONE IS READ DEAD, NOT ON THE NEXT 15 s TICK, AND THE CONTRACT IS FROZEN FOR THE WALK'S LIFE. At r132 each rung
       rested ~5 s (_rung_deadline) and nothing was working for ~10 s until the next tick. _place_single_leg now loops, live
@@ -318,9 +327,18 @@ class EntryEngine:
         if fill_premium is None or filled_qty <= 0:
             logger.error("Entry order failed — no confirmed fill, no position recorded")
             return None
-        if filled_qty < sizing.contracts:
+        return self._book_fill(signal, fill_premium, order_id, filled_qty, sizing.contracts)
+
+    def _book_fill(self, signal: OptionsSignal, fill_premium: float, order_id: str,
+                   filled_qty: int, planned: int, how: str = "") -> TradeRecord:
+        """THE ONE PLACE A CONFIRMED ENTRY FILL BECOMES A ROW. r135 (GUARD.1): enter() books here as it always did,
+        and so does order_guard's resolution of a suspect (an unconfirmed cancel, a lost reply, unreadable fills),
+        through the booking handed to it by _place_single_leg, so a late fill carries its own strategy's plan
+        (stop, trail, target, setup) instead of becoming ADOPTED. `how` is appended to the row's notes."""
+        mode = "PAPER" if self.paper_trading else "LIVE"
+        if filled_qty < planned:
             logger.warning(
-                f"[{mode}] Entry PARTIAL: {filled_qty}/{sizing.contracts} "
+                f"[{mode}] Entry PARTIAL: {filled_qty}/{planned} "
                 f"filled — recording the filled size")
 
         total_cost = fill_premium * filled_qty * CONTRACT_MULTIPLIER
@@ -360,7 +378,7 @@ class EntryEngine:
             # setup_type. Copy the tag, always.
             relaxed_entry     = int(getattr(signal, "relaxed_entry", 0) or 0),
             status            = "open",
-            notes             = signal.notes,
+            notes             = (f"{signal.notes} | {how}" if signal.notes else how) if how else signal.notes,
         )
 
         # ── ORB range boundaries — persisted for exit_engine range violation ──
@@ -663,7 +681,7 @@ class EntryEngine:
         if self.paper_trading:
             return self._paper_fill_single(signal, contracts)
 
-        _placed = _key = limit = None                                   # B2
+        _placed = _key = limit = _booking = None                        # B2 (r135: + the suspect booking)
         _posting = False                                                # r127 LOP.1
         try:
             session  = get_session()
@@ -698,6 +716,7 @@ class EntryEngine:
             _bid, _ask = self._quote_of(signal.contract)
             _key = _lr.intent_key(symbol, "open", "single")
             _pid = _pin_id(signal)                                      # r133 D3
+            _booking = self._suspect_booking(signal, contracts, symbol, _key, _pid)   # r135 GUARD.1
             _t0 = time.monotonic()                                      # r133 D2: the call's budget clock
             _budget = self._walk_budget_s()
             _n = 0
@@ -761,9 +780,9 @@ class EntryEngine:
                     # not in this call, and not next tick: the order guard holds the
                     # intent until the broker reads that order dead (B2).
                     _guard.after_failure(_key, _dead, session, account,
-                                         "single-leg entry (cancel unconfirmed)")
+                                         "single-leg entry (cancel unconfirmed)", booking=_booking)
                     logger.info("[ladder] %s rung %.2f REFUSED (%s) — cancel unconfirmed; "
-                                "the intent is held by the order guard", symbol, limit, fill.detail)
+                                "the instrument is held by the order guard", symbol, limit, fill.detail)
                     return None, "", 0
                 _stop, _end = self._walk_stop(signal, limit, _why, _bid, _ask, fill, _t0, _budget)
                 if _stop:
@@ -789,10 +808,26 @@ class EntryEngine:
             logger.error(f"Single-leg order failed: {e}")
             if _placed is not None:                                     # B2
                 self._walk_refused(_key, limit)
-                _guard.after_failure(_key, _placed, session, account, "single-leg entry")
+                _guard.after_failure(_key, _placed, session, account, "single-leg entry",
+                                     booking=_booking)                  # r135 GUARD.1
             elif _posting:                                              # r127 LOP.1
-                _guard.after_lost_post(_key, [symbol], session, account, "single-leg entry", e)
+                _guard.after_lost_post(_key, [symbol], session, account, "single-leg entry", e,
+                                       booking=_booking)                # r135 GUARD.1
             return None, "", 0
+
+    def _suspect_booking(self, signal, contracts: int, symbol: str, key: str, pid: tuple) -> dict:
+        """r135 (GUARD.1) — what order_guard needs to book a suspect order's fill as THIS entry: the single-leg
+        basis and a closure over the signal that fired it. The closure ends the walk and its pin, then books
+        through _book_fill exactly as a confirmed entry is booked."""
+        sig = copy.copy(signal)
+
+        def _fn(price: float, qty: int, oid: str):
+            self._walk_done(key)
+            _PINS.pop(pid, None)
+            return self._book_fill(sig, float(price), str(oid or ""), int(qty), int(contracts),
+                                   how="entry fill confirmed by the order guard after the walk")
+        return {"fn": _fn, "basis": [(symbol, 1, +1)],
+                "strategy": str(getattr(signal, "strategy_name", "") or "")}
 
     def _walk_stop(self, signal, limit, why, bid, ask, fill, t0, budget) -> Tuple[str, bool]:
         """(why the walk hands back to the tick, or "", and whether the walk is OVER). r133 D2."""
@@ -846,15 +881,18 @@ class EntryEngine:
     @staticmethod
     def _page_if_working(fill, what: str):
         """An entry order that could not be cancelled may still fill — page
-        once so it's watched; broker reconciliation ADOPTS any late fill."""
+        once so it's watched. r135 (GUARD.1): the order guard books a late fill
+        under its strategy; reconcile adopts it only after the guard gives up."""
         if not fill.working_order_id:
             return
         try:
             from notifications.alert_manager import get_alert_manager
             get_alert_manager()._send(
                 f"\U0001F6A8 {what}: order {fill.working_order_id} could not "
-                f"be cancelled and may still fill — reconcile will adopt it. "
-                f"({fill.detail})")
+                f"be cancelled (or its fills read) and may still fill. No new entry posts on "
+                f"{INSTRUMENT} until the order guard resolves it: a fill is booked under its "
+                f"strategy with its plan; reconcile adopts it only if the guard gives up "
+                f"({_guard.RESOLVE_GIVEUP_S:.0f} s unresolved, or past the day's last entry window). ({fill.detail})")
         except Exception as e:
             logger.warning(f"Working-order page failed to send: {e}")
 

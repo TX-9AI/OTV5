@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """
-tests/check_column_writers.py  v5.5
+tests/check_column_writers.py  v5.6
+v5.6  2026-11-20  OTV5 r135 (GUARD.1) — the entry record is built in EntryEngine._book_fill (enter() books through it, and so
+      does order_guard's resolution of a suspect entry order); the entry columns' named writer moves with it, and W5 reads
+      enter and _book_fill together. No column changes.
 v5.5  2026-11-14  OTV5 r111 (AM.1) — the executable-price basis joins WRITERS: entry_exec_premium and would_fill_live (TradeLogger._write_exec_entry, called by set_entry_contract), exit_exec_premium and pnl_exec_usd (TradeLogger._write_exec_exit, called by set_exit_contract).
 v5.4  2026-11-11  OTV5 r107 (RETIRE.5 follow-up) — the generic fly entry is removed: lower_strike / lower_symbol are written by the
       tent (condor_roll._execute_tent, off), is_butterfly by _execute_condor_leg (0, off), and six fly-only columns become
@@ -50,7 +53,7 @@ def check(name, ok, detail=""):
 
 EE, TL, MAIN = "execution/entry_engine.py", "database/trade_logger.py", "main.py"
 XE, CR = "execution/exit_engine.py", "strategy/condor_roll.py"
-_ENTER = (EE, "EntryEngine.enter")
+_ENTER = (EE, "EntryEngine._book_fill")                   # r135: enter() books through it
 _RKW = (EE, "EntryEngine._record_kwargs")
 _TAPE = ("analysis/tape_at_level.py", "measure")
 _EXIT = (TL, "TradeLogger.log_exit")
@@ -149,7 +152,7 @@ check("W2 every named writer exists and its own source names its column", not ba
 
 # r88 (RETIRE.3): W3 / W4 (the shadow store, execution/shadow_book.py) go with the TCS shadow.
 
-_ee_enter = _func_src(EE, "EntryEngine.enter") or ""
+_ee_enter = (_func_src(EE, "EntryEngine.enter") or "") + (_func_src(EE, "EntryEngine._book_fill") or "")
 _q = open(os.path.join(ROOT, "query.py"), encoding="utf-8").read()
 _w5 = [c for c in HISTORY if re.search(r"\b%s\b" % c, _ee_enter)]
 check("W5 the history columns (the removed fly's) are written by nothing and still decoded by query.py (r107)",

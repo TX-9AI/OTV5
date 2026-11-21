@@ -1,5 +1,7 @@
 # TRADES — the specs
 
+**`TRADES.md` v5.22 · 2026-11-20 · OTV5 r135 (GUARD.1; the live-readiness audit C3 + I3) — section 6: while ANY opening order's fate is unknown (an unconfirmed cancel, a lost reply, a fill whose fills cannot be read) no opening order posts on the instrument (any strategy, any strike; exits never wait); the unknown is read from the broker every tick, a fill (or the partial an unconfirmed cancel leaves) is booked once as the ORIGINATING strategy's trade at the broker's fills, a dead order clears; unresolved after 120 s (or at all once the day's last entry window, PARK's 11:03, is 120 s behind) it pages once and reconcile adopts it. The ladder's rules are unchanged. The operator, 2026-11-20: "Yes, let's fix it smartly."**
+
 **`TRADES.md` v5.21 · 2026-11-20 · OTV5 r133 (LADDER.1, D2 + D3) — section 6: the live entry walk posts rung after rung inside one tick (~6 s apart, cancel-confirm-post, bounded by one 15 s tick, back to the tick on a fill, the mark rung refused, the window's end, no fresh quote, an unconfirmed cancel), and the contract is frozen for the walk's life. The ladder's rules are unchanged. The operator, 2026-11-20: "Yes to both".**
 
 **`TRADES.md` v5.20 · 2026-11-20 · OTV5 r132 (TICK.3) — section 6: the entry walk steps one VENUE increment of the UNDERLYING's grid (the rule cached under INSTRUMENT, as exits use), never the OCC symbol's; at r131 every live entry fell back to the non-penny grid (QQQ 3.40/3.50 posted 3.40 every tick; now 3.42 -> 3.45). The ladder's rules are unchanged. The operator, 2026-11-20: "Yes to both".**
@@ -481,6 +483,23 @@ price it.
   freeze lapses on a fill, the window's end, or 45 s with no rung posted. A
   restart loses the walk and the freeze (in memory); the boot sweep still
   cancels a working rung.
+· **ONE UNKNOWN ORDER HOLDS THE WHOLE INSTRUMENT** (r135 GUARD.1; the operator,
+  2026-11-20: *"Yes, let's fix it smartly."*). An opening order whose fate is
+  unknown — a cancel that could not be confirmed, a place_order whose reply was
+  lost, or an order FILLED whose fills could not be read — refuses EVERY opening
+  post on the box (any strategy, any strike) until it is resolved; closes, stops
+  and the 15:55 flatten never wait on it. It is read from the broker on every
+  tick (and before every rung): dead with no fill clears it; a fill, whole or the
+  PARTIAL an unconfirmed cancel leaves, is booked ONCE as the originating
+  strategy's trade (its stop, trail and target) at the broker's fills and
+  quantity, then clears; still working, the cancel is re-sent (at most 3, 5 s
+  apart). An order already on a trade row is never booked again, and the
+  intraday adopt waits for the booking. Unresolved after 120 s (or at all once
+  the day's last entry window, PARK's 11:03, is 120 s behind) it pages once,
+  the block stays, and reconcile adopts the position (ADOPTED) for the stop and
+  the flatten. A restart forgets it; the boot sweep then cancels every untracked
+  working order and blocks entries until each reads dead, and the boot reconcile
+  adopts any fill.
 · A refusal is *"didn't completely fill at that price"* —
   a partial counts as a refusal for the remainder.
 · **RATCHET** — a refused price never returns, even if the market moves back

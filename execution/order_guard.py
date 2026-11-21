@@ -1,5 +1,27 @@
 """
-execution/order_guard.py  v5.3
+execution/order_guard.py  v5.4
+v5.4  2026-11-20  OTV5 r135 (GUARD.1; the live-readiness audit 2026-11-20 C3 + I3, live only) — NO SECOND OPENING ORDER
+      WHILE AN EARLIER ONE'S FATE IS UNKNOWN, AND THE UNKNOWN IS RESOLVED ON THE NEXT TICK, NOT AT THE 10-MINUTE ADOPT
+      SLOT. The suspects were held per INTENT (one contract), so once r133's freeze went idle (45 s) Runaway or the Hunt
+      re-picked a strike, a different OCC passed clear_to_post and a second entry posted beside an order that had been
+      left by (a) an unconfirmed cancel, (b) a lost place_order reply or (c) a FILLED order whose fills were unreadable;
+      the one-per-session check reads trades.db and missed the unrecorded fill, and the orphan was adopted later as
+      ADOPTED without its plan. Now: (1) INSTRUMENT-WIDE: clear_to_post refuses every opening post on this box while
+      ANY suspect exists (any strategy, any strike; exits never call it). (2) ACTIVE RESOLUTION: resolve_suspects()
+      runs from every clear_to_post and from main's per-tick hook: an order read DEAD with no fills clears; a fill (whole
+      or partial, the broker's per-leg fills) is BOOKED through the suspect's `booking` (EntryEngine's own entry record
+      for the ORIGINATING strategy, its stop/trail/target) once, then clears; a WORKING one is cancelled again (at most
+      RECANCEL_MAX, RECANCEL_EVERY_S apart) and keeps blocking. Booked records queue for main (take_booked) to hand to
+      the position manager; the clear_to_post pass that booked one refuses its own post (its admission ran before the
+      row existed). NEVER TWICE: an order id already on a trades row is never booked again; an ADOPTED open row
+      on the leg (adopt got there first, after the give-up) clears the suspect without booking; main._intraday_adopt
+      resolves first and defers while a bookable suspect touches the leg (pending_booking_symbols). (3) BOUNDED: a
+      suspect unresolved after RESOLVE_GIVEUP_S (or at all, once the day's last ENTRY_WINDOWS end is RESOLVE_GIVEUP_S
+      behind: PARK's 11:03 + 120 s) pages once and stays blocking; adopt then no longer defers for it
+      (reconcile + the 15:55 flatten cover the position). A suspect from an earlier ET day is dropped (a DAY order is
+      dead). A suspect with no booking (the credit-vertical path, unreachable live) behaves as before: FILLED blocks.
+      In memory, as before: a restart's boot sweep cancels every untracked working order of the instrument and blocks
+      entries until each reads dead, and the boot reconcile adopts any fill. Gate tests/check_entry_suspect_block.py.
 v5.3  2026-11-16  OTV5 r127 (LOP.1, FA.1; the cold audit 2026-11-15, critical) — A place_order THAT RAISES NO LONGER LETS THE
       SAME INTENT POST AGAIN BESIDE A LIVE ORDER. after_failure covers an error AFTER place_order returned; an error FROM
       it (the reply lost, run_async's 30 s TimeoutError while the coroutine completes, a reset mid-read) left no order id,
@@ -98,9 +120,23 @@ def _status_name(placed) -> str:
 _DEAD = {"CANCELLED", "EXPIRED", "REMOVED", "PARTIALLY_REMOVED", "REJECTED"}
 
 
-def after_failure(key: str, placed, session, account, what: str) -> None:
+def _new_suspect(what: str, booking, symbols, **kw) -> dict:
+    """r135 (GUARD.1) — the fields every suspect carries. `booking` (or None) is the originating entry's
+    {"fn": fn(price, qty, order_id) -> record, "basis": [(sym, ratio, sign)], "strategy": name}."""
+    syms = sorted({str(x).strip() for x in (symbols or []) if str(x or "").strip()})
+    if not syms and booking:
+        syms = sorted({str(b[0]).strip() for b in (booking.get("basis") or [])})
+    s = {"order_id": "", "ts": time.time(), "what": what, "paged_fill": False, "booking": booking,
+         "symbols": syms, "day": _et_day(), "cancels": 0, "last_cancel": 0.0, "gave_up": False}
+    s.update(kw)
+    return s
+
+
+def after_failure(key: str, placed, session, account, what: str, booking=None, symbols=None) -> None:
     """An order WAS placed and something after it raised. Cancel it, remember
-    it, page. Never raises."""
+    it, page. Never raises. r135 (GUARD.1): with `booking`, the suspect is
+    resolved at once (and on every clear_to_post / tick): a fill is booked
+    under the originating strategy."""
     oid = str(getattr(placed, "id", "") or "") if placed is not None else ""
     if not oid:
         return
@@ -110,12 +146,18 @@ def after_failure(key: str, placed, session, account, what: str) -> None:
         cancelled = True
     except Exception as exc:                                   # noqa: BLE001
         logger.warning("[guard] %s: cancel of %s after an error failed: %s", what, oid, exc)
-    _SUSPECT[key] = {"order_id": oid, "ts": time.time(), "what": what, "paged_fill": False}
+    _SUSPECT[key] = _new_suspect(what, booking, symbols, order_id=oid, cancels=1, last_cancel=time.time())
     logger.error("[guard] %s: order %s was PLACED and then an error followed — "
-                 "cancel %s; this intent posts nothing until the broker says "
-                 "the order is dead", what, oid, "requested" if cancelled else "FAILED")
+                 "cancel %s; NO OPENING ORDER posts on this instrument until the broker says "
+                 "the order is dead or its fill is booked", what, oid, "requested" if cancelled else "FAILED")
     _page(f"⚠️ ORDER GUARD — {what}: order {oid} was placed, then an error. Cancel "
-          f"{'requested' if cancelled else 'FAILED'}; no re-post until it is confirmed dead.")
+          f"{'requested' if cancelled else 'FAILED'}; no new entry until it is confirmed dead or booked.")
+    if booking and account is not None:
+        try:
+            _resolve_one(key, _SUSPECT[key], session, account)
+        except Exception as exc:                               # noqa: BLE001
+            logger.warning("[guard] %s: immediate resolution of %s failed (%s); the next tick retries",
+                           what, oid, exc)
 
 
 # r127 (LOP.1) — a post whose place_order RAISED. The broker may hold the order; the reply never said.
@@ -123,12 +165,12 @@ LOST_GRACE_S = 10.0     # with no candidate in the book, the intent stays blocke
 LOST_SLACK_S = 60.0     # a candidate was received no earlier than this before the failed post (clock skew)
 
 
-def after_lost_post(key: str, symbols, session, account, what: str, exc=None) -> None:
+def after_lost_post(key: str, symbols, session, account, what: str, exc=None, booking=None) -> None:
     """place_order RAISED, so the order may be live at the broker with no id here. Remember the intent as a
-    LOST suspect and try to resolve it now (cancel what the book shows). Never raises."""
+    LOST suspect and try to resolve it now (cancel what the book shows). Never raises. r135 (GUARD.1): with
+    `booking`, a FILLED candidate (or a dead one with fills) is booked under the originating strategy."""
     syms = sorted({str(x).strip() for x in (symbols or []) if str(x or "").strip()})
-    _SUSPECT[key] = {"order_id": "", "lost": True, "symbols": syms, "ts": time.time(), "what": what,
-                     "paged_fill": False, "paged_working": False, "ids": []}
+    _SUSPECT[key] = _new_suspect(what, booking, syms, lost=True, paged_working=False, ids=[], recancels={})
     logger.error("[guard] %s: place_order RAISED (%s) - the order may be live at the broker; this intent "
                  "posts nothing until the broker's book shows no working or filled order on %s",
                  what, f"{type(exc).__name__}: {exc}" if exc is not None else "no detail", ", ".join(syms))
@@ -190,17 +232,34 @@ def _resolve_lost(key: str, s: dict, session, account) -> tuple:
             s["ids"].append(oid)
         st = _norm_status(o)
         if st == "FILLED" or (st in _DEAD_N and _has_fills(o)):
+            if s.get("booking") and _order_id_recorded(oid):     # r135: another entry's booked order, not this post's
+                continue
             filled.append(oid)
         elif st in _WORKING:
             working.append(oid)
         elif st not in _DEAD_N:
             pending.append(f"{oid} {st or 'unknown'}")           # cancel requested, or a status not known here
+    rc = s.setdefault("recancels", {})
     for oid in working:
+        n, last = rc.get(oid, (0, 0.0))
+        if n >= RECANCEL_MAX or (n and time.time() - last < RECANCEL_EVERY_S):   # r135: bounded, spaced
+            continue
+        rc[oid] = (n + 1, time.time())
         try:
             sdk_result(account.delete_order(session, oid))
             logger.warning("[guard] %s: cancelled order %s left working by a failed post", s["what"], oid)
         except Exception as exc:                               # noqa: BLE001
             logger.error("[guard] %s: cancel of %s (left by a failed post) FAILED: %s", s["what"], oid, exc)
+    if filled and s.get("booking"):                            # r135 (GUARD.1): book each fill under its strategy
+        by_id = {str(getattr(o, "id", "") or "?"): o for o in orders}
+        unbooked = []
+        for oid in filled:
+            if not _book_order(key, s, oid, by_id.get(oid)):
+                unbooked.append(oid)
+        filled = unbooked
+        if not filled and not working and not pending:
+            _SUSPECT.pop(key, None)
+            return True, "lost post: its fill is booked under " + str(s["booking"].get("strategy") or "its strategy")
     if filled:
         if not s["paged_fill"]:
             s["paged_fill"] = True
@@ -389,25 +448,100 @@ def boot_sweep() -> tuple:
     return sweep_working(session, account)
 
 
-def clear_to_post(key: str, session, account) -> tuple:
-    """(ok, why). ok=False means DO NOT POST for this intent this tick."""
-    if _BOOT["state"] != "clean":                               # r495 B4
-        ok, _n, why = sweep_working(session, account)
-        if not ok:
-            return False, f"boot sweep: {why}"
-    s = _SUSPECT.get(key)
-    if not s:
-        return True, ""
+# ── r135 (GUARD.1) — ONE UNKNOWN OPENING ORDER HOLDS THE WHOLE INSTRUMENT, AND IS RESOLVED EVERY TICK ─────────────
+RESOLVE_GIVEUP_S = 120.0   # unresolved this long (8 ticks): page once, keep the block, let reconcile adopt the fill
+RECANCEL_MAX = 3           # cancels resolution sends to a suspect order still working
+RECANCEL_EVERY_S = 5.0     # ...at most one per this many seconds (clear_to_post runs on every rung)
+_BOOKED: list = []         # records booked by resolution, for main to hand to the position manager (take_booked)
+
+
+def _et_day() -> str:
+    try:
+        from utils.time_utils import now_et
+        return now_et().strftime("%Y-%m-%d")
+    except Exception:                                          # noqa: BLE001
+        return ""
+
+
+def _open_rows() -> list:
+    """Every open trades row. Raises when unreadable (the caller then books nothing and keeps the block)."""
+    from database.trade_logger import get_trade_logger
+    return list(get_trade_logger().get_open_trades() or [])
+
+
+def _order_id_recorded(oid: str) -> bool:
+    """True when a trades row (any status) already carries this broker order id: the normal entry path, or an
+    earlier resolution, booked it. Raises when unreadable."""
+    from database.trade_logger import get_trade_logger
+    with get_trade_logger()._db() as conn:
+        return conn.execute("SELECT 1 FROM trades WHERE order_id=? LIMIT 1", (str(oid),)).fetchone() is not None
+
+
+def _adopted_on(symbols) -> bool:
+    """True when an open ADOPTED row holds one of these legs: reconcile adopted the fill (after the give-up)."""
+    syms = set(symbols or [])
+    return any(str(r.get("strategy") or "") == "ADOPTED"
+               and str(r.get("option_symbol") or "").strip() in syms for r in _open_rows())
+
+
+def _book_order(key: str, s: dict, oid: str, order) -> bool:
+    """Book one suspect order's fills under the originating strategy. True when it is booked (now or before, or
+    adopted) and needs no more work; False when it cannot be booked yet (fills unreadable, the DB unreadable, the
+    booking raised). Never raises."""
+    b = s.get("booking") or {}
+    try:
+        if _order_id_recorded(oid):
+            logger.info("[guard] %s: order %s is already on a trades row - not booked twice", s["what"], oid)
+            return True
+        if _adopted_on(s.get("symbols")):
+            logger.warning("[guard] %s: order %s's leg is already ADOPTED by reconcile - not booked twice",
+                           s["what"], oid)
+            return True
+        if order is None:
+            return False
+        from execution.order_confirm import net_from_fills
+        got = net_from_fills(order, b.get("basis") or [])
+        if got is None or got[0] <= 0:
+            logger.error("[guard] %s: order %s holds fills that cannot be read yet - not booked; retried",
+                         s["what"], oid)
+            return False
+        qty, price = got
+        rec = b["fn"](price, qty, oid)
+        if not rec:
+            return False
+    except Exception as exc:                                   # noqa: BLE001
+        logger.error("[guard] %s: booking order %s FAILED (%s: %s) - the block stays; retried next tick",
+                     s["what"], oid, type(exc).__name__, exc)
+        return False
+    _BOOKED.append(rec)
+    logger.warning("[guard] %s: order %s's fill BOOKED under %s - %s @ %.2f (the broker's fills), trade %s",
+                   s["what"], oid, b.get("strategy") or "its strategy", qty, price, str(rec.get("trade_id", ""))[:8])
+    _page(f"✅ ORDER GUARD — {s['what']}: order {oid} filled {qty} @ {price:.2f}; booked under "
+          f"{b.get('strategy') or 'its strategy'} with its plan. Entries resume once nothing else is in doubt.")
+    return True
+
+
+def _resolve_one(key: str, s: dict, session, account) -> tuple:
+    """(cleared, why) for one suspect, read from the broker. Raises when the broker is unreadable."""
+    if s.get("day") and s["day"] != _et_day():
+        _SUSPECT.pop(key, None)
+        logger.warning("[guard] %s: suspect %s is from %s - a DAY order is dead by now; dropped",
+                       s["what"], s.get("order_id") or ", ".join(s.get("symbols") or []), s["day"])
+        return True, "suspect from an earlier session dropped"
     if s.get("lost"):                                           # r127 (LOP.1)
-        try:
-            return _resolve_lost(key, s, session, account)
-        except Exception as exc:                               # noqa: BLE001
-            return False, f"lost post: broker book unreadable ({type(exc).__name__})"
+        return _resolve_lost(key, s, session, account)
     try:
         placed = sdk_result(account.get_order(session, s["order_id"]))
         status = _status_name(placed)
     except Exception as exc:                                   # noqa: BLE001
         return False, f"suspect order {s['order_id']} unreadable ({type(exc).__name__})"
+    if s.get("booking") and (status == "FILLED" or status in _DEAD):
+        has_fill = status == "FILLED" or _has_fills(placed)     # a dead order may carry a partial (I3)
+        if (not has_fill) or _book_order(key, s, s["order_id"], placed):
+            _SUSPECT.pop(key, None)
+            logger.info("[guard] suspect order %s is %s - resolved, instrument cleared", s["order_id"], status)
+            return True, f"suspect {s['order_id']} {status} (resolved)"
+        return False, f"suspect {s['order_id']} {status}: fill not booked yet"
     if status in _DEAD:
         _SUSPECT.pop(key, None)
         logger.info("[guard] suspect order %s is %s — intent cleared", s["order_id"], status)
@@ -416,13 +550,127 @@ def clear_to_post(key: str, session, account) -> tuple:
         if not s["paged_fill"]:
             s["paged_fill"] = True
             _page(f"🔴 ORDER GUARD — {s['what']}: order {s['order_id']} FILLED after an error "
-                  f"and is NOT in the DB. No new entry on this intent; reconcile adopts it.")
+                  f"and is NOT in the DB. No new entry on this instrument; reconcile adopts it.")
         return False, f"suspect {s['order_id']} FILLED but unrecorded"
+    if (s.get("booking") and s.get("cancels", 0) < RECANCEL_MAX
+            and time.time() - float(s.get("last_cancel") or 0.0) >= RECANCEL_EVERY_S):
+        s["cancels"] = int(s.get("cancels", 0)) + 1
+        s["last_cancel"] = time.time()
+        try:
+            sdk_result(account.delete_order(session, s["order_id"]))
+            logger.warning("[guard] %s: suspect order %s still %s - cancel re-sent (%d of %d)",
+                           s["what"], s["order_id"], status, s["cancels"], RECANCEL_MAX)
+        except Exception as exc:                               # noqa: BLE001
+            logger.error("[guard] %s: re-cancel of %s FAILED: %s", s["what"], s["order_id"], exc)
     return False, f"suspect {s['order_id']} still {status or 'unknown'}"
+
+
+def _past_last_window() -> bool:
+    """True once the latest entry window of the day (config.ENTRY_WINDOWS, PARK's 11:03 today) ended more than
+    RESOLVE_GIVEUP_S ago: no suspect may hold the adopt back after that, whatever its age, so every fill is in a row
+    (booked or ADOPTED) long before the 15:55 flatten. Unreadable: True (fail toward the adopt)."""
+    try:
+        import config as _c
+        from utils.time_utils import now_et
+        ends = [w[1] for w in (getattr(_c, "ENTRY_WINDOWS", None) or {}).values() if w]
+        if not ends:
+            return True
+        h, m = max(tuple(e)[:2] for e in ends)
+        n = now_et()
+        return (n.hour * 3600 + n.minute * 60 + n.second) >= h * 3600 + m * 60 + RESOLVE_GIVEUP_S
+    except Exception:                                          # noqa: BLE001
+        return True
+
+
+def _give_up_check(key: str, s: dict, why: str) -> None:
+    """A suspect still unresolved after RESOLVE_GIVEUP_S, or at all once the day's last entry window is
+    RESOLVE_GIVEUP_S behind us: page ONCE, keep the block, stop deferring the adopt."""
+    if s.get("gave_up") or (time.time() - float(s.get("ts") or 0.0) < RESOLVE_GIVEUP_S and not _past_last_window()):
+        return
+    s["gave_up"] = True
+    inst = os.environ.get("OT_INSTRUMENT", "")
+    logger.error("[guard] %s: suspect %s UNRESOLVED after %.0f s (%s) - entries on %s stay blocked; reconcile "
+                 "adopts any fill and the 15:55 flatten closes it", s["what"],
+                 s.get("order_id") or ", ".join(s.get("symbols") or []), RESOLVE_GIVEUP_S, why, inst)
+    _page(f"🔴 ORDER GUARD [{inst}] — {s['what']}: order {s.get('order_id') or '(reply lost)'} on "
+          f"{', '.join(s.get('symbols') or []) or '?'} still unresolved after {RESOLVE_GIVEUP_S:.0f} s ({why}). "
+          f"NO NEW ENTRIES on {inst}; exits unaffected. Reconcile adopts any fill. Check the order book.")
+
+
+def has_suspects() -> bool:
+    return bool(_SUSPECT)
+
+
+def resolve_suspects(session, account, first: str = "") -> tuple:
+    """(clear, why). Resolve every suspect against the broker; clear=True only when none is left. `first` is
+    resolved first so its own reason leads. Never raises."""
+    whys = []
+    for k in sorted(_SUSPECT, key=lambda x: x != first):
+        s = _SUSPECT.get(k)
+        if s is None:
+            continue
+        try:
+            ok, why = _resolve_one(k, s, session, account)
+        except Exception as exc:                               # noqa: BLE001
+            ok, why = False, ("lost post: broker book unreadable" if s.get("lost") else "suspect unreadable") \
+                + f" ({type(exc).__name__})"
+        if not ok:
+            if s.get("booking") and s.get("gave_up"):
+                try:
+                    if _adopted_on(s.get("symbols")):
+                        _SUSPECT.pop(k, None)
+                        logger.warning("[guard] %s: the leg is ADOPTED by reconcile - suspect cleared, no booking",
+                                       s["what"])
+                        continue
+                except Exception:                              # noqa: BLE001
+                    pass
+            _give_up_check(k, s, why)
+            whys.append(why)
+    if whys:
+        return False, whys[0] + (f" (+{len(whys) - 1} more)" if len(whys) > 1 else "")
+    return True, ""
+
+
+def take_booked() -> list:
+    """The records resolution booked since the last call (main hands them to the position manager)."""
+    out = list(_BOOKED)
+    _BOOKED.clear()
+    return out
+
+
+def pending_booking_symbols() -> set:
+    """Legs a bookable, not-given-up suspect still covers: main._intraday_adopt defers on them, so the fill is
+    booked under its strategy instead of ADOPTED."""
+    out = set()
+    for s in _SUSPECT.values():
+        if s.get("booking") and not s.get("gave_up"):
+            out |= set(s.get("symbols") or [])
+    return out
+
+
+def clear_to_post(key: str, session, account) -> tuple:
+    """(ok, why). ok=False means DO NOT POST an opening order this tick. r135 (GUARD.1): any suspect on this
+    box blocks EVERY opening intent (any strategy, any strike), not only its own."""
+    if _BOOT["state"] != "clean":                               # r495 B4
+        ok, _n, why = sweep_working(session, account)
+        if not ok:
+            return False, f"boot sweep: {why}"
+    if not _SUSPECT:
+        return True, ""
+    n0 = len(_BOOKED)
+    ok, why = resolve_suspects(session, account, first=key)
+    if not ok:
+        return False, why
+    if len(_BOOKED) > n0:
+        # A fill was booked just now: the caller's admission (one per session, the open-position rules) ran before
+        # that row existed, so this post waits a tick and is re-admitted against it.
+        return False, "a suspect's fill was just booked under its strategy - re-admitted next tick"
+    return True, "suspects resolved"
 
 
 def reset(boot_clean: bool = True) -> None:
     """Tests only. boot_clean=True marks the r495 sweep done (the B2 gates predate it);
     False leaves it pending, as a fresh process is."""
     _SUSPECT.clear()
+    _BOOKED.clear()
     _BOOT.update(state="clean" if boot_clean else None, why="", paged=False)

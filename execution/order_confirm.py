@@ -1,5 +1,11 @@
 """
-execution/order_confirm.py  v5.0
+execution/order_confirm.py  v5.1
+v5.1  2026-11-20  OTV5 r135 (GUARD.1, I3; the live-readiness audit 2026-11-20) — the unconfirmed-cancel return names any
+      PARTIAL already filled ("PARTIAL n filled so far @ net p") in its detail, so the page and the log say a position
+      exists. The return is unchanged otherwise (filled=False, working_order_id set): the caller must not book while
+      the order may still fill; entry_engine hands it to order_guard, which books the final fills under the strategy
+      once the order reads dead. The "may still fill" details drop "reconcile will adopt" (the caller's page says who
+      books it: the order guard on the single-leg path, reconcile on the credit path). No other path changes.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v4.3  2026-10-18  OTV4TEST r295 (LIVE.2) — confirm_order_fill touches the heartbeat on every broker poll
       (utils.heartbeat.touch). Audit 2026-10-18 C2.
@@ -166,7 +172,7 @@ def confirm_order_fill(session, account, placed, basis: Basis,
                 logger.error(f"{what} {order_id}: FILLED but fills unreadable")
                 return EntryFill(filled=False, order_id=str(order_id),
                                  working_order_id=str(order_id),
-                                 detail="filled but fills unreadable — reconcile will adopt")
+                                 detail="filled but fills unreadable")   # r135: the caller says who books it
             units, net = got
             return EntryFill(filled=True, quantity=units, net_price=net,
                              order_id=str(order_id),
@@ -211,10 +217,14 @@ def confirm_order_fill(session, account, placed, basis: Basis,
             # Cancel could not be confirmed — the order may still fill later.
             # This is the ONLY path that leaves a working order behind, and it
             # is reported loudly: reconciliation adopts whatever fills.
+            try:                                                   # r135 (I3): say so when part of it filled
+                _part = net_from_fills(placed, basis)
+            except Exception:                                      # noqa: BLE001
+                _part = None
+            _ptxt = (f"; PARTIAL {_part[0]} filled so far @ net {_part[1]}" if _part and _part[0] > 0 else "")
             logger.error(f"{what} {order_id}: UNRESOLVED working order after "
-                         f"cancel attempts — reconcile will adopt any late fill")
+                         f"cancel attempts{_ptxt} — the caller's guard books or adopts any late fill")
             return EntryFill(filled=False, order_id=str(order_id),
                              working_order_id=str(order_id),
-                             detail="deadline; cancel unconfirmed — order may still fill; "
-                                    "reconcile will adopt")
+                             detail="deadline; cancel unconfirmed — order may still fill" + _ptxt)
         time.sleep(poll)

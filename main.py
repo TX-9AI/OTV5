@@ -1,5 +1,6 @@
 """
-main.py  v5.28
+main.py  v5.29
+v5.29  2026-11-20  OTV5 r135 (GUARD.1; the live-readiness audit 2026-11-20 C3 + I3, live only) — A SUSPECT ENTRY ORDER IS RESOLVED EVERY TICK AND BOOKED UNDER ITS STRATEGY. NEW _resolve_entry_suspects(state), called on every RTH tick before the intraday reconcile (live only; no broker call unless order_guard holds a suspect): order_guard.resolve_suspects reads each suspect from the broker, then _hand_booked_to_manager hands every record it booked to the position manager (appended, as an entry is) and sends the entry alert. _execute_entry_signal hands them over after enter() too (a booking can happen inside another entry's clear_to_post). _intraday_adopt resolves first and DEFERS (paged once a day) while a bookable suspect not yet given up touches a leg it would adopt, so the fill keeps its plan instead of becoming ADOPTED; after the guard gives up (RESOLVE_GIVEUP_S) adopt proceeds and the guard clears on the ADOPTED row. Paper unchanged. Gate tests/check_entry_suspect_block.py.
 v5.28  2026-11-20  OTV5 r133 (D2/D3; the forward-edge study 2026-11-20) — _execute_entry_signal calls entry_engine.freeze_contract(signal, state.paper_trading) right after the validity check and before ENT.1 and sizing: a strategy that re-picked its strike while its live entry walk is in flight is put back on the walking contract (D3). One call; paper is a no-op. Gate tests/check_entry_ladder_5s.py.
 v5.27  2026-11-16  OTV5 r131 (OGAP.2) — OGAP's sizer budget is config.RISK_PER_TRADE_USD (the ramp MIN, OT_RISK_USD), not the deleted flat $500 OGAP_BUDGET_USD; still on the ASK, still its own budget_usd line, only for strategy_name OGAP. The operator, 2026-11-16: "Do me a favor and size the OGAP to whatever the ramp minimum (risk per trade) is set at instead of a flat $500. That $500 is Park's (my friend) preferred position size. I like 1050 for most trades." Every other strategy sizes exactly as before.
 v5.26  2026-11-16  OTV5 r129 (LOP.2, FA.3; the cold audit 2026-11-15, critical, live-only) — A BROKER POSITION NO ROW EXPLAINS
@@ -5371,6 +5372,8 @@ def _execute_entry_signal(signal, ctx, ms, state, _sigj=None, *, additive: bool 
     # ── Enter trade ───────────────────────────────────────────────────────────
     # ⚠️ r152 — no score argument; the scorer is gone.
     record = entry_eng.enter(signal=signal, sizing=sizing)
+    if not state.paper_trading:                                 # r135 (GUARD.1): a suspect booked inside this call
+        _hand_booked_to_manager(state)
     if record:
         # v5.1 — capture BEFORE anything else touches the row, but AFTER the
         # fill: the picture we want is the one that produced this entry.
@@ -5897,6 +5900,10 @@ def main_loop(state: BotState):
             # list only ever covers the failures already thought of, and the
             # requirement is "anything else that is blinding it".
             _check_blindness(state)
+
+            # ── r135 (GUARD.1): an entry order whose fate is unknown is resolved now, not at the adopt slot ──
+            if not state.paper_trading:
+                _resolve_entry_suspects(state)
 
             # ── Intraday broker reconcile (LIVE + enabled) ─────────────────
             # Every 30 min across RTH, last sweep at 15:30 — catches a broker-
@@ -6531,6 +6538,50 @@ def _intraday_reconcile(state: BotState, instrument: str):
 _ADOPT_DEFER_PAGED: dict = {}
 
 
+def _hand_booked_to_manager(state: BotState) -> list:
+    """r135 (GUARD.1) — the records order_guard's resolution booked (a suspect entry order's fill, under its own
+    strategy) join the position manager exactly as a confirmed entry does (appended; never replaces), with the entry
+    alert. Live only. Never raises. Returns them."""
+    try:
+        from execution import order_guard as _og
+        recs = _og.take_booked()
+    except Exception as exc:                                   # noqa: BLE001
+        logger.error(f"[guard] booked-entry hand-over failed ({type(exc).__name__}: {exc})")
+        return []
+    for rec in recs:
+        try:
+            _pm = get_position_manager(state.paper_trading)
+            if _pm.has_open_position():
+                _pm.add_open_position(rec)
+            else:
+                _pm.set_open_position(rec)
+            logger.warning(f"[guard] BOOKED ENTRY now managed: {rec.get('strategy')} {_describe_position(rec)} "
+                           f"x{rec.get('contracts')} @ {float(rec.get('entry_premium') or 0):.2f} "
+                           f"id={str(rec.get('trade_id', ''))[:8]}")
+            get_alert_manager().send_entry_alert(rec)
+        except Exception as exc:                               # noqa: BLE001
+            logger.error(f"[guard] booked entry {str(rec.get('trade_id', ''))[:8]} hand-over failed "
+                         f"({type(exc).__name__}: {exc}) - its row is open; the next restart resumes it")
+    return recs
+
+
+def _resolve_entry_suspects(state: BotState) -> list:
+    """r135 (GUARD.1) — every live tick: resolve any opening order whose fate is unknown (order_guard), then hand
+    what it booked to the position manager. No broker call when nothing is suspect. Never raises."""
+    if state.paper_trading:
+        return []
+    try:
+        from execution import order_guard as _og
+        if _og.has_suspects():
+            from data.tasty_client import get_session, get_account
+            _ok, _why = _og.resolve_suspects(get_session(), get_account())
+            if not _ok:
+                logger.warning(f"[guard] entries held on this instrument: {_why}")
+    except Exception as exc:                                   # noqa: BLE001
+        logger.error(f"[guard] suspect resolution failed ({type(exc).__name__}: {exc}) - entries stay held")
+    return _hand_booked_to_manager(state)
+
+
 def _intraday_adopt(state: BotState, instrument: str, broker: list) -> list:
     """r129 (LOP.2, FA.3; the cold audit 2026-11-15, critical, live-only) — ADOPT, INTRADAY, A BROKER POSITION NO
     OPEN ROW EXPLAINS. Every path that can leave a fill unrecorded (LOP.1's lost reply that FILLED, a fill after the
@@ -6555,6 +6606,7 @@ def _intraday_adopt(state: BotState, instrument: str, broker: list) -> list:
     try:
         if state.paper_trading or not broker:
             return []
+        _resolve_entry_suspects(state)                         # r135 (GUARD.1): book a suspect's fill first
         trade_logger = get_trade_logger()
         pos_mgr = get_position_manager(state.paper_trading)
         pos_mgr.has_open_position()                            # hydrate first: never append to an empty, unloaded set
@@ -6578,6 +6630,14 @@ def _intraday_adopt(state: BotState, instrument: str, broker: list) -> list:
                     pass
             return []
 
+        try:                                                   # r135 (GUARD.1)
+            from execution.order_guard import pending_booking_symbols as _pbs
+            _held = sorted(legs & set(_pbs()))
+        except Exception:                                      # noqa: BLE001
+            _held = []
+        if _held:
+            return _defer("suspect", f"An entry order on {', '.join(_held)} is still being resolved by the order "
+                                     f"guard (its fill is booked under its strategy) - NOT adopted this pass.")
         try:
             from data.tasty_client import get_session, get_account, sdk_result
             from execution.order_guard import _norm_status, _WORKING, _PENDING
