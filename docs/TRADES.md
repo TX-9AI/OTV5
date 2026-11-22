@@ -1,5 +1,7 @@
 # TRADES — the specs
 
+**`TRADES.md` v5.29 · 2026-11-22 · r144 (EXIT.19; the before-cash audit 2026-11-22 F1, live only) — section 6: a thesis-invalidated close (Runaway's and the Hunt's thesis line, their structure backstop, the rejected-pool handoff) is priced as a stop: the mark, the mark, the bid, then MARKET, the escalation of r139. Profit locks and trails, the fizzle, theta bleed, the decay stop, the target, PARK's delta floor and close and OGAP's sweep and close keep the walk; the hard closes are unchanged. The operator, 2026-11-22: "I agree with your recommendation on thesis dead".**
+
 **`TRADES.md` v5.28 · 2026-11-21 · r142 (HUNT.16) — section 0's re-fire paragraph: the Hunt is no longer held after a losing Breakout (Breakout is dormant since r110, so the rule could only hold a Hunt on an unreadable trades.db); `OT_HUNT_AFTER_BRK` is not read and hunt_after_breakout is no longer written.**
 
 **`TRADES.md` v5.27 · 2026-11-21 · r141 (the Saturday brief 2026-11-21 §4 item 12) — section 0's plan-states paragraph: Runaway and the Hunt have switches (`OT_RUNAWAY`, `OT_HUNT`); Breakout's `OT_BREAKOUT` is no longer read (dormant r110).**
@@ -535,6 +537,7 @@ price it.
 | inverted butterfly | full walk |
 | structural / profit-side close | full walk |
 | **15% floor stop** | **escalate straight to MARK**, reprice at mark each tick |
+| **thesis-invalidated close** (r144) | **as the floor stop** - the thesis line, the structure backstop, the rejected-pool handoff |
 
 **WIRED r104 (entries) / r105 (exits, roll).** Debit hard close KEEPS the cross:
 §6's prose and its table disagreed, and the assignment argument is about SHORT
@@ -608,6 +611,19 @@ The operator, 2026-11-21: *"I don't want partial opens or partial closes to be t
   or a target's walk never counts toward a stop. A different exit reason starts the
   count again (the P&L a reason carries each tick does not make it a different
   reason); the same reason continues it, a restart included (`live_exit_state`).
+· **A thesis-invalidated close is a stop (r144, EXIT.19).** The operator, 2026-11-22:
+  *"I agree with your recommendation on thesis dead"*. Runaway's and the Hunt's thesis
+  line (`runaway_thesis_dead`, `hunt_thesis_dead`), their structure backstop
+  (`runaway_backstop`; the Hunt's `orb_structure_stop` already was one) and the
+  rejected-pool handoff (`handoff: pool ...`) post at the mark and escalate exactly as
+  above: the mark, the mark, the bid, MARKET. Before r144 they walked, and on a
+  one-tick book (QQQ 1.00 / 1.01) the walk's last sell rung is the mark rounded in our
+  favour - the ask - offered again every pass. Profit locks and trails (`park_lock`,
+  `ogap_lock`, `ogap_trail`, `orb_trail_stop`, `orb_fvg_trail_stop`,
+  `hunt_target_wicked`), the fizzle (`runaway_fizzle`), theta bleed, the decay stop,
+  the target, PARK's delta floor and close and OGAP's sweep and close keep the walk.
+  The table is `ExitEngine._FLOOR_REASONS`, matched by substring on the reason. Paper
+  books the mark as before.
 · **The price is the store's newest (EXIT.17).** Just before a close posts, its legs
   are re-read from the feed store (local, no broker call) and it posts at that mark,
   not at a copy taken earlier in the tick; the quote's own age is logged on the post

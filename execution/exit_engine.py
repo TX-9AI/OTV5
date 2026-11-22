@@ -1,5 +1,19 @@
 """
-execution/exit_engine.py  v5.27
+execution/exit_engine.py  v5.28
+v5.28  2026-11-22  OTV5 r144 (EXIT.19; the before-cash audit 2026-11-22 F1, live only) — A THESIS-INVALIDATED EXIT IS
+      PRICED AS A STOP. The operator, 2026-11-22: "I agree with your recommendation on thesis dead". _FLOOR_REASONS gains
+      "thesis_dead" (runaway_thesis_dead, hunt_thesis_dead), "runaway_backstop" (Runaway's and the Hunt's structure
+      backstop) and "handoff:" (the rejected-pool handoff), so those closes post at the mark and escalate exactly as a
+      stop does (r139: the mark, the mark, then the bid after LIVE_STOP_AT_BID_AFTER = 2 unfilled attempts, then MARKET
+      from LIVE_STOP_MARKET_AFTER = 3). Before, they walked, and on a one-tick book (QQQ 1.00 / 1.01) the walk's
+      terminal sell rung is the mark rounded in our favour - the ask - re-offered every pass. Profit locks and trails
+      (park_lock, ogap_lock / ogap_trail, orb_trail_stop, orb_fvg_trail_stop, hunt_target_wicked), runaway_fizzle,
+      theta_bleed, decay, target_hit, park_delta_floor / park_close, ogap_sweep / ogap_close keep the walk; the hard
+      closes (15:45 / 15:50 / 15:55) are decided before the table and are unchanged. No management intent declares a
+      pricing for any of these reasons (strategy/management EXIT_PRICING names none; the calculator step's conditions
+      are not in it), so nothing overrides the table. Same calls as a stop today (no broker call added, none when
+      idle); paper books the mark as before (the paper close never reads _exit_policy); no new config key. Gate
+      tests/check_live_stop_escalation.py v5.3 E8-E16.
 v5.27  2026-11-21  OTV5 r139 (EXIT.15 + EXIT.16 + EXIT.17 + EXIT.18; the live exit polling audit 2026-11-21 S1-S4, live only) —
       THE LIVE CLOSE DOES WHAT THE OPERATOR'S SPEC SAYS. The operator, 2026-11-21: "Yes, in that order" (the second
       build). EXIT.15 (S2, the stop spec: mark, mark, then the bid after LIVE_STOP_AT_BID_AFTER = 2, then MARKET from
@@ -4557,8 +4571,20 @@ class ExitEngine:
     # with the price known. DEBITS KEEP THE CROSS: a long that does not close
     # does not assign, it EXPIRES WORTHLESS — there is no assignment tradeoff
     # to take, so paying the spread beats losing the premium.
+    # 🔴 r144 (EXIT.19, the before-cash audit 2026-11-22 F1) — A THESIS-INVALIDATED EXIT IS PRICED AS A STOP. The
+    # operator, 2026-11-22: "I agree with your recommendation on thesis dead". Until r143 only the premium and structure
+    # stops matched here; Runaway's and the Hunt's thesis line (runaway_thesis_dead / hunt_thesis_dead), their
+    # structure backstop (runaway_backstop) and the rejected-pool handoff ("handoff: pool ...") walked, and on a
+    # one-tick book (QQQ 1.00 / 1.01) the walk's terminal sell rung is the ask, re-offered every pass. Now they post at
+    # the mark and escalate as a stop does (the mark, the mark, the bid, MARKET; _stop_escalation). The keys are the
+    # narrowest substrings that catch exactly those reasons: "thesis_dead" (both labels), "runaway_backstop" (written
+    # for Runaway and Hunt rows alike) and "handoff:" (the reason's own prefix). Profit locks and trails (park_lock,
+    # ogap_lock, ogap_trail, orb_trail_stop, orb_fvg_trail_stop, the Hunt's hunt_target_wicked), runaway_fizzle,
+    # theta_bleed, decay, target_hit, PARK's delta floor and close, OGAP's sweep and close keep the walk; the hard
+    # closes are decided above this table and are unchanged.
     _FLOOR_REASONS = ("condor_stop", "hard_stop", "stop_hit", "adopted_stop",
-                      "structure_stop", "tcs_breach", "orb_structure_stop")
+                      "structure_stop", "tcs_breach", "orb_structure_stop",
+                      "thesis_dead", "runaway_backstop", "handoff:")
 
     @classmethod
     def _exit_policy(cls, record: TradeRecord, reason: str) -> str:

@@ -1,5 +1,7 @@
 # PLAN_SPEC.md — every strategy declares its intent BEFORE the trigger
 
+**`PLAN_SPEC.md` v5.9 · 2026-11-22 · r144 (EXIT.19) — §30.4 says how its exits are priced live: the handoff, the thesis line and the structure backstop as a stop (the mark, the mark, the bid, MARKET); the fizzle, the trail and theta bleed walk.**
+
 **`PLAN_SPEC.md` v5.8 · 2026-11-21 · r142 (HUNT.16) — §43.2 is REMOVED: the Hunt is no longer held after a losing Breakout (Breakout dormant r110; the rule could only hold on an unreadable trades.db); §43.5 no longer lists hunt_after_breakout.jsonl.**
 
 **`PLAN_SPEC.md` v5.7 · 2026-11-21 · r141 (the Saturday brief 2026-11-21 §4 item 12) — §4's ORB-engine line says the Hunt reads it (Runaway and the Hunt; Breakout is dormant), and §43 carries a DORMANT r110 line: §43.1 (Breakout's re-fire) and §43.2 (no Hunt after a losing Breakout) describe kept code that no live trade reaches.**
@@ -1200,6 +1202,7 @@ Written to `level_event` (never purged), read by `DerivedStore.latest_rejection(
 5. trail (unchanged)
 6. theta bleed (kept)
 7. **structure backstop** — a 1m close through the ORB boundary itself
+- **Live pricing (r144, EXIT.19).** 2, 3 and 7 are priced as a stop: the mark, the mark, the bid, then MARKET (TRADES §6). 4, 5 and 6 walk the exit ladder. 1 is the end of day.
 - **No premium stop.** *"If we're going to immediately open another momentum trade the second the preceding one stops out, then why not just HOLD?"* What a 20% floor would have done is recorded (`would_have_floored`) — a question for the first sessions, not a bar. Velocity stall is off the runaway too (ORB.3 closed).
 
 ### 30.5 The interaction, named

@@ -1,6 +1,23 @@
 #!/usr/bin/env python3
 """
-tests/check_live_stop_escalation.py  v5.2
+tests/check_live_stop_escalation.py  v5.3
+v5.3  2026-11-22  OTV5 r144 (EXIT.19; the before-cash audit 2026-11-22 F1) — A THESIS-INVALIDATED EXIT ESCALATES AS A STOP.
+      On a one-tick book (QQQ bid 1.00 / ask 1.01, mark 1.005), driven through the same real _confirm_and_book_live_exit:
+  E8  runaway_thesis_dead posts the floor escalation: LIMIT 1.01 (the mark on the grid, sell rounds up), LIMIT 1.01, LIMIT
+      AT THE BID 1.00, MARKET - and makes exactly the broker calls the hard stop makes over the same four passes
+  E9  hunt_thesis_dead (a LiquidityHunt row) likewise
+  E10 runaway_backstop likewise
+  E11 the rejected-pool handoff ("handoff: pool ...") likewise
+  E12 orb_trail_stop still walks on that book: four passes, all LIMIT, never the bid, no MARKET
+  E13 park_lock (a PARK row) still walks likewise; ogap_trail (an OGAP row) likewise
+  E14 the policy of every exit reason Runaway, the Hunt, PARK and OGAP can write (their real formats): exactly the
+      thesis line, the backstop, the handoff and the existing stops are floor; every lock, trail, fizzle, theta, decay,
+      target, PARK delta / close and OGAP sweep / close walks; the hard closes keep their EOD policies
+  E15 each r144 key catches only its own reasons (no key matches a walk reason), and no management intent declares a
+      pricing for a thesis / backstop / handoff close (strategy/management EXIT_PRICING; the calculator's condition)
+  E16 PAPER is unchanged: every reason above books at the mark in one pass (the paper close never reads _exit_policy);
+      the digest of the paper results is the one r143 produced
+Born red on r143 (927f74c) at E8 E9 E10 E11 E14 E15.
 v5.2  2026-11-15  OTV5 r123 (HYG.27) — OT_RESTING_DB leaves the scratch env (r118 deleted execution/resting_orders.py, its only reader).
 v5.1  2026-11-14  OTV5 r112 (AM.2 / LIVE.6) — new. A LIVE STOP STEPS TO THE BID, THEN CROSSES. Driven through the REAL
       ExitEngine._confirm_and_book_live_exit with a stub broker whose every order dies UNFILLED (CANCELLED, no legs), so
@@ -35,6 +52,7 @@ for _k, _f in (("OT_TRADES_DB", "trades.db"), ("OT_DERIVED_DB", "derived_store.d
     os.environ.setdefault(_k, os.path.join(_s, _f))
 ET = ZoneInfo("America/New_York")
 FAILED = []
+PAPER_DIGEST = "894db8cfed3eb92b"   # E16: the paper results' digest on r143 (927f74c), identical on r144
 
 
 def check(name, ok, detail=""):
@@ -48,15 +66,20 @@ class _Acct:
     def __init__(self):
         self.orders = []
 
+        self.calls = []
+
     def place_order(self, session, order, dry_run=False):
+        self.calls.append("place_order")
         self.orders.append(order)
         return types.SimpleNamespace(errors=None, order=types.SimpleNamespace(id=f"O{len(self.orders)}"))
 
     def get_order(self, session, oid):
+        self.calls.append("get_order")
         from tastytrade.order import OrderStatus
         return types.SimpleNamespace(id=oid, status=OrderStatus.CANCELLED, legs=[], reject_reason=None)
 
     def delete_order(self, session, oid):
+        self.calls.append("delete_order")
         return None
 
 
@@ -133,11 +156,94 @@ def main():
           getattr(_cfg, "LIVE_STOP_AT_BID_AFTER", None) == 2 and getattr(_cfg, "LIVE_STOP_MARKET_AFTER", None) == 3
           and no_env, f"{getattr(_cfg, 'LIVE_STOP_AT_BID_AFTER', None)} {getattr(_cfg, 'LIVE_STOP_MARKET_AFTER', None)}")
 
+    # ── r144 (EXIT.19): a thesis-invalidated exit on a ONE-TICK book (QQQ 1.00 / 1.01) ──
+    B, A, M = 1.00, 1.01, 1.005
+    FLOOR_POSTS = [("Limit", 1.01), ("Limit", 1.01), ("Limit", 1.00)]
+
+    def floor_run(tag, reason, **kw):
+        got = passes(single(tag, **kw), reason, 4, mark=M, bid=B, ask=A)
+        return got, list(acct["a"].calls)
+
+    _, stop_calls = floor_run("E8-stop", "hard_stop_20% pnl=-21.0%")
+    hunt = dict(strategy="LiquidityHunt", setup_type="hunt")
+    for name, tag, reason, kw in (
+            ("E8 runaway_thesis_dead", "E8-thesis", "runaway_thesis_dead: 1m close 699.10 back through 699.40 (band 0.039)", {}),
+            ("E9 hunt_thesis_dead", "E9-hunt", "hunt_thesis_dead: 1m close 699.10 back through 699.40 (band 0.039)", hunt),
+            ("E10 runaway_backstop", "E10-backstop", "runaway_backstop: 1m close 699.10 through the ORB boundary 699.20", {}),
+            ("E11 handoff", "E11-handoff", "handoff: pool 701.50 (NY High) REJECTED on close (wick pierce 0.04%, "
+                                           "bar 2026-11-13 10:39:00) — sweep owns it", {})):
+        got, calls = floor_run(tag, reason, **kw)
+        check(f"{name} on 1.00/1.01: LIMIT 1.01, LIMIT 1.01, LIMIT AT THE BID 1.00, MARKET; the hard stop's calls",
+              len(got) == 4 and got[:3] == FLOOR_POSTS and got[3][0] == "Market" and calls == stop_calls,
+              f"{got} calls={len(calls)} vs stop {len(stop_calls)}")
+
+    def walks(got):
+        return len(got) == 4 and all(t == "Limit" for t, _ in got) and all(p != B for _, p in got)
+
+    got = passes(single("E12-trail"), "orb_trail_stop pnl=42.0%", 4, mark=M, bid=B, ask=A)
+    check("E12 orb_trail_stop on 1.00/1.01 still walks: all LIMIT, never the bid, no MARKET", walks(got), f"{got}")
+    got = passes(single("E13-park", strategy="PARK", setup_type="park"),
+                 "park_lock: mark 1.01 <= 1.68 after +60%", 4, mark=M, bid=B, ask=A)
+    got2 = passes(single("E13-ogap", strategy="OGAP", setup_type="ogap"),
+                  "ogap_trail: mark 1.01 <= floor 1.68 (fill 1.40, peak 2.80)", 4, mark=M, bid=B, ask=A)
+    check("E13 park_lock and ogap_trail on 1.00/1.01 still walk", walks(got) and walks(got2), f"{got} {got2}")
+
+    # E14 — every reason the four live setups write, in the code's own formats
+    FLOOR = ["runaway_thesis_dead: 1m close 699.10 back through 699.40 (band 0.039)",
+             "hunt_thesis_dead: 1m close 699.10 back through 699.40 (band 0.039)",
+             "runaway_backstop: 1m close 699.10 through the ORB boundary 699.20",
+             "handoff: pool 701.50 (NY High) REJECTED on close (wick pierce 0.04%, bar 2026-11-13 10:39:00) — sweep owns it",
+             "hard_stop_20% pnl=-21.0%",
+             "orb_structure_stop: 1m close 699.10 below impulsive-candle low 699.20",
+             "structure_stop: touch 699.10 through 699.20 pnl=-8.0%"]
+    WALK = ["orb_trail_stop pnl=42.0%", "orb_fvg_trail_stop pnl=120.0%", "theta_bleed pnl=12.0%",
+            "target_hit pnl=100.0%",
+            "runaway_fizzle: higher_low_broken 699.10<699.20; acceptance_decay delta=-0.10 recent=0.40",
+            "hunt_target_wicked: target 702.00 reached on a wick, close 701.80 — off",
+            "decay: open profit +$40.00 (p 0.200) fell 31% from peak +$58.00 (p 0.290), armed at 09:41:15 pnl=14.0%",
+            "park_lock: mark 1.01 <= 1.68 after +60%", "park_delta_floor: |delta| 0.080 <= 0.10",
+            "park_close_15:30_ET",
+            "ogap_lock: mark 1.60 <= floor 1.68 (fill 1.40, peak 2.30)",
+            "ogap_trail: mark 2.00 <= floor 2.16 (fill 1.40, peak 3.60)",
+            "ogap_sweep_1400: mark 0.60 < 0.75 x fill 1.40, peak 1.90", "ogap_close_1545",
+            "started_close_resume"]
+    pol = EE.ExitEngine._exit_policy
+    rec0 = {"strategy": "RunawayContinuation", "option_symbol": "QQQ   261113C00700000"}
+    bad = [(r[:24], pol(rec0, r)) for r in FLOOR if pol(rec0, r) != "floor"]
+    bad += [(r[:24], pol(rec0, r)) for r in WALK if pol(rec0, r) != "walk"]
+    eod = pol(rec0, EE._eod_label(rec0))
+    check("E14 every Runaway/Hunt/PARK/OGAP reason: thesis, backstop, handoff and the stops floor; the rest walk; "
+          "the debit hard close unchanged", not bad and eod == "debit_hard_close", f"bad={bad} eod={eod}")
+
+    # E15 — each added key catches only its own reasons; no intent declares a pricing for them
+    NEW = {"thesis_dead": FLOOR[0:2], "runaway_backstop": FLOOR[2:3], "handoff:": FLOOR[3:4]}
+    keys = tuple(EE.ExitEngine._FLOOR_REASONS)
+    own = {k: [r for r in FLOOR + WALK if k in r.lower()] for k in NEW}
+    from strategy import management as MG
+    conds = [str(r).split(" ")[0].split(":")[0] for r in FLOOR[:4]]
+    declared = [(c, MG.EXIT_PRICING.get(c)) for c in conds if MG.EXIT_PRICING.get(c) is not None]
+    check("E15 the r144 keys are in the table, each catches exactly its own reasons, none a walk reason; no declared "
+          "pricing for them", all(k in keys for k in NEW) and all(own[k] == NEW[k] for k in NEW)
+          and not any(k in w.lower() for k in keys for w in WALK) and not declared,
+          f"keys={keys} own={own} declared={declared}")
+
+    # E16 — paper: every reason books at the mark in one pass, digest as r143
+    import hashlib
+    paper = EE.ExitEngine(paper_trading=True)
+    rows = []
+    for i, r in enumerate(FLOOR + WALK):
+        rec = single(f"E16-{i}")
+        res = paper.place_exit_order(rec, r, 1.005)
+        rows.append(f"{r}|{bool(res.confirmed)}|{res.fill_price!r}|{getattr(res, 'held', None)!r}")
+    dig = hashlib.sha256("\n".join(rows).encode()).hexdigest()[:16]
+    check("E16 paper unchanged: every reason confirmed in one pass, the digest r143 produced",
+          all("|True|" in x for x in rows) and dig == PAPER_DIGEST, f"digest={dig} first={rows[0]}")
+
     print("=" * 60)
     if FAILED:
         print(f"RED — {len(FAILED)} failed: {FAILED}")
         return 1
-    print("GREEN — a live stop steps to the bid, then crosses")
+    print("GREEN — a live stop, and a thesis-invalidated exit, steps to the bid, then crosses")
     return 0
 
 
