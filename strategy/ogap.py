@@ -1,5 +1,10 @@
 """
-strategy/ogap.py  v5.3
+strategy/ogap.py  v5.4
+v5.4  2026-11-22  OTV5 r149 (OGAP.4) — OGAP RUNS ON EVERY BOX, ON PAPER: ogap_not_this_symbol leaves PLAN_CHECKS (nothing
+      writes it; config.OGAP_SYMBOLS is deleted). The operator, 2026-11-22: "I honestly want it paper Trading on all of
+      them." The box flag `ogap` (utils/box_flags, default on) and the live-box rule (strategy/plan_state) decide whether
+      it is asked. ogap_no_0dte leaves too: the contract is on the chain's expiry, today's or else the nearest listed
+      (the operator, 2026-11-22: "No to sitting out on non-expiry days. We just buy the nearest available expiry."). Every other condition unchanged.
 v5.3  2026-11-21  OTV5 r137 (CAP.10) — TEXT ONLY: OGAP is no longer cap-exempt (v5.0 below): its closes count toward the daily catastrophic cap and the cap refuses its entry (config v5.26). The operator, 2026-11-21: "both trades should fall under the catastrophic cap". The conditions are unchanged.
 v5.2  2026-11-21  OTV5 r136 (OGAP.3) — the ogap_contract condition reads the MARK (mark >= OGAP_MIN_ASK, floor(RISK_PER_TRADE_USD / (mark x 100)) >= 1), not the ask: the operator, 2026-11-20, "never pay the spread". The two-sided quote check is unchanged (a mark needs both sides).
 v5.1  2026-11-16  OTV5 r131 (OGAP.2) — the ogap_contract description reads RISK_PER_TRADE_USD (the ramp MIN), not the deleted OGAP_BUDGET_USD.
@@ -12,7 +17,8 @@ v5.0  2026-11-14  OTV5 (OGAP.1) — OGAP, PARK'S FRIEND'S ORB-GAP: THE SPECIFICA
 
       MEASURED (~/reviews/studies/park_orbgap_20261113, ogap_equities_20261113 sealed 2026-11-13 22:04 UTC): QQQ T1 real
       quotes n=7 +$148/row [-124, +454], T2 n=32 +$137 [-87, +421]; equities FAILED the sealed bar (T1 -$96 [-160, -22]),
-      so OGAP trades QQQ only (config.OGAP_SYMBOLS). Its own $500 budget, cap-exempt, decay-exempt, pin-exempt.
+      so OGAP traded QQQ only (config.OGAP_SYMBOLS, deleted r149: every box on paper). Its own $500 budget, cap-exempt,
+      decay-exempt, pin-exempt.
 """
 
 from __future__ import annotations
@@ -44,16 +50,16 @@ class Ogap:
         "ogap_signal":       (f"the first 1m close beyond the range 09:45-10:30, then a retest within "
                               f"{config.OGAP_RETEST_BARS} bars at +/-{config.OGAP_RETEST_W:.2f}W closing back beyond "
                               f"the level; filled the next minute or never"),
-        "ogap_contract":     (f"today's expiry, the strike nearest the fill-minute open (tie lower), two-sided, mark >= "
+        "ogap_contract":     (f"the chain's expiry (today's, else the nearest listed; r149), the strike nearest the fill-minute open (tie lower), two-sided, mark >= "
                               f"{config.OGAP_MIN_ASK:.2f}, floor({config.RISK_PER_TRADE_USD:.0f} / (mark x 100)) >= 1"),
     }
 
     PERSISTENT = ()
 
     PLAN_CHECKS = tuple(CONDITIONS) + (
-        "ogap_not_this_symbol", "ogap_range_w", "ogap_range_bars", "ogap_gap", "ogap_allowed",
+        "ogap_range_w", "ogap_range_bars", "ogap_gap", "ogap_allowed",
         "ogap_break_c", "ogap_break_p", "ogap_signal_c", "ogap_signal_p", "ogap_gateg_shadow",
-        "ogap_no_range", "ogap_stale", "ogap_no_0dte", "ogap_ask_floor", "ogap_ask_band", "ogap_bars", "ogap_read",
+        "ogap_no_range", "ogap_stale", "ogap_ask_floor", "ogap_ask_band", "ogap_bars", "ogap_read",
         "strike", "ask", "bid", "contracts",
     )
 

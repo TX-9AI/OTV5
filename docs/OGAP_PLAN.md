@@ -30,7 +30,7 @@ the alternative, a second underlying on the QQQ box, is a new build.
    `_DECAY_EXEMPT_DEFAULT` and `CAP_EXCLUDED_STRATEGIES`. No env keys.
 2. **strategy/ogap_plan.py:** a pure function, `ogap_read(bars_1m, prior_close, now_minute) ->` the range, gap,
    allowed sides, break, retest, signal, stale flag and shadow. The plan wraps it with the tape read and the contract
-   pick: today's expiry only (else `ogap_no_0dte`), the strike nearest the fill-minute open with ties going lower,
+   pick: today's expiry only (else `ogap_no_0dte`; r149 OGAP.4: the chain's nearest listed expiry instead), the strike nearest the fill-minute open with ties going lower,
    the ask band, and sizing. It is written so the backtest's `day_signal` and the plan's function can be compared
    directly.
 3. **strategy/ogap.py:** CONDITIONS, PLAN_CHECKS and `generate_signal`, as park.py. The plan checks are `range_w`,

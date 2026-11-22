@@ -1,5 +1,14 @@
 """
-strategy/ogap_plan.py  v5.2
+strategy/ogap_plan.py  v5.3
+v5.3  2026-11-22  OTV5 r149 (OGAP.4) — THE SYMBOL TEST GOES: prepare() no longer refuses a box outside
+      config.OGAP_SYMBOLS (deleted) with a dormant ogap_not_this_symbol row; OGAP reads the tape of whatever box it runs
+      on. Whether it is asked at all is strategy/plan_state (the box flag `ogap`, default on; dormant on a live box), so
+      a dormant OGAP is never asked and writes nothing. The operator, 2026-11-22: "I honestly want it paper Trading on all
+      of them." The read, the contract pick, the mark floor and the sizing are unchanged.
+      AND THE ogap_no_0dte REFUSAL GOES (the operator, 2026-11-22: "No to sitting out on non-expiry days. We just buy the nearest available expiry."): OGAP buys
+      the chain's expiry, the one data/options_chain.OptionsChainFetcher.fetch_chain already chose for the tick (today's,
+      else the nearest listed on or after today - the same chain and the same fallback every setup reads); no second
+      rule here. Same strike pick, sizing and exits (the 15:45 close: flat the same day).
 v5.2  2026-11-21  OTV5 r136 (OGAP.3) — OGAP READS THE MARK WHEREVER PARK'S SPEC READS THE ASK. The operator, 2026-11-20:
       "Ours needs the modification to account for how I would trade it, never pay the spread." / "Mark is the worst buy
       or sell we accept." The mark (the two-sided mid, floored to the cent as PARK.4) is computed before the gates, and
@@ -32,7 +41,7 @@ v5.0  2026-11-14  OTV5 (OGAP.1) — THE OGAP PLAN: READS THE TAPE, PICKS THE CON
         signal  - the earliest retest bar on an ALLOWED side (a tie goes to the call, as the backtest sorts). A retest on
                   the refused side is a SHADOW: recorded, never traded, never blocking.
         fill    - in the minute right after the signal bar, or never (stale: the tick that first sees it is later).
-        contract- today's expiry only; the listed strike nearest the fill-minute open (a tie goes lower); ask >=
+        contract- the chain's expiry (r149: today's, else the nearest listed); the listed strike nearest the fill-minute open (a tie goes lower); ask >=
                   OGAP_MIN_ASK; contracts = floor(RISK_PER_TRADE_USD / (mark x 100)) >= 1 (a mark over RISK_PER_TRADE_USD / 100 buys none).
                   r136 (OGAP.3): every price here is the MARK (two-sided mid, floored to the cent), never the ask.
 """
@@ -341,10 +350,7 @@ class OgapPlan:
         prep = OgapPreparation(t, spec)
         prep.price_now = _f(price_now)
         sym = (symbol or self._symbol()).upper()
-
-        if sym not in tuple(s.upper() for s in config.OGAP_SYMBOLS):
-            t.dormant("ogap_not_this_symbol", f"OGAP trades {','.join(config.OGAP_SYMBOLS)} only (OGAP_SYMBOLS)")
-            return prep
+        # r149 (OGAP.4): no symbol test - plan_state decides whether OGAP is asked on this box (the box flag `ogap`).
         hm = _hm(now_et)
         w0, w1 = config.ENTRY_WINDOWS["OGAP"]
         if hm is None or not (tuple(w0) <= tuple(hm) < tuple(w1)):
@@ -395,9 +401,7 @@ class OgapPlan:
         rows = (getattr(chain, "calls", None) if side == "call" else getattr(chain, "puts", None)) or []
         if chain is None or not rows:
             return t.starved("chain") or prep
-        exp = str(getattr(chain, "expiry", "") or "")
-        if exp and exp != day.isoformat():
-            return t.refuse("ogap_no_0dte", f"the chain's expiry is {exp}, not today: no OGAP today") or prep
+        # r149 (OGAP.4): the chain's expiry, whatever it is (today's, else fetch_chain's nearest) - no 0DTE refusal.
         fb = bars.get(now_min) if isinstance(bars, dict) else None
         spot = _f(fb[0]) if fb else None
         if spot is None:
@@ -412,9 +416,6 @@ class OgapPlan:
         t.check("bid", bid, None)
         if k is None or bid is None or ask is None or not (ask >= bid > 0):
             return t.refuse("ogap_contract", "no two-sided ATM contract") or prep
-        kexp = str(getattr(k, "expiry", "") or "")
-        if kexp and kexp != day.isoformat():
-            return t.refuse("ogap_no_0dte", f"the contract expires {kexp}, not today") or prep
         mark = mark_of(bid, ask)                                      # r136 OGAP.3: THE price every gate reads
         if mark is None:
             return t.refuse("ogap_contract", "no two-sided ATM contract") or prep

@@ -1,5 +1,8 @@
 # TRADES — the specs
 
+**`TRADES.md` v5.33 · 2026-11-22 · r149 (OGAP.4, M1 of the box flags) — section 0 and section 10: OGAP runs on EVERY box, on paper (the box flag `ogap`, default on; `config.OGAP_SYMBOLS` is gone), buys the nearest expiry when none is same-day,
+and sits out on a LIVE box; it blocks none of its cousins.**
+
 **`TRADES.md` v5.32 · 2026-11-22 · r148 (BOXF.1, L1) — section 0: each box's saved settings file (deploy/box_flags/<SYM>, utils/box_flags.py; read once at start, one `[flags]` line). The schema is empty at r148, so nothing in the roster below changes.**
 
 **`TRADES.md` v5.31 · 2026-11-22 · r146 (BLND.1, partial; the before-cash audit 2026-11-22 F3) — section 0: after a blind episode no setup opens on the tick that first sees again; entries are eligible from the next tick on current 1m bars (utils/blind_reacquire; PLAN_SPEC section 45; the operator, 2026-11-22: "Does it really need a full minute if the plans refresh every 15 second tick? I think 1 full tick after a restore should be eligible for a fire if the entry still qualifies."). Exits never gated; paper and live alike.**
@@ -83,7 +86,7 @@ is its `docs/PLAN_SPEC.md` section.
 | Runaway | `RunawayContinuation` | ON | none (its end is fixed; r68) | 09:35-10:30 | PLAN_SPEC §30 |
 | Liquidity hunt | `LiquidityHunt` | ON | none | 09:35-10:30 | PLAN_SPEC §37 |
 | PARK | `PARK` | ON | none (`OT_PARK=log` records it, `off` stops it) | 11:01-11:03 | section 9 below |
-| OGAP | `OGAP` | ON | none (QQQ only, `config.OGAP_SYMBOLS`; no study toggle) | 09:46-10:32 | section 10 below |
+| OGAP | `OGAP` | ON | box flag `ogap` (default on, every box on paper; dormant on a live box; r149) | 09:46-10:32 | section 10 below |
 
 A window's end is exclusive: 10:30 means the last entry is 10:29. A switch is ACTIVE at
 `1` or `active` (r303 below). The ORB trade, VOLT, the sweep credit spread, the ATP butterfly and ORCS are REMOVED (r76,
@@ -791,9 +794,19 @@ time exits cut the big days. Small n: the book rests on two or three days a mont
 
 **OTV5 OGAP.1, 2026-11-14.** Park's friend's ORB-GAP (his spec of record 2026-11-13), a faithful PAPER copy: his
 signal, sizing and exits, unchanged; only the plumbing is ours (`docs/OGAP_SPEC.md`). The operator, 2026-11-14: *"let's
-design & paper trade the OGAP on QQQ"*. **QQQ only** (`config.OGAP_SYMBOLS`): his rule run unchanged on every fleet
-symbol failed the sealed bar on the equities (`~/reviews/studies/ogap_equities_20261113`: T1 −$96/row [−160, −22]) and
-SPX is refused by his $5.00 ask band on every row; every other box writes one `ogap_not_this_symbol` row a day.
+design & paper trade the OGAP on QQQ"*. It ran on QQQ only (`config.OGAP_SYMBOLS`) from OGAP.1 to r148: his rule run
+unchanged on every fleet symbol failed the sealed bar on the equities (`~/reviews/studies/ogap_equities_20261113`: T1
+−$96/row [−160, −22]). **From r149 (OGAP.4) it runs on EVERY box, on paper.** The operator, 2026-11-22: *"If we're
+studying that trade, I don't understand why we're only testing it on one box. I honestly want it paper Trading on all of
+them."* Whether it runs is the box flag `ogap` (`utils/box_flags.py`, default on; no box carries a line) and one rule in
+`strategy/plan_state.py`: **on a LIVE box (`config.PAPER_TRADING` False) OGAP is DORMANT** (never asked, writes nothing;
+the `[plans]` line names why) until delivery P's `paper_only`. Its numbers are Park's, unchanged on every symbol: the
+size is floor(`RISK_PER_TRADE_USD` / (mark x 100)) on each box's own risk, so a box whose ATM 0DTE mark is above
+`RISK_PER_TRADE_USD` / 100 buys none (`ogap_ask_band`). A box with no same-day expiry buys the nearest listed expiry (the
+chain's own fallback; the operator, 2026-11-22: *"No to sitting out on non-expiry days. We just buy the nearest available expiry."*) and still closes at 15:45. **It blocks none of its cousins** (the operator, 2026-11-22: *"No trade set up should block or impede
+any of its cousins. Each one fires and manages on its own merits."*): it is asked last in the tick, admitted on its own
+row (one open, one try), and an open OGAP position changes nothing Runaway, the Hunt or PARK is asked or sized with
+(`tests/check_ogap_all_boxes.py` A4/A5). Shared by design: the daily catastrophic cap (the whole box's realized P&L).
 
 **Entry, once per session, 09:46-10:32 ET:**
 - the range: the 09:30-09:44 1m bars, at least 10 of them, W = high − low > 0;
@@ -803,7 +816,7 @@ SPX is refused by his $5.00 ask band on every row; every other box writes one `o
 - the break: per side, the first 1m CLOSE strictly beyond the range, 09:45-10:30; it never re-arms;
 - the retest: within the 20 bars after the break (and by 10:30): a call's low <= high + 0.10W closing above the high
   (a put mirrored). The earliest allowed retest is the signal bar; the fill is the NEXT minute or never (`ogap_stale`);
-- the contract: today's expiry only (`ogap_no_0dte`), the strike nearest the fill-minute open (a tie goes lower), a
+- the contract: the chain's expiry, today's or else the nearest listed (r149; no `ogap_no_0dte`), the strike nearest the fill-minute open (a tie goes lower), a
   two-sided quote; **every price below is the MARK** (the mid, floored to the cent) since r136 (OGAP.3; Park's book
   reads the ask): mark >= $0.50 (`ogap_ask_floor`, the name kept), contracts = floor(`RISK_PER_TRADE_USD` / (mark x
   100)), the ramp MIN (r131; a mark over `RISK_PER_TRADE_USD` / 100, $10.50 at $1,050, buys none: `ogap_ask_band`).

@@ -1,5 +1,11 @@
 """
-utils/box_flags.py  v5.0
+utils/box_flags.py  v5.1
+v5.1  2026-11-22  OTV5 r149 (OGAP.4, M1) — THE FIRST KEY: `ogap` (setup OGAP, on / off, DEFAULT ON). The operator,
+      2026-11-22: "If we're studying that trade, I don't understand why we're only testing it on one box. I honestly want
+      it paper Trading on all of them." So OGAP runs on every box with no file line (the design drafted default off with
+      `ogap = on` for QQQ; the ruling made it on everywhere, so no box needs a line). strategy/plan_state reads it for
+      OGAP's state (on -> ACTIVE, off -> DORMANT); OGAP also sits out on a LIVE box (plan_state; until delivery P's
+      paper_only, which this schema still refuses). Schema v1 keeps its number: a key added, none changed.
 v5.0  2026-11-22  OTV5 r148 (BOXF.1) — new. ONE SAVED SETTINGS FILE PER BOX, READ ONCE AT START, AND ONE SCHEMA THAT IS
       THE FLEET ROSTER. The operator, 2026-11-22: "each box should maintain a 'flag' file — essentially a configure file,
       but not user toggled ... saved settings, not user interactive"; "Design it smartly. I don't want redundant gates
@@ -64,8 +70,10 @@ class Key:
     default: str = ON
 
 
-# THE ROSTER. r148 (BOXF.1): empty; each key joins in its own land.
-SCHEMA: Dict[str, Key] = {}
+# THE ROSTER. r148 (BOXF.1): empty; each key joins in its own land. r149 (OGAP.4): ogap, default on.
+SCHEMA: Dict[str, Key] = {
+    "ogap": Key("ogap", "OGAP", VALUES, ON),     # r149: on every box, paper (the operator, 2026-11-22)
+}
 
 
 @dataclass(frozen=True)

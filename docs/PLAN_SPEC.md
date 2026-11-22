@@ -1,5 +1,7 @@
 # PLAN_SPEC.md — every strategy declares its intent BEFORE the trigger
 
+**`PLAN_SPEC.md` v5.12 · 2026-11-22 · r149 (OGAP.4) — OGAP's section: the DORMANT `ogap_not_this_symbol` terminal is gone; OGAP runs on every box on paper and is not asked when plan_state reads it DORMANT (the box flag `ogap` off, or a live box); `ogap_no_0dte` is gone (the chain's expiry, today's or else the nearest listed).**
+
 **`PLAN_SPEC.md` v5.11 · 2026-11-22 · r147 (QTIME.1, record only) — §46: every plan_tick row records when its tick started and read its quotes, and the store time of the quote it priced (four trailing columns); every signal_journal row carries the same tick times and its contract's quote time.**
 
 **`PLAN_SPEC.md` v5.10 · 2026-11-22 · r146 (BLND.1, partial) — §45: after a blind episode a plan reacquires its trigger on current data: nothing is asked, and nothing opens, on the tick that first sees again; from the next tick, on current 1m bars, the plans are asked as always.**
@@ -1415,8 +1417,9 @@ hunt_after_breakout.jsonl is no longer written: 43.2.)
 a bar labelled m is read once the clock is at m+1) and the prior RTH close, and the pure `ogap_read()` returns the range,
 the gap, the allowed sides, the breaks, the retests, the signal and the shadows. Every check row is named `ogap_*`
 (`ogap_range_w`, `ogap_gap`, `ogap_allowed`, `ogap_break_c/p`, `ogap_signal_c/p`, `ogap_gateg_shadow`) and every
-terminal is one of: DORMANT `ogap_not_this_symbol` (every box but `OGAP_SYMBOLS`) / `ogap_entry_window`; DECLINE
-`ogap_no_range`, `ogap_stale`, `ogap_no_0dte`, `ogap_contract`, `ogap_ask_floor`, `ogap_ask_band`; HOLD
+terminal is one of: DORMANT `ogap_entry_window` (r149: no symbol terminal; a box where plan_state reads OGAP DORMANT -
+the box flag `ogap` off, or a live box - never asks it); DECLINE
+`ogap_no_range`, `ogap_stale`, `ogap_contract`, `ogap_ask_floor`, `ogap_ask_band`; HOLD
 `ogap_no_signal: <no break | break, no retest | gate-refused only>`; NO PLAN `ogap_bars` / `chain` / `spot`; TAKE.
 Invalidation: none on the underlying (its exits are premium-only, TRADES section 10). Window 09:46-10:32 ET. The full
 rule and its provenance: `docs/OGAP_SPEC.md`.

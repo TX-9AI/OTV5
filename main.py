@@ -1,5 +1,6 @@
 """
-main.py  v5.36
+main.py  v5.37
+v5.37  2026-11-22  OTV5 r149 (OGAP.4) — OGAP ON EVERY BOX, ON PAPER; DORMANT ON A LIVE BOX. The Service line's ogap= token is read from strategy/plan_state (no symbol list): "ogap=on" when OGAP is ACTIVE, "ogap=dormant (live box: paper only)" on a live box, "ogap=off (box flag)" when the box flag says off. _attempt_ogap is unchanged (a DORMANT OGAP is never asked: _safe_strategy returns before it). The operator, 2026-11-22: "I honestly want it paper Trading on all of them"; "No trade set up should block or impede any of its cousins."
 v5.36  2026-11-22  OTV5 r148 (BOXF.1) — ONE [flags] LINE AT EVERY START: _announce_box_flags() (beside _announce_plan_states, both start paths) loads this box's deploy/box_flags/<SYM> once through utils/box_flags.effective() and logs "[flags] <SYM> source=<file|none (defaults)> sha256=<12> commit=<10> · <key=value ...|schema v1: no keys> · differs: <...|none>", plus " · REFUSED: ..." when a line was refused, which is also paged once (code MSG). The schema is empty at r148, so the line reads "source=none (defaults) ... schema v1: no keys" on every box and no decision changes. The operator, 2026-11-22: "each box should maintain a 'flag' file ... saved settings, not user interactive".
 v5.35  2026-11-22  OTV5 r147 (QTIME.1; record only) — THE TICK SAYS WHEN IT READ ITS QUOTES. main_loop calls utils/tick_reads.begin(tick_start) at the top of every tick and tick_reads.chain_read(_gex_chain) right after the one pre-analysis chain fetch, so plan_tick (strategy/plan v5.5) and every signal_journal row (analysis/signal_journal v5.3) carry tick_start_epoch, marks_read_epoch and marks_store_epoch. Both calls are wrapped; nothing reads them to decide; no broker call, no config key, no env read.
 v5.34  2026-11-22  OTV5 r146 (BLND.1, partial; the before-cash audit 2026-11-22 F3) — AFTER A BLIND EPISODE, NO OPENING ORDER ON THE TICK THAT FIRST SEES AGAIN; ENTRIES ARE ELIGIBLE FROM THE NEXT TICK, ON CURRENT 1m BARS. The operator, 2026-09-30: "The plan should have to reacquire a valid trigger after sight restored"; approved 2026-11-22: "Yes, we need that."; the timing, 2026-11-22: "Does it really need a full minute if the plans refresh every 15 second tick? I think 1 full tick after a restore should be eligible for a fire if the entry still qualifies." Entries were held only WHILE blind (_blind_tick ends the tick), so the first tick with sight could open on a frame it never watched (2026-09-29: feed dead 09:30:10-09:37:52, an entry 09:38:04 on the 09:30 bar's trigger). _blind_tick records every blind tick (utils/blind_reacquire.note_blind), _blind_clear (now= for tests) arms the hold with the sighted tick's number (note_sight); attempt_new_entry (RTH, after the session gate) asks NOTHING on the sighted tick, nor on a later tick whose ctx["df_1m"] does not yet hold the last completed minute as its newest closed bar: one "[entry-gate] ... entries HELD - reacquiring after the blind episode ..." line per tick and one plan_check row per plan at gate blind_reacquire; then the plans are asked as always and fire only if they still qualify. _execute_condor_leg refuses while an episode stands, after entries_open (entry_engine.enter is the debit half). Exits untouched; paper and live alike; zero broker calls (memory; this tick's frame); no config key. With no blind episode nothing changes. Partial: no plan's own latch is reset. Gate tests/check_blind_reacquire.py.
@@ -4801,7 +4802,8 @@ def _attempt_park(ctx, ms, state, chain=None) -> None:
 
 
 def _attempt_ogap(ctx, ms, state, chain=None) -> None:
-    """OGAP.1 — ask OGAP (its plan is dormant outside 09:46-10:32 and on every box but OGAP_SYMBOLS) and, on a fire,
+    """OGAP.1 — ask OGAP (its plan is dormant outside 09:46-10:32; r149: on every box unless plan_state says DORMANT, the
+    box flag `ogap` off or a live box) and, on a fire,
     execute it ADDITIVE. Called from the normal dispatch only (r137 CAP.10: OGAP is under the daily catastrophic cap
     both ways; the capped branch asks nothing). One per session on this box, DB-backed (fails closed)."""
     if _one_per_session_used("OGAP"):
@@ -5035,8 +5037,14 @@ def _banner_dials() -> str:
     if BRK_DFLOOR_ENV_REFUSED:
         brk += f" (OT_BRK_DFLOOR={BRK_DFLOOR_ENV_REFUSED!r} REFUSED)"
     brk += f" · park={PARK_MODE}"                                          # r288 (PARK.1)
-    from config import OGAP_SYMBOLS as _OGS, INSTRUMENT as _OG_INS          # OGAP.1
-    brk += " · ogap=" + ("on" if str(_OG_INS or "").upper() in tuple(x.upper() for x in _OGS) else "not this symbol")
+    try:                                                                   # r149 (OGAP.4): plan_state decides
+        from strategy import plan_state as _ps_og
+        if _ps_og.state("OGAP") == _ps_og.ACTIVE:
+            brk += " · ogap=on"
+        else:
+            brk += " · ogap=" + ("dormant (live box: paper only)" if not PAPER_TRADING else "off (box flag)")
+    except Exception:                                                      # noqa: BLE001
+        brk += " · ogap=?"
     if PARK_ENV_REFUSED:
         brk += f" (OT_PARK={PARK_ENV_REFUSED!r} REFUSED)"
     # r293 (DIAL.2) — the three dials whose refusal was recorded by config and read by NOTHING: a typo on

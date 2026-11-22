@@ -1,5 +1,14 @@
 """
-strategy/plan_state.py  v5.9
+strategy/plan_state.py  v5.10
+v5.10  2026-11-22  OTV5 r149 (OGAP.4) — OGAP'S STATE COMES FROM ITS BOX FLAG, AND OGAP SITS OUT ON A LIVE BOX. The operator,
+      2026-11-22: "I honestly want it paper Trading on all of them" and, on interaction, "No trade set up should block or
+      impede any of its cousins. Each one fires and manages on its own merits." Its TABLE row's default is FLAG: the
+      default lives in utils/box_flags.SCHEMA (`ogap`, default on) and nowhere here, so there is no second copy;
+      state("OGAP") is ACTIVE when the box's effective `ogap` is on and DORMANT when off. ON A LIVE BOX
+      (config.PAPER_TRADING False; 2026-12-04 is QQQ live for one session) it is DORMANT whatever the flag says: never
+      asked, writes nothing, and the [plans] line names why (the before-cash audit 2026-11-22 F2). That rule is
+      replaced later by the flag value paper_only (delivery P, after 2026-12-04). Fails CLOSED: an error reading the
+      flag or the paper/live mode reads DORMANT for a flagged plan (never ACTIVE by accident). Every other row unchanged.
 v5.9  2026-11-14  OTV5 (OGAP.1) — the OGAP row: ACTIVE, an hour plan, no switch key (no study toggle; OGAP_SYMBOLS keeps it to QQQ).
 v5.8  2026-11-14  OTV5 r110 (WS.3 TRIM) — BREAKOUT IS DORMANT, WITH NO SWITCH: its row is ("", DORMANT, HOUR), like the condor's, so it is never asked, writes nothing, and no env value turns it back on (OT_BREAKOUT is no longer read). Its code stays for a revisit. The operator, 2026-11-14: "Concur" (WS.3: the fitted gates failed blind; window EV -$11.73/trade [-59.33, +41.68], n=120).
 v5.7  2026-11-09  OTV5 r103 (RETIRE.5 step 2) — the GEXPinButterfly row, its OT_GEX_BUTTERFLY read and the _FLAG table (the fly was its last entry) with its config-flag branch go with the GEX pin butterfly. The live rows read exactly as before. The operator, 2026-11-08: "I concur on both, in that order".
@@ -70,6 +79,7 @@ GATES = {}      # WA §36: this file owns no gate constant
 ACTIVE, LOG, DORMANT = "active", "log", "dormant"
 STATES = (ACTIVE, LOG, DORMANT)
 HOUR, CONDITION = "hour", "condition"
+FLAG = "flag"       # r149 (OGAP.4): a TABLE default that lives in utils/box_flags.SCHEMA, not here
 
 # name -> (switch key shown to the operator, default state, category)
 TABLE: Dict[str, Tuple[str, str, str]] = {
@@ -77,7 +87,7 @@ TABLE: Dict[str, Tuple[str, str, str]] = {
     "Breakout":                 ("",                  DORMANT, HOUR),        # r110 (WS.3 TRIM): off the roster
     "LiquidityHunt":            ("OT_HUNT",           ACTIVE,  HOUR),
     "PARK":                     ("OT_PARK",           ACTIVE,  HOUR),
-    "OGAP":                     ("",                  ACTIVE,  HOUR),    # OGAP.1: no switch (QQQ only, in code)
+    "OGAP":                     ("",                  FLAG,    HOUR),    # r149: box flag `ogap` (default on); live: dormant
     "IronCondorStrategy":       ("",                  DORMANT, CONDITION),   # no entry of its own (r249)
     "CondorManagement":         ("",                  ACTIVE,  CONDITION),
     "CreditRoll":               ("",                  ACTIVE,  CONDITION),
@@ -89,6 +99,37 @@ _ON = ("1", "active", "trade", "on")
 _OFF = ("0", "off", "dormant")
 
 _REFUSED: Dict[str, str] = {}
+_WHY: Dict[str, str] = {}           # r149: why a flagged plan is DORMANT this process (the [plans] line names it)
+
+
+def _flag_key(name: str) -> str:
+    """The box flag key that decides plan `name` ("" when none). Read from utils/box_flags.SCHEMA (the one roster)."""
+    from utils import box_flags as _bf
+    for k, row in _bf.SCHEMA.items():
+        if row.setup == name:
+            return k
+    return ""
+
+
+def _flagged_state(name: str) -> str:
+    """r149 — a FLAG row's state: DORMANT on a live box (OGAP; until delivery P), else the box flag (on -> ACTIVE,
+    anything else -> DORMANT). Fails CLOSED: any error -> DORMANT."""
+    try:
+        import config as _c
+        if name == "OGAP" and getattr(_c, "PAPER_TRADING", None) is not True:
+            _WHY[name] = "live box: OGAP is paper only (the before-cash audit F2; until paper_only)"
+            return DORMANT
+        from utils import box_flags as _bf
+        key = _flag_key(name)
+        v = _bf.value(key) if key else ""
+        if v == _bf.ON:
+            _WHY.pop(name, None)
+            return ACTIVE
+        _WHY[name] = "box flag %s=%s" % (key or "?", v or "unset")
+        return DORMANT
+    except Exception as exc:                                    # noqa: BLE001
+        _WHY[name] = "flag unreadable (%s): fails closed" % type(exc).__name__
+        return DORMANT
 
 
 def _raw(key: str) -> str:
@@ -122,7 +163,15 @@ def category(name: str) -> str:
 
 def default(name: str) -> str:
     n = base(name)
-    return TABLE.get(n, ("", ACTIVE, HOUR))[1]
+    d = TABLE.get(n, ("", ACTIVE, HOUR))[1]
+    if d == FLAG:                                               # r149: the schema's default, never a copy here
+        try:
+            from utils import box_flags as _bf
+            row = _bf.SCHEMA.get(_flag_key(n))
+            return ACTIVE if row is not None and row.default == _bf.ON else DORMANT
+        except Exception:                                       # noqa: BLE001
+            return DORMANT
+    return d
 
 
 def switch(name: str) -> str:
@@ -137,6 +186,8 @@ def state(name: str) -> str:
         if n.endswith("/manage") or n not in TABLE:
             return ACTIVE
         key, dflt, _cat = TABLE[n]
+        if dflt == FLAG:                                        # r149 (OGAP.4): the box flag decides
+            return _flagged_state(n)
         if not key:
             return dflt
         if n == "PARK":
@@ -152,6 +203,8 @@ def state(name: str) -> str:
         _note(n, key, raw)
         return dflt
     except Exception:                                           # noqa: BLE001
+        if TABLE.get(n, ("", ACTIVE, HOUR))[1] == FLAG:
+            return DORMANT                                      # r149: a flagged plan fails closed
         return default(n)
 
 
@@ -185,6 +238,9 @@ def summary(names=None) -> str:
     bad = refused()
     if bad:
         out += " · REFUSED: " + ", ".join(bad.values())
+    why = {n: w for n, w in _WHY.items() if n in rows and state(n) == DORMANT}
+    if why:                                                     # r149: why a flagged plan is dormant
+        out += " · " + ", ".join("%s dormant: %s" % (n, w) for n, w in sorted(why.items()))
     return out
 
 

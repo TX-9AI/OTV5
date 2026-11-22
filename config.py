@@ -1,5 +1,6 @@
 """
-config.py  v5.30
+config.py  v5.31
+v5.31  2026-11-22  OTV5 r149 (OGAP.4) — OGAP_SYMBOLS GOES: OGAP is asked on every box (the operator, 2026-11-22: "I honestly want it paper Trading on all of them"). Whether it runs is the box flag `ogap` (utils/box_flags.SCHEMA, default on) and the paper/live rule in strategy/plan_state (dormant on a live box); no module reads a symbol list for OGAP. Every OGAP number is unchanged.
 v5.30  2026-11-22  OTV5 r145 (HALF.1) — HALF_DAY_ENTRY_LEAD_MIN GOES: on a 13:00 half day nothing opens at all (utils/time_utils.no_entries_today, read by entries_open and risk/session_guard.can_enter), so the 90-minute lead that clipped entries at 11:30 has no reader. The operator, 2026-11-22: "Yes, just treat them as bank holidays. No trading." The RUNAWAY_END comment says so. Every other value unchanged; no new key.
 v5.29  2026-11-21  OTV5 r142 (HUNT.16) — HUNT_AFTER_BRK_MODE and HUNT_AFTER_BRK_ENV_REFUSED go (OT_HUNT_AFTER_BRK is no longer read): their one reader, the Hunt's losing-Breakout guard (HUNT.13), is removed, because Breakout is dormant (r110) and the guard could only hold a Hunt on an unreadable trades.db. Every other value unchanged; no new key.
 v5.28  2026-11-21  OTV5 r141 — COMMENT ONLY: the ramp TOP's per-box note says fourteen boxes (was fifteen; the Saturday brief 2026-11-21 section 4 item 13) and that the key sizes Breakout only, dormant since r110 (RAMP.1). Every value unchanged; no new key.
@@ -1072,8 +1073,9 @@ CAP_EXCLUDED_STRATEGIES = ()   # r137 (CAP.10): was ("PARK", "OGAP") (r288 PARK;
 # r136 OGAP.3: the MARK, was the ask - the operator, 2026-11-20: "never pay the spread"). Exits on the MARK vs the booked
 # fill (entry_premium; exit_engine._evaluate_ogap; r136, was the bid vs the entry ask):
 # peak >= 2.0x -> floor 0.60 x peak (ratchets); peak >= 1.6x -> floor 1.2x; mark <= floor sells; the first tick at/after
-# 14:00 with peak never 1.6x and mark < 0.75x sells; 15:45 sells. QQQ only (ogap_equities_20261113: equities FAILED sealed).
-OGAP_SYMBOLS = ("QQQ",)
+# 14:00 with peak never 1.6x and mark < 0.75x sells; 15:45 sells. r149 (OGAP.4): on every box on paper (OGAP_SYMBOLS is gone;
+# the operator, 2026-11-22: "I honestly want it paper Trading on all of them"; ogap_equities_20261113 had FAILED the
+# equities sealed, which the operator knows); dormant on a live box (strategy/plan_state) until delivery P's paper_only.
 OGAP_RANGE_ET = ((9, 30), (9, 44))
 OGAP_RANGE_MIN_BARS = 10
 OGAP_BREAK_ET = ((9, 45), (10, 30))

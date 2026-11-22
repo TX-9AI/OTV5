@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_ogap.py  v5.5
+tests/check_ogap.py  v5.6
+v5.6  2026-11-22  OTV5 r149 (OGAP.4) — OGAP ON EVERY BOX (the operator, 2026-11-22: "I honestly want it paper Trading on all of them"). O7: the same fixture on a META box now gives the same OGAP put (the plan reads no symbol list); every other O7 case unchanged. O9: the OGAP_SYMBOLS pin is replaced by "no module reads a symbol list for OGAP" (config has no OGAP_SYMBOLS; no .py outside the docs names it in code) and the plan state is ACTIVE on this paper box. O7 also: a chain on 2026-11-06 (no same-day expiry) now gives the same put on that expiry (the operator, 2026-11-22: "We just buy the nearest available expiry."; ogap_no_0dte is gone). Every other check, the replay R1-R5 and its fixture unchanged. The every-box, live-box and independence checks are tests/check_ogap_all_boxes.py.
 v5.5  2026-11-21  OTV5 r137 (CAP.10) — OGAP IS UNDER THE CAP (the operator, 2026-11-21: "both trades should fall under the catastrophic cap"). O9: OGAP is NOT in CAP_EXCLUDED_STRATEGIES and its admission rule is NOT cap-exempt (every other isolation term unchanged). O11: the capped branch asks NOTHING (no _attempt_ogap, no _attempt_park; it returns); the normal path still asks OGAP with the chain. The cap's refusal and P&L for OGAP are driven in tests/check_cap_all.py.
 v5.4  2026-11-21  OTV5 r136 (OGAP.3) — OGAP READS THE MARK (the operator, 2026-11-20: "never pay the spread"). O7: the
       signal books entry_premium = the mark 4.24 (4.23 / 4.26), notes carry mark=, no ogap_ask; the band case moves to
@@ -27,7 +28,7 @@ v5.0  2026-11-14  OTV5 (OGAP.1) — THE OGAP GATE. The operator, 2026-11-14: "le
               size_for("long_debit", premium=ask, budget_usd=500) agrees; every caller without budget_usd is unchanged.
       O7      the plan end to end on a feed-less fixture: QQQ 11-05 at the fill minute -> a TAKE signal (put, the strike
               nearest the fill-minute open, notes carry ask=, ogap_ask set); one minute later -> ogap_stale, no signal;
-              a META box -> ogap_not_this_symbol, no signal; ask 0.49 -> ogap_ask_floor; ask 5.01 -> ogap_ask_band.
+              (r149) a META box -> the same signal; ask 0.49 -> ogap_ask_floor; ask 5.01 -> ogap_ask_band.
       O7b     a one-sided quote at the fill minute (bid 0.00 / ask 4.26; bid 4.23 / ask 0.00) -> no signal.
       O8      the exit walk (execution/exit_engine.ogap_exit_step) and _evaluate_ogap on a record: the lock, the trail,
               the 14:00 sweep once, the 15:45 bell; a restart seeds the peak from max_premium_seen (1.7x -> the 1.2x
@@ -193,12 +194,16 @@ def main():
     s_band = prep_at(fill, bid=5.01, ask=5.03)                 # r136: mark 5.02 buys 0 on $500
     s_0dte = prep_at(fill, expiry="2026-11-06")
     check("O7 the plan: QQQ 11-05 at the fill minute -> OGAP put, strike %s, entry_premium = the mark 4.24, notes "
-          "mark=, no ogap_ask; +1 min -> stale; META -> none; mark 0.48 / 5.02 / not-0DTE -> none" % fx[d]["expect"]["strike"],
+          "mark=, no ogap_ask; +1 min -> stale; META -> the same put (r149); mark 0.48 / 5.02 -> none; an 11-06 chain -> the same put on 11-06"
+          % fx[d]["expect"]["strike"],
           s_ok is not None and s_ok.strategy_name == "OGAP" and s_ok.option_side == "put"
           and float(s_ok.strike) == float(fx[d]["expect"]["strike"]) and abs(s_ok.entry_premium - 4.24) < 1e-9
           and getattr(s_ok, "ogap_ask", None) is None
           and "mark=4.24" in s_ok.notes and s_ok.ogap_contracts == 1
-          and s_stale is None and s_meta is None and s_floor is None and s_band is None and s_0dte is None,
+          and s_stale is None and s_meta is not None and s_meta.option_side == s_ok.option_side
+          and float(s_meta.strike) == float(s_ok.strike) and s_meta.entry_premium == s_ok.entry_premium
+          and s_floor is None and s_band is None and s_0dte is not None and s_0dte.expiry == "2026-11-06"
+          and float(s_0dte.strike) == float(s_ok.strike),
           f"ok={s_ok and (s_ok.option_side, s_ok.strike, s_ok.notes)} stale={s_stale} meta={s_meta} "
           f"floor={s_floor} band={s_band} 0dte={s_0dte}")
 
@@ -249,14 +254,30 @@ def main():
     from strategy import plan_state as PS
     rl = PM.rules().get("OGAP")
     mn_src = open(os.path.join(ROOT, "main.py")).read()
+    import ast as _ast
+    _named = []                                       # r149: no module reads a symbol list for OGAP
+    for _dp, _dn, _fn in os.walk(ROOT):
+        _dn[:] = [x for x in _dn if x not in (".git", "__pycache__", "docs", "venv")]
+        for _f in _fn:
+            if not _f.endswith(".py") or _f == "check_ogap.py":
+                continue
+            _p = os.path.join(_dp, _f)
+            try:
+                _tree = _ast.parse(open(_p, encoding="utf-8").read())
+            except SyntaxError:
+                continue
+            for _n in _ast.walk(_tree):
+                if (isinstance(_n, _ast.Name) and _n.id == "OGAP_SYMBOLS") or (
+                        isinstance(_n, _ast.Attribute) and _n.attr == "OGAP_SYMBOLS"):
+                    _named.append(os.path.relpath(_p, ROOT))
     check("O9 isolation: decay-exempt, UNDER the cap (r137), pin-exempt, admission one/one not cap-exempt, management does not "
-          "cover it, long_debit, QQQ only, plan ACTIVE",
+          "cover it, long_debit, no symbol list (r149), plan ACTIVE on this paper box",
           "OGAP" in tuple(config.DECAY_STOP_EXEMPT) and "OGAP" not in tuple(config.CAP_EXCLUDED_STRATEGIES)
           and 'PIN_EXEMPT = ("PARK", "OGAP")' in mn_src and '"OGAP":                 "long_debit"' in mn_src
           and rl is not None and rl.max_open_of_type == 1 and rl.max_tries_per_session == 1 and not rl.cap_exempt
-          and MG.covers({"strategy": "OGAP"}) is False and tuple(config.OGAP_SYMBOLS) == ("QQQ",)
+          and MG.covers({"strategy": "OGAP"}) is False and not hasattr(config, "OGAP_SYMBOLS") and not _named
           and PS.state("OGAP") == PS.ACTIVE,
-          f"rule={rl}")
+          f"rule={rl} OGAP_SYMBOLS read by {sorted(set(_named))}")
 
     # ── O10 the real funnel sizes OGAP on the ask with its own budget ──
     import main as MN

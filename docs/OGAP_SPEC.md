@@ -32,8 +32,10 @@ spec.
 ## 1. Instruments
 
 - **Symbols:** QQQ, plus the symbols in §9. Each box trades its own symbol.
-- **Option:** the same-day expiry only (0DTE). A box whose symbol has no same-day expiry that day has no OGAP that
-  day. The plan writes one row saying so (`ogap_no_0dte`). It is not a refusal, and it never borrows a later expiry.
+- **Option (AS BUILT r149, OGAP.4):** the chain's expiry: the same-day expiry when the symbol has one, else the nearest
+  listed expiry (the one data/options_chain fetch_chain already falls back to for every setup). The operator,
+  2026-11-22: "No to sitting out on non-expiry days. We just buy the nearest available expiry." `ogap_no_0dte` is gone. The exits are unchanged, so a later-expiry position
+  still closes at 15:45 the same day. (As designed to r148: the same-day expiry only, else no OGAP that day.)
 - **Side:** long calls or long puts only.
 - **Strike:** the listed strike nearest the underlying at the fill minute (the open of the fill-minute 1m bar). A tie
   goes to the lower strike.
@@ -171,9 +173,11 @@ This was decided by `ogap_equities_20261113`, sealed 22:04 UTC 11-13 and run onc
 | QQQ | T1 | 7 | +$148 [−124, +454] |
 | QQQ | T2 | 32 | +$137 [−87, +421] |
 
-- **OGAP runs on the QQQ box only.** The symbol set is a config constant, `OGAP_SYMBOLS = ("QQQ",)`. Every other box's
-  plan writes one `ogap_not_this_symbol` row a day and does nothing else.
-- **SPX:** stays out under Park's band. The ATM 0DTE ask is far above $5.00, so every row is refused.
+- **AS BUILT r149 (OGAP.4): OGAP runs on EVERY box, on paper.** `OGAP_SYMBOLS` and the `ogap_not_this_symbol` row are
+  gone; the box flag `ogap` (`utils/box_flags.py`, default on) decides, and OGAP is DORMANT on a live box. The operator,
+  2026-11-22: "I honestly want it paper Trading on all of them." (Until r148 it ran on the QQQ box only, as below.)
+- **SPX (as designed, at Park's $500):** stayed out under Park's band, the ATM 0DTE ask far above $5.00. Since r131 the
+  band is the box's own `RISK_PER_TRADE_USD` / 100, so on SPX it now depends on the SPX box's risk per trade.
 - **SPY:** not a fleet symbol.
   - It can't be added on Monday without a 15th TastyTrade session (the ceiling is 15 on one login, leaving no
     headroom) or a second-symbol trading path on the QQQ box (a new build: chain, quotes and positions for a second
