@@ -1,5 +1,6 @@
 """
-query.py  v5.3
+query.py  v5.4
+v5.4  2026-11-22  OTV5 r146 (BLND.1) — the plans panel labels the new gate blind_reacquire REACQUIRING (after a blind episode, nothing is asked on the tick that first sees again, nor until the 1m bars are current). Nothing else changes.
 v5.3  2026-11-14  OTV5 r120 (HYG §5.7, HYG.25) — the plans panel's _CREDIT_ENTRIES keeps IronCondorStrategy only: OpeningRangeCreditSpread, SweepCreditSpread (r76) and TrendCreditSpread (r88) are not in strategy/plan_state.TABLE or plan.REGISTRY, so data/plan_states.json (rewritten at every boot) can never carry them and their three reads were always empty. The panel shows the same lines. The ledger decode map (_STRAT_ABBR) keeps every name: it reads history.
 v5.2  2026-10-25  OTV5 r19 (VIEW.2) — THE PLANS PANEL SHOWS EVERY SWITCHED-ON PLAN, THE SAME ON EVERY BOX, AT ANY HOUR, AND
       HIDES WHAT IS SWITCHED OFF. The operator, 2026-10-25, comparing SOFI's and NVDA's panels: "Look at the plans. Why
@@ -935,6 +936,7 @@ def show_decisions(dc):
         "retired":           "RETIRED",
         "position_open":     "POSITION OPEN",
         "condor_auth":       "AWAITING AUTH",
+        "blind_reacquire":   "REACQUIRING",       # r146 (BLND.1)
     }
     # ⚠️ THE BOX RUNS UTC AND EVERY TIME ON THIS PAGE IS AN EXCHANGE FACT.
     # `ts_epoch` is absolute, so it is rendered through ET here rather than

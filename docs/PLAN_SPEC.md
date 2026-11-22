@@ -1,5 +1,7 @@
 # PLAN_SPEC.md — every strategy declares its intent BEFORE the trigger
 
+**`PLAN_SPEC.md` v5.10 · 2026-11-22 · r146 (BLND.1, partial) — §45: after a blind episode a plan reacquires its trigger on current data: nothing is asked, and nothing opens, on the tick that first sees again; from the next tick, on current 1m bars, the plans are asked as always.**
+
 **`PLAN_SPEC.md` v5.9 · 2026-11-22 · r144 (EXIT.19) — §30.4 says how its exits are priced live: the handoff, the thesis line and the structure backstop as a stop (the mark, the mark, the bid, MARKET); the fizzle, the trail and theta bleed walk.**
 
 **`PLAN_SPEC.md` v5.8 · 2026-11-21 · r142 (HUNT.16) — §43.2 is REMOVED: the Hunt is no longer held after a losing Breakout (Breakout dormant r110; the rule could only hold on an unreadable trades.db); §43.5 no longer lists hunt_after_breakout.jsonl.**
@@ -1416,3 +1418,45 @@ terminal is one of: DORMANT `ogap_not_this_symbol` (every box but `OGAP_SYMBOLS`
 `ogap_no_signal: <no break | break, no retest | gate-refused only>`; NO PLAN `ogap_bars` / `chain` / `spot`; TAKE.
 Invalidation: none on the underlying (its exits are premium-only, TRADES section 10). Window 09:46-10:32 ET. The full
 rule and its provenance: `docs/OGAP_SPEC.md`.
+
+## 45. OTV5 r146 — AFTER A BLIND EPISODE, A PLAN REACQUIRES ON THE NEXT TICK, ON CURRENT BARS (BLND.1, partial)
+
+The ruling, 2026-09-30: *"On blind, I agree. The plan should have to reacquire a valid trigger after sight restored."*
+The case, 2026-09-29: the feed was dead 09:30:10-09:37:52 and a Breakout entered at 09:38:04, on the first tick that
+saw again, on a trigger that formed on the 09:30 bar while the bot was blind. Approved for build 2026-11-22: "Yes, we
+need that." The timing, the operator 2026-11-22: *Does it really need a full minute if the plans refresh every 15 second tick? I think 1 full tick after a restore should be eligible for a fire if the entry still qualifies."*
+
+**45.1 The episode.** main's FeedBlind episode (r74, BLIND.1): `_blind_tick` runs on every tick that cannot see (no price
+or no 5m bars) and records it; `_blind_clear`, on the first tick that sees again, ends it and records that tick's number.
+
+**45.2 The hold.** `utils/blind_reacquire.hold(now, tick, df_1m)`, asked once a tick by `attempt_new_entry` (RTH):
+held while still blind; held on the tick that first sees again (one full tick with sight first); on a later tick, held
+only while the tick's 1m frame (`ctx["df_1m"]`, the frame the plans read) does not yet hold the LAST COMPLETED MINUTE as
+its newest closed bar; otherwise the episode ends and the plans are asked as always - a fire only if the plan still
+qualifies on current data (its normal evaluation, no new rule). Example: sight on the 09:38:04 tick: held; the 09:38:19
+tick with the 09:37 bar in the frame: eligible. While it holds no plan is asked - Runaway, the Hunt, PARK, OGAP - so none
+fires, spends or releases a trigger; every plan gets one plan_check row at gate `blind_reacquire` (the plans panel:
+REACQUIRING) and the tick one `[entry-gate] ... entries HELD - reacquiring after the blind episode A-B ET (sight S): ...`
+line. Both order choke points (`entry_engine.enter`, `main._execute_condor_leg`) refuse while an episode stands, after
+`entries_open()`. Exits, management and the hard closes never read it. Paper and live alike. Zero broker calls: the
+hold is the module's memory and the frame is the tick's own. No config key, no env read, no log-only mode. A new blind
+episode inside the hold starts over. With no episode `hold()` is '' and nothing changes (the gate's R8 replay digest is
+identical on r145 and r146).
+
+**45.3 Why the current-bars condition (data/candle_feed.py).** Every (re)connect re-subscribes each candle stream from
+`_backfill_start` (1m: today's 09:30 open), so the vendor replays the session's 1m bars, the blind minutes included; the
+feed drains them one event a loop pass and commits every 2 s with the heartbeat; a bar frozen at the feed's death yields
+to the replay's fuller version (FEED.9b). The store is normally current by the next 15 s tick, but sight can return on
+the first flush after the reconnect, before the 1m replay has landed, so the next tick checks the frame it reads.
+
+**45.4 Restart (WORKING_AGREEMENT 37 composes; nothing is duplicated).** The hold is not persisted. A process that
+restarts mid-episode and is still blind opens a new episode on its first RTH tick and is held on sight. A process that
+restarts inside the hold (one tick, normally) loses it; what holds then is WA 37: the ORB engine's reach-back replays the
+session and consumes any trigger that completed while the process was down, which covers every ORB trigger Runaway and
+the Hunt read; OGAP's own stale rule (§44: a signal first seen after its fill minute is `ogap_stale`) and PARK's
+11:01-11:03 window are clock rules.
+
+**45.5 Not built (the ruling's other half).** No plan's own latch is reset: a plan that latched an armed state before or
+during the episode can still fire on the first eligible tick if it still qualifies. The ruling's "nothing built before or
+during a blind episode may fire" - every plan re-forming its trigger after sight - is a separate delivery, open in
+BACKLOG BLND.1. Gate: `tests/check_blind_reacquire.py`.

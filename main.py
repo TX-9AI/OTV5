@@ -1,5 +1,6 @@
 """
-main.py  v5.33
+main.py  v5.34
+v5.34  2026-11-22  OTV5 r146 (BLND.1, partial; the before-cash audit 2026-11-22 F3) — AFTER A BLIND EPISODE, NO OPENING ORDER ON THE TICK THAT FIRST SEES AGAIN; ENTRIES ARE ELIGIBLE FROM THE NEXT TICK, ON CURRENT 1m BARS. The operator, 2026-09-30: "The plan should have to reacquire a valid trigger after sight restored"; approved 2026-11-22: "Yes, we need that."; the timing, 2026-11-22: "Does it really need a full minute if the plans refresh every 15 second tick? I think 1 full tick after a restore should be eligible for a fire if the entry still qualifies." Entries were held only WHILE blind (_blind_tick ends the tick), so the first tick with sight could open on a frame it never watched (2026-09-29: feed dead 09:30:10-09:37:52, an entry 09:38:04 on the 09:30 bar's trigger). _blind_tick records every blind tick (utils/blind_reacquire.note_blind), _blind_clear (now= for tests) arms the hold with the sighted tick's number (note_sight); attempt_new_entry (RTH, after the session gate) asks NOTHING on the sighted tick, nor on a later tick whose ctx["df_1m"] does not yet hold the last completed minute as its newest closed bar: one "[entry-gate] ... entries HELD - reacquiring after the blind episode ..." line per tick and one plan_check row per plan at gate blind_reacquire; then the plans are asked as always and fire only if they still qualify. _execute_condor_leg refuses while an episode stands, after entries_open (entry_engine.enter is the debit half). Exits untouched; paper and live alike; zero broker calls (memory; this tick's frame); no config key. With no blind episode nothing changes. Partial: no plan's own latch is reset. Gate tests/check_blind_reacquire.py.
 v5.33  2026-11-21  OTV5 r142 (HUNT.16) — TEXT ONLY: the Service line loses " · hunt_after_brk=<mode>" and its REFUSED note; config no longer defines OT_HUNT_AFTER_BRK (the Hunt's losing-Breakout guard is removed, Breakout dormant since r110). Nothing else on the line or in the tick changes.
 v5.32  2026-11-21  OTV5 r141 (RAMP.1) — TEXT ONLY: the Service line's ramp_top= and the interactive start line say the ramp TOP (OT_BREAKOUT_BUDGET_USD) sizes Breakout only, which is dormant (r110), and that the live setups size on risk= (OT_RISK_USD). Only risk_manager._size_geometry reads the key, and only a sizes_on_geometry signal (Breakout) reaches it. No value, sizing or decision changes.
 v5.31  2026-11-21  OTV5 r137 (CAP.10) — AT THE DAILY CATASTROPHIC CAP NOTHING IS ASKED: the capped branch no longer calls _attempt_park and _attempt_ogap (they were cap-exempt, PARK from r288, OGAP from OGAP.1); it returns after the admission table has refused every strategy at catastrophic_cap (one plan row each), and still fails closed when the table is unavailable. The cap-hit log line no longer names exemptions. The operator, 2026-11-21: "both trades should fall under the catastrophic cap & any profit locks need to be on mark". The normal dispatch asks PARK and OGAP exactly as before.
@@ -1751,6 +1752,7 @@ from database.trade_logger import get_trade_logger
 from utils.blindness_latch import BlindnessLatch, ALERT as _BLIND_ALERT, \
     RECOVERED as _BLIND_RECOVERED
 from data.market_data import last_blindness, clear_blindness
+from utils import blind_reacquire as _blind_reacq     # r146 (BLND.1): the reacquire hold after a blind episode
 from notifications.alert_manager import get_alert_manager
 
 
@@ -2939,6 +2941,12 @@ def _execute_condor_leg(signal: "OptionsSignal", state: BotState,
                     "entry cutoff — r268)", mode,
                     getattr(signal, "strategy_name", "credit vertical"),
                     *ENTRY_OPEN_ET[:2])
+        return
+    # r146 (BLND.1) — the credit half of the reacquire hold (the debit half is entry_engine.enter): refused while an
+    # episode stands (attempt_new_entry ends it on the tick it releases). '' = no episode.
+    _reacq = _blind_reacq.hold(now_et().timestamp())
+    if _reacq:
+        logger.info("[entry-gate] %s %s HELD - %s", mode, getattr(signal, "strategy_name", "credit vertical"), _reacq)
         return
 
     # Short/long contracts for this leg live on the call- or put-side fields.
@@ -4142,6 +4150,24 @@ def attempt_new_entry(ctx: dict, ms: MarketState, state: BotState):
     if _rehearsing:
         logger.info("[rehearsal] gates PASS (%s) — running the full dispatch; "
                     "the order choke points refuse outside RTH", reason)
+
+    # ── r146 (BLND.1) — AFTER A BLIND EPISODE, ONE FULL TICK WITH SIGHT, ON CURRENT BARS ───────
+    # The operator, 2026-09-30: "The plan should have to reacquire a valid trigger after sight restored"; 2026-11-22:
+    # "I think 1 full tick after a restore should be eligible for a fire if the entry still qualifies." A blind tick
+    # ends before this function (main_loop's FeedBlind handler), so entries were held only WHILE blind and the first
+    # tick with sight could open on a frame it never watched (2026-09-29: an entry on the first sighted tick, on the
+    # 09:30 bar's trigger). On the tick that first sees again - and on any later tick whose 1m frame does not yet hold
+    # the last completed minute as its newest closed bar - NOTHING is asked (Runaway, the Hunt, PARK, OGAP), so no
+    # plan fires or spends a trigger; every plan gets one plan_check row at gate blind_reacquire and the tick one
+    # line. From the next tick on current bars the plans are asked as always and fire only if they still qualify.
+    # Exits ran above and are untouched. Zero broker calls (the hold is utils/blind_reacquire's memory; the frame is
+    # this tick's). With no blind episode hold() is '' and nothing here changes. Partial: no plan latch is reset.
+    if not _rehearsing:
+        _reacq = _blind_reacq.hold(now_et().timestamp(), getattr(state, "tick_count", None), ctx.get("df_1m"))
+        if _reacq:
+            logger.info("[entry-gate] %s entries HELD - %s", "PAPER" if state.paper_trading else "LIVE", _reacq)
+            _plan_skip_all(_reacq, gate=_blind_reacq.GATE)
+            return
 
     # The asymmetry is deliberate and is the other half of the hold above.
     # HOLDING a label on a stale tick is declining to act on unknown information.
@@ -5673,6 +5699,7 @@ def _blind_tick(state, pos_mgr, err: Exception, now: Optional[float] = None) -> 
             _latch = getattr(state, "blind_latch", None)
             state.blind_paged = bool(_latch is not None and _latch.is_alerted)   # the latch already paged this outage
             state.blind_last_line = 0.0
+        _blind_reacq.note_blind(now)          # r146 (BLND.1): the episode's last blind tick, for the reacquire hold
         try:
             pos_mgr.blind_rest_marks = True
         except Exception:                                      # noqa: BLE001
@@ -5712,13 +5739,17 @@ def _blind_tick(state, pos_mgr, err: Exception, now: Optional[float] = None) -> 
     return n_open
 
 
-def _blind_clear(state, pos_mgr) -> None:
-    """r74 (BLIND.1) — the first tick that sees again ends the episode: one line, REST marks off. Never raises."""
+def _blind_clear(state, pos_mgr, now: Optional[float] = None) -> None:
+    """r74 (BLIND.1) — the first tick that sees again ends the episode: one line, REST marks off. Never raises.
+    r146 (BLND.1): and arms the reacquire hold (utils/blind_reacquire): no opening order on this tick; entries are
+    eligible from the next tick once the 1m bars are current."""
     try:
         if state.blind_since is None:
             return
+        now = time.time() if now is None else now
         logger.warning("[blind] sight restored after %.0fs - positions priced from the chain again",
-                       time.time() - state.blind_since)
+                       now - state.blind_since)
+        _blind_reacq.note_sight(now, getattr(state, "tick_count", None))
         state.blind_since = None
         state.blind_paged = False
         pos_mgr.blind_rest_marks = False

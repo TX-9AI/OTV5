@@ -1,5 +1,6 @@
 """
-execution/entry_engine.py  v5.8
+execution/entry_engine.py  v5.9
+v5.9  2026-11-22  OTV5 r146 (BLND.1, partial) — enter() refuses an opening order while utils/blind_reacquire holds (after a blind episode: the tick that first sees again, and until main.attempt_new_entry has had one full tick with sight on current 1m bars), after the entries_open gate, before any broker call: one "[entry-gate] ... HELD - reacquiring ..." line, None returned. With no blind episode the hold is '' and enter() is unchanged. No broker call, no config key. Gate tests/check_blind_reacquire.py.
 v5.8  2026-11-21  OTV5 r136 (OGAP.3) — freeze_contract no longer re-stamps signal.ogap_ask: OGAP carries none (it sizes and exits on the mark, entry_premium, which the freeze already re-reads). The operator, 2026-11-20: "never pay the spread". Nothing else changes.
 v5.7  2026-11-20  OTV5 r135 (GUARD.1; the live-readiness audit 2026-11-20 C3 + I3, live only) — A SUSPECT ENTRY ORDER IS
       BOOKED AS ITS OWN STRATEGY'S TRADE. enter()'s record-building tail moves, unchanged, into _book_fill (the one place a
@@ -313,6 +314,15 @@ class EntryEngine:
                 "[entry-gate] %s %s HELD — entries open at %02d:%02d ET "
                 "(opening range not established). The setup was fully formed; "
                 "it re-signals next tick.", mode, signal.strategy_name, _h, _m)
+            return None
+        # r146 (BLND.1) — AFTER A BLIND EPISODE, nothing opens while the episode stands: the tick that first sees again,
+        # and any later tick until main.attempt_new_entry has seen one full tick on current 1m bars and ended it. That
+        # call already holds every setup (nothing is asked); this is the belt at the debit order for any other caller.
+        # '' = no episode: nothing changes. Zero broker calls.
+        from utils import blind_reacquire as _blind_reacq
+        _reacq = _blind_reacq.hold(now_et().timestamp())
+        if _reacq:
+            logger.info("[entry-gate] %s %s HELD - %s", mode, signal.strategy_name, _reacq)
             return None
 
         logger.info(
