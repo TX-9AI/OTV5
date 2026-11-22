@@ -1,5 +1,7 @@
 # TRADES — the specs
 
+**`TRADES.md` v5.27 · 2026-11-21 · r141 (the Saturday brief 2026-11-21 §4 item 12) — section 0's plan-states paragraph: Runaway and the Hunt have switches (`OT_RUNAWAY`, `OT_HUNT`); Breakout's `OT_BREAKOUT` is no longer read (dormant r110).**
+
 **`TRADES.md` v5.26 · 2026-11-21 · OTV5 r139 (EXIT.15 + EXIT.16 + EXIT.17 + EXIT.18; the live exit polling audit 2026-11-21 S1-S4, live only) — section 6, the live close does what the spec says: a stop counts ITS OWN attempts (refused and rejected ones included, a lock exit's walk never; a different exit reason starts again; a restart continues), so it posts at the mark, the mark, then the bid, then MARKET; every close is priced off the feed store's mark re-read just before it posts (the freshest stored mark, its age logged; an unchanged quote is the current quote, since the feed sends a quote only when it changes), and only a quote past the feed's own 120 s staleness rule goes as a close with no mark; a broker refusal is a refusal (the reason paged), not a lost reply; and a cancel refused because the order just filled books in the same pass. The operator, 2026-11-21: "Yes, in that order". The order itself (the mark, 2 s polls, 8 s deadline, cancel-confirm-dead, the stop steps 2 and 3, the 15:55 cross) is unchanged.**
 
 **`TRADES.md` v5.25 · 2026-11-21 · OTV5 r138 (EXIT.11 + EXIT.12 + EXIT.13 + EXIT.14; the live exit polling audit 2026-11-21 M1-M3, live only) — section 6, a live close that has started: an unreadable read of the kept close order posts nothing (the id is kept and re-read next pass) until the end-of-day close, when the broker's own book and positions decide (every working order on the contract cancelled and confirmed dead, the broker-held remainder closed, the 15:55 cross intact); an order FILLED whose fills cannot be read keeps its id and books once when they read; and while a position holds partial-close fills or a kept close order it keeps closing under its last exit reason until flat, even when the trigger flips back, a restart included. The operator, 2026-11-21: "Yes, in that order" / "I don't want partial opens or partial closes to be the norm". The exit order itself (the mark, 2 s polls, 8 s deadline, cancel-confirm-dead, the stop escalation, the 15:55 cross) is unchanged.**
@@ -84,8 +86,8 @@ of its own; with every credit entry removed it has nothing to manage.
 plan_tick / plan_check / plan_ledger / plan_heartbeat row, not on the `[plans]` line). The operator, 2026-10-19: "dormant
 plans should not write to the ledger, unless we are studying them as 'log only' - I would like each plan to have 3 states".
 Each switch takes `active` | `log` | `off` (`1` still = active; for an OFF-by-default trade anything else stays dormant;
-a value nobody recognises keeps the default and is named at start). Runaway, Breakout and the Hunt gained switches
-(`OT_RUNAWAY`, `OT_BREAKOUT`, `OT_HUNT`, unset = active); PARK keeps `OT_PARK` trade/log/off. Unset, every plan is in
+a value nobody recognises keeps the default and is named at start). Runaway and the Hunt gained switches
+(`OT_RUNAWAY`, `OT_HUNT`, unset = active; Breakout's `OT_BREAKOUT` is no longer read, dormant r110); PARK keeps `OT_PARK` trade/log/off. Unset, every plan is in
 the state the table above shows: no decision changed. Each plan is also HOUR-gated (asked only in its window - every
 row above) or CONDITION-gated (the management plans, while their own position is open; CondorManagement and
 CreditRoll, while a credit position is open, and off the `[plans]` line otherwise; the condor, which has no entry). A

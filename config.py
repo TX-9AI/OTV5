@@ -1,5 +1,6 @@
 """
-config.py  v5.27
+config.py  v5.28
+v5.28  2026-11-21  OTV5 r141 — COMMENT ONLY: the ramp TOP's per-box note says fourteen boxes (was fifteen; the Saturday brief 2026-11-21 section 4 item 13) and that the key sizes Breakout only, dormant since r110 (RAMP.1). Every value unchanged; no new key.
 v5.27  2026-11-21  OTV5 r140 (MACRO.2) — VIX_NO_ENTRY_THRESHOLD GOES: it named the VIX crisis entry gate (session_guard.can_enter), which is deleted (the operator, 2026-09-17: "VIX crisis — get rid of it. That is major opportunity."; 2026-11-21: "VIX 'CRISIS' is something that I view as an opportunity not as something we sit out."). Its other reader, macro_data._classify_vix, reads VIX_CRISIS_THRESHOLD (30, the same number), so vix_band is unchanged. Every other value unchanged; no new key.
 v5.26  2026-11-21  OTV5 r137 (CAP.10) — CAP_EXCLUDED_STRATEGIES = () (was ("PARK", "OGAP")): PARK and OGAP fall under the daily catastrophic cap both ways - their realized P&L counts toward it and, once it is hit, their entries are refused like every other strategy's (execution/position_manager v5.40 drops their cap_exempt; main v5.31 asks nothing in the capped branch). The operator, 2026-11-21: "both trades should fall under the catastrophic cap & any profit locks need to be on mark". The mechanism stays (realized_pnl_today's exclude_strategies, the empty tuple); DAILY_LOSS_LIMIT_USD and every other value unchanged; no new key.
 v5.25  2026-11-21  OTV5 r136 (OGAP.3) — COMMENT ONLY: the OGAP block says every price is the MARK (the 0.50 floor OGAP_MIN_ASK, its name kept, the size floor(RISK_PER_TRADE_USD / (mark x 100)), the exits on the mark vs the booked fill); no constant, value or key changes. The operator, 2026-11-20: "never pay the spread".
@@ -1289,7 +1290,8 @@ RISK_PER_TRADE_USD  = float(os.environ.get("OT_RISK_USD", "200"))
 # it."* Consequence: sizing is deterministic and does not depend on what other
 # boxes committed seconds earlier, and the reject-vs-reduce-to-fit question at
 # the broker is never approached (still unverified — see backlog).
-# ⚠️ PER BOX. Fifteen boxes each hold this much, so fleet exposure is 15x.
+# ⚠️ PER BOX. Fourteen boxes each hold this much, so fleet exposure is 14x. RAMP.1 (r141): only Breakout's
+# _size_geometry reads it, and Breakout is DORMANT (r110); every live setup sizes on RISK_PER_TRADE_USD.
 # r125 (HYG.28): THE KEY IS OT_BREAKOUT_BUDGET_USD. Until r124 it was OT_ORB_BUDGET_USD, named after the ORB trade
 # retired at r76; Breakout is the setup that rides this ramp. The old key is still READ as a fallback (new key first),
 # so a unit not yet migrated by tools/strip_retired_env.sh sizes exactly as before; BREAKOUT_BUDGET_FROM_OLD_KEY says

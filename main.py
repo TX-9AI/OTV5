@@ -1,5 +1,6 @@
 """
-main.py  v5.31
+main.py  v5.32
+v5.32  2026-11-21  OTV5 r141 (RAMP.1) — TEXT ONLY: the Service line's ramp_top= and the interactive start line say the ramp TOP (OT_BREAKOUT_BUDGET_USD) sizes Breakout only, which is dormant (r110), and that the live setups size on risk= (OT_RISK_USD). Only risk_manager._size_geometry reads the key, and only a sizes_on_geometry signal (Breakout) reaches it. No value, sizing or decision changes.
 v5.31  2026-11-21  OTV5 r137 (CAP.10) — AT THE DAILY CATASTROPHIC CAP NOTHING IS ASKED: the capped branch no longer calls _attempt_park and _attempt_ogap (they were cap-exempt, PARK from r288, OGAP from OGAP.1); it returns after the admission table has refused every strategy at catastrophic_cap (one plan row each), and still fails closed when the table is unavailable. The cap-hit log line no longer names exemptions. The operator, 2026-11-21: "both trades should fall under the catastrophic cap & any profit locks need to be on mark". The normal dispatch asks PARK and OGAP exactly as before.
 v5.30  2026-11-21  OTV5 r136 (OGAP.3) — OGAP IS SIZED ON THE MARK: _execute_entry_signal asks the sizer, for strategy_name OGAP only, with premium = signal.entry_premium (the plan's mark; the D3 freeze re-reads it) and budget_usd = config.RISK_PER_TRADE_USD (unchanged), i.e. floor(RISK_PER_TRADE_USD / (mark x 100)); the signal's ogap_ask is gone and is never read. The operator, 2026-11-20: "Ours needs the modification to account for how I would trade it, never pay the spread." Every other strategy sizes exactly as before.
 v5.29  2026-11-20  OTV5 r135 (GUARD.1; the live-readiness audit 2026-11-20 C3 + I3, live only) — A SUSPECT ENTRY ORDER IS RESOLVED EVERY TICK AND BOOKED UNDER ITS STRATEGY. NEW _resolve_entry_suspects(state), called on every RTH tick before the intraday reconcile (live only; no broker call unless order_guard holds a suspect): order_guard.resolve_suspects reads each suspect from the broker, then _hand_booked_to_manager hands every record it booked to the position manager (appended, as an entry is) and sends the entry alert. _execute_entry_signal hands them over after enter() too (a booking can happen inside another entry's clear_to_post). _intraday_adopt resolves first and DEFERS (paged once a day) while a bookable suspect not yet given up touches a leg it would adopt, so the fill keeps its plan instead of becoming ADOPTED; after the guard gives up (RESOLVE_GIVEUP_S) adopt proceeds and the guard clears on the ADOPTED row. Paper unchanged. Gate tests/check_entry_suspect_block.py.
@@ -7033,6 +7034,8 @@ def main():
             # RETIRE.1: the sizing ramp's TOP (configure.sh item 7, OT_BREAKOUT_BUDGET_USD since r125).
             f" · ramp_top=${BREAKOUT_BUDGET_USD:.0f}"
             f"{' (DEFAULT — not set for this box)' if BREAKOUT_BUDGET_IS_DEFAULT else ''}"
+            # r141 (RAMP.1): only Breakout's _size_geometry reads it; Breakout is dormant; every live setup sizes on risk=.
+            f" (Breakout only - dormant r110; live setups size on risk=)"
             # r161 — the ramp is MIN (risk per trade) to MAX (ramp_top); Breakout rides it.
             f" · scaling BRK={'on' if SCALE_BREAKOUT else 'OFF'}"
             # r253 (RUNW.2) — the pin gate and Runaway's end in force, READ here rather than
@@ -7179,7 +7182,7 @@ def _interactive_startup() -> SessionConfig:
     print(f"  Risk/trade:    ${risk_usd:.0f}")
     print(f"  Mode:          {'PAPER' if paper else '⚠️  LIVE'}")
     print(f"  Loss cap:      ${DAILY_LOSS_LIMIT_USD:.0f} realized → no new entries until back under")
-    print(f"  Ramp top:      ${BREAKOUT_BUDGET_USD:.0f} per setup"
+    print(f"  Ramp top:      ${BREAKOUT_BUDGET_USD:.0f} (Breakout only - dormant r110; live setups size on Risk/trade)"
           f"{'  (DEFAULT — not set for this box)' if BREAKOUT_BUDGET_IS_DEFAULT else ''}")
     print(f"{'─'*50}")
 

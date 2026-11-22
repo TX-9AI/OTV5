@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 # ==========================================================================
-# configure.sh  v5.9
+# configure.sh  v5.10
+# v5.10 2026-11-21  OTV5 r141 (RAMP.1) — TEXT ONLY: item 7 and its screen say the ramp TOP (OT_BREAKOUT_BUDGET_USD) sizes
+#       Breakout only, which is dormant (r110); Runaway, the Hunt, PARK and OGAP size on item 2 (OT_RISK_USD). The key, the
+#       item number, the handler and what it writes are unchanged.
 # v5.9  2026-11-15  OTV5 r125 (HYG.28) — ITEM 7 WRITES OT_BREAKOUT_BUDGET_USD (the ramp TOP; was OT_ORB_BUDGET_USD, named after the
 #       ORB trade retired at r76) and drops the old bare line; it displays the new key, else the old one (config.py's
 #       own precedence). The item number, its label and every other item are unchanged.
@@ -698,6 +701,8 @@ change_orb_budget() {
     echo ""
     echo -e "  ${BOLD}Scaling ramp TOP (MAX)${RESET}  (OT_BREAKOUT_BUDGET_USD)"
     echo -e "  The most premium one scaled trade may deploy."
+    echo -e "  ${BOLD}Breakout only - dormant (r110).${RESET} No live setup reads it: Runaway, the Hunt, PARK and OGAP"
+    echo -e "  size on item 2 (Risk/trade, OT_RISK_USD)."
     echo ""
     echo -e "  Current: ${BOLD}$(fmt_declared "$current")${RESET}"
     echo ""
@@ -939,7 +944,7 @@ while true; do
     echo -e "  ${BOLD}4.${RESET}  Telegram alerts     (chat: $(get_env TELEGRAM_CHAT_ID))"
     echo -e "  ${BOLD}5.${RESET}  TastyTrade credentials"
     echo -e "  ${BOLD}6.${RESET}  Catastrophic cap    (currently: \$$(dll=$(get_env OT_DAILY_LOSS_LIMIT); echo ${dll:-$(get_env OT_RISK_USD)}))"
-    echo -e "  ${BOLD}7.${RESET}  Ramp TOP (MAX)      (currently: $(fmt_declared "$(get_ramp_top)"))"
+    echo -e "  ${BOLD}7.${RESET}  Ramp TOP (MAX)      (currently: $(fmt_declared "$(get_ramp_top)"); Breakout only - dormant r110)"
     echo -e "  ${BOLD}8.${RESET}  Data capture        (currently: $(data_capture_label))"
     echo -e "  ${BOLD}9.${RESET}  Done"
     echo ""

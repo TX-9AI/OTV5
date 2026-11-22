@@ -1,5 +1,6 @@
 #!/bin/bash
-# bootstrap.example.sh  v5.6
+# bootstrap.example.sh  v5.7
+# v5.7 — 2026-11-21 — OTV5 r141 (RAMP.1). The ramp TOP line says it sizes Breakout only (dormant r110); every live setup sizes on OT_RISK_USD.
 # v5.6 — 2026-11-15 — OTV5 r125 (HYG.28). The ramp TOP line names OT_BREAKOUT_BUDGET_USD (was OT_ORB_BUDGET_USD; setup_ec2.sh still honours the old key).
 # v5.5 — 2026-11-08 — OTV5 r76 (RETIRE.1). OT_SCALE_ORB and OT_SCALE_VOLT are gone: the ORB and VOLT trades are removed
 #         and config.py reads neither key.
@@ -90,7 +91,7 @@ fi
 # Installs are ALWAYS paper. Switch to live later, deliberately, via configure.sh.
 export OT_INSTRUMENT="QQQ"              # configure.sh item 1  Instrument
 export OT_RISK_USD="200"               # configure.sh item 2  Risk per trade / ramp MIN
-# export OT_BREAKOUT_BUDGET_USD="200" # configure.sh item 7  Ramp TOP (MAX) (defaults to OT_RISK_USD)
+# export OT_BREAKOUT_BUDGET_USD="200" # configure.sh item 7  Ramp TOP (MAX) (defaults to OT_RISK_USD; Breakout only - dormant r110, live setups size on OT_RISK_USD)
 # export OT_DAILY_LOSS_LIMIT="200"    # configure.sh item 6  Daily catastrophic loss cap (defaults to OT_RISK_USD)
 
 # ── Box ───────────────────────────────────────────────────────────────────────

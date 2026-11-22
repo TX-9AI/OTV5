@@ -1,4 +1,5 @@
-# docs/ROADMAP.md — v5.1 — options_trader v4
+# docs/ROADMAP.md — v5.2 — options_trader v4
+# v5.2  2026-11-21  OTV5 r141 — S.4 says 14 boxes (the Saturday brief 2026-11-21 section 4 item 13; the instance map and that night's box read hold 14).
 # v5.1  2026-11-08  OTV5 r81 (DOC.36) — the banner cites docs/GENESIS.md, this tree's ledger (there is no GENESIS-TEST.md). The Saturday brief 2026-11-07 section 4 item 6.
 # v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 
@@ -140,7 +141,7 @@ placement. ⬜
 existing root sprawl on control migrates. ⬜
 **S.3 Bot independence is a FEATURE.** No box may require control to be
 reachable in order to trade. ⬜
-**S.4 Fleet: 15 boxes. Collection and trading are the SAME SET.** Updated
+**S.4 Fleet: 14 boxes (15 until 2026-10-25). Collection and trading are the SAME SET.** Updated
 2026-08-25 — this row previously read "15 traders, 29 collectors / collection is
 fleet-wide", which has been false since the 2026-08-20 pare: **the other 14
 instances were TERMINATED, not stopped.**

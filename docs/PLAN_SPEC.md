@@ -1,5 +1,7 @@
 # PLAN_SPEC.md — every strategy declares its intent BEFORE the trigger
 
+**`PLAN_SPEC.md` v5.7 · 2026-11-21 · r141 (the Saturday brief 2026-11-21 §4 item 12) — §4's ORB-engine line says the Hunt reads it (Runaway and the Hunt; Breakout is dormant), and §43 carries a DORMANT r110 line: §43.1 (Breakout's re-fire) and §43.2 (no Hunt after a losing Breakout) describe kept code that no live trade reaches.**
+
 **`PLAN_SPEC.md` v5.6 · 2026-11-14 · OTV5 (OGAP.1) — §44 OGAP, the plan contract of Park's friend's ORB-GAP on QQQ paper.**
 
 **`PLAN_SPEC.md` v5.5 · 2026-11-14 · OTV5 r109 (the Saturday brief 2026-11-14 §4, item 4) — §4's sub-sections carry their state: §4.1, §4.3, §4.4 and §4.6 a REMOVED line (r76 / r88 / r103), §4.5 and §4.7 ENTRY DORMANT (r249). A reader who starts at §4 no longer finds five trades that do not exist. Docs only.**
@@ -162,7 +164,7 @@ Each carries: **trigger** (fixed price), **invalidation** (fixed price),
 
 ### 4.1 ORB — `ORBStrategy` — 🔴 **LEAVE IT ALONE**
 
-**REMOVED, OTV5 r76 (RETIRE.1), 2026-11-08** — the ORB trade and its plan are deleted from the code (the ORB *engine* stays: Runaway and Breakout read it); this sub-section is history.
+**REMOVED, OTV5 r76 (RETIRE.1), 2026-11-08** — the ORB trade and its plan are deleted from the code (the ORB *engine* stays: Runaway and the Hunt read it; Breakout, which also did, is DORMANT since r110); this sub-section is history.
 Operator, 2026-08-25: *"leave orb alone. That one can't get encumbered with
 extra hurdles & it already pretty much plans."*
 **NO CHANGES. ORB IS THE MODEL, NOT A CANDIDATE.** It already declares a range
@@ -1362,6 +1364,8 @@ conditional gated"; 08:45 ET: "That looks right to me".
 ---
 
 ## 43. OTV4TEST r316 — THE RE-FIRE IS A RETURN TO THE RANGE; A LOSING BREAKOUT CLOSES ITS SIDE TO THE HUNT (operator 2026-10-24)
+
+**DORMANT r110 (2026-11-16, v5.7).** Breakout is DORMANT with no switch (`strategy/plan_state.py`), so §43.1 never fires and §43.2's condition (a losing Breakout closed today) cannot occur; both stay as kept code for a revisit (TRIM.1). §43.3 and §43.4 are unchanged.
 
 **The rulings, verbatim.** 13:45 ET: *"The new session high/low rule needs to be dropped. You established that the move
 was mostly done if we waited for a new extreme. The 20 second rule also was proven unnecessary after today's reentry
