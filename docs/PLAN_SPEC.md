@@ -1,5 +1,7 @@
 # PLAN_SPEC.md — every strategy declares its intent BEFORE the trigger
 
+**`PLAN_SPEC.md` v5.13 · 2026-11-22 · r150 (OGAP.5) — OGAP's section: a live box no longer reads OGAP DORMANT; it is asked as on paper and books on the walled paper book (execution/paper_wall); at a tripped cash cap a live box still asks it (one plan row of its own verdict, never `catastrophic_cap`). The operator, 2026-11-22: "I want it paper trading even on the cash boxes. It's under evaluation. Why the fuck would I want to stop evaluating it?"**
+
 **`PLAN_SPEC.md` v5.12 · 2026-11-22 · r149 (OGAP.4) — OGAP's section: the DORMANT `ogap_not_this_symbol` terminal is gone; OGAP runs on every box on paper and is not asked when plan_state reads it DORMANT (the box flag `ogap` off, or a live box); `ogap_no_0dte` is gone (the chain's expiry, today's or else the nearest listed).**
 
 **`PLAN_SPEC.md` v5.11 · 2026-11-22 · r147 (QTIME.1, record only) — §46: every plan_tick row records when its tick started and read its quotes, and the store time of the quote it priced (four trailing columns); every signal_journal row carries the same tick times and its contract's quote time.**
@@ -1418,7 +1420,8 @@ a bar labelled m is read once the clock is at m+1) and the prior RTH close, and 
 the gap, the allowed sides, the breaks, the retests, the signal and the shadows. Every check row is named `ogap_*`
 (`ogap_range_w`, `ogap_gap`, `ogap_allowed`, `ogap_break_c/p`, `ogap_signal_c/p`, `ogap_gateg_shadow`) and every
 terminal is one of: DORMANT `ogap_entry_window` (r149: no symbol terminal; a box where plan_state reads OGAP DORMANT -
-the box flag `ogap` off, or a live box - never asks it); DECLINE
+the box flag `ogap` off - never asks it; r150: a live box asks it like a paper box and books it paper, and at a tripped
+cash cap still asks it, `main._ask_walled_past_cap`); DECLINE
 `ogap_no_range`, `ogap_stale`, `ogap_contract`, `ogap_ask_floor`, `ogap_ask_band`; HOLD
 `ogap_no_signal: <no break | break, no retest | gate-refused only>`; NO PLAN `ogap_bars` / `chain` / `spot`; TAKE.
 Invalidation: none on the underlying (its exits are premium-only, TRADES section 10). Window 09:46-10:32 ET. The full

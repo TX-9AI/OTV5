@@ -1,5 +1,7 @@
 # TRADES — the specs
 
+**`TRADES.md` v5.34 · 2026-11-22 · r150 (OGAP.5) — section 0, the day and section 10: on a LIVE box OGAP keeps paper-trading, walled off from the cash account (`execution/paper_wall.py`: the mark, `paper_trade = 1`, zero broker calls; out of reconcile, buying power, the order guard, the live walk, the startup cancel and the 15:55 live cross), and the cap on a live box is for live trades only. The operator, 2026-11-22: "I want it paper trading even on the cash boxes. It's under evaluation. Why the fuck would I want to stop evaluating it?" and "The cap on a live box is for live trades only. Full stop."**
+
 **`TRADES.md` v5.33 · 2026-11-22 · r149 (OGAP.4, M1 of the box flags) — section 0 and section 10: OGAP runs on EVERY box, on paper (the box flag `ogap`, default on; `config.OGAP_SYMBOLS` is gone), buys the nearest expiry when none is same-day,
 and sits out on a LIVE box; it blocks none of its cousins.**
 
@@ -86,7 +88,7 @@ is its `docs/PLAN_SPEC.md` section.
 | Runaway | `RunawayContinuation` | ON | none (its end is fixed; r68) | 09:35-10:30 | PLAN_SPEC §30 |
 | Liquidity hunt | `LiquidityHunt` | ON | none | 09:35-10:30 | PLAN_SPEC §37 |
 | PARK | `PARK` | ON | none (`OT_PARK=log` records it, `off` stops it) | 11:01-11:03 | section 9 below |
-| OGAP | `OGAP` | ON | box flag `ogap` (default on, every box on paper; dormant on a live box; r149) | 09:46-10:32 | section 10 below |
+| OGAP | `OGAP` | ON | box flag `ogap` (default on, every box on paper; r150: on a live box too, walled paper) | 09:46-10:32 | section 10 below |
 
 A window's end is exclusive: 10:30 means the last entry is 10:29. A switch is ACTIVE at
 `1` or `active` (r303 below). The ORB trade, VOLT, the sweep credit spread, the ATP butterfly and ORCS are REMOVED (r76,
@@ -153,7 +155,10 @@ paper; a live box only logs); the caution size after the session's first directi
 **The day.** New entries stop while the day's net loss is at or past the daily catastrophic
 loss cap (`OT_DAILY_LOSS_LIMIT`, else the box's `OT_RISK_USD`), and it re-arms if the day recovers (r162).
 Every strategy counts and every strategy is refused, PARK and OGAP included (r137 CAP.10; they sat outside
-the cap from r288 / OGAP.1 to r136).
+the cap from r288 / OGAP.1 to r136). **On a LIVE box the cap is for live trades only (r150, OGAP.5; the operator,
+2026-11-22: "The cap on a live box is for live trades only. Full stop.")**: it counts the cash trades' realized P&L only (OGAP's paper rows,
+`paper_trade = 1`, never count, whatever their size) and refuses cash entries only (at a tripped cash cap the walled
+paper OGAP is still asked and still managed). A paper box is unchanged.
 
 ---
 
@@ -799,14 +804,20 @@ unchanged on every fleet symbol failed the sealed bar on the equities (`~/review
 −$96/row [−160, −22]). **From r149 (OGAP.4) it runs on EVERY box, on paper.** The operator, 2026-11-22: *"If we're
 studying that trade, I don't understand why we're only testing it on one box. I honestly want it paper Trading on all of
 them."* Whether it runs is the box flag `ogap` (`utils/box_flags.py`, default on; no box carries a line) and one rule in
-`strategy/plan_state.py`: **on a LIVE box (`config.PAPER_TRADING` False) OGAP is DORMANT** (never asked, writes nothing;
-the `[plans]` line names why) until delivery P's `paper_only`. Its numbers are Park's, unchanged on every symbol: the
+`strategy/plan_state.py`. **On a LIVE box OGAP keeps PAPER-trading (r150, OGAP.5; it was DORMANT there at r149)**: the
+operator, 2026-11-22: "I want it paper trading even on the cash boxes. It's under evaluation. Why the fuck would I want to stop evaluating it?" Its entry books at the mark through a paper engine, its row says
+`paper_trade = 1`, it is managed on its own walled paper book (`execution/paper_wall.py`) with its own paper exit engine,
+and it closes at its own 15:45 at the mark (the paper EOD rule at the hard close); it makes zero broker calls, and the
+broker reconcile, buying power, the live order guard, the live entry walk, the startup cancel of working orders and the
+15:55 live cross never see it. The cash cap does not count it or stop it (the day, above). No flag value: OGAP is paper
+on every box, cash or paper, until the operator says otherwise. Its numbers are Park's, unchanged on every symbol: the
 size is floor(`RISK_PER_TRADE_USD` / (mark x 100)) on each box's own risk, so a box whose ATM 0DTE mark is above
 `RISK_PER_TRADE_USD` / 100 buys none (`ogap_ask_band`). A box with no same-day expiry buys the nearest listed expiry (the
 chain's own fallback; the operator, 2026-11-22: *"No to sitting out on non-expiry days. We just buy the nearest available expiry."*) and still closes at 15:45. **It blocks none of its cousins** (the operator, 2026-11-22: *"No trade set up should block or impede
 any of its cousins. Each one fires and manages on its own merits."*): it is asked last in the tick, admitted on its own
 row (one open, one try), and an open OGAP position changes nothing Runaway, the Hunt or PARK is asked or sized with
-(`tests/check_ogap_all_boxes.py` A4/A5). Shared by design: the daily catastrophic cap (the whole box's realized P&L).
+(`tests/check_ogap_all_boxes.py` A4/A5; on a live box `tests/check_ogap_paper_on_live.py` P6). Shared by design on a
+paper box: the daily catastrophic cap (the whole box's realized P&L); on a live box the cap is the cash account's.
 
 **Entry, once per session, 09:46-10:32 ET:**
 - the range: the 09:30-09:44 1m bars, at least 10 of them, W = high − low > 0;

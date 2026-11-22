@@ -1,5 +1,18 @@
 """
-main.py  v5.37
+main.py  v5.38
+v5.38  2026-11-22  OTV5 r150 (OGAP.5) — ON A LIVE BOX OGAP KEEPS PAPER-TRADING, WALLED OFF FROM THE CASH ACCOUNT (replaces
+      r149's "dormant on a live box"). The operator, 2026-11-22: "I want it paper trading even on the cash boxes. It's
+      under evaluation. Why the fuck would I want to stop evaluating it?" On a live box (state.paper_trading False) an
+      OGAP signal (execution/paper_wall.walled) goes through _execute_entry_signal to paper_wall.entry_engine() (a paper
+      EntryEngine: the mark, paper_trade = 1, no broker call; no freeze_contract, no suspect hand-off) and its record to
+      paper_wall.book(), never the live PositionManager; main_loop manages that book after the cash work of the tick
+      (_paper_wall_pass) and in the hard-close window after handle_hard_close (_paper_wall_close_pass: the paper EOD rule,
+      never the live cross); main() resumes it after _recover_open_position (paper_wall.recover). THE CAP ON A LIVE BOX IS FOR LIVE
+      TRADES ONLY (the operator, 2026-11-22: "The cap on a live box is for live trades only. Full stop."): OGAP's paper
+      P&L never counts toward it (the cap reads the box's mode rows), and at a tripped cash cap a live box still asks the
+      walled OGAP after every cash refusal (_ask_walled_past_cap, its catastrophic_cap plan row replaced by its own
+      verdict). A paper box keeps r137 CAP.10 (OGAP inside the cap). The Service line says "ogap=on (paper,
+      walled from the cash account)" on a live box. A paper box: nothing here runs (walled() is False), byte-identical.
 v5.37  2026-11-22  OTV5 r149 (OGAP.4) — OGAP ON EVERY BOX, ON PAPER; DORMANT ON A LIVE BOX. The Service line's ogap= token is read from strategy/plan_state (no symbol list): "ogap=on" when OGAP is ACTIVE, "ogap=dormant (live box: paper only)" on a live box, "ogap=off (box flag)" when the box flag says off. _attempt_ogap is unchanged (a DORMANT OGAP is never asked: _safe_strategy returns before it). The operator, 2026-11-22: "I honestly want it paper Trading on all of them"; "No trade set up should block or impede any of its cousins."
 v5.36  2026-11-22  OTV5 r148 (BOXF.1) — ONE [flags] LINE AT EVERY START: _announce_box_flags() (beside _announce_plan_states, both start paths) loads this box's deploy/box_flags/<SYM> once through utils/box_flags.effective() and logs "[flags] <SYM> source=<file|none (defaults)> sha256=<12> commit=<10> · <key=value ...|schema v1: no keys> · differs: <...|none>", plus " · REFUSED: ..." when a line was refused, which is also paged once (code MSG). The schema is empty at r148, so the line reads "source=none (defaults) ... schema v1: no keys" on every box and no decision changes. The operator, 2026-11-22: "each box should maintain a 'flag' file ... saved settings, not user interactive".
 v5.35  2026-11-22  OTV5 r147 (QTIME.1; record only) — THE TICK SAYS WHEN IT READ ITS QUOTES. main_loop calls utils/tick_reads.begin(tick_start) at the top of every tick and tick_reads.chain_read(_gex_chain) right after the one pre-analysis chain fetch, so plan_tick (strategy/plan v5.5) and every signal_journal row (analysis/signal_journal v5.3) carry tick_start_epoch, marks_read_epoch and marks_store_epoch. Both calls are wrapped; nothing reads them to decide; no broker call, no config key, no env read.
@@ -1750,6 +1763,7 @@ from risk.session_guard import get_session_guard
 from execution.entry_engine import get_entry_engine
 from execution.entry_engine import freeze_contract as _freeze_contract   # r133 D3
 from execution.position_manager import get_position_manager
+from execution import paper_wall as _paper_wall                      # r150 (OGAP.5): OGAP's paper book on a live box
 
 from database.trade_logger import get_trade_logger
 from utils.blindness_latch import BlindnessLatch, ALERT as _BLIND_ALERT, \
@@ -4131,6 +4145,9 @@ def attempt_new_entry(ctx: dict, ms: MarketState, state: BotState):
     # catastrophic_cap plan row) returns before any strategy is asked.
     _cap_hit = risk_mgr.is_halted()
     _adm_ok = False
+    # r150 (OGAP.5) — W4: on a LIVE box the cap is for live trades only (the operator, 2026-11-22: "The cap on a live box
+    # is for live trades only. Full stop."): the walled paper OGAP is asked past it below. Paper box: False, as r137.
+    _cap_wall = bool(_cap_hit) and _paper_wall.asked_past_cap(getattr(state, "paper_trading", True))
     if _cap_hit:
         logger.info("Entry blocked: DAILY CATASTROPHIC LOSS CAP reached — no new entries "
                     "until the realized loss is back under the limit (every strategy, "
@@ -4272,6 +4289,8 @@ def attempt_new_entry(ctx: dict, ms: MarketState, state: BotState):
         # episode; anything else declares itself), and parsing a sentence to
         # recover a gate name is how that rule would silently stop working.
         for _nm, (_ok, _gate, _why) in _state.items():
+            if _cap_wall and _gate == "catastrophic_cap" and _paper_wall.walled(_nm, state.paper_trading):
+                continue                             # r150: _ask_walled_past_cap writes this plan's own row
             if not _ok and _nm not in _obs:          # r254: an observed plan writes its own rows
                 _plan_skip(_nm, f"inactive — {_gate}: {_why}", gate=_gate)
     except Exception as exc:                                   # noqa: BLE001
@@ -4305,6 +4324,8 @@ def attempt_new_entry(ctx: dict, ms: MarketState, state: BotState):
             _plan_skip_all("CATASTROPHIC LOSS CAP reached and the admission table is "
                            "unavailable — nothing is asked", gate="catastrophic_cap")
             return
+        if _cap_wall:                                            # r150 (OGAP.5): after every cash refusal
+            _ask_walled_past_cap(ctx, ms, state, _pm_adm, _adm_now, _orb_d, _tries)
         return
 
     # ── Fetch options chain (shared across strategies) ────────────────────────
@@ -4803,7 +4824,7 @@ def _attempt_park(ctx, ms, state, chain=None) -> None:
 
 def _attempt_ogap(ctx, ms, state, chain=None) -> None:
     """OGAP.1 — ask OGAP (its plan is dormant outside 09:46-10:32; r149: on every box unless plan_state says DORMANT, the
-    box flag `ogap` off or a live box) and, on a fire,
+    box flag `ogap` off; r150: on a live box it books on execution/paper_wall, paper) and, on a fire,
     execute it ADDITIVE. Called from the normal dispatch only (r137 CAP.10: OGAP is under the daily catastrophic cap
     both ways; the capped branch asks nothing). One per session on this box, DB-backed (fails closed)."""
     if _one_per_session_used("OGAP"):
@@ -4828,6 +4849,86 @@ def _attempt_ogap(ctx, ms, state, chain=None) -> None:
                          ), ctx)
     if sig is not None:
         _execute_entry_signal(sig, ctx, ms, state, None, additive=True)
+
+
+def _ask_walled_past_cap(ctx, ms, state, pm, now, orb_d, tries) -> None:
+    """r150 (OGAP.5) — W4: at the daily catastrophic cap on a LIVE box, the walled paper setups (OGAP) are still asked:
+    the cash cap counts the cash account and refuses cash entries; a walled entry books paper and makes no broker call
+    (the BOX_FLAGS design, paper_only: excluded from the cap's realized P&L and its refusal). Each walled setup gets
+    the admission table's verdict with the cap intact (window, tries, the hard close) and ONE plan row when refused;
+    admitted, it is asked through _attempt_ogap exactly as in the normal dispatch. Called after every cash refusal is
+    written, so it can never come before a cash decision. Never raises."""
+    for name in _paper_wall.WALLED:
+        try:
+            from utils.time_utils import close_anchored as _ca
+            _st = pm.logging_state((now.hour, now.minute),            # the dispatch's own call, the cap intact
+                                   trading_day=True,
+                                   orb_established=bool(orb_d and orb_d.orb_high and orb_d.orb_low),
+                                   cap_intact=True,
+                                   past_hard_close=now.time() >= _ca(HARD_CLOSE, now),
+                                   tries_used=tries)
+            _ok, _gate, _why = _st.get(name, (False, "unknown_strategy", f"{name} has no admission rule"))
+            if not _ok:
+                _plan_skip(name, f"inactive — {_gate}: {_why}", gate=_gate)
+                continue
+            _set_admission([name])
+            chain = ctx.get("chain") or get_chain_fetcher().fetch_chain()
+            if chain is None:
+                _plan_skip(name, "no options chain this tick", gate="no_chain")
+                continue
+            if name == "OGAP":
+                _attempt_ogap(ctx, ms, state, chain=chain)
+        except Exception as exc:                                # noqa: BLE001
+            logger.warning("[paper-wall] %s past the cash cap skipped (%s: %s)", name, type(exc).__name__, exc)
+
+
+def _paper_wall_pass(ctx, state) -> None:
+    """r150 (OGAP.5) — W3: manage the walled paper book on a LIVE box, once per sighted tick, AFTER the tick's cash
+    management and entries (so it can never delay a cash decision). Paper exits at the mark through the book's own
+    paper ExitEngine; one management row per walled record. A paper box returns at once. Never raises."""
+    if getattr(state, "paper_trading", True):
+        return
+    try:
+        b = _paper_wall.book()
+        if not b.has_open_position():
+            return
+        b.manage_open_position(chain=ctx.get("chain"), df_1m=ctx.get("df_1m"), df_5m=ctx.get("df_5m"),
+                               vol_state=ctx.get("vol"), trend=ctx.get("trend"))
+        try:
+            from strategy.management import get_management_plan
+            _pctx = dict(ctx)
+            _pctx["_open_records"] = b.get_open_records()
+            get_management_plan().tick(_pctx, _pctx["_open_records"], ctx.get("price"))
+        except Exception as _mp_err:                            # noqa: BLE001
+            logger.debug("paper-wall management row skipped: %s", _mp_err)
+    except Exception as exc:                                    # noqa: BLE001
+        logger.warning("[paper-wall] manage pass failed (%s: %s) - retried next tick", type(exc).__name__, exc)
+
+
+def _paper_wall_close_pass(state, hc_ctx=None) -> None:
+    """r150 (OGAP.5) — W3 in the hard-close window, on a LIVE box, after handle_hard_close and its manage pass: the paper
+    book's own flatten_all (the paper EOD rule: a hard close is held to the 15:55 cross and booked at the mark; a
+    position without assignment risk is held and managed, so OGAP's own 15:45 close fires at the mark first). Never the
+    live cross, the debit ladder or a broker read. A paper box returns at once. Never raises."""
+    if getattr(state, "paper_trading", True):
+        return
+    try:
+        b = _paper_wall.book()
+        if not b.has_open_position():
+            return
+        hc = hc_ctx or {}
+        chain = hc.get("chain") or get_chain_fetcher().fetch_chain()
+        _spot = hc.get("price") or getattr(chain, "spot_price", None)   # never get_cache().get_price(): a REST quote
+        failed = b.flatten_all(chain=chain, spot=_spot)
+        from utils.time_utils import eod_close_due as _ecd
+        if b.has_open_position() and not _ecd(False):
+            b.manage_open_position(chain=chain, df_1m=hc.get("df_1m"), df_5m=hc.get("df_5m"),
+                                   vol_state=hc.get("vol"), trend=hc.get("trend"))
+        if failed:
+            logger.warning("[paper-wall] hard close: %d walled paper position(s) still open %s - retried next tick",
+                           len(failed), [t[:8] for t in failed])
+    except Exception as exc:                                    # noqa: BLE001
+        logger.warning("[paper-wall] hard-close pass failed (%s: %s) - retried next tick", type(exc).__name__, exc)
 
 
 def _one_per_session_used(strategy: str) -> bool:
@@ -5040,9 +5141,9 @@ def _banner_dials() -> str:
     try:                                                                   # r149 (OGAP.4): plan_state decides
         from strategy import plan_state as _ps_og
         if _ps_og.state("OGAP") == _ps_og.ACTIVE:
-            brk += " · ogap=on"
+            brk += " · ogap=on" + ("" if PAPER_TRADING else " (paper, walled from the cash account)")   # r150 OGAP.5
         else:
-            brk += " · ogap=" + ("dormant (live box: paper only)" if not PAPER_TRADING else "off (box flag)")
+            brk += " · ogap=off (box flag)"
     except Exception:                                                      # noqa: BLE001
         brk += " · ogap=?"
     if PARK_ENV_REFUSED:
@@ -5166,7 +5267,10 @@ def _execute_entry_signal(signal, ctx, ms, state, _sigj=None, *, additive: bool 
     if _log_only(signal, ctx):
         return
     risk_mgr = get_risk_manager()
-    entry_eng = get_entry_engine(state.paper_trading)
+    # r150 (OGAP.5) — W1: on a LIVE box a walled setup (OGAP) books on the paper wall: a paper engine, a paper row, no
+    # broker call. A paper box is never walled, so everything below is as it was.
+    _walled = _paper_wall.walled(getattr(signal, "strategy_name", ""), getattr(state, "paper_trading", True))
+    entry_eng = _paper_wall.entry_engine() if _walled else get_entry_engine(state.paper_trading)
     if not signal.is_valid:
         logger.warning(f"Invalid signal from {signal.strategy_name}")
         if _sigj is not None:
@@ -5180,7 +5284,7 @@ def _execute_entry_signal(signal, ctx, ms, state, _sigj=None, *, additive: bool 
     # r133 (D3) — A WALK IN FLIGHT KEEPS ITS CONTRACT: a strategy that re-picked its strike mid-walk is put back on
     # the contract it is walking (re-quoted from the stream) BEFORE sizing, so the size, the order and the record all
     # name it. Live only (paper never walks); never raises. execution/entry_engine.freeze_contract.
-    _freeze_contract(signal, state.paper_trading)
+    _freeze_contract(signal, state.paper_trading or _walled)     # r150: a walled entry never walks
 
     # ── 🔴 ENT.1 (r61) — NO TRADE OPENS ALREADY THROUGH ITS OWN STOP ─────────
     # Operator's ruling, 2026-09-19: *"any strategy check on the firing tick one
@@ -5415,7 +5519,7 @@ def _execute_entry_signal(signal, ctx, ms, state, _sigj=None, *, additive: bool 
     # OT_COMMIT_GATE=trade (unset), on paper and (r112, AM.3) live boxes alike. Every directional entry is recorded with its would-be order
     # (data/counterfactual/commit_gate.jsonl) so the old rule is replayable. An unreadable state ALLOWS the
     # entry and says why. The caution size (S2) is LOGGED only - it never changes `sizing`.
-    if _cm.gate(signal, ctx, mode=COMMIT_GATE_MODE, paper=PAPER_TRADING, contracts=sizing.contracts):
+    if _cm.gate(signal, ctx, mode=COMMIT_GATE_MODE, paper=PAPER_TRADING or _walled, contracts=sizing.contracts):
         if _sigj is not None:
             try:
                 _sigj.journal("disposition", outcome="gate_block:commit_abandoned",
@@ -5430,7 +5534,7 @@ def _execute_entry_signal(signal, ctx, ms, state, _sigj=None, *, additive: bool 
     # ── Enter trade ───────────────────────────────────────────────────────────
     # ⚠️ r152 — no score argument; the scorer is gone.
     record = entry_eng.enter(signal=signal, sizing=sizing)
-    if not state.paper_trading:                                 # r135 (GUARD.1): a suspect booked inside this call
+    if not state.paper_trading and not _walled:                 # r135 (GUARD.1): a suspect booked inside this call
         _hand_booked_to_manager(state)
     if record:
         # v5.1 — capture BEFORE anything else touches the row, but AFTER the
@@ -5438,7 +5542,8 @@ def _execute_entry_signal(signal, ctx, ms, state, _sigj=None, *, additive: bool 
         _capture_entry_snapshot(ctx, record, signal.direction)
         _capture_fire_snapshot(ctx, record)
         _capture_entry_contract(ctx, record)          # v5.5 (N.9)
-        _pm = get_position_manager(state.paper_trading)
+        # r150 (OGAP.5) — W2: a walled record goes to the paper book, never the live manager
+        _pm = _paper_wall.book() if _walled else get_position_manager(state.paper_trading)
         # 🔴 r197 — ADDITIVE IS DECIDED BY WHAT IS OPEN, NOT BY THE CALL SITE.
         # `set_open_position` REPLACES `_open_records`, so an ORB entry landing
         # on a box that already holds a butterfly would silently drop the
@@ -6015,6 +6120,7 @@ def main_loop(state: BotState):
                     except Exception as _hc_err:                # noqa: BLE001
                         logger.warning("15:40-15:45 vertical manage pass "
                                        "failed: %s", _hc_err)
+                _paper_wall_close_pass(state, _hc_ctx)          # r150 (OGAP.5): live box only, after the cash close
                 time.sleep(POLL_INTERVAL_SECONDS)
                 continue
 
@@ -6307,6 +6413,7 @@ def main_loop(state: BotState):
                 # had a sentence and the other did not.
                 _plan_skip_management("no open position — nothing to manage")
                 attempt_new_entry(ctx, ms, state)
+            _paper_wall_pass(ctx, state)                        # r150 (OGAP.5): live box only, after the cash work
 
             # ── Periodic heartbeat log ────────────────────────────────────
             if state.tick_count % 20 == 0:
@@ -7200,6 +7307,8 @@ def main():
     # If the bot went down with money on the line, we resume managing
     # that position within seconds — not waiting for the first loop cycle.
     _recover_open_position(state, restart_type)
+    if not state.paper_trading:                                 # r150 (OGAP.5): the walled paper book, after the cash
+        _paper_wall.recover()
 
     # ── Fetch ORB range on start/restart ─────────────────────────────────────
     # Runs unconditionally: get_orb_range.py always writes the last valid range

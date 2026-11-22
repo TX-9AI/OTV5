@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 """
-tests/check_ogap_all_boxes.py  v5.0
+tests/check_ogap_all_boxes.py  v5.1
+v5.1  2026-11-22  OTV5 r150 (OGAP.5) — A2 TURNS AROUND: a LIVE box no longer sits OGAP out; it is ACTIVE and asked, and
+      the Service line says "ogap=on (paper, walled from the cash account)" (the operator, 2026-11-22: "I want it paper
+      trading even on the cash boxes. It's under evaluation."). The walls themselves are tests/check_ogap_paper_on_live.py.
+      A1, A3-A6 unchanged.
 v5.0  2026-11-22  OTV5 r149 (OGAP.4, M1 of the box flags) — new. OGAP ON EVERY BOX, ON PAPER; DORMANT ON A LIVE BOX; AND IT
       BLOCKS NONE OF ITS COUSINS. The operator, 2026-11-22: "If we're studying that trade, I don't understand why we're only
       testing it on one box. I honestly want it paper Trading on all of them." and "No trade set up should block or impede
@@ -10,10 +14,10 @@ v5.0  2026-11-22  OTV5 r149 (OGAP.4, M1 of the box flags) — new. OGAP ON EVERY
   A1  OGAP EVALUATES ON EVERY BOX: for each of the 14 fleet symbols the plan state is ACTIVE on paper and the plan, on
       Park's 2026-11-05 fixture at the fill minute, gives the same OGAP put (no symbol list anywhere; config has no
       OGAP_SYMBOLS)
-  A2  DORMANT ON A LIVE BOX, in a fresh interpreter with OT_PAPER_TRADING=False: plan_state.state("OGAP") is DORMANT
-      with the box flag on, the [plans] summary names "OGAP dormant: live box", main._safe_strategy("OGAP", fn) never
-      calls fn, and the Service line says "ogap=dormant (live box: paper only)"; the same interpreter on paper reads
-      ACTIVE, asks fn and says "ogap=on"
+  A2  ACTIVE ON A LIVE BOX TOO (r150), in a fresh interpreter with OT_PAPER_TRADING=False: plan_state.state("OGAP") is
+      ACTIVE with the box flag on, the [plans] summary names no dormant OGAP, main._safe_strategy("OGAP", fn) calls fn,
+      and the Service line says "ogap=on (paper, walled from the cash account)"; the same interpreter on paper reads
+      ACTIVE, asks fn and says "ogap=on" with no suffix (r149's A2 was DORMANT on a live box)
   A3  THE BOX FLAG DECIDES ON PAPER, FAIL CLOSED: `ogap = off` -> DORMANT (not asked, "ogap=off (box flag)"); a bad
       value (`ogap = of`), `paper_only` (refused until delivery P) and an unreadable file -> DORMANT; no file -> ACTIVE
       (the schema default on); a box_flags read that raises -> DORMANT (never ACTIVE by accident); plan_state.default
@@ -166,11 +170,11 @@ def main():
 
     # ── A2 live box ─────────────────────────────────────────────────────────
     lv, pp = probe(False), probe(True)
-    ok2 = (lv.get("paper") is False and lv.get("state") == "dormant" and "OGAP dormant: live box" in lv.get("summary", "")
-           and lv.get("asked") == 0 and "ogap=dormant (live box: paper only)" in lv.get("banner", "")
+    ok2 = (lv.get("paper") is False and lv.get("state") == "active" and "OGAP dormant" not in lv.get("summary", "")
+           and lv.get("asked") == 1 and " · ogap=on (paper, walled from the cash account)" in lv.get("banner", "")
            and pp.get("paper") is True and pp.get("state") == "active" and pp.get("asked") == 1
-           and " · ogap=on" in pp.get("banner", ""))
-    check("A2 a LIVE box: OGAP DORMANT (not asked, the [plans] line and the Service line say why); paper: ACTIVE, asked",
+           and " · ogap=on" in pp.get("banner", "") and "walled" not in pp.get("banner", ""))
+    check("A2 a LIVE box: OGAP ACTIVE and asked (walled paper, the Service line says so); paper: ACTIVE, asked",
           ok2, f"live={lv} paper={ {k: v for k, v in pp.items() if k != 'banner'} }")
 
     # ── A3 the flag, fail closed ────────────────────────────────────────────
@@ -422,7 +426,7 @@ def main():
     if FAILED:
         print(f"RED — {len(FAILED)} failed: {' '.join(FAILED)}")
         return 1
-    print("GREEN — OGAP runs on every box on paper (nearest expiry when none is same-day), sits out on a live box, and "
+    print("GREEN — OGAP runs on every box on paper (nearest expiry when none is same-day; walled paper on a live box), and "
           "blocks none of its cousins (A1-A6)")
     return 0
 

@@ -174,8 +174,16 @@ This was decided by `ogap_equities_20261113`, sealed 22:04 UTC 11-13 and run onc
 | QQQ | T2 | 32 | +$137 [−87, +421] |
 
 - **AS BUILT r149 (OGAP.4): OGAP runs on EVERY box, on paper.** `OGAP_SYMBOLS` and the `ogap_not_this_symbol` row are
-  gone; the box flag `ogap` (`utils/box_flags.py`, default on) decides, and OGAP is DORMANT on a live box. The operator,
-  2026-11-22: "I honestly want it paper Trading on all of them." (Until r148 it ran on the QQQ box only, as below.)
+  gone; the box flag `ogap` (`utils/box_flags.py`, default on) decides. The operator, 2026-11-22: "I honestly want it
+  paper Trading on all of them." (Until r148 it ran on the QQQ box only, as below.)
+- **AS BUILT r150 (OGAP.5): ON A LIVE BOX TOO, PAPER, WALLED OFF FROM THE CASH ACCOUNT** (r149 had it DORMANT there).
+  The operator, 2026-11-22: "I want it paper trading even on the cash boxes. It's under evaluation. Why the fuck would I want to stop evaluating it?" `execution/paper_wall.py`: the entry books at the mark through a
+  paper engine (`paper_trade = 1`), the position lives on its own paper book with its own paper exit engine, the exits
+  and the 15:45 close are paper at the mark; zero broker calls; never in the broker reconcile, buying power, the order
+  guard, the live walk, the startup cancel or the 15:55 live cross. The cap on a live box is for live trades only (the
+  operator, 2026-11-22: "The cap on a live box is for live trades only. Full stop."): OGAP's paper P&L never counts toward it, and a tripped cash cap does
+  not stop it. Size: the box's `RISK_PER_TRADE_USD` (configure.sh item 2), as every box (the operator, 2026-11-22: "it
+  should get its budget from configure.sh like the rest"). Gate `tests/check_ogap_paper_on_live.py`.
 - **SPX (as designed, at Park's $500):** stayed out under Park's band, the ATM 0DTE ask far above $5.00. Since r131 the
   band is the box's own `RISK_PER_TRADE_USD` / 100, so on SPX it now depends on the SPX box's risk per trade.
 - **SPY:** not a fleet symbol.

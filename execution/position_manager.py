@@ -1,5 +1,11 @@
 """
-execution/position_manager.py  v5.42
+execution/position_manager.py  v5.43
+v5.43  2026-11-22  OTV5 r150 (OGAP.5) — THE PAPER-WALL SEAM (execution/paper_wall.PaperWallBook: OGAP on a live box, booked
+      paper). _manage_one and _execute_exit call get_exit_engine(self.paper_trading) exactly as before unless self is the
+      wall book (PAPER_WALL True), which closes through its own _exit_engine(), a paper ExitEngine (the singleton is
+      built LIVE on a live box); so every stand-in self and every PM.get_exit_engine stand-in behaves as at r149. PAPER_WALL (False here; read as
+      getattr(self, "PAPER_WALL", False) is True) skips risk_manager.record_win / record_loss for a walled close (the cash
+      cap counts cash) and prefixes the exit alert's setup with "PAPER ". Every paper and live close is unchanged.
 v5.42  2026-11-21  OTV5 r139 (EXIT.17; the live exit polling audit 2026-11-21 S3, live only) — A PRICED RECORD CARRIES ITS
       QUOTE'S OWN TIME. The 10 s freshness rule (exit_engine._fresh_quote) timed the moment _stash_quote copied the
       quote onto the record (unchanged: it guards the copy), so the k-th close of a tick or of the 15:50 loop priced off marks (k-1) x 10-14 s old
@@ -1073,6 +1079,11 @@ class PositionManager:
     def get_open_records(self) -> List[TradeRecord]:
         return list(self._open_records)
 
+    def _exit_engine(self):
+        """r150 (OGAP.5) — the exit engine this book closes through: the module's get_exit_engine, read at call time
+        (execution/paper_wall.PaperWallBook overrides it with its own paper engine)."""
+        return get_exit_engine(self.paper_trading)
+
     def remove_record(self, trade_id: str):
         """Drop a record from active management (used by the broken-wing roll
         when it closes the old untested vertical)."""
@@ -1124,7 +1135,8 @@ class PositionManager:
         # r270 (PMAP.1, RECORD ONLY) — one premium-map row per position per minute; decides nothing, never raises.
         _fo.observe_map(record, current_premium, getattr(chain, "spot_price", None))
 
-        exit_eng = get_exit_engine(self.paper_trading)
+        exit_eng = (self._exit_engine() if getattr(self, "PAPER_WALL", False) is True    # r150 (OGAP.5): the wall's own
+                    else get_exit_engine(self.paper_trading))
         # r113 (AM.7): the excursion sees this tick even when the plan closes on it (evaluate() would never run).
         try:
             from execution.exit_engine import _track_excursion as _trk
@@ -1505,7 +1517,8 @@ class PositionManager:
         """
         trade_id = record["trade_id"]
 
-        exit_eng = get_exit_engine(self.paper_trading)
+        exit_eng = (self._exit_engine() if getattr(self, "PAPER_WALL", False) is True    # r150 (OGAP.5): the wall's own
+                    else get_exit_engine(self.paper_trading))
         _pend = _BOOK_PENDING.get(trade_id)
         if _pend is not None:
             # r128 (MC.1): this close already FILLED and only its booking write failed — retry the WRITE, no order.
@@ -1600,19 +1613,21 @@ class PositionManager:
 
         # r128 (MC.1): the row is BOOKED from here — a raise below must not leave the record managed (the next pass
         # would post a fresh close for a position that is gone). Each step logs its failure and the close stands.
+        _walled = getattr(self, "PAPER_WALL", False) is True    # r150 (OGAP.5): a walled paper close
         try:
-            risk_mgr = get_risk_manager()
-            if pnl_usd >= 0:
-                risk_mgr.record_win(pnl_usd)
-            else:
-                risk_mgr.record_loss(pnl_usd)
+            if not _walled:                                       # the cash cap's tally counts cash only
+                risk_mgr = get_risk_manager()
+                if pnl_usd >= 0:
+                    risk_mgr.record_win(pnl_usd)
+                else:
+                    risk_mgr.record_loss(pnl_usd)
         except Exception as _re:                                  # noqa: BLE001
             logger.error(f"Exit {trade_id[:8]} booked, but the risk tally FAILED ({type(_re).__name__}: {_re})")
 
         try:
             get_alert_manager().send_exit_alert(
                 trade_id      = trade_id,
-                setup_type    = record.get("setup_type", ""),
+                setup_type    = ("PAPER " + str(record.get("setup_type", "") or "")) if _walled else record.get("setup_type", ""),
                 exit_premium  = fill_price,
                 entry_premium = entry_prem,
                 pnl_usd       = pnl_usd,

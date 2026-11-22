@@ -1,5 +1,10 @@
 """
-strategy/plan_state.py  v5.10
+strategy/plan_state.py  v5.11
+v5.11  2026-11-22  OTV5 r150 (OGAP.5) — THE LIVE-BOX DORMANT RULE GOES: OGAP's state is its box flag on every box, cash or
+      paper (on -> ACTIVE, anything else -> DORMANT, fails closed). On a LIVE box an ACTIVE OGAP books on the walled
+      paper book (execution/paper_wall: paper_trade = 1 at the mark, zero broker calls), so there is nothing to sit out.
+      The operator, 2026-11-22: "I want it paper trading even on the cash boxes. It's under evaluation. Why the fuck would
+      I want to stop evaluating it?" Every other row unchanged.
 v5.10  2026-11-22  OTV5 r149 (OGAP.4) — OGAP'S STATE COMES FROM ITS BOX FLAG, AND OGAP SITS OUT ON A LIVE BOX. The operator,
       2026-11-22: "I honestly want it paper Trading on all of them" and, on interaction, "No trade set up should block or
       impede any of its cousins. Each one fires and manages on its own merits." Its TABLE row's default is FLAG: the
@@ -87,7 +92,7 @@ TABLE: Dict[str, Tuple[str, str, str]] = {
     "Breakout":                 ("",                  DORMANT, HOUR),        # r110 (WS.3 TRIM): off the roster
     "LiquidityHunt":            ("OT_HUNT",           ACTIVE,  HOUR),
     "PARK":                     ("OT_PARK",           ACTIVE,  HOUR),
-    "OGAP":                     ("",                  FLAG,    HOUR),    # r149: box flag `ogap` (default on); live: dormant
+    "OGAP":                     ("",                  FLAG,    HOUR),    # r149: box flag `ogap` (default on); r150: live = walled paper
     "IronCondorStrategy":       ("",                  DORMANT, CONDITION),   # no entry of its own (r249)
     "CondorManagement":         ("",                  ACTIVE,  CONDITION),
     "CreditRoll":               ("",                  ACTIVE,  CONDITION),
@@ -112,13 +117,9 @@ def _flag_key(name: str) -> str:
 
 
 def _flagged_state(name: str) -> str:
-    """r149 — a FLAG row's state: DORMANT on a live box (OGAP; until delivery P), else the box flag (on -> ACTIVE,
-    anything else -> DORMANT). Fails CLOSED: any error -> DORMANT."""
+    """r149 — a FLAG row's state: the box flag (on -> ACTIVE, anything else -> DORMANT), on every box. r150 (OGAP.5): no
+    live-box rule here; a live box books OGAP on execution/paper_wall. Fails CLOSED: any error -> DORMANT."""
     try:
-        import config as _c
-        if name == "OGAP" and getattr(_c, "PAPER_TRADING", None) is not True:
-            _WHY[name] = "live box: OGAP is paper only (the before-cash audit F2; until paper_only)"
-            return DORMANT
         from utils import box_flags as _bf
         key = _flag_key(name)
         v = _bf.value(key) if key else ""

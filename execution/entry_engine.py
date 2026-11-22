@@ -1,5 +1,9 @@
 """
-execution/entry_engine.py  v5.9
+execution/entry_engine.py  v5.10
+v5.10  2026-11-22  OTV5 r150 (OGAP.5) — _book_fill skips the cap counterfactual (risk_manager.note_entry_risk, a study of
+      the CASH cap) when the engine is execution/paper_wall's PaperWallEntry (PAPER_WALL True: OGAP on a live box, booked
+      paper at the mark). Read as getattr(self, "PAPER_WALL", False) is True, so this engine and any stand-in behave as
+      before; every paper and live entry books exactly as at r149.
 v5.9  2026-11-22  OTV5 r146 (BLND.1, partial) — enter() refuses an opening order while utils/blind_reacquire holds (after a blind episode: the tick that first sees again, and until main.attempt_new_entry has had one full tick with sight on current 1m bars), after the entries_open gate, before any broker call: one "[entry-gate] ... HELD - reacquiring ..." line, None returned. With no blind episode the hold is '' and enter() is unchanged. No broker call, no config key. Gate tests/check_blind_reacquire.py.
 v5.8  2026-11-21  OTV5 r136 (OGAP.3) — freeze_contract no longer re-stamps signal.ogap_ask: OGAP carries none (it sizes and exits on the mark, entry_premium, which the freeze already re-reads). The operator, 2026-11-20: "never pay the spread". Nothing else changes.
 v5.7  2026-11-20  OTV5 r135 (GUARD.1; the live-readiness audit 2026-11-20 C3 + I3, live only) — A SUSPECT ENTRY ORDER IS
@@ -477,8 +481,9 @@ class EntryEngine:
 
         self._trade_logger.log_entry(record)
         try:                                                    # r208 (CAP.4): log-only, never affects the entry
-            from risk.risk_manager import get_risk_manager as _grm
-            _grm().note_entry_risk(record)
+            if getattr(self, "PAPER_WALL", False) is not True:  # r150 (OGAP.5): a walled paper row is not the cash cap's
+                from risk.risk_manager import get_risk_manager as _grm
+                _grm().note_entry_risk(record)
         except Exception as _cfe:                               # noqa: BLE001
             logger.warning("cap counterfactual skipped: %s", _cfe)
 
