@@ -1,5 +1,7 @@
 # PLAN_SPEC.md — every strategy declares its intent BEFORE the trigger
 
+**`PLAN_SPEC.md` v5.11 · 2026-11-22 · r147 (QTIME.1, record only) — §46: every plan_tick row records when its tick started and read its quotes, and the store time of the quote it priced (four trailing columns); every signal_journal row carries the same tick times and its contract's quote time.**
+
 **`PLAN_SPEC.md` v5.10 · 2026-11-22 · r146 (BLND.1, partial) — §45: after a blind episode a plan reacquires its trigger on current data: nothing is asked, and nothing opens, on the tick that first sees again; from the next tick, on current 1m bars, the plans are asked as always.**
 
 **`PLAN_SPEC.md` v5.9 · 2026-11-22 · r144 (EXIT.19) — §30.4 says how its exits are priced live: the handoff, the thesis line and the structure backstop as a stop (the mark, the mark, the bid, MARKET); the fizzle, the trail and theta bleed walk.**
@@ -1460,3 +1462,37 @@ the Hunt read; OGAP's own stale rule (§44: a signal first seen after its fill m
 during the episode can still fire on the first eligible tick if it still qualifies. The ruling's "nothing built before or
 during a blind episode may fire" - every plan re-forming its trigger after sight - is a separate delivery, open in
 BACKLOG BLND.1. Gate: `tests/check_blind_reacquire.py`.
+
+## 46. OTV5 r147 — WHEN EACH TICK READ ITS QUOTES (QTIME.1, record only)
+
+The operator, 2026-11-22: "Yes to both" (the WS.15 pricer's one unrecorded input, ~/reviews/studies/pricer_ws1415_v11_20261122/).
+The bot reads bid/ask from the feed store's `chain_marks`, which `data/candle_feed.py` refreshes on its 2 s flush
+(`FLUSH_INTERVAL_S`), so the mark a tick acts on is 0-4 s old. Before r147 neither the read time nor the store's refresh
+time of the rows read was recorded, so a replay from `raw/quote_series` could not pick the quote the bot saw.
+
+**The fields.** `plan_tick` gains four trailing REAL columns (no column dropped; an in-place ALTER for old stores, old rows
+NULL): `tick_start_epoch` (main_loop's `tick_start`), `marks_read_epoch` (when the tick's one pre-analysis chain fetch read
+`chain_marks`: the clock `_read_marks` already reads for its `OT_CHAIN_STALE_S` floor), `marks_store_epoch` (the newest
+`updated_epoch` among the rows that same SELECT returned: one SQLite snapshot, no second read) and `quote_epoch` (the row's
+own priced contract: a `/manage` row's mark legs, `record["_mark_epoch"]` from r139; a TAKE or LOG-ONLY row's
+`signal.contract`). Every `signal_journal` row gains `tick_reads` {the three tick times}, so every disposition (fired,
+invalid_signal, gate_block:*, pin_proximity, sizing_rejected) carries them, and `contract_ctx` gains `quote_epoch`.
+`plan_check` and `strategy_note` join to `plan_tick` on (symbol, tick_id). Both push paths already carry new fields
+(`push_derived` ships `SELECT *`; the journal ships its JSONL lines verbatim).
+
+**Timing.** main calls `utils/tick_reads.begin(tick_start)` at the top of the tick and `chain_read(_gex_chain)` after the
+fetch; the board's `begin_tick` adopts them, so `close_tick`'s INACTIVE / NO PLAN rows for the tick just ended keep that
+tick's times. A tick that read no chain (blind, the 15:40-15:50 manage branch, the pre-open rehearsal) carries its start and
+NULL read times.
+
+**How a replay uses them.** For a contract X priced on a row, the quote the bot saw is the `raw/quote_series` row for X
+whose receive time equals `quote_epoch` (candle_feed writes each `chain_marks` row's `updated_epoch` as the receive time of
+the event it holds); failing an exact match, the newest `quote_series` row for X at or before `marks_store_epoch` (the last
+flush the read could see). A row with no `quote_epoch` (a DECLINE, a refused fire before a contract was chosen) uses the
+second rule. `marks_read_epoch - quote_epoch` is the quote's age at the decision. Known edge: a greeks update in the same
+flush overwrites `updated_epoch` with the greeks event's time, so the exact match can miss; the store-time rule (and the
+row's own bid/ask) then decides.
+
+Nothing reads these to decide: zero broker calls, no config key, no env read; gate `tests/check_tick_read_times.py`
+T1-T8 (T8 pins r146's chain, entry, exit and plan-row replay digest).
+

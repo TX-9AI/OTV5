@@ -1,5 +1,6 @@
 """
-strategy/management.py  v5.9
+strategy/management.py  v5.10
+v5.10  2026-11-22  OTV5 r147 (QTIME.1; record only) — A /manage ROW CARRIES ITS MARK'S STORE TIME. decide() and the per-record row set PlanTick.quote_epoch from the record's _mark_epoch (r139: the oldest priced leg's chain_marks.updated_epoch, stamped by the pass that priced it; absent when the mark came from REST or the entry premium), so plan_tick.quote_epoch names the quote behind the row's "now" mark. Every condition, intent and row text is unchanged.
 v5.9  2026-11-14  OTV5 r120 (HYG §5.7, HYG.25) — THE RETIRED SWEEP NAME LEAVES THE TWO CREDIT-SIGN READS. decide() only runs for a record covers() accepts (COVERED = RunawayContinuation, Breakout, both debits), so `strategy in ("SweepCreditSpread",)` there could never be true; credit is is_credit_vertical alone. _one() (narration rows, never a decision) keeps IronCondorStrategy (dormant entry, CondorManagement active) and drops SweepCreditSpread: no open row of it on any box (CRM read-only, the S3 trade warehouse 08-15..11-14). Every intent and every row is unchanged.
 v5.8  2026-11-09  OTV5 r103 (RETIRE.5 step 2) — THE GEX PIN BUTTERFLY IS REMOVED: its EXIT_CONDITIONS row, BUTTERFLIES, its COVERED entry and the HOLD_TO_CLOSE_STRATEGIES reads (the fly was the only member) go. The live strategies' conditions and intents are unchanged. The operator, 2026-11-08: "I concur on both, in that order" (cut 11-09, code removed after that close).
 v5.7  2026-11-08  OTV5 r88 (RETIRE.3) — the TrendCreditSpread EXIT_CONDITIONS row and COVERED entry, and its four special cases (no premium stop, 'breach', the credit classification), go with the TCS. The operator, 2026-11-08: "Delete" (the TCS shadow, which never fired: its own gates declined every candidate 11-02..11-06).
@@ -597,6 +598,15 @@ def _f(v) -> Optional[float]:
         return None
 
 
+def _mark_epoch(record) -> Optional[float]:
+    """r147 (QTIME.1) — the record's mark's store time (_mark_epoch, r139), None when unstamped. Never raises."""
+    try:
+        v = float((record or {}).get("_mark_epoch") or 0.0)
+    except (TypeError, ValueError, AttributeError):
+        return None
+    return v if v > 0 else None
+
+
 class ManagementPlan:
     """One `Plan` per strategy, rows written under "<Strategy>/manage"."""
 
@@ -657,6 +667,7 @@ class ManagementPlan:
                 price = last_close
             plan = self._plan(strategy)
             t = plan.tick(price, str(record.get("option_side", "") or ""))
+            t.quote_epoch = _mark_epoch(record)                # r147 (QTIME.1): record only
             self._readings(t, record, price)
 
             # ── 1. THE DECLARED SPEC CONDITIONS — never outranked ──────────
@@ -950,6 +961,7 @@ class ManagementPlan:
         conds = EXIT_CONDITIONS.get(strategy)
         plan = self._plan(strategy)
         t = plan.tick(price, str(rec.get("option_side", "") or ""))
+        t.quote_epoch = _mark_epoch(rec)                        # r147 (QTIME.1): record only
 
         # ── the readings — the record's own fields, the exit engine's state ─
         entry = _f(rec.get("entry_premium")) or 0.0

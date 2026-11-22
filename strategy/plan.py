@@ -1,5 +1,6 @@
 """
-strategy/plan.py  v5.4
+strategy/plan.py  v5.5
+v5.5  2026-11-22  OTV5 r147 (QTIME.1; record only) — EVERY plan_tick ROW SAYS WHEN ITS TICK READ ITS QUOTES. Four trailing columns (CREATE for new stores, an in-place ALTER for old ones, old rows read NULL, no column dropped): tick_start_epoch, marks_read_epoch, marks_store_epoch (utils/tick_reads, adopted by begin_tick so close_tick's rows keep the tick they belong to) and quote_epoch (the row's own priced contract: PlanTick.quote_epoch, set by take() from the signal's contract and by strategy/management from the record's _mark_epoch; _close hands it to write_row through _ROW_CTX, so write_row's call shape is unchanged). The rows written, their other columns and every verdict are unchanged; nothing reads the new columns to decide.
 v5.4  2026-11-11  OTV5 r107 (RETIRE.5 follow-up) — PlanTick.butterfly (the fly's economics) goes: no plan calls it since the fly strategy was removed at r103. debit_directional and credit_spread are unchanged.
 v5.3  2026-11-08  OTV5 r76 (RETIRE.1) — DISPATCH_ALIAS drops ORB and SweepForLeg2; OWN_LEDGER drops ORBStrategy. Nothing a live plan reads changes. The operator, 2026-11-07: "Running dead code and logging dead code activity is unnecessary drag. Yes, I want all of those things fixed."
 v5.2  2026-10-26  OTV5 r35 (PLN.3) — A CLOSED POSITION'S MANAGE VERDICT LEAVES THE [plans] LINE. A /manage plan runs
@@ -296,7 +297,21 @@ def begin_tick(ts: Optional[float] = None) -> int:
     """Advance the tick clock. Called ONCE per tick by the board."""
     _TICK["n"] += 1
     _TICK["ts"] = float(ts or time.time())
+    try:                                                        # r147 (QTIME.1): the board's rows carry this tick's reads
+        from utils import tick_reads as _tr
+        _tr.adopt()
+    except Exception:                                           # noqa: BLE001
+        pass
     return _TICK["n"]
+
+
+def _tick_reads() -> dict:
+    """r147 (QTIME.1) — the board tick's three read times (utils/tick_reads.adopted); all None when unknown."""
+    try:
+        from utils import tick_reads as _tr
+        return _tr.adopted()
+    except Exception:                                           # noqa: BLE001
+        return {}
 
 
 def tick_now() -> Tuple[int, float]:
@@ -394,6 +409,10 @@ def ensure_tables(store) -> bool:
                 r_now           REAL,            -- LIVE, comparable ACROSS plans
                 direction    TEXT NOT NULL DEFAULT '',
                 tick_id      INTEGER DEFAULT 0,   -- r177: the join key
+                tick_start_epoch  REAL,           -- r147 (QTIME.1): main_loop's tick start
+                marks_read_epoch  REAL,           -- r147: when the tick's chain read chain_marks
+                marks_store_epoch REAL,           -- r147: the newest chain_marks.updated_epoch that read returned
+                quote_epoch       REAL,           -- r147: this row's priced contract's own chain_marks.updated_epoch
                 PRIMARY KEY (ts_epoch, symbol, strategy, direction)
             );""")
         store.conn.execute("""
@@ -455,6 +474,13 @@ def ensure_tables(store) -> bool:
             store.commit()
         except Exception:                                       # noqa: BLE001
             pass                                                # already present
+        # r147 (QTIME.1) — the same in-place migration for plan_tick's four read times; old rows read NULL.
+        for _col in TICK_READ_COLUMNS:
+            try:
+                store.conn.execute(f"ALTER TABLE plan_tick ADD COLUMN {_col} REAL")
+                store.commit()
+            except Exception:                                   # noqa: BLE001
+                pass                                            # already present
         try:
             store._plan_tables_ready = True
         except Exception:                                       # noqa: BLE001
@@ -465,11 +491,16 @@ def ensure_tables(store) -> bool:
         return False
 
 
+TICK_READ_COLUMNS = ("tick_start_epoch", "marks_read_epoch", "marks_store_epoch", "quote_epoch")   # r147 (QTIME.1)
+_ROW_CTX: Dict[str, Any] = {"quote_epoch": None}   # r147: the quote_epoch of the row PlanTick._close is writing
+
+
 def write_row(store, symbol: str, ts: float, strategy: str, verdict: str,
               reason: str, direction: str = "", trigger=None,
               invalidation=None, underlying=None, r=None,
               checks: Optional[Dict[str, Tuple[Any, Optional[bool]]]] = None,
-              check_notes: Optional[Dict[str, str]] = None
+              check_notes: Optional[Dict[str, str]] = None,
+              quote_epoch=None
               ) -> bool:
     """One spine row plus its check rows. Never raises; returns False on a
     failed spine write (and WARNS — a lost row is data lost, r133). r303: a DORMANT plan's row is not
@@ -485,13 +516,22 @@ def write_row(store, symbol: str, ts: float, strategy: str, verdict: str,
                 dist = float(underlying) - float(trigger)
             except (TypeError, ValueError):
                 dist = None
+        _rd = _tick_reads()                                     # r147 (QTIME.1): record only
+        if quote_epoch is None:
+            quote_epoch = _ROW_CTX.get("quote_epoch")
+        try:
+            _qe = float(quote_epoch) if quote_epoch is not None and float(quote_epoch) > 0 else None
+        except (TypeError, ValueError):
+            _qe = None
         store.conn.execute(
             "INSERT OR REPLACE INTO plan_tick (ts_epoch, symbol, strategy,"
             " verdict, reason, trigger_price, invalidation, underlying,"
-            " dist_to_trigger, r_now, direction, tick_id)"
-            " VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+            " dist_to_trigger, r_now, direction, tick_id,"
+            " tick_start_epoch, marks_read_epoch, marks_store_epoch, quote_epoch)"
+            " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (ts, symbol, strategy, verdict, reason, trigger, invalidation,
-             underlying, dist, r, direction or "", _TICK["n"]))
+             underlying, dist, r, direction or "", _TICK["n"],
+             _rd.get("tick_start_epoch"), _rd.get("marks_read_epoch"), _rd.get("marks_store_epoch"), _qe))
     except Exception as exc:                                    # noqa: BLE001
         logger.warning("plan_tick write FAILED for %s: %s: %s",
                        strategy, type(exc).__name__, exc)
@@ -553,6 +593,7 @@ class PlanTick:
         self.last_why: str = ""
         self.closed = False
         self.verdict: str = ""
+        self.quote_epoch: Optional[float] = None   # r147 (QTIME.1): the priced contract's store time, plan_tick.quote_epoch
 
     # ── narration ──────────────────────────────────────────────────────
     def check(self, name: str, value=None, ok: Optional[bool] = None,
@@ -777,6 +818,12 @@ class PlanTick:
         """The strategy is firing. Writes TAKE (or MUTED if the R hurdle was
         muted), clears the gate block, opens the ledger row that
         `link_trade()` will join a fill to. Returns the signal unchanged."""
+        if self.quote_epoch is None:                            # r147 (QTIME.1): the fired contract's store time
+            try:
+                from utils import tick_reads as _tr
+                self.quote_epoch = _tr.quote_epoch(getattr(signal, "contract", None))
+            except Exception:                                   # noqa: BLE001
+                pass
         # r254 (OBS.1) - an OBSERVED strategy (past its entry end) records LOG-ONLY and stops:
         # no TAKE row, no gate-report "cleared", no plan_ledger row. main.py refuses the signal.
         try:
@@ -826,6 +873,9 @@ class PlanTick:
                 logger.debug("[plan] %s silent - no credit leg open (%s)", self.strategy, reason)
                 return
         self.plan._last = (self.n, verdict, reason)
+        # r147 (QTIME.1) — the row's priced contract's store time rides beside the call, not in it: write_row's
+        # positional shape is unchanged for every caller and every stand-in a gate installs.
+        _ROW_CTX["quote_epoch"] = getattr(self, "quote_epoch", None)
         try:
             write_row(self.plan._store_ref(), self.plan.symbol, self.ts,
                       self.strategy, verdict, reason, self.direction,
@@ -833,6 +883,8 @@ class PlanTick:
                       self.checks, getattr(self, "check_notes", None))
         except Exception as exc:                                # noqa: BLE001
             logger.warning("[plan] %s row not written: %s", self.strategy, exc)
+        finally:
+            _ROW_CTX["quote_epoch"] = None
         lvl = logging.INFO if verdict in ("TAKE", "NO PLAN", "ROLL", "CLOSE") \
             else logging.DEBUG
         logger.log(lvl, "[plan] %-22s %-8s %s%s", self.strategy, verdict,

@@ -1,5 +1,6 @@
 """
-main.py  v5.34
+main.py  v5.35
+v5.35  2026-11-22  OTV5 r147 (QTIME.1; record only) — THE TICK SAYS WHEN IT READ ITS QUOTES. main_loop calls utils/tick_reads.begin(tick_start) at the top of every tick and tick_reads.chain_read(_gex_chain) right after the one pre-analysis chain fetch, so plan_tick (strategy/plan v5.5) and every signal_journal row (analysis/signal_journal v5.3) carry tick_start_epoch, marks_read_epoch and marks_store_epoch. Both calls are wrapped; nothing reads them to decide; no broker call, no config key, no env read.
 v5.34  2026-11-22  OTV5 r146 (BLND.1, partial; the before-cash audit 2026-11-22 F3) — AFTER A BLIND EPISODE, NO OPENING ORDER ON THE TICK THAT FIRST SEES AGAIN; ENTRIES ARE ELIGIBLE FROM THE NEXT TICK, ON CURRENT 1m BARS. The operator, 2026-09-30: "The plan should have to reacquire a valid trigger after sight restored"; approved 2026-11-22: "Yes, we need that."; the timing, 2026-11-22: "Does it really need a full minute if the plans refresh every 15 second tick? I think 1 full tick after a restore should be eligible for a fire if the entry still qualifies." Entries were held only WHILE blind (_blind_tick ends the tick), so the first tick with sight could open on a frame it never watched (2026-09-29: feed dead 09:30:10-09:37:52, an entry 09:38:04 on the 09:30 bar's trigger). _blind_tick records every blind tick (utils/blind_reacquire.note_blind), _blind_clear (now= for tests) arms the hold with the sighted tick's number (note_sight); attempt_new_entry (RTH, after the session gate) asks NOTHING on the sighted tick, nor on a later tick whose ctx["df_1m"] does not yet hold the last completed minute as its newest closed bar: one "[entry-gate] ... entries HELD - reacquiring after the blind episode ..." line per tick and one plan_check row per plan at gate blind_reacquire; then the plans are asked as always and fire only if they still qualify. _execute_condor_leg refuses while an episode stands, after entries_open (entry_engine.enter is the debit half). Exits untouched; paper and live alike; zero broker calls (memory; this tick's frame); no config key. With no blind episode nothing changes. Partial: no plan's own latch is reset. Gate tests/check_blind_reacquire.py.
 v5.33  2026-11-21  OTV5 r142 (HUNT.16) — TEXT ONLY: the Service line loses " · hunt_after_brk=<mode>" and its REFUSED note; config no longer defines OT_HUNT_AFTER_BRK (the Hunt's losing-Breakout guard is removed, Breakout dormant since r110). Nothing else on the line or in the tick changes.
 v5.32  2026-11-21  OTV5 r141 (RAMP.1) — TEXT ONLY: the Service line's ramp_top= and the interactive start line say the ramp TOP (OT_BREAKOUT_BUDGET_USD) sizes Breakout only, which is dormant (r110), and that the live setups size on risk= (OT_RISK_USD). Only risk_manager._size_geometry reads the key, and only a sizes_on_geometry signal (Breakout) reaches it. No value, sizing or decision changes.
@@ -5787,6 +5788,11 @@ def main_loop(state: BotState):
         _obs_chain  = None              # r270 (FILL.2) — the chain the observing sleep reads
         state.tick_count += 1
         _touch_heartbeat(state.tick_count)   # r168 — the emergency watchdog's liveness read
+        try:                                # r147 (QTIME.1): record only - when this tick started and read
+            from utils import tick_reads as _tick_reads
+            _tick_reads.begin(tick_start)
+        except Exception:                                      # noqa: BLE001
+            _tick_reads = None
 
         try:
             _apply_log_level()      # r112 — one stat; DEBUG flips with no restart
@@ -6009,6 +6015,11 @@ def main_loop(state: BotState):
                 _gex_chain = get_chain_fetcher().fetch_chain()
             except Exception as exc:                           # noqa: BLE001
                 logger.debug("pre-analysis chain fetch: %s", exc)
+            try:                                               # r147 (QTIME.1): the read behind this tick's quotes
+                if _tick_reads is not None:
+                    _tick_reads.chain_read(_gex_chain)
+            except Exception:                                  # noqa: BLE001
+                pass
 
             # ── Main analysis ─────────────────────────────────────────────
             # r74 (BLIND.1) — a blind tick (no price / no 5m bars) is caught HERE, before the loop's catch-all: it

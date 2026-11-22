@@ -1,5 +1,6 @@
 """
-data/options_chain.py  v5.2
+data/options_chain.py  v5.3
+v5.3  2026-11-22  OTV5 r147 (QTIME.1; record only) — THE CHAIN SAYS WHEN ITS QUOTES WERE READ. OptionsChain gains marks_read_epoch (the clock _read_marks already reads for its OT_CHAIN_STALE_S floor, now kept) and marks_store_epoch (the newest updated_epoch among the chain_marks rows that same SELECT returned: the store's refresh point, no second read); _read_marks leaves both on the fetcher (_marks_read) and fetch_chain copies them onto the chain it builds (0.0 unknown). The rows read, the floor, every quote, greek and mark, and every return are unchanged; nothing decides on the new fields (utils/tick_reads records them).
 v5.2  2026-11-21  OTV5 r139 (EXIT.17; the live exit polling audit 2026-11-21 S3) — OptionContract.quote_epoch: _read_marks carries each chain_marks row's updated_epoch on its quote and _apply_market_data puts it on the contract (0.0 unknown), so a live close can measure the quote's own age. Every other field, the 120 s OT_CHAIN_STALE_S refusal and the mark rule are unchanged.
 v5.1  2026-11-14  OTV5 r119 (HYG §5.5, HYG.24) — OptionsChainFetcher.get_iv_rank goes (uncalled). No caller anywhere (OTV5 code, tests, tools, docs, dtp: token scan + grep on r118). Nothing else changes; the module's behaviour is identical.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
@@ -194,6 +195,8 @@ class OptionsChain:
     iv_rank:        float = 0.0
     calls:          List[OptionContract] = field(default_factory=list)
     puts:           List[OptionContract] = field(default_factory=list)
+    marks_read_epoch:  float = 0.0   # r147 (QTIME.1): when chain_marks was read for this chain; 0 unknown
+    marks_store_epoch: float = 0.0   # r147 (QTIME.1): the newest updated_epoch among the rows that read returned; 0 unknown
 
     @property
     def atm_iv(self) -> float:
@@ -231,6 +234,15 @@ class OptionsChain:
         except Exception:                                       # noqa: BLE001
             return 0.0
 
+
+
+def _store_epoch(rows) -> float:
+    """r147 (QTIME.1) — the newest updated_epoch among chain_marks rows already read (the store's refresh point for
+    that read); 0.0 when there is none. Record only; never raises."""
+    try:
+        return max((float(r[8] or 0.0) for r in rows.values()), default=0.0)
+    except Exception:                                           # noqa: BLE001
+        return 0.0
 
 
 _ZERO_MARKS_SAID: set = set()          # r301 (LOG.1): (symbol, expiry) said once per process outside RTH
@@ -401,10 +413,12 @@ class OptionsChainFetcher:
                 logger.warning("OI wiring failed (%s) - GEX runs WITHOUT open "
                                "interest this cycle", _oie)
 
+            _reads = (0.0, 0.0)                                 # r147 (QTIME.1): this chain's own read
             if streamer_syms:
                 greeks_map, quote_map = self._fetch_greeks_and_quotes(
                     session, streamer_syms, expiry=today_str
                 )
+                _reads = getattr(self, "_marks_read", (0.0, 0.0))
                 self._apply_market_data(calls_raw, greeks_map, quote_map)
                 self._apply_market_data(puts_raw,  greeks_map, quote_map)
 
@@ -418,6 +432,7 @@ class OptionsChainFetcher:
                 calls      = calls_raw,
                 puts       = puts_raw,
             )
+            chain.marks_read_epoch, chain.marks_store_epoch = _reads    # r147 (QTIME.1): record only
 
             # Populate spot_price from ATM call (nearest delta to 0.50)
             liquid_calls = [c for c in chain.calls if c.delta > 0 and c.mark > 0]
@@ -611,12 +626,15 @@ class OptionsChainFetcher:
     def _read_marks(self, streamer_symbols: List[str]) -> tuple:
         greeks_map: Dict[str, object] = {}
         quote_map:  Dict[str, object] = {}
+        self._marks_read = (0.0, 0.0)                           # r147 (QTIME.1): (read epoch, store epoch); 0 unknown
         try:
-            floor = time.time() - OT_CHAIN_STALE_S
+            _read_at = time.time()                              # r147: the floor's own clock, kept
+            floor = _read_at - OT_CHAIN_STALE_S
             cur = self._ro_conn().execute(
                 "SELECT streamer_symbol, bid, ask, delta, gamma, theta, vega, iv,"
                 " updated_epoch FROM chain_marks WHERE updated_epoch >= ?", (floor,))
             rows = {r[0]: r for r in cur.fetchall()}
+            self._marks_read = (_read_at, _store_epoch(rows))  # r147 (QTIME.1): record only
         except sqlite3.OperationalError as e:
             # table absent (feed still on <= v3.3) or db missing entirely
             self._db_ro = None

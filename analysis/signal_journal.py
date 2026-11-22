@@ -1,5 +1,6 @@
 """
-analysis/signal_journal.py  v5.2
+analysis/signal_journal.py  v5.3
+v5.3  2026-11-22  OTV5 r147 (QTIME.1; record only) — EVERY JOURNAL ROW SAYS WHEN ITS TICK READ ITS QUOTES, AND A CONTRACT SAYS ITS QUOTE'S STORE TIME. journal() adds a trailing `tick_reads` section ({tick_start_epoch, marks_read_epoch, marks_store_epoch}, utils/tick_reads.latest(): the tick in progress) to every row, so each disposition (fired and every refusal: gate_block, invalid_signal, pin_proximity, sizing_rejected, commit_abandoned) carries the read behind it; contract_ctx adds `quote_epoch` (the contract's own chain_marks.updated_epoch, OptionContract.quote_epoch; None unknown). No existing field changes or goes; nothing reads them to decide.
 v5.2  2026-11-11  OTV5 r107 (RETIRE.5 follow-up) — signal_ctx loses its butterfly legs block: OptionsSignal has no butterfly fields since this revision. Every other field is unchanged.
 v5.1  2026-11-08  OTV5 r76 (RETIRE.1) — vol_ctx and macro_ctx (no caller anywhere) are removed. Nothing else changes. The operator, 2026-11-07: "Running dead code and logging dead code activity is unnecessary drag. Yes, I want all of those things fixed."
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
@@ -133,6 +134,25 @@ def _round(x, nd=4):
         return None
 
 
+def _quote_epoch(c):
+    """r147 (QTIME.1) — OptionContract.quote_epoch (chain_marks.updated_epoch) to the millisecond; None unknown."""
+    try:
+        v = float(getattr(c, "quote_epoch", 0.0) or 0.0)
+        return round(v, 3) if v > 0 else None
+    except Exception:                                          # noqa: BLE001
+        return None
+
+
+def _tick_reads():
+    """r147 (QTIME.1) — the tick in progress's read times (utils/tick_reads.latest), None when none is known."""
+    try:
+        from utils import tick_reads as _tr
+        d = _tr.latest()
+        return d if any(v is not None for v in d.values()) else None
+    except Exception:                                          # noqa: BLE001
+        return None
+
+
 def contract_ctx(c) -> dict:
     """Quote context for one OptionContract — the perishable part. None-safe."""
     if c is None:
@@ -156,6 +176,7 @@ def contract_ctx(c) -> dict:
             "theta":      _round(getattr(c, "theta", 0.0), 4),
             "volume":     int(getattr(c, "volume", 0) or 0),
             "oi":         int(getattr(c, "open_interest", 0) or 0),
+            "quote_epoch": _quote_epoch(c),                    # r147 (QTIME.1): the quote's own store time
         }
     except Exception:
         return None
@@ -276,6 +297,9 @@ def journal(event: str, **sections):
         for k, v in sections.items():
             if v is not None:
                 row[k] = v
+        _rd = _tick_reads()                           # r147 (QTIME.1): trailing, record only
+        if _rd is not None and "tick_reads" not in row:
+            row["tick_reads"] = _rd
         day_dir = os.path.join(_OUT_ROOT, now.strftime("%Y-%m-%d"))
         os.makedirs(day_dir, exist_ok=True)
         path = os.path.join(day_dir, f"{_SYMBOL}.jsonl")
