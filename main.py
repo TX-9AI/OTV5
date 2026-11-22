@@ -1,5 +1,6 @@
 """
-main.py  v5.35
+main.py  v5.36
+v5.36  2026-11-22  OTV5 r148 (BOXF.1) — ONE [flags] LINE AT EVERY START: _announce_box_flags() (beside _announce_plan_states, both start paths) loads this box's deploy/box_flags/<SYM> once through utils/box_flags.effective() and logs "[flags] <SYM> source=<file|none (defaults)> sha256=<12> commit=<10> · <key=value ...|schema v1: no keys> · differs: <...|none>", plus " · REFUSED: ..." when a line was refused, which is also paged once (code MSG). The schema is empty at r148, so the line reads "source=none (defaults) ... schema v1: no keys" on every box and no decision changes. The operator, 2026-11-22: "each box should maintain a 'flag' file ... saved settings, not user interactive".
 v5.35  2026-11-22  OTV5 r147 (QTIME.1; record only) — THE TICK SAYS WHEN IT READ ITS QUOTES. main_loop calls utils/tick_reads.begin(tick_start) at the top of every tick and tick_reads.chain_read(_gex_chain) right after the one pre-analysis chain fetch, so plan_tick (strategy/plan v5.5) and every signal_journal row (analysis/signal_journal v5.3) carry tick_start_epoch, marks_read_epoch and marks_store_epoch. Both calls are wrapped; nothing reads them to decide; no broker call, no config key, no env read.
 v5.34  2026-11-22  OTV5 r146 (BLND.1, partial; the before-cash audit 2026-11-22 F3) — AFTER A BLIND EPISODE, NO OPENING ORDER ON THE TICK THAT FIRST SEES AGAIN; ENTRIES ARE ELIGIBLE FROM THE NEXT TICK, ON CURRENT 1m BARS. The operator, 2026-09-30: "The plan should have to reacquire a valid trigger after sight restored"; approved 2026-11-22: "Yes, we need that."; the timing, 2026-11-22: "Does it really need a full minute if the plans refresh every 15 second tick? I think 1 full tick after a restore should be eligible for a fire if the entry still qualifies." Entries were held only WHILE blind (_blind_tick ends the tick), so the first tick with sight could open on a frame it never watched (2026-09-29: feed dead 09:30:10-09:37:52, an entry 09:38:04 on the 09:30 bar's trigger). _blind_tick records every blind tick (utils/blind_reacquire.note_blind), _blind_clear (now= for tests) arms the hold with the sighted tick's number (note_sight); attempt_new_entry (RTH, after the session gate) asks NOTHING on the sighted tick, nor on a later tick whose ctx["df_1m"] does not yet hold the last completed minute as its newest closed bar: one "[entry-gate] ... entries HELD - reacquiring after the blind episode ..." line per tick and one plan_check row per plan at gate blind_reacquire; then the plans are asked as always and fire only if they still qualify. _execute_condor_leg refuses while an episode stands, after entries_open (entry_engine.enter is the debit half). Exits untouched; paper and live alike; zero broker calls (memory; this tick's frame); no config key. With no blind episode nothing changes. Partial: no plan's own latch is reset. Gate tests/check_blind_reacquire.py.
 v5.33  2026-11-21  OTV5 r142 (HUNT.16) — TEXT ONLY: the Service line loses " · hunt_after_brk=<mode>" and its REFUSED note; config no longer defines OT_HUNT_AFTER_BRK (the Hunt's losing-Breakout guard is removed, Breakout dormant since r110). Nothing else on the line or in the tick changes.
@@ -5071,6 +5072,28 @@ def _banner_dials() -> str:
     return f" · pin_gate={'ON' if PIN_PROXIMITY_ACTIVE else 'OFF'}{end}{brk}"
 
 
+def _announce_box_flags() -> None:
+    """r148 (BOXF.1) — ONE line naming this box's flags as loaded (utils/box_flags.effective(): read once, at start),
+    the file's sha256 and the commit, so the effective values are on the record at every start and control's botlog
+    copy carries them. A refused line is named on it and paged once. Never raises: the bot always starts."""
+    try:
+        from utils import box_flags as _bf
+        _f = _bf.effective()
+        _line = _bf.start_line(_f, _bf.commit())
+        if _f.problems:
+            logger.warning(_line)
+            try:
+                get_alert_manager()._send(
+                    f"\u26A0\uFE0F {INSTRUMENT} box flags REFUSED at start: " + "; ".join(_f.problems)
+                    + " | the bot started; a refused setup reads off | " + fmt_et_short(), code="MSG")
+            except Exception as _pg:                            # noqa: BLE001
+                logger.warning("[flags] page NOT sent (%s: %s)", type(_pg).__name__, _pg)
+        else:
+            logger.info(_line)
+    except Exception as exc:                                    # noqa: BLE001
+        logger.warning("[flags] box flags not announced (%s: %s)", type(exc).__name__, exc)
+
+
 def _announce_plan_states() -> None:
     """r303 (PSTATE.1) — ONE line naming every plan's state and category, and data/plan_states.json for the
     devtools plans panel, so a DORMANT plan's silence is explained rather than mistaken for a fault (WA §0.5).
@@ -7092,6 +7115,7 @@ def main():
                 "configure.sh item 2.", ORB_RISK_ENV_IGNORED, RISK_PER_TRADE_USD)
     else:
         session_config = _interactive_startup()
+    _announce_box_flags()                                       # r148 (BOXF.1)
     _announce_plan_states()                                     # r303 (PSTATE.1)
 
     # Initialize TastyTrade client

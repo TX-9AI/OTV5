@@ -1,0 +1,18 @@
+deploy/box_flags/README  v5.0
+v5.0  2026-11-22  OTV5 r148 (BOXF.1) — new. The format of a box flag file. This README is the only file here that is
+      not a box's file; utils/box_flags.py and tools/box_flags_show.py skip it by name.
+
+ONE FILE PER BOX, NAMED FOR ITS SYMBOL (deploy/box_flags/QQQ, deploy/box_flags/SPX ...), AND ONLY WHERE THE BOX DIFFERS.
+
+  - The keys, their allowed values and their defaults live in ONE place: utils/box_flags.py SCHEMA. That is the fleet
+    roster. A file overrides it for one box; a file never restates it (a line equal to the default is refused at land,
+    so a default changed in SCHEMA reaches every box). A box with no file runs on the defaults.
+  - Format: blank lines, "# comment" lines, and "key = value  # reason" lines. One key per line, lowercase.
+  - Values: on | off (paper_only is refused until its own delivery lands).
+  - Read ONCE, at the bot's start (one "[flags]" line in bot.log names the effective values, this file's sha256 and
+    the commit). A change takes effect at the next start: the 09:15 wake or a restart.
+  - A file changes only through a land with the operator's yes; git is the audit trail. No menu item, no prompt, no
+    env key, no installer writes here.
+  - A bad value turns THAT setup off; an unreadable file turns every setup off; an unknown key is ignored. Each is
+    named on the [flags] line and paged once, and the bot still starts. tests/check_box_flags.py refuses all of them
+    at land.

@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""tests/check_map_accuracy.py — v5.2
+"""tests/check_map_accuracy.py — v5.3
+v5.3  2026-11-22  OTV5 r148 (BOXF.1) — _unit_scripts reads only the FILES directly under deploy/: deploy/box_flags/ is a
+      folder (the per-box flag files, utils/box_flags), and opening it as a unit file raised IsADirectoryError. No unit
+      lives in a subfolder; every check is unchanged.
 v5.2  2026-11-14  OTV5 r118 (HYG.23) — DOCSTRING ONLY: the resting store leaves the list of stores L reads (its module is deleted).
 v5.1  2026-10-25  OTV5 r23 — R1b EXEMPTS THE TABLES s3_push ITSELF WRITES. r20 (PUSH.1) gave s3_push its own SQLite
       ledger (derived_ledger.db, table `seen`), which it creates, writes and reads; R1b read that true read of its own
@@ -99,6 +102,8 @@ def _unit_scripts():
     rx_mod = re.compile(r"\s-m\s+([\w.]+)")
     d = os.path.join(_root, "deploy")
     for fn in sorted(os.listdir(d)):
+        if not os.path.isfile(os.path.join(d, fn)):        # r148: deploy/box_flags/ is a folder, not a unit
+            continue
         for ln in open(os.path.join(d, fn), encoding="utf-8", errors="replace"):
             s = ln.strip()
             if not re.match(r"Exec(Start|Condition)=", s):

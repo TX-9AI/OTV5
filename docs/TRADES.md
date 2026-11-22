@@ -1,5 +1,7 @@
 # TRADES — the specs
 
+**`TRADES.md` v5.32 · 2026-11-22 · r148 (BOXF.1, L1) — section 0: each box's saved settings file (deploy/box_flags/<SYM>, utils/box_flags.py; read once at start, one `[flags]` line). The schema is empty at r148, so nothing in the roster below changes.**
+
 **`TRADES.md` v5.31 · 2026-11-22 · r146 (BLND.1, partial; the before-cash audit 2026-11-22 F3) — section 0: after a blind episode no setup opens on the tick that first sees again; entries are eligible from the next tick on current 1m bars (utils/blind_reacquire; PLAN_SPEC section 45; the operator, 2026-11-22: "Does it really need a full minute if the plans refresh every 15 second tick? I think 1 full tick after a restore should be eligible for a fire if the entry still qualifies."). Exits never gated; paper and live alike.**
 
 **`TRADES.md` v5.30 · 2026-11-22 · r145 (HALF.1) — the close paragraph: on a listed 13:00 early close (11-27, 12-24, ...) NOTHING OPENS ALL SESSION, paper or live; r268's 11:30 entry clip is gone. The box still wakes and records data, and the close-side times still move three hours earlier. The operator, 2026-11-22: "Yes, just treat them as bank holidays. No trading."**
@@ -88,6 +90,8 @@ A window's end is exclusive: 10:30 means the last entry is 10:29. A switch is AC
 RETIRE.1), the trend credit spread with its shadow (r88, RETIRE.3) and the GEX pin butterfly (r103, RETIRE.5); Breakout is DORMANT from 2026-11-16 (r110, WS.3 TRIM; its code kept, section 7); the opening-range ENGINE is not removed: Runaway and the Hunt read it, and since r222 its
 range is checked against the official print. The condor is a management plan with no entry
 of its own; with every credit entry removed it has nothing to manage.
+
+**Box flags (r148, BOXF.1; `utils/box_flags.py`, `deploy/box_flags/<SYM>`).** Each box may keep ONE saved settings file, named for its symbol, holding only the lines where that box differs from the default (`key = value  # reason`). The keys, their allowed values (`on` / `off`) and their defaults live in one place, `utils/box_flags.SCHEMA`, which is the fleet roster; a file never restates a default (tests/check_box_flags.py F6). The file is read once at the bot's start and named on one `[flags]` line (the values, the file's sha256, the commit); it changes only through a land and reaches a box with the fleet update. A bad value turns that setup off, an unreadable file turns every setup off, an unknown key is ignored; each is named and paged once, and the bot still starts. r148 ships the schema EMPTY (schema v1, no keys): the switch column below is unchanged. The keys arrive one land at a time (OGAP first, then the Hunt, Runaway and PARK, whose env keys move here).
 
 **Plan states (r303, PSTATE.1; `strategy/plan_state.py`).** Every plan is ACTIVE (evaluated, written, trades), LOG
 (evaluated and written, every fire recorded LOG-ONLY and never executed) or DORMANT (never asked, writes nothing: no
