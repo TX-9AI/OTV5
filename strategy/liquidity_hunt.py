@@ -1,5 +1,13 @@
 """
-strategy/liquidity_hunt.py  v5.5
+strategy/liquidity_hunt.py  v5.6
+v5.6  2026-11-21  OTV5 r142 (HUNT.16) — THE HUNT NO LONGER READS A DORMANT SETUP'S BOOK. HUNT.13 (r316) asked trades.db on every armed
+      Hunt for a CLOSED losing Breakout on that side today and HELD the Hunt when the read failed. Breakout has been DORMANT with
+      no switch since r110 (strategy/plan_state.py), so no such row can be written: the hold could only fire on an unreadable
+      trades.db (locked, I/O error), for a reason that cannot apply. breakout_failed_today, _HAB_SAID,
+      _record_hunt_after_breakout (data/counterfactual/hunt_after_breakout.jsonl), the guard and the breakout_failed plan check
+      go; config's OT_HUNT_AFTER_BRK and main's hunt_after_brk= field go with them. Every gate that ran before or after it is
+      unchanged. The operator, 2026-11-21: "if it's an obvious fix or improvement, let's consider it". GATE
+      tests/check_hunt_no_dormant_guard.py.
 v5.5  2026-11-14  OTV5 r115 (HYG §5.1) — the symbol comes from config.INSTRUMENT here (_symbol_of, the same try/except), not from strategy/sweep_credit_spread, whose last two helpers kept a 397-line removed-trade file alive; that module is deleted. Same value.
 v5.4  2026-11-09  OTV5 r103 (RETIRE.5 step 2) — the expected move is read from analysis.volatility_measures.expected_move_session, the function strategy/gex_pin_butterfly.expected_move wrapped since r223 (same value; the fly module is removed). The operator, 2026-11-08: "I concur on both, in that order".
 v5.3  2026-11-08  OTV5 r90 (SHADOW.1) — LOG ONLY: every fire records the opening-range / EM rule's verdict (S5 R1,
@@ -221,75 +229,6 @@ def break_finished_in_book(direction: str, boundary, session_date=None):
     return False
 
 
-def breakout_failed_today(direction: str, session_date=None):
-    """r316 (HUNT.13) - the LOSING Breakout that closes this side to the Hunt today. NEVER raises.
-
-      (trade_id, pnl_usd) - a CLOSED Breakout on `direction` today with pnl_usd < 0 (the first such)
-      None                - none has: the Hunt may trade
-      "unreadable"        - the book could not be read; the caller HOLDS (fails closed)
-
-    The side is option_side (call = long, put = short), direction the fallback, as side_entries_today; rows are
-    the current mode's (paper or live) only.
-    """
-    from datetime import datetime, timedelta
-    try:
-        from zoneinfo import ZoneInfo
-        _et, _utc = ZoneInfo("America/New_York"), ZoneInfo("UTC")
-        day = session_date or datetime.now(_et).date()
-        lo = (datetime.combine(day, datetime.min.time(), _et)
-              - timedelta(hours=1)).astimezone(_utc).isoformat()
-        from database.trade_logger import get_trade_logger
-        tl = get_trade_logger()
-        conn = tl._connect()
-        try:
-            rows = conn.execute(
-                "SELECT trade_id, entry_time, option_side, direction, pnl_usd FROM trades "
-                "WHERE strategy='Breakout' AND status='closed' AND entry_time >= ? "
-                "AND COALESCE(paper_trade,1)=? ORDER BY exit_time",
-                (lo, int(getattr(tl, "_mode_flag", 1)))).fetchall()
-        finally:
-            conn.close()
-    except Exception as exc:                                    # noqa: BLE001
-        logger.warning("[hunt] Breakout history unreadable from trades.db (%s) - holding", exc)
-        return "unreadable"
-    for tid, et_, side, dirn, pnl in rows:
-        sd = str(side or "").lower()
-        d = "long" if sd.startswith("c") else ("short" if sd.startswith("p") else str(dirn or "").lower())
-        if d != direction:
-            continue
-        try:
-            if datetime.fromisoformat(str(et_)).astimezone(_et).date() != day:
-                continue
-            if pnl is not None and float(pnl) < 0:
-                return (str(tid), float(pnl))
-        except (TypeError, ValueError):
-            continue
-    return None
-
-
-_HAB_SAID: set = set()
-
-
-def _record_hunt_after_breakout(row: dict) -> None:
-    """r316 (HUNT.13) COUNTERFACTUAL: once per (symbol, direction, boundary, entry) per process, the Hunt a losing
-    same-side Breakout held (or, in log mode, would have held), to data/counterfactual/hunt_after_breakout.jsonl.
-    Never raises; a failed write is logged."""
-    key = (row.get("symbol"), row.get("direction"), row.get("boundary"), row.get("entry"))
-    if key in _HAB_SAID:
-        return
-    _HAB_SAID.add(key)
-    try:
-        import json, os, time
-        d = os.environ.get("OT_COUNTERFACTUAL_DIR") or os.path.join(
-            os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "counterfactual")
-        os.makedirs(d, exist_ok=True)
-        with open(os.path.join(d, "hunt_after_breakout.jsonl"), "a") as fh:
-            fh.write(json.dumps({"ts_epoch": time.time(), "rule": "hunt_after_breakout",
-                                 "mode": getattr(config, "HUNT_AFTER_BRK_MODE", "trade"), **row}) + "\n")
-    except Exception as exc:                                    # noqa: BLE001
-        logger.warning("[hunt] after-breakout counterfactual row NOT written: %s", exc)
-
-
 def _record_hunt_rearm(row: dict) -> None:
     """HUNT.9 COUNTERFACTUAL: the A2 a return to the range would have fired, NOT traded, to
     data/counterfactual/hunt_rearm.jsonl. Never raises; a failed write is logged, never fatal."""
@@ -343,7 +282,7 @@ class LiquidityHunt:
                    "board_above",
                    "board_below", "fork_built", "nearest_above", "nearest_below",
                    "above_em", "below_em", "em_platform", "bias", "break_state", "fake_seen", "fake_failed",
-                   "entry", "break_finished", "breakout_failed", "runway", "considered", "spread_rejected",
+                   "entry", "break_finished", "runway", "considered", "spread_rejected",
                    "contract", "leverage", "debit", "stop_premium")
 
     def __init__(self):
@@ -547,30 +486,7 @@ class LiquidityHunt:
                 return prep
             t.hold(f"{head}. {entry} armed but this break already had its hunt — one per break")
             return prep
-        # 🔴 r316 (HUNT.13) — A LOSING BREAKOUT ON THIS SIDE CLOSES IT TO THE HUNT FOR THE DAY. The operator,
-        # 2026-10-24 13:56 ET: "if a breakout on one side fails, don't allow a hunt to fire on that side for
-        # the rest of the day". trades.db decides; an unreadable book HOLDS.
-        _hab = getattr(config, "HUNT_AFTER_BRK_MODE", "trade")
-        if _hab != "off":
-            _bf = breakout_failed_today(bias)
-            t.check("breakout_failed", None if _bf == "unreadable" else (1.0 if _bf else 0.0),
-                    _bf is None or _hab == "log")
-            if _bf == "unreadable":
-                if _hab == "trade":
-                    t.hold(f"{head}. {entry} {bias} at {_n(boundary)} — trades.db is UNREADABLE, so a losing "
-                           f"{bias} Breakout today cannot be ruled out; holding (HUNT.13)")
-                    return prep
-            elif _bf:
-                if not _obs:
-                    _record_hunt_after_breakout({"symbol": _symbol_of(), "direction": bias, "entry": entry,
-                                                 "boundary": round(boundary, 2), "signal_bar": bar_ts,
-                                                 "price_now": price_now, "target": target,
-                                                 "breakout_trade": _bf[0], "breakout_pnl": _bf[1],
-                                                 "held": _hab == "trade"})
-                if _hab == "trade":
-                    t.hold(f"{head}. {entry} {bias} at {_n(boundary)} — the {bias} Breakout {_bf[0]} lost "
-                           f"${_bf[1]:,.2f} today; no {bias} Hunt for the rest of the day (HUNT.13)")
-                    return prep
+        # r142 (HUNT.16): no read of a dormant setup's book here; the one-per-break read above is the Hunt's own.
         t.anchor(trigger=boundary, invalidation=boundary)
         runway = _runway(bias, target, price_now)        # r33 (HUNT.14): signed, so a price through its target refuses
         prep.runway = runway

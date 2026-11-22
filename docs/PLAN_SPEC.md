@@ -1,5 +1,7 @@
 # PLAN_SPEC.md — every strategy declares its intent BEFORE the trigger
 
+**`PLAN_SPEC.md` v5.8 · 2026-11-21 · r142 (HUNT.16) — §43.2 is REMOVED: the Hunt is no longer held after a losing Breakout (Breakout dormant r110; the rule could only hold on an unreadable trades.db); §43.5 no longer lists hunt_after_breakout.jsonl.**
+
 **`PLAN_SPEC.md` v5.7 · 2026-11-21 · r141 (the Saturday brief 2026-11-21 §4 item 12) — §4's ORB-engine line says the Hunt reads it (Runaway and the Hunt; Breakout is dormant), and §43 carries a DORMANT r110 line: §43.1 (Breakout's re-fire) and §43.2 (no Hunt after a losing Breakout) describe kept code that no live trade reaches.**
 
 **`PLAN_SPEC.md` v5.6 · 2026-11-14 · OTV5 (OGAP.1) — §44 OGAP, the plan contract of Park's friend's ORB-GAP on QQQ paper.**
@@ -1384,9 +1386,9 @@ session extreme. r142 stays: a bar that started before the side's latest entry a
 trades.db and the feed store; unreadable is a refusal. `OT_BRK_REFIRE=extreme` restores r131/r282 unchanged.
 BRK.12's record-only re-arm row is superseded while `rearm` decides (the Service line reads `rearm=brk:superseded`).
 
-**43.2 Liquidity Hunt — no Hunt on a side after a losing Breakout on that side, for the day.** "Fails" is a Breakout
-on that side that CLOSED today with pnl_usd < 0 (an open loser has not failed yet). The Hunt HOLDS, named HUNT.13;
-an unreadable book holds. `OT_HUNT_AFTER_BRK` trade|log|off (unset = trade).
+**43.2 Liquidity Hunt — REMOVED r142 (HUNT.16, 2026-11-21).** HUNT.13 held a Hunt on a side after a losing Breakout on
+that side that day. Breakout is dormant (r110) and writes no row, so the rule could only hold a Hunt when trades.db
+could not be read. The guard, its read and `OT_HUNT_AFTER_BRK` are gone; the Hunt's own gates are unchanged.
 
 **43.3 There is no re-entry time gate (CD.1).** The 20 s gate (r306/r316) is scrapped, not logged: the operator,
 2026-10-24, "The 20 seconds is arbitrary, just like 45 seconds, or 145 seconds. It has zero value. Scrap it."
@@ -1397,8 +1399,8 @@ did). Its own limits (one per break, any exit; r179/r281) are unchanged.
 
 **43.5 Counterfactuals (the operator, 2026-10-10: the evidence of what would have happened had we NOT made the
 adjustment).** data/counterfactual/breakout_refire.jsonl (every signal bar where the two re-fire rules disagree, both
-verdicts, which decided, whether it fired), hunt_after_breakout.jsonl (every held or would-be-held Hunt with the losing
-Breakout). Scored on Saturdays. (reentry_gate.jsonl is no longer written: 43.3.)
+verdicts, which decided, whether it fired). Scored on Saturdays. (reentry_gate.jsonl is no longer written: 43.3;
+hunt_after_breakout.jsonl is no longer written: 43.2.)
 
 ## 44. OTV5 OGAP.1 — OGAP: THE PLAN CONTRACT (the operator, 2026-11-14: "let's design & paper trade the OGAP on QQQ")
 

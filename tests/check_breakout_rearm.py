@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 """
-tests/check_breakout_rearm.py  v5.4
+tests/check_breakout_rearm.py  v5.5
+v5.5  2026-11-21  OTV5 r142 (HUNT.16) — RE-POINTED: HUNT.13 is removed (Breakout dormant r110), so C1 reads BRK_REFIRE only and C1d
+      asserts config defines no HUNT_AFTER_BRK_MODE; U1 and U5 (the book read and its log/off modes) go with the function; U3
+      now asserts a long Breakout that LOST today does NOT hold the long Hunt and writes no hunt_after_breakout row.
+      R1-R9 unchanged. The Hunt-side gate is tests/check_hunt_no_dormant_guard.py.
 v5.4  2026-11-15  OTV5 r123 (HYG.27) — OT_RESTING_DB leaves the scratch env (r118 deleted execution/resting_orders.py, its only reader).
 v5.3  2026-11-08  OTV5 r76 (RETIRE.1) — the fixture no longer resets execution/handoff (removed with the sweep, r76). No check changed.
 v5.2  2026-10-31  OTV5 r68 (CFG.5) — OT_RESTING_STOP_STATE leaves the scratch env: the resting stop and its state file are deleted
@@ -38,14 +42,11 @@ rows go to a scratch OT_COUNTERFACTUAL_DIR, never the live one. Only the order-f
   R7  an unreadable tape FAILS CLOSED under "fresh_break"
   R8  OT_BRK_REFIRE=extreme restores r131 exactly: R3's bar is refused under "new_extreme" (fresh interpreter)
   R9  breakout.GATES declares FRESH_BREAK FOUNDATIONAL and NEW_EXTREME stays declared (the rollback)
-  C1  config defaults (fresh interpreter, env cleared): BRK_REFIRE_MODE rearm, HUNT_AFTER_BRK_MODE trade; a bogus
-      value of each reads the default and is NAMED; OT_REENTRY_GATE is not read (RENT.2/RENT.3 scrapped, CD.1)
-  U1  breakout_failed_today: a losing same-side closed Breakout -> it; a winner, the other side, an open
-      loser -> None; an unreadable book -> "unreadable"
+  C1  config defaults (fresh interpreter, env cleared): BRK_REFIRE_MODE rearm; a bogus value reads the default and
+      is NAMED; OT_REENTRY_GATE is not read (RENT.2/RENT.3 scrapped, CD.1); C1d config has no HUNT_AFTER_BRK_MODE (r142)
   U2  the Hunt's A1 long fires with no losing long Breakout today
-  U3  ... and HOLDS, named HUNT.13, once a long Breakout today closed at a loss; one row recorded
+  U3  r142 (HUNT.16): ... and STILL fires once a long Breakout today closed at a loss; no hunt_after_breakout row
   U4  a losing SHORT Breakout does not hold the long Hunt
-  U5  OT_HUNT_AFTER_BRK=log fires and records the would-be hold; off records nothing
 """
 import os
 import sys
@@ -326,24 +327,27 @@ def main():
                    str({k: B.GATES.get(k) for k in ("FRESH_BREAK", "NEW_EXTREME")})))
 
     # C1 config defaults and refusals, fresh interpreters
-    cc = ("import config as c;print('MODES',c.BRK_REFIRE_MODE,c.HUNT_AFTER_BRK_MODE,"
-          "repr(c.BRK_REFIRE_ENV_REFUSED),repr(c.HUNT_AFTER_BRK_ENV_REFUSED),hasattr(c,'REENTRY_GATE_MODE'))")
+    cc = ("import config as c;print('MODES',c.BRK_REFIRE_MODE,"
+          "repr(c.BRK_REFIRE_ENV_REFUSED),hasattr(c,'REENTRY_GATE_MODE'),hasattr(c,'HUNT_AFTER_BRK_MODE'))")
     rc_a, out_a = _child({}, cc)
-    guard("C1a unset: brk_refire=rearm, hunt_after_brk=trade",
-          lambda: ("MODES rearm trade '' '' False" in out_a, f"rc={rc_a} {out_a[-160:]}"))
-    rc_b, out_b = _child({"OT_BRK_REFIRE": "bogus", "OT_HUNT_AFTER_BRK": "nope"}, cc)
-    guard("C1b a bogus value of each reads the default and is NAMED",
-          lambda: ("MODES rearm trade 'bogus' 'nope' False" in out_b, f"rc={rc_b} {out_b[-160:]}"))
+    guard("C1a unset: brk_refire=rearm",
+          lambda: ("MODES rearm '' False" in out_a, f"rc={rc_a} {out_a[-160:]}"))
+    rc_b, out_b = _child({"OT_BRK_REFIRE": "bogus"}, cc)
+    guard("C1b a bogus value reads the default and is NAMED",
+          lambda: ("MODES rearm 'bogus' False" in out_b, f"rc={rc_b} {out_b[-160:]}"))
     rc_c, out_c = _child({"OT_REENTRY_GATE": "trade"}, cc)
     guard("C1c OT_REENTRY_GATE is no longer read (RENT.2/RENT.3 scrapped)",
-          lambda: ("MODES rearm trade '' '' False" in out_c, f"rc={rc_c} {out_c[-160:]}"))
+          lambda: ("MODES rearm '' False" in out_c, f"rc={rc_c} {out_c[-160:]}"))
+    rc_d, out_d = _child({"OT_HUNT_AFTER_BRK": "trade"}, cc)
+    guard("C1d r142 (HUNT.16): config defines no HUNT_AFTER_BRK_MODE, even with OT_HUNT_AFTER_BRK set",
+          lambda: ("MODES rearm '' False False" in out_d, f"rc={rc_d} {out_d[-160:]}"))
 
     _hunt(day)
     return _tail()
 
 
 def _hunt(day):
-    """U1-U5 on check_liquidity_hunt's own fixture (bias LONG, A1 from 101.00)."""
+    """U2-U4 on check_liquidity_hunt's own fixture (bias LONG, A1 from 101.00)."""
     try:
         import config
         from strategy import plan as P
@@ -352,7 +356,6 @@ def _hunt(day):
     except Exception as exc:                                    # noqa: BLE001
         check("U0 setup", False, f"{type(exc).__name__}: {exc}")
         return
-    bft = getattr(LH, "breakout_failed_today", None)
 
     class St:
         def __init__(s): s.conn = sqlite3.connect(":memory:"); s.conn.row_factory = sqlite3.Row
@@ -384,10 +387,6 @@ def _hunt(day):
 
     def fire(n):
         h = LH.LiquidityHunt(); h._store = ds; h.planner.symbol = "TST"; LH.FINISHED.clear()
-        try:
-            LH._HAB_SAID.clear()
-        except AttributeError:
-            pass
         P.begin_tick(n)
         sg = h.generate_signal(orb=orb, price_now=101.3, now_et="09:42", atr_pct=0.14, chain=chain,
                                df_1m=frame, atm_iv=0.25)
@@ -404,29 +403,6 @@ def _hunt(day):
         nowm = datetime.now(ZoneInfo(ET))
         return _log_brk(side, max(0, (nowm.hour - 9) * 60 + nowm.minute - 30 - 1), day, pnl=pnl, closed=closed)
 
-    # U1 the book read
-    wipe()
-    log_now("call", 250.0)                                   # a WINNING long
-    log_now("put", -400.0)                                   # a losing SHORT
-    log_now("call", -300.0, closed=False)                    # an OPEN long (not failed yet)
-    r_none = bft("long") if bft else "absent"
-    lose = log_now("call", -310.0)                           # the losing long
-    r_hit = bft("long") if bft else "absent"
-    import database.trade_logger as TLm
-    _gtl = TLm.get_trade_logger
-
-    def _boom(*a, **k):
-        raise sqlite3.OperationalError("unable to open database file")
-    TLm.get_trade_logger = _boom
-    try:
-        r_bad = bft("long") if bft else "absent"
-    finally:
-        TLm.get_trade_logger = _gtl
-    guard("U1 breakout_failed_today: winner / other side / open loser -> None; a closed losing long -> it; "
-          "an unreadable book -> 'unreadable'",
-          lambda: (r_none is None and isinstance(r_hit, tuple) and r_hit[0] == lose and r_hit[1] == -310.0
-                   and r_bad == "unreadable", f"none={r_none!r} hit={r_hit!r} unreadable={r_bad!r}"))
-
     # U2 no losing long today -> A1 fires
     wipe()
     log_now("put", -400.0)                                   # U4's losing SHORT is present from the start
@@ -434,34 +410,15 @@ def _hunt(day):
     guard("U2/U4 with no losing LONG Breakout today (a losing short is) the A1 long fires",
           lambda: (sig is not None and sig.direction == "long", f"{r[0]} {r[1][-100:]}"))
 
-    # U3 a losing long -> HOLD, named, recorded
+    # U3 r142 (HUNT.16): a losing long Breakout no longer holds the long Hunt, and nothing is recorded
     log_now("call", -310.0)
     n0 = len(_cf_rows("hunt_after_breakout.jsonl"))
     sig, r = fire(2.0)
     rows = _cf_rows("hunt_after_breakout.jsonl")[n0:]
-    guard("U3 a long Breakout that LOST today holds the long Hunt, named HUNT.13",
-          lambda: (sig is None and r[0] == "HOLD" and "HUNT.13" in r[1], f"{r[0]} {r[1][-120:]}"))
-    guard("U3b ...and one row is recorded with the losing trade and held=True",
-          lambda: (len(rows) == 1 and rows[0].get("held") is True and rows[0].get("breakout_pnl") == -310.0
-                   and rows[0].get("direction") == "long", str(rows)[:200]))
-
-    # U5 log and off
-    _mode = getattr(config, "HUNT_AFTER_BRK_MODE", None)
-    try:
-        config.HUNT_AFTER_BRK_MODE = "log"
-        n1 = len(_cf_rows("hunt_after_breakout.jsonl"))
-        sig_l, r_l = fire(3.0)
-        rows_l = _cf_rows("hunt_after_breakout.jsonl")[n1:]
-        config.HUNT_AFTER_BRK_MODE = "off"
-        n2 = len(_cf_rows("hunt_after_breakout.jsonl"))
-        sig_o, r_o = fire(4.0)
-        rows_o = _cf_rows("hunt_after_breakout.jsonl")[n2:]
-    finally:
-        config.HUNT_AFTER_BRK_MODE = _mode
-    guard("U5 log fires the Hunt and records the would-be hold (held=False); off fires and records nothing",
-          lambda: (sig_l is not None and len(rows_l) == 1 and rows_l[0].get("held") is False
-                   and sig_o is not None and rows_o == [],
-                   f"log={sig_l is not None}/{rows_l} off={sig_o is not None}/{rows_o}"))
+    guard("U3 r142: a long Breakout that LOST today does NOT hold the long Hunt (HUNT.13 removed)",
+          lambda: (sig is not None and sig.direction == "long" and "HUNT.13" not in r[1], f"{r[0]} {r[1][-120:]}"))
+    guard("U3b ...and no hunt_after_breakout row is written",
+          lambda: (rows == [], str(rows)[:200]))
 
 
 def _tail():

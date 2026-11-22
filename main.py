@@ -1,5 +1,6 @@
 """
-main.py  v5.32
+main.py  v5.33
+v5.33  2026-11-21  OTV5 r142 (HUNT.16) — TEXT ONLY: the Service line loses " · hunt_after_brk=<mode>" and its REFUSED note; config no longer defines OT_HUNT_AFTER_BRK (the Hunt's losing-Breakout guard is removed, Breakout dormant since r110). Nothing else on the line or in the tick changes.
 v5.32  2026-11-21  OTV5 r141 (RAMP.1) — TEXT ONLY: the Service line's ramp_top= and the interactive start line say the ramp TOP (OT_BREAKOUT_BUDGET_USD) sizes Breakout only, which is dormant (r110), and that the live setups size on risk= (OT_RISK_USD). Only risk_manager._size_geometry reads the key, and only a sizes_on_geometry signal (Breakout) reaches it. No value, sizing or decision changes.
 v5.31  2026-11-21  OTV5 r137 (CAP.10) — AT THE DAILY CATASTROPHIC CAP NOTHING IS ASKED: the capped branch no longer calls _attempt_park and _attempt_ogap (they were cap-exempt, PARK from r288, OGAP from OGAP.1); it returns after the admission table has refused every strategy at catastrophic_cap (one plan row each), and still fails closed when the table is unavailable. The cap-hit log line no longer names exemptions. The operator, 2026-11-21: "both trades should fall under the catastrophic cap & any profit locks need to be on mark". The normal dispatch asks PARK and OGAP exactly as before.
 v5.30  2026-11-21  OTV5 r136 (OGAP.3) — OGAP IS SIZED ON THE MARK: _execute_entry_signal asks the sizer, for strategy_name OGAP only, with premium = signal.entry_premium (the plan's mark; the D3 freeze re-reads it) and budget_usd = config.RISK_PER_TRADE_USD (unchanged), i.e. floor(RISK_PER_TRADE_USD / (mark x 100)); the signal's ogap_ask is gone and is never read. The operator, 2026-11-20: "Ours needs the modification to account for how I would trade it, never pay the spread." Every other strategy sizes exactly as before.
@@ -5014,14 +5015,10 @@ def _banner_dials() -> str:
     # OT_HUNT_STOP5M moved every Hunt back to the 1m boundary with no line anywhere (audit 10-18 G2).
     from config import (HUNT_STOP5M_MODE, HUNT_STOP5M_ENV_REFUSED, BRK_REARM_MODE, BRK_REARM_ENV_REFUSED,
                         HUNT_REARM_MODE, HUNT_REARM_ENV_REFUSED,
-                        BRK_REFIRE_MODE, BRK_REFIRE_ENV_REFUSED,                  # r316 (BRK.15)
-                        HUNT_AFTER_BRK_MODE, HUNT_AFTER_BRK_ENV_REFUSED)          # r316 (HUNT.13)
+                        BRK_REFIRE_MODE, BRK_REFIRE_ENV_REFUSED)                  # r316 (BRK.15)
     brk += f" · brk_refire={BRK_REFIRE_MODE}"                              # r316 (BRK.15)
     if BRK_REFIRE_ENV_REFUSED:
         brk += f" (OT_BRK_REFIRE={BRK_REFIRE_ENV_REFUSED!r} REFUSED)"
-    brk += f" · hunt_after_brk={HUNT_AFTER_BRK_MODE}"                       # r316 (HUNT.13)
-    if HUNT_AFTER_BRK_ENV_REFUSED:
-        brk += f" (OT_HUNT_AFTER_BRK={HUNT_AFTER_BRK_ENV_REFUSED!r} REFUSED)"
     brk += f" · hunt_stop={'5m' if HUNT_STOP5M_MODE == 'trade' else '1m'}({HUNT_STOP5M_MODE})"   # r285 (HUNT.8)
     if HUNT_STOP5M_ENV_REFUSED:
         brk += f" (OT_HUNT_STOP5M={HUNT_STOP5M_ENV_REFUSED!r} REFUSED)"

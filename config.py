@@ -1,5 +1,6 @@
 """
-config.py  v5.28
+config.py  v5.29
+v5.29  2026-11-21  OTV5 r142 (HUNT.16) — HUNT_AFTER_BRK_MODE and HUNT_AFTER_BRK_ENV_REFUSED go (OT_HUNT_AFTER_BRK is no longer read): their one reader, the Hunt's losing-Breakout guard (HUNT.13), is removed, because Breakout is dormant (r110) and the guard could only hold a Hunt on an unreadable trades.db. Every other value unchanged; no new key.
 v5.28  2026-11-21  OTV5 r141 — COMMENT ONLY: the ramp TOP's per-box note says fourteen boxes (was fifteen; the Saturday brief 2026-11-21 section 4 item 13) and that the key sizes Breakout only, dormant since r110 (RAMP.1). Every value unchanged; no new key.
 v5.27  2026-11-21  OTV5 r140 (MACRO.2) — VIX_NO_ENTRY_THRESHOLD GOES: it named the VIX crisis entry gate (session_guard.can_enter), which is deleted (the operator, 2026-09-17: "VIX crisis — get rid of it. That is major opportunity."; 2026-11-21: "VIX 'CRISIS' is something that I view as an opportunity not as something we sit out."). Its other reader, macro_data._classify_vix, reads VIX_CRISIS_THRESHOLD (30, the same number), so vix_band is unchanged. Every other value unchanged; no new key.
 v5.26  2026-11-21  OTV5 r137 (CAP.10) — CAP_EXCLUDED_STRATEGIES = () (was ("PARK", "OGAP")): PARK and OGAP fall under the daily catastrophic cap both ways - their realized P&L counts toward it and, once it is hit, their entries are refused like every other strategy's (execution/position_manager v5.40 drops their cap_exempt; main v5.31 asks nothing in the capped branch). The operator, 2026-11-21: "both trades should fall under the catastrophic cap & any profit locks need to be on mark". The mechanism stays (realized_pnl_today's exclude_strategies, the empty tuple); DAILY_LOSS_LIMIT_USD and every other value unchanged; no new key.
@@ -950,19 +951,6 @@ else:
     BRK_REFIRE_MODE = "rearm"
     if _bf_raw:
         BRK_REFIRE_ENV_REFUSED = _bf_raw
-# ── r316 HUNT.13 — NO HUNT ON A SIDE AFTER A LOSING BREAKOUT ON THAT SIDE ─────
-# trade | log | off. UNSET = trade (the operator, 2026-10-24 13:45 ET: "on a losing breakout trade, forbid a liquidity
-# hunt on the same side for the day"; 13:56 ET: "if a breakout on one side fails, don't allow a hunt to fire on that
-# side for the rest of the day"). trade: the Hunt HOLDS, named; log: it fires and the would-be hold is written; off:
-# not evaluated. Every hold or would-be hold is written to data/counterfactual/hunt_after_breakout.jsonl.
-HUNT_AFTER_BRK_ENV_REFUSED = ""
-_hb_raw = os.environ.get("OT_HUNT_AFTER_BRK", "").strip().lower()
-if _hb_raw in ("trade", "log", "off"):
-    HUNT_AFTER_BRK_MODE = _hb_raw
-else:
-    HUNT_AFTER_BRK_MODE = "trade"
-    if _hb_raw:
-        HUNT_AFTER_BRK_ENV_REFUSED = _hb_raw
 HUNT_REARM_ENV_REFUSED = ""
 _hr_raw = os.environ.get("OT_HUNT_REARM", "").strip().lower()
 if _hr_raw in ("off", "log"):

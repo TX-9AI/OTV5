@@ -1,5 +1,7 @@
 # TRADES — the specs
 
+**`TRADES.md` v5.28 · 2026-11-21 · r142 (HUNT.16) — section 0's re-fire paragraph: the Hunt is no longer held after a losing Breakout (Breakout is dormant since r110, so the rule could only hold a Hunt on an unreadable trades.db); `OT_HUNT_AFTER_BRK` is not read and hunt_after_breakout is no longer written.**
+
 **`TRADES.md` v5.27 · 2026-11-21 · r141 (the Saturday brief 2026-11-21 §4 item 12) — section 0's plan-states paragraph: Runaway and the Hunt have switches (`OT_RUNAWAY`, `OT_HUNT`); Breakout's `OT_BREAKOUT` is no longer read (dormant r110).**
 
 **`TRADES.md` v5.26 · 2026-11-21 · OTV5 r139 (EXIT.15 + EXIT.16 + EXIT.17 + EXIT.18; the live exit polling audit 2026-11-21 S1-S4, live only) — section 6, the live close does what the spec says: a stop counts ITS OWN attempts (refused and rejected ones included, a lock exit's walk never; a different exit reason starts again; a restart continues), so it posts at the mark, the mark, then the bid, then MARKET; every close is priced off the feed store's mark re-read just before it posts (the freshest stored mark, its age logged; an unchanged quote is the current quote, since the feed sends a quote only when it changes), and only a quote past the feed's own 120 s staleness rule goes as a close with no mark; a broker refusal is a refusal (the reason paged), not a lost reply; and a cancel refused because the order just filled books in the same pass. The operator, 2026-11-21: "Yes, in that order". The order itself (the mark, 2 s polls, 8 s deadline, cancel-confirm-dead, the stop steps 2 and 3, the 15:55 cross) is unchanged.**
@@ -116,14 +118,15 @@ end-of-tick sleep records when its own quote crosses its premium stop (data/coun
 the recording off. **The floor watch (r280, EXIT.5) WAKES THE TICK:** a Breakout or Runaway whose own quote (at most 4 s
 old) is at or below its enforced premium stop ends the 15 s wait and the tick runs at once; the tick still decides. Nothing here exits or orders. `OT_FLOOR_WATCH=trade|log|off`, unset = trade.
 
-**The re-fire, the Hunt after a losing Breakout, and the 20 s gate (r316, BRK.15 / HUNT.13 / RENT.3; the operator,
+**The re-fire and the 20 s gate (r316, BRK.15 / RENT.3; the operator,
 2026-10-24 13:45 and 13:56 ET, "Yes, effective Monday").** A Breakout side fires on a FRESH break: the first 1m close
 beyond its edge since 09:35 or since its latest close back inside - every return to the range re-arms it, and the new
-session extreme is no longer asked (`OT_BRK_REFIRE`, unset = rearm; `extreme` restores r131). No Liquidity Hunt fires on a
-side for the rest of the day once a Breakout on that side has CLOSED at a loss (`OT_HUNT_AFTER_BRK` trade|log|off, unset =
-trade). There is no same-side re-entry time gate: the 20 s gate is scrapped (CD.1; "It has zero value. Scrap it.").
-Nothing blocks a Runaway because of another strategy's same-side entry. Each old rule's verdict is recorded beside the new
-one in data/counterfactual/ (breakout_refire, hunt_after_breakout).
+session extreme is no longer asked (`OT_BRK_REFIRE`, unset = rearm; `extreme` restores r131). There is no same-side
+re-entry time gate: the 20 s gate is scrapped (CD.1; "It has zero value. Scrap it."). Nothing blocks a Runaway or a
+Liquidity Hunt because of another strategy's entry or result: HUNT.13's "no Hunt on a side after a losing Breakout on
+it" is REMOVED at r142 (HUNT.16; Breakout is dormant, so it could only hold a Hunt on an unreadable trades.db), and
+`OT_HUNT_AFTER_BRK` is not read. The re-fire rule's old verdict is recorded beside the new one in
+data/counterfactual/breakout_refire.jsonl.
 
 **The commitment state (r272, COMMIT.1/2/3).** Every closed 1m bar each side is COMMITTED, NEUTRAL or ABANDONED
 (analysis/commitment.py). A directional entry whose side is ABANDONED is not placed (`OT_COMMIT_GATE`, unset = trade on
