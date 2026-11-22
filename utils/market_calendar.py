@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-utils/market_calendar.py  v5.0
+utils/market_calendar.py  v5.1
+v5.1  2026-11-22  OTV5 r145 (HALF.1) — TEXT ONLY: a half day is still a session (is_trading_day True, the boxes wake and record data) and OPENS NOTHING: utils/time_utils.no_entries_today() reads is_half_day() and entries_open() / risk/session_guard.can_enter refuse every entry all session. The operator, 2026-11-22: "Yes, just treat them as bank holidays. No trading." No date, list or function changes.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.3  2026-10-11  OTV4TEST r268 (mirror of otv4 r478) / DEP.12 - EARLY CLOSES. EARLY_CLOSES (52 sessions,
 2026-2050, generated from the NYSE rules and identical to dtp's list),
@@ -60,6 +61,12 @@ EARLY_CLOSES lists the 13:00 sessions, close_time()/close_shift_minutes() say
 when the bell rings, and utils/time_utils.close_anchored() moves every
 close-anchored constant to it. Before r478 nothing shortened the session, so
 the 15:40 flatten and 15:45 cross would have fired ~3 h after a 13:00 bell.
+🔴 AND SINCE r145 (HALF.1) A HALF DAY OPENS NOTHING. It stays a session (the boxes
+wake, is_rth runs 09:30-13:00, data is captured, the close side is anchored as above),
+but utils/time_utils.no_entries_today() reads is_half_day() and no setup opens a
+position, paper or live. The operator, 2026-11-22: "Yes, just treat them as bank
+holidays. No trading." A date wrongly listed here would therefore also cost that
+session's entries, one more reason the list is generated, never typed.
 
 Run:  python3 utils/market_calendar.py            # today's verdict
       python3 utils/market_calendar.py --selftest
@@ -498,7 +505,7 @@ def close_time(d: _dt.date | None = None) -> _dt.time:
 
 
 def is_half_day(d: _dt.date | None = None) -> bool:
-    """True on a listed early close. A half day is a TRADING day."""
+    """True on a listed early close. A half day is a session (the market opens) that opens no position (r145)."""
     c = close_time(d)
     return (c.hour, c.minute) != RTH_CLOSE_HM
 

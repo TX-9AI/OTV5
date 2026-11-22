@@ -1,5 +1,6 @@
 """
-risk/session_guard.py  v5.3
+risk/session_guard.py  v5.4
+v5.4  2026-11-22  OTV5 r145 (HALF.1) — ON A 13:00 HALF DAY can_enter REFUSES, AS ON A BANK HOLIDAY. The operator, 2026-11-22: "given our trading system, I don't think we should trade on half days"; ruling: "Yes, just treat them as bank holidays. No trading." The first gate asks time_utils.no_entries_today() (the same predicate entries_open() asks at the order choke points) and refuses with one fixed reason, HALF_DAY_REASON (no clock in it, r73), in a trading pass and a rehearsal alike, so main.attempt_new_entry asks no setup all session (one plan row per strategy, edge-triggered, gate entry_blocked) and no setup picks a contract. The first refusal of each date logs one INFO line, "[half-day] <date> is a 13:00 early close: NO ENTRIES TODAY ...", for the daily review. Full days: the gate is never reached past its test; every other gate, reason and the rehearsal are unchanged. Gate tests/check_no_half_day_entries.py.
 v5.3  2026-11-21  OTV5 r140 (MACRO.2) — THE VIX CRISIS GATE IS DELETED, the second copy of the gate the operator removed on 2026-09-17 ("VIX crisis — get rid of it. That is major opportunity."; restated 2026-11-21: "VIX 'CRISIS' is something that I view as an opportunity not as something we sit out."). can_enter refused every new entry while MacroSnapshot.new_entries_allowed was False (VIX >= 30): on Friday 2026-11-20 from 12:17 ET, VIX 39.53, it blocked every entry on all 14 boxes. The branch goes (and the field with it, macro_data v5.4); the RTH, 09:35 floor and hard-close gates and the rehearsal are unchanged. can_enter keeps its macro parameter, accepted and unused, so no caller breaks. Gate tests/check_no_vix_gate.py.
 v5.2  2026-11-14  OTV5 r119 (HYG §5.5, HYG.24) — must_close_all, seconds_to_open and log_session_state go (uncalled), and the seconds_until_rth_open import only seconds_to_open used. can_enter is unchanged. No caller anywhere (OTV5 code, tests, tools, docs, dtp: token scan + grep on r118). Nothing else changes; the module's behaviour is identical.
 v5.1  2026-11-09  OTV5 r103 (RETIRE.5 step 2) — config.BUTTERFLY_ENTRY_CUTOFF_ET and _BUTTERFLY_CUTOFF go with the GEX pin butterfly: they gated nothing since r209. can_enter keeps its is_butterfly parameter, accepted and unused, so no caller breaks. The operator, 2026-11-08: "I concur on both, in that order".
@@ -77,11 +78,29 @@ from typing import Optional
 
 from utils.time_utils import (
     is_rth, is_orb_complete, is_hard_close_time,
-    now_et, fmt_et_short
+    now_et, fmt_et_short, no_entries_today
 )
+from utils import time_utils as _tu      # r145: the module's clock, the one is_rth reads (and a check pins)
 from data.macro_data import MacroSnapshot
 
 logger = logging.getLogger(__name__)
+
+# r145 (HALF.1) — the refusal on a 13:00 half day. Fixed text, no clock (r73), so the
+# edge-triggered plan row says it once per strategy.
+HALF_DAY_REASON = "half day (13:00 ET close) — no entries today (r145, treated as a bank holiday)"
+_half_day_said: set = set()     # the dates whose one [half-day] line has been logged
+
+
+def _say_half_day_once(d) -> None:
+    """The one INFO line per half-day date (not per tick)."""
+    key = d.isoformat()
+    if key in _half_day_said:
+        return
+    _half_day_said.add(key)
+    logger.info("[half-day] %s is a 13:00 early close: NO ENTRIES TODAY - no setup opens a position, "
+                "paper or live (r145 HALF.1; the operator, 2026-11-22: \"just treat them as bank holidays. "
+                "No trading.\"). The bot runs and records market data; exits and the end-of-day sequence "
+                "are unchanged.", key)
 
 
 
@@ -151,6 +170,17 @@ class SessionGuard:
         # ⚠️ AND THE FIX IS THE PATTERN, NOT THE STRING (§20): check_inactive_once
         # refuses ANY refusal reason carrying a clock, so the next one cannot
         # reintroduce this by writing a different message.
+        # ── r145 (HALF.1) — A 13:00 HALF DAY IS A BANK HOLIDAY FOR TRADING ────
+        # The operator, 2026-11-22: "Yes, just treat them as bank holidays. No
+        # trading." Terminal in a trading pass AND a rehearsal: nothing opens
+        # today, so nothing rehearses opening. The order choke points refuse on
+        # the same predicate (entries_open), so this gate only saves the
+        # dispatch: no setup is asked, no contract is picked. Full days: False.
+        _n = _tu.now_et()
+        if no_entries_today(_n):
+            _say_half_day_once(_n.date())
+            return False, HALF_DAY_REASON
+
         _noted: list = []
         if not is_rth():
             if not rehearsal:

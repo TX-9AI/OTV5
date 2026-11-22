@@ -1,5 +1,15 @@
 """
-utils/time_utils.py  v5.4
+utils/time_utils.py  v5.5
+v5.5  2026-11-22  OTV5 r145 (HALF.1) — NOTHING OPENS ON A 13:00 HALF DAY. The operator, 2026-11-22: "given our trading
+      system, I don't think we should trade on half days" ("our end of day sequence is already structured for a 1600
+      close"); ruling: "Yes, just treat them as bank holidays. No trading." no_entries_today(now) is the one predicate:
+      True on a listed early close (utils/market_calendar.is_half_day). entries_open() returns False all session on such a
+      day (it used to close at the bell minus config.HALF_DAY_ENTRY_LEAD_MIN, 11:30, and that key goes), so both order
+      choke points (entry_engine.enter and main._execute_condor_leg) and the walk's re-offer (_window_open) refuse every
+      opening; risk/session_guard.can_enter asks the same predicate so the dispatch asks no setup. The bot still wakes,
+      is_rth is unchanged (09:30-13:00), and every close-anchored time, exit and the end-of-day sequence are unchanged.
+      A full day is byte-identical. A calendar that cannot be read reads a full day (the pre-r145 behaviour; entries_open
+      still fails closed on its own). GATE tests/check_no_half_day_entries.py.
 v5.4  2026-11-14  OTV5 r119 (HYG §5.5, HYG.24) — is_orb_window, is_within_minutes and seconds_until_hard_close (its own 15:45 literal) go (uncalled). is_orb_complete, minutes_since and is_hard_close_time stay. No caller anywhere (OTV5 code, tests, tools, docs, dtp: token scan + grep on r118). Nothing else changes; the module's behaviour is identical.
 v5.3  2026-10-30  OTV5 r59 (ENT.1) — ENTRY_OPEN_ET APPLIES ON THE PRODUCTION CLOCK, AND ONLY EVER LATER THAN THE RANGE.
       entries_open() honoured config.ENTRY_OPEN_ET (OT_ENTRY_OPEN_ET) only when the caller passed `now`; both production
@@ -317,6 +327,23 @@ except Exception:
     FLATTEN_WINDOW_OPEN = HARD_CLOSE
 
 
+def no_entries_today(now: Optional[datetime] = None) -> bool:
+    """r145 (HALF.1) — True when THIS session opens nothing: a listed 13:00 early close.
+
+    The operator, 2026-11-22: half days are treated as bank holidays for trading
+    (no setup opens, paper or live), while the boxes still wake and record data.
+    The one predicate: entries_open() and risk/session_guard.can_enter both ask it.
+    ⚠️ A calendar that cannot be read reads a FULL day (False), the pre-r145
+    behaviour, so a broken read never darkens a full session; entries_open keeps
+    its own fail-closed guard around everything else.
+    """
+    try:
+        n = now or now_et()
+        return bool(market_calendar.is_half_day(n.date()))
+    except Exception:                                          # noqa: BLE001
+        return False
+
+
 def entries_open(now: Optional[datetime] = None) -> bool:
     """r101 — True once ORDERS MAY BE PLACED (config.ENTRY_OPEN_ET, 09:35 ET).
 
@@ -342,19 +369,15 @@ def entries_open(now: Optional[datetime] = None) -> bool:
         n = now or now_et()
         if not is_rth(n):
             return False
-        # 🔴 r478 / DEP.12 — ON AN EARLY CLOSE, NOTHING OPENS IN THE LAST
-        # HALF_DAY_ENTRY_LEAD_MIN (90) MINUTES: 11:30 on a 13:00 day. Operator
-        # 2026-10-11. ORB (to 11:00) and Runaway (to 11:30) keep their windows;
-        # the sweep (11:31), butterfly (12:00) and TCS never open. A judgement,
-        # not a measurement: no box has traded a half day. Full days: no change
-        # (the r60 ruling stands — there is no global afternoon cutoff).
-        if market_calendar.is_half_day(n.date()):
-            # Imported, not getattr'd (C.44): a missing key fails CLOSED here.
-            from config import HALF_DAY_ENTRY_LEAD_MIN as _lead
-            _c = market_calendar.close_time(n.date())
-            _cut = max(0, _c.hour * 60 + _c.minute - _lead)
-            if (n.hour * 60 + n.minute) >= _cut:
-                return False
+        # 🔴 r145 (HALF.1) — ON A 13:00 HALF DAY NOTHING OPENS, ALL SESSION.
+        # The operator, 2026-11-22: "Yes, just treat them as bank holidays. No
+        # trading." (the end-of-day sequence is built for a 16:00 close). This
+        # replaces r478's clip at the bell minus 90 minutes (11:30), which let
+        # every setup open 09:35-11:30. The bot still runs and records data;
+        # is_rth and every close-anchored time are unchanged. Full days: no
+        # change (the r60 ruling stands — there is no global afternoon cutoff).
+        if no_entries_today(n):
+            return False
         # 🔴 r59 (ENT.1) — THE OVERRIDE APPLIES ON THE PRODUCTION CLOCK TOO. It used to
         # need an explicit `now`, and both choke points call this bare, so
         # OT_ENTRY_OPEN_ET was dead in production (AMZN 2026-10-30: a 10:00 floor,

@@ -1,5 +1,6 @@
 """
-config.py  v5.29
+config.py  v5.30
+v5.30  2026-11-22  OTV5 r145 (HALF.1) — HALF_DAY_ENTRY_LEAD_MIN GOES: on a 13:00 half day nothing opens at all (utils/time_utils.no_entries_today, read by entries_open and risk/session_guard.can_enter), so the 90-minute lead that clipped entries at 11:30 has no reader. The operator, 2026-11-22: "Yes, just treat them as bank holidays. No trading." The RUNAWAY_END comment says so. Every other value unchanged; no new key.
 v5.29  2026-11-21  OTV5 r142 (HUNT.16) — HUNT_AFTER_BRK_MODE and HUNT_AFTER_BRK_ENV_REFUSED go (OT_HUNT_AFTER_BRK is no longer read): their one reader, the Hunt's losing-Breakout guard (HUNT.13), is removed, because Breakout is dormant (r110) and the guard could only hold a Hunt on an unreadable trades.db. Every other value unchanged; no new key.
 v5.28  2026-11-21  OTV5 r141 — COMMENT ONLY: the ramp TOP's per-box note says fourteen boxes (was fifteen; the Saturday brief 2026-11-21 section 4 item 13) and that the key sizes Breakout only, dormant since r110 (RAMP.1). Every value unchanged; no new key.
 v5.27  2026-11-21  OTV5 r140 (MACRO.2) — VIX_NO_ENTRY_THRESHOLD GOES: it named the VIX crisis entry gate (session_guard.can_enter), which is deleted (the operator, 2026-09-17: "VIX crisis — get rid of it. That is major opportunity."; 2026-11-21: "VIX 'CRISIS' is something that I view as an opportunity not as something we sit out."). Its other reader, macro_data._classify_vix, reads VIX_CRISIS_THRESHOLD (30, the same number), so vix_band is unchanged. Every other value unchanged; no new key.
@@ -883,7 +884,7 @@ EOD_SCHEDULE = {
 
 # ── r189 (RUNW.1) / r68 (CFG.5) — RUNAWAY'S END IS 10:30, FIXED ───────────────
 # r187's 10:30. The per-box switch (OT_RUNAWAY_END) is gone: the operator, 2026-10-31, "10&11–defaults are fine, take
-# them out". No key is read; a half day is clipped by entries_open() (HALF_DAY_ENTRY_LEAD_MIN), not by this value.
+# them out". No key is read; on a 13:00 half day nothing opens at all (r145 HALF.1, entries_open), whatever this value.
 RUNAWAY_END = (10, 30)
 
 # ── r265 (BRK.9) / r68 (CFG.5) — BREAKOUT'S END IS 10:30, FIXED ──────────────
@@ -1676,16 +1677,12 @@ DEBIT_DIRECTIONAL_CUTOFF_ET = EOD_SCHEDULE["entries_stop"]   # r149: all day; th
 ENTRY_OPEN_ET = tuple(int(x) for x in
                       os.environ.get("OT_ENTRY_OPEN_ET", "9,35").split(","))
 
-# r478 / DEP.12 — ON AN EARLY CLOSE (13:00), NOTHING OPENS IN THE LAST 90 MINUTES.
-# Mainline's operator 2026-10-11 (otv4 r478); THIS repo's, 16:51 ET: "Yes, we want
-# those fixed here too". Entries close at the bell minus
-# this lead — 11:30 on 13:00 — so ORB (to 11:00) and Runaway (to 11:30) keep
-# their windows and the sweep, butterfly and TCS do not open. It also clips the
-# TEST boxes' later per-box dials (SPX-TEST Runaway 12:00, QQQ-TEST Breakout
-# 15:40) when mirrored. ⚠️ A JUDGEMENT, NOT A MEASUREMENT: no box has ever
-# traded a half day. Read ONLY on a listed early close; full days have no
-# global entry cutoff (r60).
-HALF_DAY_ENTRY_LEAD_MIN = 90
+# r145 (HALF.1) — ON AN EARLY CLOSE (13:00) NOTHING OPENS, ALL SESSION. The operator,
+# 2026-11-22: "given our trading system, I don't think we should trade on half days";
+# ruling: "Yes, just treat them as bank holidays. No trading." It replaces r478 /
+# DEP.12's HALF_DAY_ENTRY_LEAD_MIN (entries closed at the bell minus 90 minutes, 11:30),
+# which is deleted: the rule is utils/time_utils.no_entries_today(), no key. Full days
+# have no global entry cutoff (r60).
 
 DEBIT_BLOCKED_STRUCTURES = {"long_debit"}
 DEBIT_BLOCK_ACTIVE          = os.environ.get("OT_DEBIT_BLOCK_ACTIVE", "1") == "1"

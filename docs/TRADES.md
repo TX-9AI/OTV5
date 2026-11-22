@@ -1,5 +1,7 @@
 # TRADES — the specs
 
+**`TRADES.md` v5.30 · 2026-11-22 · r145 (HALF.1) — the close paragraph: on a listed 13:00 early close (11-27, 12-24, ...) NOTHING OPENS ALL SESSION, paper or live; r268's 11:30 entry clip is gone. The box still wakes and records data, and the close-side times still move three hours earlier. The operator, 2026-11-22: "Yes, just treat them as bank holidays. No trading."**
+
 **`TRADES.md` v5.29 · 2026-11-22 · r144 (EXIT.19; the before-cash audit 2026-11-22 F1, live only) — section 6: a thesis-invalidated close (Runaway's and the Hunt's thesis line, their structure backstop, the rejected-pool handoff) is priced as a stop: the mark, the mark, the bid, then MARKET, the escalation of r139. Profit locks and trails, the fizzle, theta bleed, the decay stop, the target, PARK's delta floor and close and OGAP's sweep and close keep the walk; the hard closes are unchanged. The operator, 2026-11-22: "I agree with your recommendation on thesis dead".**
 
 **`TRADES.md` v5.28 · 2026-11-21 · r142 (HUNT.16) — section 0's re-fire paragraph: the Hunt is no longer held after a losing Breakout (Breakout is dormant since r110, so the rule could only hold a Hunt on an unreadable trades.db); `OT_HUNT_AFTER_BRK` is not read and hunt_after_breakout is no longer written.**
@@ -104,7 +106,9 @@ a short leg rests a best-case close from **15:45**. Everything else walks the ma
 from **15:50**. Whatever is still open CROSSES at **15:55** (r149 - this supersedes "nothing
 ever crosses" and the "15:45 hard close" wherever they appear below).
 On a listed EARLY CLOSE (13:00: 11-27, 12-24, ...; `utils/market_calendar.EARLY_CLOSES`) every one of these moves
-three hours earlier and nothing opens at or after 11:30 (r268, DEP.12; deliberately not bold: check_docs_roster R4 reads the bold times
+three hours earlier (r268, DEP.12), and NOTHING OPENS THAT SESSION (r145, HALF.1: the operator, 2026-11-22, "just treat them as bank
+holidays. No trading."; `utils/time_utils.no_entries_today`, read by `entries_open()` and `risk/session_guard.can_enter`). The box wakes and
+records data as on any session; the 11:30 entry clip of r268 is gone (deliberately not bold: check_docs_roster R4 reads the bold times
 above as EOD_SCHEDULE).
 
 **The stops that are one number in `config.py`.** Runaway: a **20%** premium floor

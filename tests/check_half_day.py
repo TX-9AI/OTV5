@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""tests/check_half_day.py  v5.0
+"""tests/check_half_day.py  v5.1
+v5.1  2026-11-22  OTV5 r145 (HALF.1) — H3 restated: on a 13:00 half day entries_open() is False ALL SESSION (09:35, 11:29,
+      11:30, 12:30), the operator's 2026-11-22 ruling ("just treat them as bank holidays. No trading."); r478's 11:30 clip
+      and config.HALF_DAY_ENTRY_LEAD_MIN are gone. H3e (a full day) and every close-side check unchanged; the setups' own
+      refusals are tests/check_no_half_day_entries.py.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 DEP.12 — ON A 13:00 CLOSE EVERY CLOSE-ANCHORED TIME MOVES TO THE BELL; THE OPEN DOES NOT.
 
@@ -19,8 +23,8 @@ each tree's own constants, so this file is byte-identical in both trees but its 
   H2  is_rth: 09:30 open (raw), 12:59 open, 13:00 closed, 21:30 closed (a CLOCK shift
       would wrap past midnight and read 00:30 as RTH); 07:00 closed (a shifted open);
       11-25 15:59 open
-  H3  entries_open: 09:35 open, 11:29 open, 11:30 CLOSED (bell - 90); 11-25 11:30 and
-      15:30 open (no global afternoon cutoff, r60)
+  H3  entries_open: 09:35, 11:29, 11:30 and 12:30 CLOSED on 11-27 (r145: nothing opens on a
+      half day); 11-25 11:30 and 15:30 open (no global afternoon cutoff, r60)
   H4-H7 THE SHAPE TEST, tree-neutral (WA §38.9: one file runs in mainline and OTV4TEST,
       whose close-side constants differ). For every minute 12:00..bell the half day's
       is_hard_close_time, hard_close_order_mode, _vertical_close_due and reconcile wind-down
@@ -97,9 +101,9 @@ ck("H2e 15:59 on 11-25 is RTH", tu.is_rth(at(FULL, 15, 59)) is True)
 ck("H2f 07:00 on 11-27 is NOT RTH (a shifted open would read 10:00)", tu.is_rth(at(HALF, 7, 0)) is False)
 
 # ── H3 entries_open ──────────────────────────────────────────────────────────
-ck("H3a 09:35 on 11-27 entries open", tu.entries_open(at(HALF, 9, 35)) is True)
-ck("H3b 11:29 on 11-27 entries open", tu.entries_open(at(HALF, 11, 29)) is True)
-ck("H3c 11:30 on 11-27 entries CLOSED (bell - 90)", tu.entries_open(at(HALF, 11, 30)) is False)
+ck("H3a 09:35 on 11-27 entries CLOSED (r145: a half day opens nothing)", tu.entries_open(at(HALF, 9, 35)) is False)
+ck("H3b 11:29 on 11-27 entries CLOSED", tu.entries_open(at(HALF, 11, 29)) is False)
+ck("H3c 11:30 on 11-27 entries CLOSED", tu.entries_open(at(HALF, 11, 30)) is False)
 ck("H3d 12:30 on 11-27 entries CLOSED", tu.entries_open(at(HALF, 12, 30)) is False)
 ck("H3e 11:30 and 15:30 on 11-25 entries open",
    tu.entries_open(at(FULL, 11, 30)) is True and tu.entries_open(at(FULL, 15, 30)) is True)
