@@ -1,6 +1,16 @@
 #!/usr/bin/env python3
 """
-tests/check_ogap_paper_on_live.py  v5.1
+tests/check_ogap_paper_on_live.py  v5.2
+v5.2  2026-11-23  OTV5 r153 (TRIM.2) — RE-POINTED (WA 38.4): OGAP and the Hunt are RETIRED (DORMANT, no switch; the
+      operator, 2026-11-23: "The hunt & OGAP are trash. Retire them both after this session today."). The paper wall's
+      code is KEPT until the purge, so P2-P4 and P7-P10 still drive it directly (an OGAP row already open on a live box is
+      still booked, managed, recovered and closed on the wall). TURNED AROUND: P1 - on a live box and on paper OGAP is
+      DORMANT and never asked, the [plans] summary names it retired and the Service line says "ogap=retired (dormant
+      r153)", never "walled"; P5 - the cap halves are unchanged (OGAP paper loss never counts on a live box; a paper box
+      records only), but at the tripped cash cap a live box asks NOTHING (no OGAP, no row, no broker call) and a paper
+      box does not ask OGAP. RE-PINNED: P6's dispatch digest leaves out the Hunt's events (it is no longer asked; the
+      run must hold none) - CASH_DIGEST_EX_HUNT is the same digest measured on r152 c0cfcbf with the same filter, so
+      the cash path and the Runaway / PARK dispatch are byte-identical to r152.
 v5.1  2026-11-22  OTV5 r151 (CAP.11) — P5's PAPER-box half follows the record-only paper cap (the operator, 2026-11-22: "there's no harm in letting paper run & we can just note if the breaker would have popped"): the OGAP paper loss of -$99,999 still counts (day_realized_pnl -99,999.00) and no longer halts; at the would-be cap OGAP is asked, books paper and its row carries after_cap = 1. The LIVE half (the cap for live trades only, OGAP asked past it, never tagged) is unchanged, as are P1-P4 and P6-P10 (P8's digest is a day that never reaches the cap).
 v5.0  2026-11-22  OTV5 r150 (OGAP.5) — new. ON A LIVE BOX OGAP KEEPS PAPER-TRADING, WALLED OFF FROM THE CASH ACCOUNT, AND THE
       CAP ON A LIVE BOX IS FOR LIVE TRADES ONLY. The operator, 2026-11-22: "I want it paper trading even on the cash boxes.
@@ -79,7 +89,8 @@ os.environ["OT_PAPER_TRADING"] = "False"     # A LIVE BOX
 os.environ["OT_RISK_USD"] = "500"
 ET = ZoneInfo("America/New_York")
 FIX = os.path.join(ROOT, "tests", "fixtures", "ogap", "replay5.json")
-CASH_DIGEST = "bc4b0f6ce93d8f6a"        # P6: the same on r149 (eacf810 = 18261a5 in code) and r150
+CASH_DIGEST = "bc4b0f6ce93d8f6a"        # P6: the same on r149 (eacf810 = 18261a5 in code) and r150 (to r152)
+CASH_DIGEST_EX_HUNT = "62fc7511780b319e"      # P6 v5.2 (r153): the same filter measured on r152 c0cfcbf
 PAPER_DAY_DIGEST = "e567e6bf5c3a7577"   # P8: the same on r149 (eacf810 = 18261a5 in code) and r150
 FAILED = []
 
@@ -329,13 +340,15 @@ def main():
         finally:
             MN.PAPER_TRADING = s_pt
         summ = PS.summary(["OGAP"])
-        ok1 = (PS.state("OGAP") == "active" and "dormant: live" not in summ and "OGAP dormant" not in summ
-               and asked == [1] and " · ogap=on (paper, walled from the cash account)" in b_live
-               and " · ogap=on ·" in b_paper + " ·" and "walled" not in b_paper)
+        ok1 = (PS.state("OGAP") == "dormant" and "OGAP (r153 TRIM.2)" in summ           # v5.2 (r153): retired
+               and asked == [] and " · ogap=retired (dormant r153)" in b_live
+               and " · ogap=retired (dormant r153)" in b_paper and "walled" not in b_live + b_paper
+               and "ogap=on" not in b_live + b_paper)
         d1 = f"state={PS.state('OGAP')} asked={asked} summary={summ[-120:]} live={b_live[-160:]}"
     except Exception as exc:                                    # noqa: BLE001
         d1 = f"{type(exc).__name__}: {exc}"
-    check("P1 a LIVE box: OGAP ACTIVE and asked; the Service line says paper, walled; a paper box's line unchanged", ok1, d1)
+    check("P1 (r153) a LIVE box and a paper box: OGAP DORMANT (retired) and never asked; the Service line says retired, "
+          "never walled", ok1, d1)
 
     # ── P2 the full OGAP day on a live box ──────────────────────────────────
     eng = get_orb_engine()
@@ -606,17 +619,17 @@ def main():
         lc, pc = res["live_at_cap"], res["paper_at_cap"]
         ok5 = (res["live_ogap_only"] == (0.0, False) and res["live_cash_loss"] == (-650.0, True)
                and res["paper_ogap_loss"] == (-99999.0, False)                  # r151: paper counts, never halts
-               and lc[0] is True and lc[1] == ["OGAP"] and "catastrophic_cap" not in lc[2]
-               and "catastrophic_cap" in lc[3] and lc[4] == 1 and lc[5] == 1 and lc[6] == [] and lc[7] == [None]
-               and pc[0] is False and "OGAP" in pc[1] and "catastrophic_cap" not in pc[2]
-               and "catastrophic_cap" not in pc[3] and pc[4] == 1 and pc[7] == [1])
+               and lc[0] is True and lc[1] == [] and lc[2] == []                       # v5.2 (r153): nothing asked
+               and "catastrophic_cap" in lc[3] and lc[4] == 0 and lc[5] == 0 and lc[6] == [] and lc[7] == []
+               and pc[0] is False and "OGAP" not in pc[1] and pc[2] == []
+               and "catastrophic_cap" not in pc[3] and pc[4] == 0 and pc[7] == [])
         d5 = f"{res}"
     except Exception as exc:                                    # noqa: BLE001
         import traceback
         d5 = f"{type(exc).__name__}: {exc} {traceback.format_exc()[-700:]}"
     check("P5 the cap on a LIVE box is for live trades only: an OGAP paper loss never moves or trips it; at the tripped "
-          "cash cap cash is refused and OGAP still fires paper on the wall, untagged; a PAPER box records only (r151): "
-          "OGAP fires past the would-be cap, tagged after_cap",
+          "cash cap cash is refused and (r153, retired) OGAP is not asked, no row, no broker call; a PAPER box records "
+          "only (r151) and does not ask OGAP",
           ok5, d5)
 
     # ── P6 cash unaffected ──────────────────────────────────────────────────
@@ -753,19 +766,23 @@ def main():
                 e2.data.orb_high, e2.data.orb_low = sh, sl
             return ev
         w0, w1 = world(False), world(True)
-        digest = dg([c0, w0])
+        w0x = [e for e in w0 if e[1] != "LiquidityHunt"]          # v5.2 (r153): the Hunt is retired
+        n_hunt = sum(1 for e in w0 + w1 if e[1] == "LiquidityHunt")
+        digest = dg([c0, w0x])
         ok6 = (c0 == c1 and w0 == w1 and c0["sized"] and c0["exits"] and c0["cash_rows"]
-               and sum(1 for e in w0 if e[0] == "ask") > 0
-               and digest == CASH_DIGEST)
-        d6 = f"digest={digest} want={CASH_DIGEST} flat={c0} ogap={c1} dispatch_equal={w0 == w1} n={len(w0)}/{len(w1)}"
+               and sum(1 for e in w0 if e[0] == "ask") > 0 and n_hunt == 0
+               and digest == CASH_DIGEST_EX_HUNT)
+        d6 = (f"digest={digest} want={CASH_DIGEST_EX_HUNT} hunt_events={n_hunt} flat={c0} ogap={c1} "
+              f"dispatch_equal={w0 == w1} n={len(w0)}/{len(w1)}")
         if w0 != w1:
             d6 += f" first_diff={[(a, b) for a, b in zip(w0, w1) if a != b][:2]}"
         print(f"       (P6 digest {digest})")
     except Exception as exc:                                    # noqa: BLE001
         import traceback
         d6 = f"{type(exc).__name__}: {exc} {traceback.format_exc()[-700:]}"
-    check("P6 cash unaffected: a cash PARK entry and exit, the cap reading, the broker log and the Runaway / Hunt / PARK "
-          "dispatch are byte-identical with an OGAP paper position open (digest pinned)", ok6, d6)
+    check("P6 cash unaffected: a cash PARK entry and exit, the cap reading, the broker log and the Runaway / PARK "
+          "dispatch are byte-identical with an OGAP paper position open (digest pinned, r152's with the Hunt filtered); "
+          "the Hunt is never asked (r153)", ok6, d6)
 
     # ── P7 the held page ────────────────────────────────────────────────────
     dtp = os.path.expanduser("~/day_trader_pro")

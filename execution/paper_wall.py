@@ -1,5 +1,10 @@
 """
-execution/paper_wall.py  v5.0
+execution/paper_wall.py  v5.1
+v5.1  2026-11-23  OTV5 r153 (TRIM.2) — OGAP IS RETIRED (strategy/plan_state: DORMANT, no switch), so no new entry reaches
+      this wall: main never asks a DORMANT OGAP (and _ask_walled_past_cap skips it). The code is KEPT until the purge
+      (BACKLOG TRIM.2 lists it) so recover() still resumes an OPEN walled row left on a live box and _paper_wall_pass /
+      _paper_wall_close_pass manage it to its exit; with no row, recover() returns 0 and both passes return at once.
+      No decision changes.
 v5.0  2026-11-22  OTV5 r150 (OGAP.5) — new. ON A LIVE BOX OGAP KEEPS PAPER-TRADING, WALLED OFF FROM THE CASH ACCOUNT.
       The operator, 2026-11-22: "I want it paper trading even on the cash boxes. It's under evaluation. Why the fuck would
       I want to stop evaluating it?" and earlier "Can we have it run as 'log only' or essentially continue paper trading

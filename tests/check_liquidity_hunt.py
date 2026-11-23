@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 """
-tests/check_liquidity_hunt.py  v5.4
+tests/check_liquidity_hunt.py  v5.5
+v5.5  2026-11-23  OTV5 r153 (TRIM.2) — the Hunt is retired (DORMANT: never asked, its plan writes no row by rule); its code is
+      kept until the purge and this gate drives it directly (the plan, main._attempt_hunt's HUNT.12 release, the exit
+      engine), so the run lifts the Hunt's plan state to ACTIVE inside this process only (check_audit_20260823's a3
+      pattern). What each check pins is unchanged; tests/check_hunt_ogap_retired.py pins the retirement.
 v5.4  2026-11-15  OTV5 r123 (HYG.27) — FIXTURES RE-POINTED (the Saturday brief 11-14 section 5 item 10): H9b's ORBStrategy -> Breakout; what each check proves is unchanged; OT_RESTING_DB leaves the scratch env (r118 deleted execution/resting_orders.py, its only reader).
 v5.3  2026-11-08  OTV5 r76 (RETIRE.1) — H6/H10 RE-POINTED (WA 38.4): the Hunt's target-wick exit is unchanged, but it no longer grants a handoff -
       its only taker, the sweep, is removed with execution/handoff.py; H10 pins the module gone.
@@ -97,6 +101,9 @@ def main():
     st = St(); P.ensure_tables(st); P.bind_store(st)
     from data.derived_store import DerivedStore
     import strategy.liquidity_hunt as LH
+    from strategy import plan_state as _ps              # r153 (TRIM.2): the Hunt is retired (DORMANT); its kept code is driven here
+    _ps_orig = _ps.state
+    _ps.state = lambda n: "active" if _ps.base(n) == "LiquidityHunt" else _ps_orig(n)
     ds = DerivedStore(path=os.path.join(tempfile.mkdtemp(), "derived.db"))
     ds.mark_level_sync("TST", time.time())        # CD.2: the book is synced "now"
     LH._symbol_of = lambda: "TST"

@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """
-tests/check_admission_wired.py  v5.4
+tests/check_admission_wired.py  v5.5
+v5.5  2026-11-23  OTV5 r153 (TRIM.2) — A1, A2 and A4 probe PARK (a live plan in the table) where they probed the Hunt (retired,
+      DORMANT from r153, so never asked by ruling); A2's other admitted name is RunawayContinuation. What they pin is unchanged.
 v5.4  2026-11-14  OTV5 r110 (WS.3 TRIM) — A3 RE-POINTED (WA 38.4): Breakout is DORMANT (never asked by ruling), so A3's live label is RunawayContinuation; what A3 pins is unchanged.
 v5.3  2026-11-09  OTV5 r103 (RETIRE.5 step 2) — the GEX fly is removed, so the r97 flag flip goes and A1, A2 and A4 probe LiquidityHunt (a live plan in the table) where they probed the fly. Every other check unchanged.
 v5.2  2026-11-08  OTV5 r97 (RETIRE.5) — the GEX fly is cut in production (OFF in code); this checker flips it on to exercise its code until step 2 removes it.
@@ -88,9 +90,9 @@ def main():
         return ran["n"] > 0, out
 
     guard("A1 an ADMITTED strategy is asked and its signal returned",
-          lambda: probe("LiquidityHunt", ["LiquidityHunt"]) == (True, "SIGNAL"))   # r103: was the GEX fly
+          lambda: probe("PARK", ["PARK"]) == (True, "SIGNAL"))   # r103: was the GEX fly; r153: was the Hunt
     guard("A2 a strategy NOT admitted this tick is NEVER ASKED — fn does not run",
-          lambda: probe("LiquidityHunt", ["PARK"]) == (False, None),
+          lambda: probe("PARK", ["RunawayContinuation"]) == (False, None),
           "this is what removes the NOT ASKED rows: no ask, so no refusal to journal")
 
     # ── A3 — the ORB dispatches under a label the table does not use ────────
@@ -101,7 +103,7 @@ def main():
 
     # ── A4/A5 — fails OPEN, in both directions ─────────────────────────────
     guard("A4 with NO admission computed, every strategy is asked (pre-r40 exactly)",
-          lambda: probe("LiquidityHunt", None)[0] is True)
+          lambda: probe("PARK", None)[0] is True)
     guard("A5 a name the table does not carry is asked — admission has no opinion",
           lambda: probe("UnlistedStrategy", ["PARK"])[0] is True,     # r303: IronCondorStrategy is DORMANT
           "IronCondorStrategy is retired as an entry; a silent veto would hide that")

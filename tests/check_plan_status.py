@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """
-tests/check_plan_status.py  v5.2
+tests/check_plan_status.py  v5.3
+v5.3  2026-11-23  OTV5 r153 (TRIM.2) — the subject plan is RunawayContinuation where it was the Hunt (retired, DORMANT from
+      r153; a dormant plan writes no plan_tick row by ruling); the status rules pinned are unchanged.
 v5.2  2026-11-14  OTV5 r110 (WS.3 TRIM) — the subject plan is LiquidityHunt where it was Breakout (Breakout is DORMANT, and a dormant plan writes no plan_tick row by ruling); the status rules pinned are unchanged.
 v5.1  2026-11-08  OTV5 r88 (RETIRE.3) — the subject plan is Breakout where it was the removed TCS (its OT_TCS_ACTIVE=1 switch goes); the status rules pinned are unchanged.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
@@ -105,7 +107,7 @@ def main():
     P.ensure_tables(st)
     P.bind_store(st)
 
-    N = "LiquidityHunt"
+    N = "RunawayContinuation"
 
     def fresh():
         P.REGISTRY.clear()
@@ -118,21 +120,21 @@ def main():
         for _d in ("_STATUS", "_SEEN", "_SEEN_DAY", "_SKIPPED", "_SKIP_GATE", "_ASKED", "_LAST_SAID"):
             getattr(P, _d, {}).clear()
         st.conn.execute("DELETE FROM plan_tick")
-        P.Plan("LiquidityHunt", ("age",))
+        P.Plan("RunawayContinuation", ("age",))
 
     def tick(n, reason=None, wrote=False):
         P.begin_tick(float(n))
         if wrote:
             # a WORKING plan speaks for itself
-            P.write_row(st, "TST", float(n), "LiquidityHunt", "ARMED", "working")
-            P.REGISTRY["LiquidityHunt"]._last = (P.tick_now()[0], "ARMED", "working")
+            P.write_row(st, "TST", float(n), "RunawayContinuation", "ARMED", "working")
+            P.REGISTRY["RunawayContinuation"]._last = (P.tick_now()[0], "ARMED", "working")
         elif reason:
-            P.skipped("LiquidityHunt", reason)
+            P.skipped("RunawayContinuation", reason)
         P.close_tick(st, "TST")
 
     def rows():
         return [(r["verdict"], r["reason"]) for r in st.conn.execute(
-            "SELECT verdict, reason FROM plan_tick WHERE strategy='LiquidityHunt'"
+            "SELECT verdict, reason FROM plan_tick WHERE strategy='RunawayContinuation'"
             " ORDER BY ts_epoch")]
 
     # ── S1/S2/S3 — the ruling itself ───────────────────────────────────────
@@ -155,7 +157,7 @@ def main():
     guard("S4 a WORKING plan still writes EVERY tick — five ticks, five rows",
           lambda: len(rw) == 5, f"{len(rw)} row(s)")
     guard("S4b and the board reports it as working",
-          lambda: P.plan_status("LiquidityHunt") == "working")
+          lambda: P.plan_status("RunawayContinuation") == "working")
 
     # ── S5 — the transition back re-announces ──────────────────────────────
     fresh()
@@ -279,7 +281,7 @@ def main():
 
     # ── S7 — the status is exposed, not merely internal ────────────────────
     guard("S7 plan_status() answers working/inactive/unknown",
-          lambda: P.plan_status("LiquidityHunt") == "inactive"
+          lambda: P.plan_status("RunawayContinuation") == "inactive"
           and P.plan_status("NeverHeardOfIt") == "unknown")
 
     # ── S8 — main.py names the gate so no table strategy hits the default ──

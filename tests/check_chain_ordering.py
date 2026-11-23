@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
-"""check_chain_ordering.py — v5.3
+"""check_chain_ordering.py — v5.4
+v5.4  2026-11-23  OTV5 r153 (TRIM.2) — C9/C10 use PARK as the second registered plan (the Hunt is retired, DORMANT from r153,
+      and a dormant plan writes no plan_tick row by rule). What C9/C10 pin is unchanged.
 v5.3  2026-11-15  OTV5 r123 (HYG.27) — OT_RESTING_DB leaves the scratch env (r118 deleted execution/resting_orders.py, its only reader).
 v5.2  2026-11-14  OTV5 r110 (WS.3 TRIM) — C9/C10 use LiquidityHunt as the second registered plan (Breakout is DORMANT, and a dormant plan writes no plan_tick row by ruling); what they pin is unchanged.
 v5.1  2026-11-08  OTV5 r76 (RETIRE.1) — C9/C10 use Breakout as the second registered plan (the sweep is removed); what they pin is unchanged.
@@ -140,8 +142,8 @@ def main():
     # dispatcher's reason.
     from strategy import plan as _plan
     from strategy.runaway_continuation import RunawayContinuationStrategy
-    from strategy.liquidity_hunt import LiquidityHunt
-    RunawayContinuationStrategy(); LiquidityHunt()   # register (r110: Breakout is dormant; the Hunt is the second plan)
+    from strategy.park import Park
+    RunawayContinuationStrategy(); Park()   # register (r110: Breakout dormant; r153: the Hunt retired - PARK is the second plan)
     st3 = _Store()
     e3 = PlanEngine(store=st3, symbol="T3", ledger=None)
     e3.derive({"price": 201.4})                    # tick 1 opens
@@ -163,14 +165,14 @@ def main():
     check("C8 the INACTIVE row carries the dispatcher's reason",
           "ORB has not run away" in (rows.get("RunawayContinuation", ("", ""))[1] or ""))
     check("C9 a strategy with no stated reason still gets a row saying so",
-          "LiquidityHunt" in rows and "no reason" in (rows["LiquidityHunt"][1] or ""),
-          str(rows.get("LiquidityHunt")))
+          "PARK" in rows and "no reason" in (rows["PARK"][1] or ""),
+          str(rows.get("PARK")))
     # ⚠️ AND A STRATEGY THAT WAS ASKED BUT WROTE NOTHING IS FLAGGED — that
     # is the canary for an unwired `return None`.
-    _plan.asked("LiquidityHunt", None)
+    _plan.asked("PARK", None)
     e3.derive({"price": 201.6})
     r3 = st3.conn.execute(
-        "SELECT verdict, reason FROM plan_tick WHERE strategy='LiquidityHunt' "
+        "SELECT verdict, reason FROM plan_tick WHERE strategy='PARK' "
         "ORDER BY ts_epoch DESC LIMIT 1").fetchone()
     check("C10 asked-and-silent writes a NO PLAN row naming the unwired return",
           r3 is not None and r3[0] == "NO PLAN" and "wrote no plan row" in (r3[1] or ""),

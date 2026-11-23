@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """
-tests/check_shadow_rules.py  v5.3
+tests/check_shadow_rules.py  v5.4
+v5.4  2026-11-23  OTV5 r153 (TRIM.2) — the Hunt is retired (DORMANT from r153: never asked, so HUNT_OR_EM records nothing
+      live); its code, the rule included, is kept until the purge, and N1 drives that code directly, reading the Hunt's
+      own plan_tick / plan_check rows, so N1 lifts LiquidityHunt's plan state to ACTIVE inside this process only.
 v5.3  2026-11-15  OTV5 r123 (HYG.27) — OT_RESTING_DB leaves the scratch env (r118 deleted execution/resting_orders.py, its only reader).
 v5.2  2026-11-10  OTV5 r106 - S2: decisions and shadow rows are counted over settled ticks (a tick committed between the
       two SELECTs no longer reads as a missing row, 11-09 AVGO 49/48); S1 reads yesterday so it passes at any hour.
@@ -172,6 +175,9 @@ def main():
     from strategy import plan as P
     from data.derived_store import DerivedStore
     import strategy.liquidity_hunt as LH
+    from strategy import plan_state as _ps                  # v5.4 (r153): the Hunt is retired; lift it for N1
+    _ps_orig = _ps.state
+    _ps.state = lambda n: "active" if _ps.base(n) == "LiquidityHunt" else _ps_orig(n)
 
     class St:
         def __init__(s):

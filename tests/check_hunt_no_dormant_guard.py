@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 """
-tests/check_hunt_no_dormant_guard.py  v5.0
+tests/check_hunt_no_dormant_guard.py  v5.1
+v5.1  2026-11-23  OTV5 r153 (TRIM.2) — the Hunt is RETIRED (DORMANT, no switch), so its plan writes no row by rule; its
+      code is kept until the purge, and this gate drives that code directly. G4a/G4b read the Hunt's own plan_tick
+      verdict, so the run lifts the Hunt's plan state to ACTIVE inside this process only (the check_audit_20260823 a3
+      pattern for the dormant condor). What G1-G4 pin is unchanged.
 v5.0  2026-11-21  OTV5 r142 (HUNT.16) — NEW. BORN RED on r141 (G1, G2a-G2e, G3); green on r142.
 
 THE DEFECT. strategy/liquidity_hunt.py (HUNT.13, OTV4TEST r316) asked trades.db, on every armed Hunt, for a CLOSED
@@ -91,6 +95,9 @@ def main():
         import pandas as pd
         from strategy import plan as P
         import strategy.liquidity_hunt as LH
+        from strategy import plan_state as _ps              # v5.1 (r153): the Hunt is DORMANT (retired); lift it here
+        _ps_orig = _ps.state
+        _ps.state = lambda n: "active" if _ps.base(n) == "LiquidityHunt" else _ps_orig(n)
         from data.derived_store import DerivedStore
         import database.trade_logger as TLm
         from database.trade_logger import get_trade_logger, make_record

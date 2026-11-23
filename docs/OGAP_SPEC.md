@@ -1,5 +1,7 @@
 # OGAP — Park's ORB-GAP on the OTV5 paper fleet (spec, DESIGN)
 
+**RETIRED (OTV5 r153, TRIM.2, 2026-11-23).** The operator, 2026-11-23: "The hunt & OGAP are trash. Retire them both after this session today. And include them in the coming purge. I think we're going to stick with the runaway & park going forward". OGAP is DORMANT with no switch on every box, paper or live (`strategy/plan_state.py`; the box flag `ogap` is gone). Never asked, it writes nothing; an open OGAP found at start is still managed to its exit. The code below stays until the purge, which deletes it (BACKLOG TRIM.2 holds the map). This document is the record of what was built and run 2026-11-16 to 2026-11-23.
+
 **Status:** BUILT (OTV5 OGAP.1, 2026-11-14). The operator, 2026-11-14: "let's design & paper trade the OGAP on QQQ" (decision D1) and, on D2-D5, the recommendations below. The code is the authority: `strategy/ogap.py`, `strategy/ogap_plan.py`, `execution/exit_engine._evaluate_ogap` / `ogap_exit_step`; gate `tests/check_ogap.py`.
 
 **As built, where it differs from this design (the code wins):**

@@ -1,5 +1,14 @@
 """
-strategy/plan_state.py  v5.11
+strategy/plan_state.py  v5.12
+v5.12  2026-11-23  OTV5 r153 (TRIM.2) — THE HUNT AND OGAP ARE RETIRED: DORMANT, WITH NO SWITCH, ON EVERY BOX. The operator,
+      2026-11-23: "The hunt & OGAP are trash. Retire them both after this session today. And include them in the coming
+      purge. I think we're going to stick with the runaway & park going forward". Breakout's r110 pattern: LiquidityHunt's
+      row is ("", DORMANT, HOUR) and OT_HUNT is no longer read (a box env that still sets it is ignored, as OT_BREAKOUT
+      is); OGAP's row is ("", DORMANT, HOUR) - its FLAG default is gone with the `ogap` key (utils/box_flags v5.2 SCHEMA
+      is empty again), so no box file and no env value can turn either back on. Never asked (main._safe_strategy),
+      writes nothing (strategy/plan); an OPEN Hunt / OGAP row is still managed to its exit (a /manage plan is ACTIVE,
+      the exit engine reads no plan state). RETIRED names them on the [plans] start line. Their code stays for the
+      purge (BACKLOG TRIM.2 holds the map). The FLAG mechanism stays for the next schema key. Every other row unchanged.
 v5.11  2026-11-22  OTV5 r150 (OGAP.5) — THE LIVE-BOX DORMANT RULE GOES: OGAP's state is its box flag on every box, cash or
       paper (on -> ACTIVE, anything else -> DORMANT, fails closed). On a LIVE box an ACTIVE OGAP books on the walled
       paper book (execution/paper_wall: paper_trade = 1 at the mark, zero broker calls), so there is nothing to sit out.
@@ -90,12 +99,18 @@ FLAG = "flag"       # r149 (OGAP.4): a TABLE default that lives in utils/box_fla
 TABLE: Dict[str, Tuple[str, str, str]] = {
     "RunawayContinuation":      ("OT_RUNAWAY",        ACTIVE,  HOUR),
     "Breakout":                 ("",                  DORMANT, HOUR),        # r110 (WS.3 TRIM): off the roster
-    "LiquidityHunt":            ("OT_HUNT",           ACTIVE,  HOUR),
+    "LiquidityHunt":            ("",                  DORMANT, HOUR),        # r153 (TRIM.2): retired, no switch
     "PARK":                     ("OT_PARK",           ACTIVE,  HOUR),
-    "OGAP":                     ("",                  FLAG,    HOUR),    # r149: box flag `ogap` (default on); r150: live = walled paper
+    "OGAP":                     ("",                  DORMANT, HOUR),        # r153 (TRIM.2): retired, no flag key
     "IronCondorStrategy":       ("",                  DORMANT, CONDITION),   # no entry of its own (r249)
     "CondorManagement":         ("",                  ACTIVE,  CONDITION),
     "CreditRoll":               ("",                  ACTIVE,  CONDITION),
+}
+# r153 (TRIM.2) — retired setups: DORMANT rows above with no switch and no flag key; the [plans] start line names them.
+# Their code is kept until the purge (BACKLOG TRIM.2).
+RETIRED: Dict[str, str] = {
+    "LiquidityHunt": "r153 TRIM.2",
+    "OGAP":          "r153 TRIM.2",
 }
 # dispatch labels -> the plan they write under (strategy/plan.DISPATCH_ALIAS, kept in step)
 ALIAS = {"CondorPlan": "IronCondorStrategy", "CondorLeg": "IronCondorStrategy"}
@@ -136,10 +151,8 @@ def _flagged_state(name: str) -> str:
 def _raw(key: str) -> str:
     """The switch's value as set, read NOW. Each key is read by a literal call so tests/gen_env_doc.py
     documents it where it is read."""
-    if key == "OT_RUNAWAY":
+    if key == "OT_RUNAWAY":                                     # r153 (TRIM.2): OT_HUNT is no longer read
         v = os.environ.get("OT_RUNAWAY", "")
-    elif key == "OT_HUNT":
-        v = os.environ.get("OT_HUNT", "")
     else:
         v = ""
     return str(v or "").strip().lower()
@@ -239,6 +252,9 @@ def summary(names=None) -> str:
     bad = refused()
     if bad:
         out += " · REFUSED: " + ", ".join(bad.values())
+    ret = [n for n in rows if n in RETIRED and state(n) == DORMANT]
+    if ret:                                                     # r153 (TRIM.2): the retired setups, named
+        out += " · retired (dormant, no switch): " + ", ".join("%s (%s)" % (n, RETIRED[n]) for n in ret)
     why = {n: w for n, w in _WHY.items() if n in rows and state(n) == DORMANT}
     if why:                                                     # r149: why a flagged plan is dormant
         out += " · " + ", ".join("%s dormant: %s" % (n, w) for n, w in sorted(why.items()))

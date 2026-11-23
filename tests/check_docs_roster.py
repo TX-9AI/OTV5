@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """
-tests/check_docs_roster.py  v5.4
+tests/check_docs_roster.py  v5.5
+v5.5  2026-11-23  OTV5 r153 (TRIM.2) — R3: a row with no switch wants its plan's state (ON when plan_state reads it ACTIVE),
+      not "always ON": the Hunt and OGAP are retired (DORMANT with no switch) and still hold ENTRY_WINDOWS rows until the
+      purge, so their TRADES rows read OFF. Every row with a switch is checked as before; R1, R2, R4, R5 unchanged.
 v5.4  2026-11-14  OTV5 r115 (HYG §5.1) — R5 checks TWO bold stops (RUNAWAY_MAX_LOSS_PCT, MAX_LOSS_PCT): config.BUTTERFLY_STOP_LOSS_PCT is deleted (nothing read it since r107), and TRADES §0 drops its bold 40%. R1-R4 unchanged.
 v5.3  2026-11-09  OTV5 r103 (RETIRE.5 step 2) — the OT_GEX_BUTTERFLY row goes with the GEX pin butterfly (config.GEX_BUTTERFLY_ENABLED removed); R1-R5 unchanged.
 v5.2  2026-11-08  OTV5 r88 (RETIRE.3) — the OT_TCS_ACTIVE row goes with the TCS (config.TREND_CREDIT_ACTIVE removed); R1-R5 unchanged.
@@ -49,6 +52,7 @@ out = {
 # r303 (PSTATE.1): every plan's switch is ON when its default state is ACTIVE - plan_state decides
 from strategy import plan_state as S
 out["on"].update({S.switch(n): S.state(n) == "active" for n in S.TABLE if S.switch(n)})
+out["nosw"] = {n: S.state(n) == "active" for n in S.TABLE if not S.switch(n)}   # r153: a no-switch row reads its state
 print("@@" + json.dumps(out))
 '''
 
@@ -84,12 +88,13 @@ def main():
         bad = {}
         for k, (state, sw, _w) in rows.items():
             m = re.match(r"`(OT_\w+)`$", sw.strip())
-            want = cfg["on"][m.group(1)] if m else True          # no switch: always asked
+            want = cfg["on"][m.group(1)] if m else cfg.get("nosw", {}).get(k, True)   # r153: no switch -> its state
             if m and m.group(1) not in cfg["on"]:
                 bad[k] = "unknown switch"
             elif (state == "ON") != want:
                 bad[k] = (state, want)
-        check("R3 each row's ON/OFF equals the switch's default (a row with no switch is ON)", not bad, str(bad))
+        check("R3 each row's ON/OFF equals the switch's default (a row with no switch reads its plan's state)", not bad,
+              str(bad))
         e = cfg["eod"]
         want = [e["entries_stop"], e["resting_at"], e["ladder_at"], e["cross_at"]]
         got = [[int(a), int(b)] for a, b in re.findall(r"\*\*(\d\d):(\d\d)\*\*", sec)]

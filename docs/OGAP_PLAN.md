@@ -1,5 +1,7 @@
 # OGAP — build, land and scoring plan (DESIGN)
 
+**RETIRED (OTV5 r153, TRIM.2, 2026-11-23): OGAP is DORMANT with no switch on every box; the scoring below ends with it. The purge deletes the code (BACKLOG TRIM.2).**
+
 The spec is `docs/OGAP_SPEC.md`. **BUILT 2026-11-14 on the operator's yes** ("let's design & paper trade the OGAP on QQQ"); decisions D2-D5 taken as recommended. The trading freeze
 is lifted for OGAP by the operator's order (11-13).
 

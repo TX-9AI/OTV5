@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """
-tests/check_time_parse.py  v5.3
+tests/check_time_parse.py  v5.4
+v5.4  2026-11-23  OTV5 r153 (TRIM.2) — T3 drives the Hunt's kept plan directly and reads its plan_tick row; the Hunt is
+      retired (DORMANT, no row by rule), so T3 lifts its plan state to ACTIVE inside this process only. What T3 pins is
+      unchanged.
 v5.3  2026-11-15  OTV5 r123 (HYG.27) — OT_RESTING_DB leaves the scratch env (r118 deleted execution/resting_orders.py, its only reader).
 v5.2  2026-11-08  OTV5 r88 (RETIRE.3) — T2/T3 drop the TCS plan (deleted with the TCS) and its OT_TCS_ACTIVE=1 switch. T1 and T4 unchanged.
 v5.1  2026-11-08  OTV5 r76 (RETIRE.1) — T2/T3 drop the removed plans (sweep, ORCS, ORB, VOLT); T3's readable-clock control is the Runaway at 09:50.
@@ -78,6 +81,9 @@ def main():
 
     try:
         import strategy.liquidity_hunt as LH, strategy.runaway_plan as RP
+        from strategy import plan_state as _ps              # r153 (TRIM.2): the Hunt is retired (DORMANT); its kept code is driven here
+        _ps_orig = _ps.state
+        _ps.state = lambda n: "active" if _ps.base(n) == "LiquidityHunt" else _ps_orig(n)
         import strategy.breakout_plan as BP
         mods = {"liquidity_hunt": LH._hm, "runaway_plan": RP._hm, "breakout_plan": BP._hm}
         own = sorted(k for k, f in mods.items() if TU is None or f is not TU.parse_hm)

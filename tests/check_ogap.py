@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 """
-tests/check_ogap.py  v5.6
+tests/check_ogap.py  v5.7
+v5.7  2026-11-23  OTV5 r153 (TRIM.2) — OGAP IS RETIRED (DORMANT, no switch; the operator, 2026-11-23: "The hunt & OGAP are
+      trash. Retire them both after this session today."). O9's last term is turned around: the plan reads DORMANT on
+      this paper box (its code is kept for the purge, so every spec, replay and exit check here still drives it
+      directly). Every other check unchanged. tests/check_hunt_ogap_retired.py is the retirement's gate.
 v5.6  2026-11-22  OTV5 r149 (OGAP.4) — OGAP ON EVERY BOX (the operator, 2026-11-22: "I honestly want it paper Trading on all of them"). O7: the same fixture on a META box now gives the same OGAP put (the plan reads no symbol list); every other O7 case unchanged. O9: the OGAP_SYMBOLS pin is replaced by "no module reads a symbol list for OGAP" (config has no OGAP_SYMBOLS; no .py outside the docs names it in code) and the plan state is ACTIVE on this paper box. O7 also: a chain on 2026-11-06 (no same-day expiry) now gives the same put on that expiry (the operator, 2026-11-22: "We just buy the nearest available expiry."; ogap_no_0dte is gone). Every other check, the replay R1-R5 and its fixture unchanged. The every-box, live-box and independence checks are tests/check_ogap_all_boxes.py.
 v5.5  2026-11-21  OTV5 r137 (CAP.10) — OGAP IS UNDER THE CAP (the operator, 2026-11-21: "both trades should fall under the catastrophic cap"). O9: OGAP is NOT in CAP_EXCLUDED_STRATEGIES and its admission rule is NOT cap-exempt (every other isolation term unchanged). O11: the capped branch asks NOTHING (no _attempt_ogap, no _attempt_park; it returns); the normal path still asks OGAP with the chain. The cap's refusal and P&L for OGAP are driven in tests/check_cap_all.py.
 v5.4  2026-11-21  OTV5 r136 (OGAP.3) — OGAP READS THE MARK (the operator, 2026-11-20: "never pay the spread"). O7: the
@@ -271,12 +275,12 @@ def main():
                         isinstance(_n, _ast.Attribute) and _n.attr == "OGAP_SYMBOLS"):
                     _named.append(os.path.relpath(_p, ROOT))
     check("O9 isolation: decay-exempt, UNDER the cap (r137), pin-exempt, admission one/one not cap-exempt, management does not "
-          "cover it, long_debit, no symbol list (r149), plan ACTIVE on this paper box",
+          "cover it, long_debit, no symbol list (r149), plan DORMANT (retired r153)",
           "OGAP" in tuple(config.DECAY_STOP_EXEMPT) and "OGAP" not in tuple(config.CAP_EXCLUDED_STRATEGIES)
           and 'PIN_EXEMPT = ("PARK", "OGAP")' in mn_src and '"OGAP":                 "long_debit"' in mn_src
           and rl is not None and rl.max_open_of_type == 1 and rl.max_tries_per_session == 1 and not rl.cap_exempt
           and MG.covers({"strategy": "OGAP"}) is False and not hasattr(config, "OGAP_SYMBOLS") and not _named
-          and PS.state("OGAP") == PS.ACTIVE,
+          and PS.state("OGAP") == PS.DORMANT,
           f"rule={rl} OGAP_SYMBOLS read by {sorted(set(_named))}")
 
     # ── O10 the real funnel sizes OGAP on the ask with its own budget ──

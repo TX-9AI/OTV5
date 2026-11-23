@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """
-tests/check_hunt_runway_sign.py  v5.1
+tests/check_hunt_runway_sign.py  v5.2
+v5.2  2026-11-23  OTV5 r153 (TRIM.2) — the Hunt is retired (DORMANT, its plan writes no row by rule); its code is kept until
+      the purge and this gate drives it directly, reading the Hunt's own plan_tick verdicts, so the run lifts the Hunt's
+      plan state to ACTIVE inside this process only (check_audit_20260823's a3 pattern). What R1-R6 pin is unchanged.
 v5.1  2026-11-08  OTV5 r76 (RETIRE.1) — the fixture no longer resets execution/handoff (removed with the sweep, r76). No check changed.
 v5.0  2026-10-26  OTV5 r33 (HUNT.14) — A HUNT WHOSE PRICE IS AT OR THROUGH ITS TARGET IS REFUSED, ON BOTH SIDES.
       GOOGL 2026-10-26 (33dc832f) entered short 0.20 through its target because the runway was abs(target - price).
@@ -59,6 +62,9 @@ def main():
     st = St(); P.ensure_tables(st); P.bind_store(st)
     from data.derived_store import DerivedStore
     import strategy.liquidity_hunt as LH
+    from strategy import plan_state as _ps              # r153 (TRIM.2): the Hunt is retired (DORMANT); its kept code is driven here
+    _ps_orig = _ps.state
+    _ps.state = lambda n: "active" if _ps.base(n) == "LiquidityHunt" else _ps_orig(n)
     LH._symbol_of = lambda: "TST"
 
     rw = getattr(LH, "_runway", None)

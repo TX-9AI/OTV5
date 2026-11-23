@@ -1,5 +1,7 @@
 # TRADES — the specs
 
+**`TRADES.md` v5.36 · 2026-11-23 · r153 (TRIM.2) — section 0, sections 9 and 10: THE HUNT AND OGAP ARE RETIRED, DORMANT with no switch on every box, paper or live (`strategy/plan_state.py`; `OT_HUNT` is no longer read; the box flag `ogap` is gone, so a box file line `ogap = ...` is refused as an unknown key). The operator, 2026-11-23: "The hunt & OGAP are trash. Retire them both after this session today. And include them in the coming purge. I think we're going to stick with the runaway & park going forward". Never asked, they write nothing; an open Hunt or OGAP row found at start is still managed to its exit. Their code (and the paper wall) is kept until the purge (BACKLOG TRIM.2 holds the map); the roster rows stay (OFF) while their ENTRY_WINDOWS rows do. Runaway and PARK are unchanged.**
+
 **`TRADES.md` v5.35 · 2026-11-22 · r151 (CAP.11) — the day, sections 9 and 10: on a PAPER box the daily catastrophic cap is RECORD ONLY. The operator, 2026-11-22: "Is there any way we can make the catastrophic cap only apply to cash? As in, there's no harm in letting paper run & we can just note if the breaker would have popped." and "Yes". A paper box writes one "breaker would have popped" record at the would-be trip, keeps trading and tags every trade opened while the cap stands tripped `after_cap = 1`; a live box halts its cash entries as at r150. Every number, every exit and every live rule unchanged.**
 
 **`TRADES.md` v5.34 · 2026-11-22 · r150 (OGAP.5) — section 0, the day and section 10: on a LIVE box OGAP keeps paper-trading, walled off from the cash account (`execution/paper_wall.py`: the mark, `paper_trade = 1`, zero broker calls; out of reconcile, buying power, the order guard, the live walk, the startup cancel and the 15:55 live cross), and the cap on a live box is for live trades only. The operator, 2026-11-22: "I want it paper trading even on the cash boxes. It's under evaluation. Why the fuck would I want to stop evaluating it?" and "The cap on a live box is for live trades only. Full stop."**
@@ -88,13 +90,13 @@ is its `docs/PLAN_SPEC.md` section.
 | trade | key | default | switch | entries (ET) | spec |
 |---|---|---|---|---|---|
 | Runaway | `RunawayContinuation` | ON | none (its end is fixed; r68) | 09:35-10:30 | PLAN_SPEC §30 |
-| Liquidity hunt | `LiquidityHunt` | ON | none | 09:35-10:30 | PLAN_SPEC §37 |
+| Liquidity hunt | `LiquidityHunt` | OFF | none (RETIRED r153, TRIM.2: dormant, `OT_HUNT` not read) | 09:35-10:30 | PLAN_SPEC §37 |
 | PARK | `PARK` | ON | none (`OT_PARK=log` records it, `off` stops it) | 11:01-11:03 | section 9 below |
-| OGAP | `OGAP` | ON | box flag `ogap` (default on, every box on paper; r150: on a live box too, walled paper) | 09:46-10:32 | section 10 below |
+| OGAP | `OGAP` | OFF | none (RETIRED r153, TRIM.2: dormant; the box flag `ogap` is gone) | 09:46-10:32 | section 10 below |
 
 A window's end is exclusive: 10:30 means the last entry is 10:29. A switch is ACTIVE at
 `1` or `active` (r303 below). The ORB trade, VOLT, the sweep credit spread, the ATP butterfly and ORCS are REMOVED (r76,
-RETIRE.1), the trend credit spread with its shadow (r88, RETIRE.3) and the GEX pin butterfly (r103, RETIRE.5); Breakout is DORMANT from 2026-11-16 (r110, WS.3 TRIM; its code kept, section 7); the opening-range ENGINE is not removed: Runaway and the Hunt read it, and since r222 its
+RETIRE.1), the trend credit spread with its shadow (r88, RETIRE.3) and the GEX pin butterfly (r103, RETIRE.5); Breakout is DORMANT from 2026-11-16 (r110, WS.3 TRIM; its code kept, section 7); the Hunt and OGAP are RETIRED from 2026-11-24 (r153, TRIM.2: DORMANT, no switch, never asked; their code kept until the purge); the opening-range ENGINE is not removed: Runaway and the Hunt read it, and since r222 its
 range is checked against the official print. The condor is a management plan with no entry
 of its own; with every credit entry removed it has nothing to manage.
 
@@ -105,8 +107,8 @@ of its own; with every credit entry removed it has nothing to manage.
 plan_tick / plan_check / plan_ledger / plan_heartbeat row, not on the `[plans]` line). The operator, 2026-10-19: "dormant
 plans should not write to the ledger, unless we are studying them as 'log only' - I would like each plan to have 3 states".
 Each switch takes `active` | `log` | `off` (`1` still = active; for an OFF-by-default trade anything else stays dormant;
-a value nobody recognises keeps the default and is named at start). Runaway and the Hunt gained switches
-(`OT_RUNAWAY`, `OT_HUNT`, unset = active; Breakout's `OT_BREAKOUT` is no longer read, dormant r110); PARK keeps `OT_PARK` trade/log/off. Unset, every plan is in
+a value nobody recognises keeps the default and is named at start). Runaway gained a switch
+(`OT_RUNAWAY`, unset = active; Breakout's `OT_BREAKOUT` is no longer read, dormant r110; the Hunt's `OT_HUNT` is no longer read, retired r153); PARK keeps `OT_PARK` trade/log/off. Unset, every plan is in
 the state the table above shows: no decision changed. Each plan is also HOUR-gated (asked only in its window - every
 row above) or CONDITION-gated (the management plans, while their own position is open; CondorManagement and
 CreditRoll, while a credit position is open, and off the `[plans]` line otherwise; the condor, which has no entry). A
@@ -807,6 +809,8 @@ sha 85dca420): the delta floor +11,786 on QQQ, +16,370 on SPX, every winner kept
 time exits cut the big days. Small n: the book rests on two or three days a month.
 
 ## 10. OGAP — `ogap.py` (the spec) + `ogap_plan.py` (the plan)
+
+**RETIRED r153 (TRIM.2, 2026-11-23).** The operator, 2026-11-23: "The hunt & OGAP are trash. Retire them both after this session today. And include them in the coming purge. I think we're going to stick with the runaway & park going forward". OGAP is DORMANT with no switch on every box (the box flag `ogap` is gone): never asked, writes nothing, and a live box no longer routes anything to the paper wall. What follows is the spec of the kept code, until the purge.
 
 **OTV5 OGAP.1, 2026-11-14.** Park's friend's ORB-GAP (his spec of record 2026-11-13), a faithful PAPER copy: his
 signal, sizing and exits, unchanged; only the plumbing is ours (`docs/OGAP_SPEC.md`). The operator, 2026-11-14: *"let's

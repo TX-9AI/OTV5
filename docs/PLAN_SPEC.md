@@ -1,5 +1,7 @@
 # PLAN_SPEC.md — every strategy declares its intent BEFORE the trigger
 
+**`PLAN_SPEC.md` v5.14 · 2026-11-23 · r153 (TRIM.2) — §37 (the Hunt) and §44 (OGAP) carry a RETIRED r153 line: both are DORMANT with no switch on every box (`strategy/plan_state.py`), never asked, write nothing; their contracts describe kept code until the purge (BACKLOG TRIM.2). The operator, 2026-11-23: "The hunt & OGAP are trash. Retire them both after this session today. And include them in the coming purge. I think we're going to stick with the runaway & park going forward".**
+
 **`PLAN_SPEC.md` v5.13 · 2026-11-22 · r150 (OGAP.5) — OGAP's section: a live box no longer reads OGAP DORMANT; it is asked as on paper and books on the walled paper book (execution/paper_wall); at a tripped cash cap a live box still asks it (one plan row of its own verdict, never `catastrophic_cap`). The operator, 2026-11-22: "I want it paper trading even on the cash boxes. It's under evaluation. Why the fuck would I want to stop evaluating it?"**
 
 **`PLAN_SPEC.md` v5.12 · 2026-11-22 · r149 (OGAP.4) — OGAP's section: the DORMANT `ogap_not_this_symbol` terminal is gone; OGAP runs on every box on paper and is not asked when plan_state reads it DORMANT (the box flag `ogap` off, or a live box); `ogap_no_0dte` is gone (the chain's expiry, today's or else the nearest listed).**
@@ -1284,6 +1286,8 @@ As a condor's second leg the sweep must be **at least as rich (credit ÷ width) 
 
 ## 37. OTV4TEST r12 — THE LIQUIDITY HUNT AND THE HANDOFF GRANT (operator 2026-09-10)
 
+**RETIRED r153 (2026-11-23, v5.14).** The Hunt is DORMANT with no switch (`strategy/plan_state.py`; `OT_HUNT` is no longer read): never asked, no plan row. An open Hunt found at start is still managed by its exits below. Kept code until the purge (TRIM.2).
+
 **r76 (RETIRE.1):** the HANDOFF GRANT below is removed - its only taker, the sweep credit spread, is removed. The Hunt's `hunt_target_wicked` exit is unchanged; its reason no longer says "handoff granted to the sweep".
 
 From the predecessor's own ledger: the ORB break-and-retest risks $71 to make $37; the momentum trade pays ~2:1 with the least give-back over ~300 trades. *"Under most circumstances price is going to go towards where the liquidity is."* So the hunt trades the break TOWARD the nearest liquidity level instead of waiting for a retest — and runs **beside** the ORB, never in its slot, so the two are compared on the same range, the same levels, the same fills.
@@ -1414,6 +1418,8 @@ verdicts, which decided, whether it fired). Scored on Saturdays. (reentry_gate.j
 hunt_after_breakout.jsonl is no longer written: 43.2.)
 
 ## 44. OTV5 OGAP.1 — OGAP: THE PLAN CONTRACT (the operator, 2026-11-14: "let's design & paper trade the OGAP on QQQ")
+
+**RETIRED r153 (2026-11-23, v5.14).** OGAP is DORMANT with no switch on every box (the box flag `ogap` is gone from `utils/box_flags.SCHEMA`): never asked, no plan row, nothing reaches the paper wall. An open OGAP found at start is still managed by its exits. Kept code until the purge (TRIM.2).
 
 `strategy/ogap.py` declares the conditions; `strategy/ogap_plan.py` reads the store's RTH 1m bars (closed bars only:
 a bar labelled m is read once the clock is at m+1) and the prior RTH close, and the pure `ogap_read()` returns the range,

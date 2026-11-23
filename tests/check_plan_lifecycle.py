@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """
-tests/check_plan_lifecycle.py  v5.2
+tests/check_plan_lifecycle.py  v5.3
+v5.3  2026-11-23  OTV5 r153 (TRIM.2) — the Hunt is retired (DORMANT from r153) and a dormant plan's ledger door opens no row,
+      so the run lifts LiquidityHunt's plan state to ACTIVE inside this process only (check_audit_20260823's a3 pattern):
+      L2, L4 and L6 keep their fixture plan, separate from L1's Runaway rows. What each check proves is unchanged.
 v5.2  2026-11-15  OTV5 r123 (HYG.27) — FIXTURES RE-POINTED (the Saturday brief 11-14 section 5 item 10): SweepCreditSpread -> LiquidityHunt, GEXPinButterfly -> PARK; what each check proves is unchanged.
 v5.1  2026-11-08  OTV5 r97 (RETIRE.5) —  GEX fly is cut in production (OFF in code); this checker flips it on to exercise its code until step 2 removes it.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
@@ -69,6 +72,9 @@ class _Store:
 
 def main():
     from derived.plan_ledger import PlanLedger
+    from strategy import plan_state as _ps                  # v5.3 (r153): the fixture plan is retired; lift it here
+    _ps_orig = _ps.state
+    _ps.state = lambda n: "active" if _ps.base(n) == "LiquidityHunt" else _ps_orig(n)
 
     # ⚠️ DEGRADE TO A NAMED FAILURE, never an AttributeError (r192): "the
     # checker crashed" and "the invariant is violated" must not look alike.

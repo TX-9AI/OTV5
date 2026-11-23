@@ -1,5 +1,10 @@
 """
-utils/box_flags.py  v5.1
+utils/box_flags.py  v5.2
+v5.2  2026-11-23  OTV5 r153 (TRIM.2) — THE `ogap` KEY GOES: OGAP is retired (strategy/plan_state: DORMANT, no switch). The
+      operator, 2026-11-23: "The hunt & OGAP are trash. Retire them both after this session today." SCHEMA is empty
+      again (schema v1: no keys, r148's shape), so a box file line `ogap = ...` is an UNKNOWN KEY: ignored, named on the
+      [flags] start line as REFUSED (main pages it once), and it can turn nothing on; tests/check_box_flags F3 refuses
+      such a line at land. The mechanism is unchanged and waits for its next key.
 v5.1  2026-11-22  OTV5 r149 (OGAP.4, M1) — THE FIRST KEY: `ogap` (setup OGAP, on / off, DEFAULT ON). The operator,
       2026-11-22: "If we're studying that trade, I don't understand why we're only testing it on one box. I honestly want
       it paper Trading on all of them." So OGAP runs on every box with no file line (the design drafted default off with
@@ -71,9 +76,8 @@ class Key:
 
 
 # THE ROSTER. r148 (BOXF.1): empty; each key joins in its own land. r149 (OGAP.4): ogap, default on.
-SCHEMA: Dict[str, Key] = {
-    "ogap": Key("ogap", "OGAP", VALUES, ON),     # r149: on every box, paper (the operator, 2026-11-22)
-}
+# r153 (TRIM.2): ogap removed with OGAP's retirement; empty again.
+SCHEMA: Dict[str, Key] = {}
 
 
 @dataclass(frozen=True)

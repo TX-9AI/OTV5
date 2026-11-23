@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """
-tests/check_not_asked_reasons.py  v5.3
+tests/check_not_asked_reasons.py  v5.4
+v5.4  2026-11-23  OTV5 r153 (TRIM.2) — N4's subject plan is RunawayContinuation where it was the Hunt (retired, DORMANT from
+      r153; a dormant plan writes no row by rule); the reason pinned is unchanged.
 v5.3  2026-11-15  OTV5 r123 (HYG.27) — FIXTURES RE-POINTED (the Saturday brief 11-14 section 5 item 10): ORBStrategy/manage -> Breakout/manage, SweepCreditSpread -> PARK; what each check proves is unchanged.
 v5.2  2026-11-14  OTV5 r110 (WS.3 TRIM) — the subject plan is LiquidityHunt where it was Breakout (dormant from r110); every reason pinned is unchanged.
 v5.1  2026-11-08  OTV5 r88 (RETIRE.3) — the subject plan is Breakout where it was the removed TCS (its OT_TCS_ACTIVE=1 switch goes); every reason pinned is unchanged.
@@ -133,7 +135,7 @@ def main():
     # rather than as a status — otherwise it gets scrolled past forever, which
     # is how it survived this long.
     P.REGISTRY.clear()
-    P.Plan("LiquidityHunt", ("adx",))
+    P.Plan("RunawayContinuation", ("adx",))             # r153: was the Hunt (retired)
     P.begin_tick(502.0)
     P.close_tick(st, "TST")
     r502 = st.conn.execute("SELECT verdict, reason FROM plan_tick"

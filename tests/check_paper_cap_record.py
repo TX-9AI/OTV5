@@ -1,6 +1,12 @@
 #!/usr/bin/env python3
 """
-tests/check_paper_cap_record.py  v5.0
+tests/check_paper_cap_record.py  v5.1
+v5.1  2026-11-23  OTV5 r153 (TRIM.2) — RE-POINTED (WA 38.4): the Hunt and OGAP are retired (DORMANT, never asked). drive()
+      leaves the two retired names out of what it reports asked and of the plan gates it collects (on any tree), so K2's
+      "keeps admitting entries" reads PARK at 11:01 (OGAP is no longer asked at 10:20; neither instant writes a
+      catastrophic_cap row), K5's live box at the cap asks NOTHING (r150's walled OGAP is retired), and K6's digest is
+      NEVER_DIGEST_EX_RETIRED, the same day measured on r152 c0cfcbf with the same filter. The trades the gate books
+      directly (a LiquidityHunt row, the walled OGAP booking) still book through the kept code. K1, K3, K4 unchanged.
 v5.0  2026-11-22  OTV5 r151 (CAP.11) — new. ON A PAPER BOX THE DAILY CATASTROPHIC CAP IS RECORD ONLY. The operator,
       2026-11-22: "Is there any way we can make the catastrophic cap only apply to cash? As in, there's no harm in letting
       paper run & we can just note if the breaker would have popped." and "Yes" to the design: a paper box writes one
@@ -60,7 +66,9 @@ os.environ["OT_RISK_USD"] = "1050"
 ET = ZoneInfo("America/New_York")
 DAY = "2026-11-24"
 LIMIT = 1050.0
-NEVER_DIGEST = "82c1c6755be35e01"       # K6: measured on r150 (dd910c2) and on r151; see the land spec
+NEVER_DIGEST = "82c1c6755be35e01"       # K6 to r152: measured on r150 (dd910c2) and on r151; see the land spec
+NEVER_DIGEST_EX_RETIRED = "c113c53e30bfb234"   # K6 v5.1 (r153): the Hunt and OGAP left out of asks and gates, measured on r152
+RETIRED_NAMES = ("LiquidityHunt", "OGAP")
 FAILED = []
 
 
@@ -225,7 +233,8 @@ def main():
                 getattr(MN, attr).generate_signal = f
             MN._plan_skip = s_skip
             MN.get_position_manager = s_gpm
-        return sorted(set(asked)), sorted(set(g for _n, g in skips)), err
+        return (sorted(set(n for n in asked if n not in RETIRED_NAMES)),                 # v5.1 (r153)
+                sorted(set(g for _n, g in skips if _n not in RETIRED_NAMES)), err)
 
     def cf_lines():
         p = os.path.join(os.path.dirname(state["db"]), "cap_counterfactual.jsonl")
@@ -269,8 +278,8 @@ def main():
         ask_og, gates_og, e_og = drive(10, 20, True)
         ask_pk, gates_pk, e_pk = drive(11, 1, True)
         h3 = RM._risk_manager.is_halted()
-        check("K2 it keeps admitting entries: at 10:20 OGAP and at 11:01 PARK are asked; no catastrophic_cap plan row",
-              not e_og and not e_pk and "OGAP" in ask_og and "PARK" in ask_pk
+        check("K2 it keeps admitting entries: at 11:01 PARK is asked; no catastrophic_cap plan row at 10:20 or 11:01",
+              not e_og and not e_pk and "PARK" in ask_pk
               and "catastrophic_cap" not in gates_og and "catastrophic_cap" not in gates_pk and h3 is False,
               f"10:20 asked={ask_og} gates={gates_og} {e_og} | 11:01 asked={ask_pk} gates={gates_pk} {e_pk} halted={h3}")
 
@@ -329,10 +338,10 @@ def main():
         lr2, lev2 = rows()
         lt = {r["trade_id"]: r.get("after_cap") for r in lr2}
         check("K5 a live box is unchanged: the cash close halts, pages once, one daily_cap_hit row and no would-pop; at "
-              "10:20 no cash setup is asked (catastrophic_cap) and the walled OGAP is; nothing on a live box is tagged",
+              "10:20 no setup is asked (catastrophic_cap; r153: OGAP retired); nothing on a live box is tagged",
               lh is True and len(lpages) == 1 and [e["reason"] for e in lev] == ["daily_cap_hit"]
-              and not would_pop(lev2) and not le and "OGAP" in lask
-              and not [n for n in lask if n != "OGAP"] and "catastrophic_cap" in lgates and ltag is False
+              and not would_pop(lev2) and not le and lask == []
+              and "catastrophic_cap" in lgates and ltag is False
               and lt.get(lb) is None and (wb is None or lt.get(wb) is None) and len(pages) == 1,
               f"halted={lh} pages={lpages} events={lev} asked={lask} gates={lgates} {le} tag_fn={ltag} tags={lt}")
 
@@ -365,7 +374,8 @@ def main():
         nulls = [r.get("after_cap") for r in nr if "after_cap" in r]
         print(f"  K6 digest {got} (rows {len(flat)}, cap day {payload['cap_day']})")
         check("K6 a paper day that never reaches the cap is byte-identical to r150 (digest), after_cap NULL on every row",
-              got == NEVER_DIGEST and all(v is None for v in nulls), f"digest {got} != {NEVER_DIGEST}; tags={nulls}")
+              got == NEVER_DIGEST_EX_RETIRED and all(v is None for v in nulls),
+              f"digest {got} != {NEVER_DIGEST_EX_RETIRED}; tags={nulls}")
     except Exception as exc:                                    # noqa: BLE001
         import traceback
         check("K0 the gate ran", False, f"{type(exc).__name__}: {exc} {traceback.format_exc()[-900:]}")

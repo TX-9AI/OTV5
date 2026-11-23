@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
-"""tests/check_ramp_top_label.py — v5.0
+"""tests/check_ramp_top_label.py — v5.1
+v5.1  2026-11-23  OTV5 r153 (TRIM.2) — R4 RE-POINTED (WA 38.4): the Hunt and OGAP are retired (DORMANT, no switch), so R4's
+      live setups are Runaway and PARK (ACTIVE) and the Hunt and OGAP read DORMANT; R1-R3, R5, R6 unchanged.
 v5.0  2026-11-21  OTV5 r141 (RAMP.1; the Saturday brief 2026-11-21 R5a, section 5 item 2) — THE RAMP TOP SIZES ONLY
       BREAKOUT, WHICH IS DORMANT, AND WHAT THE OPERATOR SEES SAYS SO. OT_BREAKOUT_BUDGET_USD is read only by
       risk/risk_manager._size_geometry, which only a signal carrying `sizes_on_geometry` reaches (main._geometry_inputs
@@ -14,7 +16,8 @@ R1  outside tests/, BREAKOUT_BUDGET_USD is named only in config.py (its definiti
 R2  main._geometry_inputs returns (0.0, 0.0) unless the signal carries sizes_on_geometry, and _execute_entry_signal
     passes its result to size_for (so no other signal reaches the geometry rule)
 R3  outside tests/, the only code that sets sizes_on_geometry = True is strategy/breakout_plan.py
-R4  plan_state: Breakout is DORMANT by default with no switch key; Runaway, the Hunt, PARK and OGAP are ACTIVE
+R4  plan_state: Breakout is DORMANT by default with no switch key; Runaway and PARK are ACTIVE (r153: the Hunt and
+    OGAP are DORMANT, retired)
 R5  EXECUTED (two child interpreters, OT_RISK_USD=1050, OT_BREAKOUT_BUDGET_USD=1 vs 1000000): the budget rule
     (no geometry) sizes the same contracts under both ramp tops; CONTROL: the geometry rule does not (the key bites
     only there)
@@ -144,8 +147,9 @@ def child(top):
 
 
 lo, hi = child(1), child(1000000)
-ok4 = "error" not in lo and lo["brk"] == ["dormant", "", "dormant"] and all(v == "active" for v in lo["live"].values())
-check("R4 Breakout is DORMANT with no switch; Runaway, the Hunt, PARK and OGAP are ACTIVE", ok4,
+ok4 = ("error" not in lo and lo["brk"] == ["dormant", "", "dormant"]
+       and lo["live"] == {"RunawayContinuation": "active", "LiquidityHunt": "dormant", "PARK": "active", "OGAP": "dormant"})
+check("R4 Breakout is DORMANT with no switch; Runaway and PARK are ACTIVE; the Hunt and OGAP DORMANT (retired r153)", ok4,
       lo.get("error") or (lo["brk"], lo["live"]))
 ok5 = ("error" not in lo and "error" not in hi and lo["top"] == 1.0 and hi["top"] == 1000000.0
        and lo["plain"] == hi["plain"] and lo["plain"][0] and lo["plain"][1] == 5 and lo["plain"][2] == "budget"

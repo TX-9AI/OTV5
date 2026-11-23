@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """
-tests/check_env_doc.py  v5.3
+tests/check_env_doc.py  v5.4
+v5.4  2026-11-23  OTV5 r153 (TRIM.2) — E2's core list swaps OT_HUNT (no longer read: the Hunt is retired, DORMANT with no
+      switch) for OT_RUNAWAY (plan_state's Runaway switch). E1 unchanged.
 v5.3  2026-11-15  OTV5 r125 (HYG.28) — the ramp TOP's key is OT_BREAKOUT_BUDGET_USD (was OT_ORB_BUDGET_USD); E2's core list names the new key.
 v5.2  2026-11-09  OTV5 r103 (RETIRE.5 step 2) — E2's core list swaps OT_GEX_BUTTERFLY (no longer read: the GEX fly is removed) for OT_HUNT (plan_state's Hunt switch). E1 unchanged.
 v5.1  2026-11-08  OTV5 r76 (RETIRE.1) — E2's core list swaps OT_ORCS and OT_CONTRACT_SCALE (no longer read: ORCS is removed)
@@ -8,7 +10,7 @@ v5.1  2026-11-08  OTV5 r76 (RETIRE.1) — E2's core list swaps OT_ORCS and OT_CO
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.0  2026-10-04  OTV4TEST r250 (DOC.31 item 4) — docs/ENV.md MATCHES THE CODE.
   E1  tests/gen_env_doc.py --check: every OT_* read in the tree is in docs/ENV.md, with its default and file:line, and nothing stale
-  E2  the doc names the known core switches (OT_INSTRUMENT, OT_RISK_USD, OT_DAILY_LOSS_LIMIT, OT_BREAKOUT_BUDGET_USD, OT_HUNT) - a scan that
+  E2  the doc names the known core switches (OT_INSTRUMENT, OT_RISK_USD, OT_DAILY_LOSS_LIMIT, OT_BREAKOUT_BUDGET_USD, OT_RUNAWAY) - a scan that
       silently found nothing would otherwise "match" an empty doc
 Run: python3 tests/check_env_doc.py
 """
@@ -30,7 +32,7 @@ try:
     doc = open(os.path.join(ROOT, "docs", "ENV.md"), encoding="utf-8").read()
 except OSError as exc:
     doc = ""
-missing = [v for v in ("OT_INSTRUMENT", "OT_RISK_USD", "OT_DAILY_LOSS_LIMIT", "OT_BREAKOUT_BUDGET_USD", "OT_HUNT")   # r103: OT_GEX_BUTTERFLY no longer read
+missing = [v for v in ("OT_INSTRUMENT", "OT_RISK_USD", "OT_DAILY_LOSS_LIMIT", "OT_BREAKOUT_BUDGET_USD", "OT_RUNAWAY")   # r103: OT_GEX_BUTTERFLY; r153: OT_HUNT no longer read
            if f"| `{v}` |" not in doc]
 check("E2 the core switches are in it (the scan found real reads)", not missing, f"missing {missing}")
 if FAILED:

@@ -1,5 +1,14 @@
 """
-main.py  v5.38
+main.py  v5.39
+v5.39  2026-11-23  OTV5 r153 (TRIM.2) — THE HUNT AND OGAP ARE RETIRED (strategy/plan_state v5.12: DORMANT, no switch). The
+      operator, 2026-11-23: "The hunt & OGAP are trash. Retire them both after this session today. And include them in
+      the coming purge." _safe_strategy already returns before a DORMANT name; _attempt_hunt and _attempt_ogap now return
+      FIRST when their plan is DORMANT (r97's butterfly rule), before the open-Hunt read and the one-per-session read, so
+      neither touches the book or writes a row; _ask_walled_past_cap skips a DORMANT walled name before its admission
+      row and its chain fetch. The Service line says "hunt=retired (dormant r153)" and "ogap=retired (dormant r153)"
+      (read from plan_state). An OPEN Hunt / OGAP row found at start is still recovered and managed to its exit
+      (_recover_open_position, paper_wall.recover and _paper_wall_pass are unchanged; exits read no plan state). The
+      paper wall's code stays for the purge (BACKLOG TRIM.2). Runaway and PARK dispatch exactly as before.
 v5.38  2026-11-22  OTV5 r150 (OGAP.5) — ON A LIVE BOX OGAP KEEPS PAPER-TRADING, WALLED OFF FROM THE CASH ACCOUNT (replaces
       r149's "dormant on a live box"). The operator, 2026-11-22: "I want it paper trading even on the cash boxes. It's
       under evaluation. Why the fuck would I want to stop evaluating it?" On a live box (state.paper_trading False) an
@@ -4750,10 +4759,24 @@ def attempt_new_entry(ctx: dict, ms: MarketState, state: BotState):
     # Its reasoning is PRESERVED where the rule now lives, inside `_fire`.
 
 
+def _retired_dormant(name: str) -> bool:
+    """r153 (TRIM.2) — True when plan_state reads `name` DORMANT (the Hunt and OGAP are retired: always). An unreadable
+    state reads False, so the caller falls through to _safe_strategy, which checks the state again (r97's butterfly
+    rule). Never raises."""
+    try:
+        from strategy import plan_state as _ps
+        return _ps.is_dormant(name)
+    except Exception:                                          # noqa: BLE001
+        return False
+
+
 def _attempt_hunt(ctx, ms, state, *, orb, chain, now_hhmm, atr_pct) -> None:
     """OTV4TEST r12 — ask the liquidity hunt's plan (dormant outside 09:35–11:30)
     and on a fire execute it ADDITIVE: it takes no slot and is not counted as
-    blocking (position_manager v4.9)."""
+    blocking (position_manager v4.9).
+    r153 (TRIM.2): retired - a DORMANT Hunt returns first: no book read, no row (an open Hunt is still managed)."""
+    if _retired_dormant("LiquidityHunt"):
+        return
     try:
         _pm = get_position_manager(state.paper_trading)
         if any(str(r.get("strategy") or "") == "LiquidityHunt" for r in _pm.get_open_records()):
@@ -4826,7 +4849,10 @@ def _attempt_ogap(ctx, ms, state, chain=None) -> None:
     """OGAP.1 — ask OGAP (its plan is dormant outside 09:46-10:32; r149: on every box unless plan_state says DORMANT, the
     box flag `ogap` off; r150: on a live box it books on execution/paper_wall, paper) and, on a fire,
     execute it ADDITIVE. Called from the normal dispatch only (r137 CAP.10: OGAP is under the daily catastrophic cap
-    both ways; the capped branch asks nothing). One per session on this box, DB-backed (fails closed)."""
+    both ways; the capped branch asks nothing). One per session on this box, DB-backed (fails closed).
+    r153 (TRIM.2): retired - a DORMANT OGAP returns first: no trades.db read, no row (an open OGAP is still managed)."""
+    if _retired_dormant("OGAP"):
+        return
     if _one_per_session_used("OGAP"):
         _plan_skip("OGAP", "one per session on this box — already traded today", gate="tries_per_session")
         return
@@ -4859,6 +4885,8 @@ def _ask_walled_past_cap(ctx, ms, state, pm, now, orb_d, tries) -> None:
     admitted, it is asked through _attempt_ogap exactly as in the normal dispatch. Called after every cash refusal is
     written, so it can never come before a cash decision. Never raises."""
     for name in _paper_wall.WALLED:
+        if _retired_dormant(name):                               # r153 (TRIM.2): no row, no chain fetch
+            continue
         try:
             from utils.time_utils import close_anchored as _ca
             _st = pm.logging_state((now.hour, now.minute),            # the dispatch's own call, the cap intact
@@ -5140,7 +5168,12 @@ def _banner_dials() -> str:
     brk += f" · park={PARK_MODE}"                                          # r288 (PARK.1)
     try:                                                                   # r149 (OGAP.4): plan_state decides
         from strategy import plan_state as _ps_og
-        if _ps_og.state("OGAP") == _ps_og.ACTIVE:
+        _ret = getattr(_ps_og, "RETIRED", {})                             # r153 (TRIM.2): the retired setups
+        if "LiquidityHunt" in _ret and _ps_og.is_dormant("LiquidityHunt"):
+            brk += " · hunt=retired (dormant r153)"
+        if "OGAP" in _ret and _ps_og.is_dormant("OGAP"):
+            brk += " · ogap=retired (dormant r153)"
+        elif _ps_og.state("OGAP") == _ps_og.ACTIVE:
             brk += " · ogap=on" + ("" if PAPER_TRADING else " (paper, walled from the cash account)")   # r150 OGAP.5
         else:
             brk += " · ogap=off (box flag)"

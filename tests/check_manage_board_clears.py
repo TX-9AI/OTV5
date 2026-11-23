@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """
-tests/check_manage_board_clears.py  v5.1
+tests/check_manage_board_clears.py  v5.2
+v5.2  2026-11-23  OTV5 r153 (TRIM.2) — the subject plans are RunawayContinuation and RunawayContinuation/manage where they
+      were the Hunt's (retired, dormant from r153: a dormant plan is off the line by design); M1-M4 pin the same board rule.
 v5.1  2026-11-14  OTV5 r110 (WS.3 TRIM) — the subject plans are LiquidityHunt and LiquidityHunt/manage where they were Breakout's (dormant from r110); M1-M4 pin the same board rule.
 v5.0  2026-10-26  OTV5 r35 (PLN.3) — A CLOSED POSITION'S MANAGE VERDICT LEAVES THE [plans] LINE.
       SPX 2026-10-26: "RunawayContinuation/manage=CLOSE(... -34%)" stayed on the line from the 09:40 close to 16:02;
@@ -53,8 +55,8 @@ def main():
     st = St()
     eng = DP.PlanEngine(st, "TST")
     cap = _Cap(); lg = logging.getLogger("derived.plans"); lg.addHandler(cap); lg.setLevel(logging.INFO)
-    brk = P.REGISTRY.get("LiquidityHunt") or P.Plan("LiquidityHunt", ("x",))
-    man = P.REGISTRY.get("LiquidityHunt/manage") or P.Plan("LiquidityHunt/manage", ("pnl",))
+    brk = P.REGISTRY.get("RunawayContinuation") or P.Plan("RunawayContinuation", ("x",))
+    man = P.REGISTRY.get("RunawayContinuation/manage") or P.Plan("RunawayContinuation/manage", ("pnl",))
 
     def board():
         time.sleep(0.002)
@@ -66,18 +68,18 @@ def main():
     t = brk.tick(100.0); t.check("x", 1, False); t.hold("waiting on: x")
     t = man.tick(100.0); t.check("pnl", -0.34, False); t.hold("floor crossed -34%", verdict="CLOSE")
     line1 = board()
-    check("M1 the tick it ran: LiquidityHunt/manage=CLOSE is on the line", "LiquidityHunt/manage=CLOSE" in line1, line1[:160])
+    check("M1 the tick it ran: RunawayContinuation/manage=CLOSE is on the line", "RunawayContinuation/manage=CLOSE" in line1, line1[:160])
 
     t = brk.tick(100.0); t.check("x", 1, False); t.hold("waiting on: x")      # manage not run: closed
     line2 = board()
     check("M2 the next tick (position closed, manage not run): Breakout/manage is off the line",
-          "LiquidityHunt/manage=" not in line2, line2[:160])
+          "RunawayContinuation/manage=" not in line2, line2[:160])
     line3 = board()                                                       # Breakout itself not run this tick either
-    check("M3 a non-condition plan not run this tick stays on the line", "LiquidityHunt=" in line3, line3[:160])
+    check("M3 a non-condition plan not run this tick stays on the line", "RunawayContinuation=" in line3, line3[:160])
 
     t = man.tick(100.0); t.check("pnl", 0.10, True); t.hold("holding +10%")
     line4 = board()
-    check("M4 a new position: Breakout/manage is back on the line", "LiquidityHunt/manage=HOLD" in line4, line4[:160])
+    check("M4 a new position: Breakout/manage is back on the line", "RunawayContinuation/manage=HOLD" in line4, line4[:160])
 
     print(f"\n{'ALL PASS' if not FAILED else 'FAILED: ' + ', '.join(FAILED)}")
     return 1 if FAILED else 0

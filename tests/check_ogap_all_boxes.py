@@ -1,6 +1,17 @@
 #!/usr/bin/env python3
 """
-tests/check_ogap_all_boxes.py  v5.2
+tests/check_ogap_all_boxes.py  v5.3
+v5.3  2026-11-23  OTV5 r153 (TRIM.2) — RE-POINTED (WA 38.4): OGAP and the Hunt are RETIRED (DORMANT, no switch; the box
+      flag `ogap` is gone from utils/box_flags.SCHEMA). The operator, 2026-11-23: "The hunt & OGAP are trash. Retire them
+      both after this session today." OGAP's code is KEPT until the purge, so what this gate pins turns around where it
+      named OGAP running: A1 - DORMANT on every one of the 14 boxes, while the spec, driven directly, still gives the same
+      11-05 put on every symbol (no symbol list); A2 - DORMANT and never asked on a live box and on paper, the Service
+      line says "ogap=retired (dormant r153)"; A3 - no flag can turn it on: a box file line `ogap = on` / `off` / `of` /
+      `paper_only`, an unreadable file, no file and a box_flags read that raises all leave it DORMANT, and the `on` line
+      is REFUSED as an unknown key (named); plan_state.default("OGAP") is DORMANT; A4 - the cousins' dispatch digest,
+      the Hunt's events filtered (it is no longer asked; the run must hold none), is REPLAY_DIGEST_EX_HUNT, measured on
+      r152 c0cfcbf with the same filter, in three worlds (`ogap=off`; a forced `ogap=on` value; an OGAP position open with
+      its try spent) and OGAP is asked in none. A5 and A6 unchanged (they drive the funnel and the spec directly).
 v5.2  2026-11-23  OTV5 r152 (GATE.9) — A6 PINS THE EXIT ENGINE'S OWN CLOCK. ExitEngine._evaluate_ogap reads the minute
       from execution/exit_engine's module `datetime` (datetime.now(_ET), exit_engine.py _evaluate_ogap), the seam
       tests/check_ogap_mark.py and tests/check_ogap_paper_on_live.py already freeze; A6 pinned only now_et / now_utc,
@@ -74,7 +85,8 @@ os.environ["OT_RISK_USD"] = "500"          # Park's $500, as tests/check_ogap.py
 ET = ZoneInfo("America/New_York")
 FLEET = ("SPX", "QQQ", "NVDA", "TSLA", "META", "AMZN", "GOOGL", "AMD", "AVGO", "NFLX", "CRM", "UNH", "CVX", "SMH")
 FIX = os.path.join(ROOT, "tests", "fixtures", "ogap", "replay5.json")
-REPLAY_DIGEST = "2fd5fb3e6e3c96bb"          # A4: Runaway / Hunt / PARK asks + skips, 09:35-11:05, identical in all three worlds
+REPLAY_DIGEST = "2fd5fb3e6e3c96bb"          # A4 to r152: Runaway / Hunt / PARK asks + skips, 09:35-11:05, identical in all three worlds
+REPLAY_DIGEST_EX_HUNT = "28ffd453a0d9e360"         # A4 v5.3 (r153): the same with the Hunt's events filtered, measured on r152 c0cfcbf
 FAILED = []
 
 
@@ -169,18 +181,20 @@ def main():
         sg = spec.generate_signal(price_now=spot, now_et=OP.hhmm(fill), chain=Chain(d, round(spot), 4.23, 4.26),
                                   day=day, symbol=sym, bars=bars, prior_close=fx[d]["prior_close"])
         got[sym] = (st, None if sg is None else (sg.option_side, float(sg.strike), sg.entry_premium))
-    want = ("active", ("put", float(fx[d]["expect"]["strike"]), 4.24))
+    want = ("dormant", ("put", float(fx[d]["expect"]["strike"]), 4.24))     # v5.3 (r153): retired, the code kept
     bad1 = {s: v for s, v in got.items() if v != want}
-    check("A1 OGAP evaluates on every box: ACTIVE on paper and the same 11-05 put on all 14 symbols; no OGAP_SYMBOLS",
+    check("A1 (r153) OGAP is DORMANT on every box; its kept spec still gives the same 11-05 put on all 14 symbols; "
+          "no OGAP_SYMBOLS",
           not bad1 and not hasattr(config, "OGAP_SYMBOLS"), f"differ: {bad1}")
 
     # ── A2 live box ─────────────────────────────────────────────────────────
     lv, pp = probe(False), probe(True)
-    ok2 = (lv.get("paper") is False and lv.get("state") == "active" and "OGAP dormant" not in lv.get("summary", "")
-           and lv.get("asked") == 1 and " · ogap=on (paper, walled from the cash account)" in lv.get("banner", "")
-           and pp.get("paper") is True and pp.get("state") == "active" and pp.get("asked") == 1
-           and " · ogap=on" in pp.get("banner", "") and "walled" not in pp.get("banner", ""))
-    check("A2 a LIVE box: OGAP ACTIVE and asked (walled paper, the Service line says so); paper: ACTIVE, asked",
+    ok2 = (lv.get("paper") is False and lv.get("state") == "dormant" and "OGAP (r153 TRIM.2)" in lv.get("summary", "")
+           and lv.get("asked") == 0 and " · ogap=retired (dormant r153)" in lv.get("banner", "")
+           and pp.get("paper") is True and pp.get("state") == "dormant" and pp.get("asked") == 0
+           and " · ogap=retired (dormant r153)" in pp.get("banner", "")
+           and "walled" not in lv.get("banner", "") + pp.get("banner", ""))
+    check("A2 (r153) a LIVE box and a paper box: OGAP DORMANT, never asked, the Service line says retired",
           ok2, f"live={lv} paper={ {k: v for k, v in pp.items() if k != 'banner'} }")
 
     # ── A3 the flag, fail closed ────────────────────────────────────────────
@@ -195,8 +209,15 @@ def main():
                 set_flags({"ogap": "off"})
                 res["off"] = PS.state("OGAP")
                 MN._safe_strategy("OGAP", lambda: asked.append("off"))
-                res["off_banner"] = "ogap=off (box flag)" in MN._banner_dials()
+                res["off_banner"] = "ogap=retired (dormant r153)" in MN._banner_dials()
                 td = tempfile.mkdtemp(prefix="a3_", dir=_TD)
+                _on = os.path.join(td, "on")
+                open(_on, "w").write("ogap = on\n")
+                BF._EFFECTIVE["flags"] = BF.load("QQQ", path=_on)
+                res["on_line"] = PS.state("OGAP")
+                res["on_refused"] = (any("unknown key 'ogap'" in x for x in BF.effective().problems)
+                                     and "ogap" not in BF.effective().values)
+                MN._safe_strategy("OGAP", lambda: asked.append("on_line"))
                 for nm, txt in (("bad", "ogap = of\n"), ("po", "ogap = paper_only\n")):
                     p = os.path.join(td, nm)
                     open(p, "w").write(txt)
@@ -218,16 +239,18 @@ def main():
                 MN._admission_allows = s_adm
                 BF.reset()
             src = open(os.path.join(ROOT, "strategy", "plan_state.py"), encoding="utf-8").read()
-            row = [ln for ln in src.splitlines() if ln.strip().startswith('"OGAP":')]
-            literal_free = len(row) == 1 and "ACTIVE" not in row[0].split("#")[0] and "DORMANT" not in row[0].split("#")[0]
-            ok3 = (res == {"off": "dormant", "off_banner": True, "bad": "dormant", "po": "dormant",
-                           "unreadable": "dormant", "missing": "active", "raises": "dormant"}
-                   and asked == ["on"] and PS.default("OGAP") == "active" and literal_free)
+            row = [ln for ln in src.splitlines() if ln.strip().startswith('"OGAP":') and "HOUR" in ln]   # v5.3: the TABLE row
+            literal_free = len(row) == 1 and "DORMANT" in row[0].split("#")[0] and "ogap" not in BF.SCHEMA
+            ok3 = (res == {"off": "dormant", "off_banner": True, "on_line": "dormant", "on_refused": True,
+                           "bad": "dormant", "po": "dormant", "unreadable": "dormant", "missing": "dormant",
+                           "raises": "dormant"}
+                   and asked == [] and PS.default("OGAP") == "dormant" and literal_free)
             d3 = f"res={res} asked={asked} default={PS.default('OGAP')} row={row}"
         except Exception as exc:                                # noqa: BLE001
             d3 = f"{type(exc).__name__}: {exc}"
-    check("A3 the box flag decides on paper and fails closed (off / bad / paper_only / unreadable / a raise -> DORMANT; "
-          "no file -> ACTIVE); no OGAP state literal in plan_state", ok3, d3)
+    check("A3 (r153) no box flag turns OGAP on: an `ogap = on` line is REFUSED (unknown key, named) and every file "
+          "state (on / off / bad / paper_only / unreadable / none / a raise) reads DORMANT; plan_state's row is DORMANT, "
+          "no `ogap` schema key", ok3, d3)
 
     # ── A4 the dispatch, three worlds ───────────────────────────────────────
     from database.trade_logger import get_trade_logger, make_record
@@ -333,12 +356,15 @@ def main():
         e_off, o_off = world("dormant", "off", False)
         e_on, o_on = world("active", "on", False)
         e_open, o_open = world("open", "on", True)
+        n_hunt = sum(1 for e in e_off + e_on + e_open if e[1] == "LiquidityHunt")      # v5.3 (r153): retired
+        e_off, e_on, e_open = ([e for e in x if e[1] != "LiquidityHunt"] for x in (e_off, e_on, e_open))
         dg = [hashlib.sha256(json.dumps(e, default=str).encode()).hexdigest()[:16] for e in (e_off, e_on, e_open)]
         n_cousin = sum(1 for e in e_on if e[0] == "ask")
-        ok4 = (dg[0] == dg[1] == dg[2] and dg[0] == REPLAY_DIGEST and n_cousin > 0 and not o_off and len(o_on) > 0
-               and len(o_open) == 0)
-        d4 = (f"digests={dg} want={REPLAY_DIGEST} cousin_asks={n_cousin} ogap_asks off/on/open="
-              f"{len(o_off)}/{len(o_on)}/{len(o_open)}")
+        print(f"       (A4 digest ex-Hunt {dg[0]})")
+        ok4 = (dg[0] == dg[1] == dg[2] and dg[0] == REPLAY_DIGEST_EX_HUNT and n_cousin > 0 and not o_off
+               and not o_on and not o_open and n_hunt == 0)
+        d4 = (f"digests={dg} want={REPLAY_DIGEST_EX_HUNT} cousin_asks={n_cousin} hunt_events={n_hunt} ogap_asks "
+              f"off/on/open={len(o_off)}/{len(o_on)}/{len(o_open)}")
         if dg[0] != dg[1] or dg[1] != dg[2]:
             for a, b, lab in ((e_off, e_on, "off->on"), (e_on, e_open, "on->open")):
                 diff = [(x, y) for x, y in zip(a, b) if x != y][:3]
@@ -346,8 +372,8 @@ def main():
     except Exception as exc:                                    # noqa: BLE001
         import traceback
         d4 = f"{type(exc).__name__}: {exc} {traceback.format_exc()[-600:]}"
-    check("A4 the dispatch: Runaway / Hunt / PARK asks and skips byte-identical with OGAP dormant, active, and active "
-          "with an OGAP position open and its try spent (digest pinned); OGAP asked only when active and its try unspent",
+    check("A4 (r153) the dispatch: Runaway / PARK asks and skips byte-identical to r152 (the Hunt filtered, and never "
+          "asked) with the flag off, a forced `ogap=on` flag value, and an OGAP position open with its try spent; OGAP never asked",
           ok4, d4)
 
     # ── A5 the funnel ───────────────────────────────────────────────────────
@@ -442,8 +468,8 @@ def main():
     if FAILED:
         print(f"RED — {len(FAILED)} failed: {' '.join(FAILED)}")
         return 1
-    print("GREEN — OGAP runs on every box on paper (nearest expiry when none is same-day; walled paper on a live box), and "
-          "blocks none of its cousins (A1-A6)")
+    print("GREEN — OGAP is retired on every box (r153: DORMANT, no flag turns it on); its kept code still sizes and exits "
+          "as built; its cousins dispatch as on r152 (A1-A6)")
     return 0
 
 

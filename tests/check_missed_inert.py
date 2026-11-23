@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """
-tests/check_missed_inert.py  v5.1
+tests/check_missed_inert.py  v5.2
+v5.2  2026-11-23  OTV5 r153 (TRIM.2) — M2's second ledger row is PARK's (the Hunt is retired, DORMANT from r153, and a
+      dormant plan's ledger door opens no row). What M2 pins is unchanged.
 v5.1  2026-11-15  OTV5 r123 (HYG.27) — FIXTURES RE-POINTED (the Saturday brief 11-14 section 5 item 10): ORBStrategy -> RunawayContinuation (an ACTIVE plan: a DORMANT one opens no row), SweepCreditSpread -> LiquidityHunt; what each check proves is unchanged.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v1.1  2026-10-19  OTV4TEST r303 (PSTATE.1) — its subject ORBStrategy (M1) / the M2 ledger row is DORMANT by default and a dormant plan now
@@ -115,7 +117,7 @@ def main() -> int:
     # a trade and must not consume a side.
     # r303: IronCondorStrategy is DORMANT for good (no entry of its own) and opens no row; M2's rule is
     # strategy-agnostic (a ledger row of any state never consumes a side), so its row is the Hunt's (r123: was a sweep leg's).
-    missed_call = led.open_plan("LiquidityHunt", "DECIDED", {"price": 706.0},
+    missed_call = led.open_plan("PARK", "DECIDED", {"price": 706.0},   # r153: PARK (the Hunt retired, dormant)
                                 direction="SHORT", short_strike=712.0)
     led.transition(missed_call, "MISSED", "TRIGGER_FIRED_WHILE_DOWN")
     rows = led._store.conn.execute(
