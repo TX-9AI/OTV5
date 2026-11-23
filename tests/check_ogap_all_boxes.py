@@ -1,6 +1,12 @@
 #!/usr/bin/env python3
 """
-tests/check_ogap_all_boxes.py  v5.1
+tests/check_ogap_all_boxes.py  v5.2
+v5.2  2026-11-23  OTV5 r152 (GATE.9) — A6 PINS THE EXIT ENGINE'S OWN CLOCK. ExitEngine._evaluate_ogap reads the minute
+      from execution/exit_engine's module `datetime` (datetime.now(_ET), exit_engine.py _evaluate_ogap), the seam
+      tests/check_ogap_mark.py and tests/check_ogap_paper_on_live.py already freeze; A6 pinned only now_et / now_utc,
+      so its 15:45:05 close was decided on the WALL clock: green when it was built after 15:45 ET on 2026-11-22,
+      red before 15:45 ET (the 2026-11-23 09:15 boot sweep, 14/14: exit=None). A6 now freezes exit_engine.datetime
+      at 2026-11-05 15:45:05 ET beside the pin and restores it after; A1-A5 and the code under test unchanged.
 v5.1  2026-11-22  OTV5 r150 (OGAP.5) — A2 TURNS AROUND: a LIVE box no longer sits OGAP out; it is ACTIVE and asked, and
       the Service line says "ogap=on (paper, walled from the cash account)" (the operator, 2026-11-22: "I want it paper
       trading even on the cash boxes. It's under evaluation."). The walls themselves are tests/check_ogap_paper_on_live.py.
@@ -407,10 +413,20 @@ def main():
                     hits.append(f)
         rec = {"trade_id": "a6", "strategy": "OGAP", "entry_premium": 4.24, "contracts": 1, "expiry": "2026-11-06",
                "max_premium_seen": 4.30, "_exit_bid": 4.20}
-        sw = pin(datetime(2026, 11, 5, 15, 45, 5, tzinfo=ET))
+        _at = datetime(2026, 11, 5, 15, 45, 5, tzinfo=ET)
+        _real_ee_dt = EE.datetime
+
+        class _EEClock(_real_ee_dt):                          # v5.2 (GATE.9): exit_engine's own `datetime` seam
+            @classmethod
+            def now(cls, tz=None):
+                return _at.astimezone(tz) if tz is not None else _at.replace(tzinfo=None)
+
+        sw = pin(_at)
+        EE.datetime = _EEClock
         try:
             dec = EE.ExitEngine()._evaluate_ogap(rec, 4.25)
         finally:
+            EE.datetime = _real_ee_dt
             unpin(sw)
         ok6 = (same is not None and nxt is not None and same.expiry == d and nxt.expiry == "2026-11-06"
                and float(nxt.strike) == float(same.strike) and nxt.ogap_contracts == same.ogap_contracts

@@ -1,6 +1,14 @@
 #!/usr/bin/env python3
 """
-tests/check_signal_kwargs.py  v5.0
+tests/check_signal_kwargs.py  v5.1
+v5.1  2026-11-23  OTV5 r152 (GATE.9) — THE WALK READS THIS TREE'S SOURCE, NEVER A VIRTUALENV UNDER IT. A box installs its
+      venv INSIDE the checkout (~/options-trader/venv, the interpreter tools/boot_sweep.py runs), and the `**` glob walked
+      it, so K1 compared every call in pandas, boto3 and tastytrade against this tree's dataclass names. Harmless until
+      r148 (BOXF.1) gave utils/box_flags a dataclass named `Flags`: pandas/core/generic.py builds pandas' own
+      `Flags(self, allows_duplicate_labels=...)`, which K1 read as a bad kwarg to box_flags.Flags, and the 2026-11-23
+      09:15 sweep went NEW RED on 14/14 (green on control, whose checkouts carry no venv). Any path with a venv,
+      .venv, site-packages or node_modules component is skipped now, in both walks; K4 pins that rule and that the
+      in-tree walk still reaches every construction site it did. No production file changed.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 
 r100 — A CONSTRUCTOR KWARG THAT IS NOT A FIELD IS A STRATEGY THAT NEVER FIRES.
@@ -46,13 +54,21 @@ def check(name, ok, detail=""):
         FAILURES.append(name)
 
 SKIP_DIRS = ("tests/", "tools/", "derived/scratch")
+# v5.1 (GATE.9) — third-party code is never this tree's: a box's venv lives INSIDE the checkout.
+SKIP_PARTS = frozenset(("venv", ".venv", "site-packages", "node_modules", "__pycache__"))
+
+
+def _skip(rel: str) -> bool:
+    return (rel.startswith(SKIP_DIRS) or rel.startswith(".")
+            or any(part in SKIP_PARTS for part in rel.split(os.sep)))
+
 
 # ── 1. every dataclass defined in the tree, by class name -> field names ──────
 fields_by_name: dict = {}
 defined_in: dict = {}
 for path in glob.glob(os.path.join(ROOT, "**", "*.py"), recursive=True):
     rel = os.path.relpath(path, ROOT)
-    if rel.startswith(SKIP_DIRS) or rel.startswith("."):
+    if _skip(rel):
         continue
     try:
         tree = ast.parse(open(path, encoding="utf-8").read())
@@ -79,7 +95,7 @@ bad: list = []
 sites = 0
 for path in glob.glob(os.path.join(ROOT, "**", "*.py"), recursive=True):
     rel = os.path.relpath(path, ROOT)
-    if rel.startswith(SKIP_DIRS) or rel.startswith("."):
+    if _skip(rel):
         continue
     try:
         tree = ast.parse(open(path, encoding="utf-8").read())
@@ -119,6 +135,16 @@ try:
           s.is_credit_vertical is True)
 except Exception as e:                                             # noqa: BLE001
     check("K2/K3 OptionsSignal probes", False, f"{type(e).__name__}: {e}")
+
+# ── 4. v5.1 (GATE.9): the walk skips a venv under the checkout and nothing of the tree ──
+_venv = os.path.join("venv", "lib", "python3.14", "site-packages", "pandas", "core", "generic.py")
+_skips = [r for r in (_venv, os.path.join(".venv", "x.py"), os.path.join("lib64", "site-packages", "y.py"))
+          if _skip(r)]
+_kept = [r for r in (os.path.join("strategy", "base_strategy.py"), os.path.join("utils", "box_flags.py"),
+                     "main.py", os.path.join("execution", "paper_wall.py")) if not _skip(r)]
+check("K4 the walk skips a venv / site-packages under the checkout and keeps the tree's own source",
+      len(_skips) == 3 and len(_kept) == 4 and sites >= 100,
+      f"skipped {len(_skips)}/3, kept {len(_kept)}/4, {sites} construction site(s)")
 
 print(f"\n{'PASS' if not FAILURES else 'FAIL'}: {len(FAILURES)} problem(s) {FAILURES}")
 sys.exit(1 if FAILURES else 0)
