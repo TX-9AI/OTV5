@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_column_writers.py  v5.6
+tests/check_column_writers.py  v5.7
+v5.7  2026-11-22  OTV5 r151 (CAP.11) — after_cap joins WRITERS: EntryEngine._book_fill writes it (1 on a paper entry opened while the record-only cap stands tripped; no key otherwise).
 v5.6  2026-11-20  OTV5 r135 (GUARD.1) — the entry record is built in EntryEngine._book_fill (enter() books through it, and so
       does order_guard's resolution of a suspect entry order); the entry columns' named writer moves with it, and W5 reads
       enter and _book_fill together. No column changes.
@@ -92,6 +93,7 @@ WRITERS = {
     "entry_ask": _ECON, "chain_iv_rank": _ECON,
     "exit_bid": _XCON, "exit_ask": _XCON, "exit_iv": _XCON,
     "entry_exec_premium": _XEN, "would_fill_live": _XEN, "exit_exec_premium": _XEX, "pnl_exec_usd": _XEX,   # r111
+    "after_cap": _ENTER,                                                                                # r151 (CAP.11)
     "exit_submit_ts": _XLAT, "exit_fill_ts": _XLAT, "exit_latency_ms": _XLAT, "exit_ladder_steps": _XLAT,
     "exit_escalated": _XLAT, "exit_mark_at_trigger": _XLAT,
     "live_exit_state": (XE, "ExitEngine._exit_state_save"),

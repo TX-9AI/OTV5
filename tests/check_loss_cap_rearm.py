@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_loss_cap_rearm.py  v5.2
+tests/check_loss_cap_rearm.py  v5.3
+v5.3  2026-11-22  OTV5 r151 (CAP.11) — the risk manager under test is a LIVE box's (paper_trading=False): from r151 (CAP.11) a paper box's cap is record only and never halts (tests/check_paper_cap_record.py pins that), so the halt, re-arm, page and event rules this gate pins are the cash rule's, unchanged. Same checks, same figures.
 v5.2  2026-11-15  OTV5 r123 (HYG.27) — OT_RESTING_DB leaves the scratch env (r118 deleted execution/resting_orders.py, its only reader).
 v5.1  2026-10-26  OTV5 r38 (HYG.18) — scratch no longer names dir="/var/tmp": mkdtemp honours TMPDIR, which boot_sweep and land.sh point
       at a per-run dir they remove (HYG.14), so a sweep leaves nothing behind (237 dirs had piled up on SOFI). No check changed.
@@ -118,7 +119,7 @@ def day(net):
     REALIZED["rows"] = [{"pnl_usd": float(net)}]
 
 
-RM = RiskManager(risk_per_trade=1050.0, paper_trading=True)
+RM = RiskManager(risk_per_trade=1050.0, paper_trading=False)
 LIMIT = RM._daily_loss_limit
 check("C0 the cap under test is the configured 5000", LIMIT == 5000.0, f"limit={LIMIT}")
 
@@ -146,7 +147,7 @@ check("C6 +200: open", RM.is_halted() is False, f"halted={RM._session_halted}")
 
 for net, want in ((-5100, True), (-4800, False)):
     day(net)
-    fresh = RiskManager(risk_per_trade=1050.0, paper_trading=True)
+    fresh = RiskManager(risk_per_trade=1050.0, paper_trading=False)
     fresh.reset_session()
     after_reset = fresh._session_halted
     check(f"C7 restart at {net}: reset_session and is_halted agree ({want})",

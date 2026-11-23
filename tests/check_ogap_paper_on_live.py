@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_ogap_paper_on_live.py  v5.0
+tests/check_ogap_paper_on_live.py  v5.1
+v5.1  2026-11-22  OTV5 r151 (CAP.11) — P5's PAPER-box half follows the record-only paper cap (the operator, 2026-11-22: "there's no harm in letting paper run & we can just note if the breaker would have popped"): the OGAP paper loss of -$99,999 still counts (day_realized_pnl -99,999.00) and no longer halts; at the would-be cap OGAP is asked, books paper and its row carries after_cap = 1. The LIVE half (the cap for live trades only, OGAP asked past it, never tagged) is unchanged, as are P1-P4 and P6-P10 (P8's digest is a day that never reaches the cap).
 v5.0  2026-11-22  OTV5 r150 (OGAP.5) — new. ON A LIVE BOX OGAP KEEPS PAPER-TRADING, WALLED OFF FROM THE CASH ACCOUNT, AND THE
       CAP ON A LIVE BOX IS FOR LIVE TRADES ONLY. The operator, 2026-11-22: "I want it paper trading even on the cash boxes.
       It's under evaluation. Why the fuck would I want to stop evaluating it?"; "it should get its budget from
@@ -29,8 +30,8 @@ v5.0  2026-11-22  OTV5 r150 (OGAP.5) — new. ON A LIVE BOX OGAP KEEPS PAPER-TRA
   P5  THE CAP ON A LIVE BOX IS FOR LIVE TRADES ONLY: a closed OGAP paper loss of -$99,999 leaves day_realized_pnl 0.00
       and is_halted False; a cash PARK loss past the limit halts at the cash number alone; at the tripped cash cap
       attempt_new_entry asks no cash setup but still asks OGAP (no catastrophic_cap row for it), and that OGAP fires
-      paper and is managed on the book. PAPER BOX unchanged (r137 CAP.10): the same OGAP loss halts, and at the cap
-      OGAP is not asked
+      paper and is managed on the book. PAPER BOX (r151 CAP.11, record only): the same OGAP loss counts and does not
+      halt; at the would-be cap OGAP is still asked, books paper and is tagged after_cap = 1 (the live one never is)
   P6  CASH UNAFFECTED (digest CASH_DIGEST): (a) a cash PARK entry (real _execute_entry_signal, live state, a live spy
       engine booking through EntryEngine._book_fill) and its exit (the real live PositionManager._manage_one /
       _execute_exit with a fake live exit engine) give the same sizing, rows, risk tally, cap reading and broker log with
@@ -598,21 +599,24 @@ def main():
             og = [r for r in rows(p, "strategy='OGAP' AND status='open'")]
             booked = len(PW.book().get_open_records()) if (PW is not None and not paper_box) else None
             return (RM._risk_manager.is_halted(), sorted(set(asked)), sorted(set(g for n, g in skips if n == "OGAP")),
-                    sorted(set(g for n, g in skips if n == "PARK")), len(og), booked, list(CALLS))
+                    sorted(set(g for n, g in skips if n == "PARK")), len(og), booked, list(CALLS),
+                    [r.get("after_cap") for r in og])                    # r151 (CAP.11): the tag
         res["live_at_cap"] = at_cap(False)
         res["paper_at_cap"] = at_cap(True)
         lc, pc = res["live_at_cap"], res["paper_at_cap"]
         ok5 = (res["live_ogap_only"] == (0.0, False) and res["live_cash_loss"] == (-650.0, True)
-               and res["paper_ogap_loss"] == (-99999.0, True)
+               and res["paper_ogap_loss"] == (-99999.0, False)                  # r151: paper counts, never halts
                and lc[0] is True and lc[1] == ["OGAP"] and "catastrophic_cap" not in lc[2]
-               and "catastrophic_cap" in lc[3] and lc[4] == 1 and lc[5] == 1 and lc[6] == []
-               and pc[0] is True and pc[1] == [] and "catastrophic_cap" in pc[2] and pc[4] == 0)
+               and "catastrophic_cap" in lc[3] and lc[4] == 1 and lc[5] == 1 and lc[6] == [] and lc[7] == [None]
+               and pc[0] is False and "OGAP" in pc[1] and "catastrophic_cap" not in pc[2]
+               and "catastrophic_cap" not in pc[3] and pc[4] == 1 and pc[7] == [1])
         d5 = f"{res}"
     except Exception as exc:                                    # noqa: BLE001
         import traceback
         d5 = f"{type(exc).__name__}: {exc} {traceback.format_exc()[-700:]}"
     check("P5 the cap on a LIVE box is for live trades only: an OGAP paper loss never moves or trips it; at the tripped "
-          "cash cap cash is refused and OGAP still fires paper on the wall; a PAPER box keeps r137 (OGAP inside the cap)",
+          "cash cap cash is refused and OGAP still fires paper on the wall, untagged; a PAPER box records only (r151): "
+          "OGAP fires past the would-be cap, tagged after_cap",
           ok5, d5)
 
     # ── P6 cash unaffected ──────────────────────────────────────────────────
@@ -898,7 +902,7 @@ def main():
         print(f"RED — {len(FAILED)} failed: {' '.join(FAILED)}")
         return 1
     print("GREEN — on a LIVE box OGAP paper-trades on the wall (zero broker calls, out of reconcile, the cash cap and "
-          "the order sweep), the cash path is byte-identical, and a paper box is unchanged (P1-P10)")
+          "the order sweep), the cash path is byte-identical, and a paper box is unchanged short of the record-only cap (P1-P10)")
     return 0
 
 

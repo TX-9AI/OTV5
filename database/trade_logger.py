@@ -1,5 +1,6 @@
 """
-database/trade_logger.py  v5.9
+database/trade_logger.py  v5.10
+v5.10 2026-11-22  OTV5 r151 (CAP.11) — ONE NEW TRAILING COLUMN, after_cap INTEGER (no default: every existing row and every row a box writes before a would-be cap trip reads NULL). On a PAPER box the daily catastrophic cap is record only (risk_manager v5.9): EntryEngine._book_fill writes after_cap = 1 on a paper entry opened while the cap, counted as cash would have counted it, stands tripped. realized_pnl_today(exclude_after_cap=False) leaves those rows out when the cap asks (the as-cash day: a trade cash would never have opened cannot move the cash cap); every other caller passes nothing and reads every row, as before. No column dropped; s3_push exports the trades row with SELECT *, so the column reaches raw/trades unchanged in shape otherwise.
 v5.9  2026-11-21  OTV5 r137 (CAP.10) — DOCSTRINGS ONLY: realized_pnl_today and today_summary no longer say the cap leaves PARK out; config.CAP_EXCLUDED_STRATEGIES is () (every strategy counts toward the daily catastrophic cap), so the cap's number equals today_summary's total_pnl. No code changes.
 v5.8  2026-11-14  OTV5 r119 (HYG §5.5, HYG.24) — get_open_trades_today goes (the deprecated alias of get_open_trades_live; uncalled). No caller anywhere (OTV5 code, tests, tools, docs, dtp: token scan + grep on r118). Nothing else changes; the module's behaviour is identical.
 v5.7  2026-11-14  OTV5 r115 (HYG §5.1) — the [spent] report's TrendCredit branch is deleted: the TCS was removed at r88, so the branch could never run on a live close, and it was the last reader of strategy/sweep_credit_spread.is_breach_exit (module deleted). The Runaway [spent] line is unchanged.
@@ -659,6 +660,10 @@ class TradeLogger:
             ("exit_exec_premium",      "REAL"),
             ("pnl_exec_usd",           "REAL"),
             ("would_fill_live",        "INTEGER"),
+            # OTV5 r151 (CAP.11) — 1 = a PAPER entry opened while the daily catastrophic cap, counted as cash would have
+            # counted it, stood tripped (paper keeps trading; cash would not have opened it). NO DEFAULT: NULL = not
+            # after the cap (every row before r151 and every row of a day that never reached it).
+            ("after_cap",              "INTEGER"),
         ]
         _MIGRATION_ADDS = _MIGRATION_ADDS + list(self.EXTRA_ADDS)    # r57: empty on the trades store
         for col, definition in _MIGRATION_ADDS:
@@ -1405,12 +1410,15 @@ class TradeLogger:
             """, (lower, self._mode_flag)).fetchall()
         return [r for r in rows if self._et_date(r["entry_time"]) == today_et]
 
-    def realized_pnl_today(self, exclude_strategies=()) -> float:
+    def realized_pnl_today(self, exclude_strategies=(), exclude_after_cap=False) -> float:
         """DEFINITIVE realized net closed P&L for today's ET session (wins
         offset losses). This is the number the daily loss limit gates on.
         r288: `exclude_strategies` drops those strategies' rows - the cap passes
         config.CAP_EXCLUDED_STRATEGIES (r137: (), so nothing is dropped); every
-        other caller passes nothing."""
+        other caller passes nothing.
+        r151 (CAP.11): `exclude_after_cap` drops the rows tagged after_cap = 1 (paper entries cash would never have
+        opened); the risk manager passes it on a paper box, so the record-only cap reads the as-cash day. With no
+        tagged row (every day that never reached the cap) the sum is the same number."""
         ex = set(exclude_strategies or ())
 
         def _strategy(r):                 # a row without the column (a fixture) is never excluded
@@ -1418,8 +1426,14 @@ class TradeLogger:
                 return r["strategy"]
             except (KeyError, IndexError):
                 return None
+
+        def _after_cap(r):                # a row without the column (a fixture, a pre-r151 store) is never after_cap
+            try:
+                return str(r["after_cap"]) in ("1", "1.0", "True")
+            except (KeyError, IndexError):
+                return False
         return float(sum((r["pnl_usd"] or 0.0) for r in self._closed_today_rows()
-                         if not ex or _strategy(r) not in ex))
+                         if (not ex or _strategy(r) not in ex) and not (exclude_after_cap and _after_cap(r))))
 
     def today_summary(self) -> dict:
         """Counts + net P&L for today's ET session, EVERY strategy - the displays' figure.

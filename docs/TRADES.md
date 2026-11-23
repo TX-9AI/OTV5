@@ -1,5 +1,7 @@
 # TRADES — the specs
 
+**`TRADES.md` v5.35 · 2026-11-22 · r151 (CAP.11) — the day, sections 9 and 10: on a PAPER box the daily catastrophic cap is RECORD ONLY. The operator, 2026-11-22: "Is there any way we can make the catastrophic cap only apply to cash? As in, there's no harm in letting paper run & we can just note if the breaker would have popped." and "Yes". A paper box writes one "breaker would have popped" record at the would-be trip, keeps trading and tags every trade opened while the cap stands tripped `after_cap = 1`; a live box halts its cash entries as at r150. Every number, every exit and every live rule unchanged.**
+
 **`TRADES.md` v5.34 · 2026-11-22 · r150 (OGAP.5) — section 0, the day and section 10: on a LIVE box OGAP keeps paper-trading, walled off from the cash account (`execution/paper_wall.py`: the mark, `paper_trade = 1`, zero broker calls; out of reconcile, buying power, the order guard, the live walk, the startup cancel and the 15:55 live cross), and the cap on a live box is for live trades only. The operator, 2026-11-22: "I want it paper trading even on the cash boxes. It's under evaluation. Why the fuck would I want to stop evaluating it?" and "The cap on a live box is for live trades only. Full stop."**
 
 **`TRADES.md` v5.33 · 2026-11-22 · r149 (OGAP.4, M1 of the box flags) — section 0 and section 10: OGAP runs on EVERY box, on paper (the box flag `ogap`, default on; `config.OGAP_SYMBOLS` is gone), buys the nearest expiry when none is same-day,
@@ -158,7 +160,15 @@ Every strategy counts and every strategy is refused, PARK and OGAP included (r13
 the cap from r288 / OGAP.1 to r136). **On a LIVE box the cap is for live trades only (r150, OGAP.5; the operator,
 2026-11-22: "The cap on a live box is for live trades only. Full stop.")**: it counts the cash trades' realized P&L only (OGAP's paper rows,
 `paper_trade = 1`, never count, whatever their size) and refuses cash entries only (at a tripped cash cap the walled
-paper OGAP is still asked and still managed). A paper box is unchanged.
+paper OGAP is still asked and still managed). **On a PAPER box the cap is record only (r151, CAP.11; the
+operator, 2026-11-22: "there's no harm in letting paper run & we can just note if the breaker would have popped")**: the same
+arithmetic, and at the would-be trip ONE record, `circuit_breaker_events` reason `daily_cap_would_pop` ("breaker would have
+popped at HH:MM ET, day net -$X", in the warehouse at raw/circuit_breaker) and one bot.log INFO line, no page; the box keeps
+trading, and every trade it opens while the cap stands tripped carries `after_cap = 1` (a trailing trades column; NULL on
+every other row). The paper cap counts the day AS CASH would have: a tagged trade's close never moves it, so it re-arms only
+when trades opened before the trip bring the day back under, exactly when cash would have re-opened. Not modelled: a setup's
+one try per session spent by a tagged trade is spent on paper too. Exits are unchanged. Control's reports headline the
+as-cash figures (tagged trades out) with the extra paper after the breaker beside them (dtp r578).
 
 ---
 
@@ -777,7 +787,8 @@ the contract and builds the signal.
 
 **Under the cap (r137 CAP.10).** PARK's closes count toward the daily catastrophic cap and, once it is hit,
 the 11:01 entry is refused like any other (it was cap-exempt and outside the cap's day P&L from r288 to
-r136). So a morning loss at or past the limit means no PARK that day unless closes bring the day back under.
+r136). So a morning loss at or past the limit means no PARK that day unless closes bring the day back under. On a paper
+box (r151 CAP.11) the cap is record only: the 11:01 PARK still fires and is tagged `after_cap = 1`.
 
 **Exits, first match wins (`exit_engine._evaluate_park`):** the lock, on the MARK (r137 LOCK.1; r288-r136 it
 walked the bid) - armed once the mark reaches +60% of the booked entry, out when the mark falls to +20% (after
@@ -817,7 +828,8 @@ chain's own fallback; the operator, 2026-11-22: *"No to sitting out on non-expir
 any of its cousins. Each one fires and manages on its own merits."*): it is asked last in the tick, admitted on its own
 row (one open, one try), and an open OGAP position changes nothing Runaway, the Hunt or PARK is asked or sized with
 (`tests/check_ogap_all_boxes.py` A4/A5; on a live box `tests/check_ogap_paper_on_live.py` P6). Shared by design on a
-paper box: the daily catastrophic cap (the whole box's realized P&L); on a live box the cap is the cash account's.
+paper box: the daily catastrophic cap (the whole box's realized P&L, record only from r151: an OGAP opened past it is
+tagged `after_cap = 1`); on a live box the cap is the cash account's.
 
 **Entry, once per session, 09:46-10:32 ET:**
 - the range: the 09:30-09:44 1m bars, at least 10 of them, W = high − low > 0;

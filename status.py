@@ -1,5 +1,6 @@
 """
-status.py  v5.0
+status.py  v5.1
+v5.1  2026-11-22  OTV5 r151 (CAP.11) — on a PAPER box the day's cap line says the breaker WOULD HAVE POPPED and that paper keeps trading (record only, later entries tagged after_cap; risk_manager v5.9); a live box prints the r150 halt line unchanged. Display only.
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 v4.10  2026-10-11  OTV4TEST r269 (OPS.22, mirror of otv4 r479) - the zone NAME is "America/New_York", the zone the legacy link
       US/Eastern pointed to: identical rules, no behaviour change. tzdata 2026c moved the US/* links into tzdata-legacy;
@@ -742,7 +743,12 @@ def main():
         # v1.13: use DAILY_LOSS_LIMIT (live unit env, top of file) — NOT
         # `from config import DAILY_LOSS_LIMIT_USD`, which resolved against this
         # process's env and falsely reported $200 / a phantom halt.
-        if pnl <= -DAILY_LOSS_LIMIT:
+        if pnl <= -DAILY_LOSS_LIMIT and PAPER_TRADING:
+            # r151 (CAP.11): a paper box's cap is record only - it notes the would-be trip and keeps trading
+            cb_warning = (f"  \u26A0\uFE0F  CATASTROPHIC CAP WOULD HAVE POPPED "
+                          f"(${pnl:+.0f} <= -${DAILY_LOSS_LIMIT:.0f})\n"
+                          f"      paper: record only, trading continues (later entries tagged after_cap)")
+        elif pnl <= -DAILY_LOSS_LIMIT:
             cb_warning = (f"  \U0001F6D1  CATASTROPHIC LOSS CAP HIT "
                           f"(${pnl:+.0f} <= -${DAILY_LOSS_LIMIT:.0f})\n"
                           f"      no new entries until the loss is back under")

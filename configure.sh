@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 # ==========================================================================
-# configure.sh  v5.10
+# configure.sh  v5.11
+# v5.11 2026-11-22  OTV5 r151 (CAP.11) — TEXT ONLY: item 6's screen says that on a PAPER box the cap is record only (it notes
+#       when the breaker would have popped and paper keeps trading); a live box halts new entries as before. The key
+#       (OT_DAILY_LOSS_LIMIT), the item number, the handler and what it writes are unchanged.
 # v5.10 2026-11-21  OTV5 r141 (RAMP.1) — TEXT ONLY: item 7 and its screen say the ramp TOP (OT_BREAKOUT_BUDGET_USD) sizes
 #       Breakout only, which is dormant (r110); Runaway, the Hunt, PARK and OGAP size on item 2 (OT_RISK_USD). The key, the
 #       item number, the handler and what it writes are unchanged.
@@ -736,6 +739,8 @@ change_daily_loss() {
     echo -e "  ${BOLD}Daily catastrophic loss cap${RESET} — no NEW entries while the"
     echo -e "  day's REALIZED net is down by this amount. Open trades are still"
     echo -e "  managed; entries re-open once closes bring it back under."
+    echo -e "  On a PAPER box it is record only: it notes when it would have"
+    echo -e "  popped and paper keeps trading (later trades tagged after_cap)."
     echo -e "  Current: ${BOLD}$(fmt_declared "$current")${RESET}"
     echo ""
     while true; do

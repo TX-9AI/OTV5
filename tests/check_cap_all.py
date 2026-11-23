@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_cap_all.py  v5.0
+tests/check_cap_all.py  v5.1
+v5.1  2026-11-22  OTV5 r151 (CAP.11) — C2, C3 and C6 drive a LIVE box's risk manager (paper_trading=False): from r151 (CAP.11) a paper box's cap is record only and never halts (tests/check_paper_cap_record.py), so 'every strategy is under the cap and refused at it' is the cash rule, unchanged. Same checks, same figures.
 v5.0  2026-11-21  OTV5 r137 (CAP.10) — EVERY STRATEGY IS UNDER THE DAILY CATASTROPHIC CAP, PARK AND OGAP INCLUDED. The
       operator, 2026-11-21: "both trades should fall under the catastrophic cap & any profit locks need to be on mark".
       From r288 (PARK) and OGAP.1 (OGAP) to r136 both sat outside the cap both ways: config.CAP_EXCLUDED_STRATEGIES
@@ -89,14 +90,14 @@ def main():
     got = {}
     for strat in ("PARK", "OGAP"):
         _rows((f"{strat.lower()}-1", strat, -1100.0))
-        rm = RiskManager(risk_per_trade=1050.0, paper_trading=True)
+        rm = RiskManager(risk_per_trade=1050.0, paper_trading=False)
         got[strat] = (rm.day_realized_pnl(), TL.realized_pnl_today(), rm.is_halted())
     check("C2 a -1,100 PARK close and a -1,100 OGAP close each count: cap P&L -1,100 = the displays', halted at 1,050",
           all(abs(v[0] + 1100) < 1e-6 and abs(v[1] + 1100) < 1e-6 and v[2] is True for v in got.values()), f"{got}")
 
     # ── C3 the restart seed ──
     _rows(("park-2", "PARK", -1100.0))
-    rs = RiskManager(risk_per_trade=1050.0, paper_trading=True)
+    rs = RiskManager(risk_per_trade=1050.0, paper_trading=False)
     rs._ensure_seeded()
     check("C3 the restart seed on a -1,100 PARK row reads -1,100 and latches the halt",
           rs._seeded is True and abs(rs._session_pnl_usd + 1100) < 1e-6 and rs._session_halted is True,
@@ -163,11 +164,11 @@ def main():
 
     # ── C6 the implication ──
     _rows(("rc-1", "RunawayContinuation", -1100.0))
-    rm6 = RiskManager(risk_per_trade=1050.0, paper_trading=True)
+    rm6 = RiskManager(risk_per_trade=1050.0, paper_trading=False)
     h6 = rm6.is_halted()
     v6 = dec("PARK", (11, 1), not h6)
     _rows(("rc-2", "RunawayContinuation", -1000.0), ("park-3", "PARK", 300.0))
-    rm6b = RiskManager(risk_per_trade=1050.0, paper_trading=True)
+    rm6b = RiskManager(risk_per_trade=1050.0, paper_trading=False)
     p6b, h6b = rm6b.day_realized_pnl(), rm6b.is_halted()
     check("C6 a -1,100 morning Runaway close halts the box and the 11:01 PARK is refused; a +300 PARK after a -1,000 "
           "morning reads -700, open",

@@ -1,5 +1,6 @@
 """
-risk/risk_manager.py  v5.8
+risk/risk_manager.py  v5.9
+v5.9  2026-11-22  OTV5 r151 (CAP.11) — ON A PAPER BOX THE DAILY CATASTROPHIC CAP IS RECORD ONLY. The operator, 2026-11-22: "Is there any way we can make the catastrophic cap only apply to cash? As in, there's no harm in letting paper run & we can just note if the breaker would have popped." and "Yes" to the design. is_halted() on a paper box (self._paper_trading is True) does the r137 CAP.10 arithmetic unchanged (realized net <= -limit, re-arming) and NEVER halts: at the would-be trip it writes ONE circuit_breaker_events row (reason daily_cap_would_pop, notes "breaker would have popped at HH:MM ET, day net -$X ...", which s3_push sends to raw/circuit_breaker) and ONE bot.log INFO line, pages nothing, and returns False; the data/CAP_PAGED stamp keeps it once per episode across a restart, as the cash page. after_cap_tag() (read by EntryEngine._book_fill) is True on a paper box while the cap stands tripped, so every paper trade opened then carries after_cap = 1. The paper cap counts the AS-CASH day: day_realized_pnl and the restart seed pass exclude_after_cap on a paper box (a trade cash would never have opened cannot move or re-arm it), so the breaker re-arms, as cash would, only when the trades opened before it close the loss back under the limit. Before a would-be trip nothing differs from r150 (no tagged row exists, so every number is the same and is_halted is False as before). A LIVE box is unchanged from r150: it halts cash entries, pages once per episode and counts the cash rows only; the walled OGAP is unaffected. No config key, no env key, no broker call.
 v5.8  2026-11-21  OTV5 r137 (CAP.10) — the two CAP_EXCLUDED_STRATEGIES getattr defaults (day_realized_pnl, _ensure_seeded) are () - config's value now (was ("PARK",)): PARK and OGAP count toward the daily catastrophic cap. The operator, 2026-11-21: "both trades should fall under the catastrophic cap". The limit (DAILY_LOSS_LIMIT_USD / OT_DAILY_LOSS_LIMIT, else the risk per trade) is unchanged.
 v5.7  2026-11-15  OTV5 r125 (HYG.28) — the BUDGET rule reads config.BREAKOUT_BUDGET_USD (was ORB_BUDGET_USD; key OT_BREAKOUT_BUDGET_USD, the old key read as a fallback in config). Same number, same sizing.
 v5.6  2026-11-14  OTV5 r119 (HYG §5.5, HYG.24) — check_circuit_breaker, its CircuitBreakerState dataclass and the _check_daily_loss_limit back-compat shim go (uncalled). The daily-loss halt is is_halted(), unchanged. No caller anywhere (OTV5 code, tests, tools, docs, dtp: token scan + grep on r118). Nothing else changes; the module's behaviour is identical.
@@ -302,6 +303,7 @@ class RiskManager:
         self._session_pnl_usd    = 0.0
         self._daily_loss_limit   = self._resolve_daily_limit(risk_per_trade)
         self._seeded             = False
+        self._would_pop          = False   # r151 (CAP.11): a paper box's record-only episode is open in this process
 
     @staticmethod
     def _resolve_daily_limit(risk_per_trade: float) -> float:
@@ -331,10 +333,71 @@ class RiskManager:
         try:
             from database.trade_logger import get_trade_logger
             return float(get_trade_logger().realized_pnl_today(
-                exclude_strategies=getattr(config, "CAP_EXCLUDED_STRATEGIES", ())))   # r298 / r137: default = config's
+                exclude_strategies=getattr(config, "CAP_EXCLUDED_STRATEGIES", ()),     # r298 / r137: default = config's
+                **self._as_cash_kw()))                                                 # r151 (CAP.11): paper, as cash
         except Exception:
             # If the DB is briefly unavailable, fall back to the in-memory tally.
             return float(self._session_pnl_usd)
+
+    def _paper_box(self) -> bool:
+        """r151 (CAP.11): True only on a PAPER box (paper_trading exactly True). Anything else is a live box and keeps
+        the cash cap, which halts - the record-only rule can never reach a box that trades cash."""
+        return self._paper_trading is True
+
+    def _as_cash_kw(self) -> dict:
+        """r151 (CAP.11): on a paper box the cap's day P&L leaves out the after_cap = 1 rows (the trades cash would never
+        have opened). {} on a live box: its call is the r150 call, unchanged."""
+        return {"exclude_after_cap": True} if self._paper_box() else {}
+
+    def after_cap_tag(self) -> bool:
+        """r151 (CAP.11): True when a paper entry booked NOW is one cash would not have opened - a paper box whose day
+        P&L, counted as cash, is at or beyond the limit. Always False on a live box. Never raises (False on error, so a
+        broken read can only leave a row untagged, never change a trade)."""
+        if not self._paper_box():
+            return False
+        try:
+            return self.day_realized_pnl() <= -self._daily_loss_limit
+        except Exception:                                      # noqa: BLE001
+            return False
+
+    def _record_only(self, net: float, breached: bool) -> bool:
+        """r151 (CAP.11) — THE PAPER BOX'S CAP: RECORD ONLY, NEVER A HALT. The arithmetic is is_halted's (r137 CAP.10:
+        realized net at or beyond -limit, re-arming once closes bring it back under); what it does differs. At the
+        would-be trip: ONE circuit_breaker_events row (daily_cap_would_pop) and ONE INFO line, no page; the data/CAP_PAGED
+        stamp makes it once per episode across a restart. A re-arm closes the episode with one INFO line. Returns False
+        always: paper keeps trading, and EntryEngine._book_fill tags what it opens while the episode stands."""
+        if not breached:
+            if getattr(self, "_would_pop", False) or self._cap_episode_open():
+                self._cap_stamp(False)
+            if getattr(self, "_would_pop", False):
+                self._would_pop = False
+                logger.info(f"[{INSTRUMENT}] PAPER: the daily catastrophic cap would have RE-ARMED: day net "
+                            f"${net:+.0f} (as cash would count it) is back under the -${self._daily_loss_limit:.0f} "
+                            f"limit. Entries from here are not tagged after_cap.")
+            return False
+        if getattr(self, "_would_pop", False):
+            return False
+        self._would_pop = True
+        if self._cap_episode_open():
+            logger.info(f"[{INSTRUMENT}] PAPER: cap episode already recorded today (data/CAP_PAGED) - not recorded "
+                        f"again after a restart; entries are still tagged after_cap")
+            return False
+        self._cap_stamp(True)
+        try:
+            from utils import time_utils as _tu
+            hhmm = _tu.now_et().strftime("%H:%M")
+        except Exception:                                      # noqa: BLE001
+            hhmm = "??:??"
+        what = (f"breaker would have popped at {hhmm} ET, day net {'-' if net < 0 else '+'}${abs(net):,.2f} "
+                f"(limit ${self._daily_loss_limit:,.2f}; paper: record only, trading continues, later entries "
+                f"tagged after_cap)")
+        try:
+            from database.trade_logger import get_trade_logger
+            get_trade_logger().log_circuit_breaker("daily_cap_would_pop", int(self._session_losses), what)
+        except Exception as exc:                               # noqa: BLE001
+            logger.warning(f"[{INSTRUMENT}] would-pop record NOT written ({type(exc).__name__}: {exc})")
+        logger.info(f"[{INSTRUMENT}] PAPER: the DAILY CATASTROPHIC LOSS CAP WOULD HAVE POPPED - {what}.")
+        return False
 
     # ══ r192 ── THE ONE DOOR ═══════════════════════════════════════════════
     def size_for(self, structure: str, *,
@@ -752,7 +815,8 @@ class RiskManager:
             # honest; the production logger always has realized_pnl_today.
             _rp = getattr(_tl, "realized_pnl_today", None)
             if callable(_rp):
-                pnl = float(_rp(exclude_strategies=getattr(config, "CAP_EXCLUDED_STRATEGIES", ())))   # r137: ()
+                pnl = float(_rp(exclude_strategies=getattr(config, "CAP_EXCLUDED_STRATEGIES", ()),   # r137: ()
+                                **self._as_cash_kw()))                                                  # r151
             self._session_pnl_usd = pnl
             if self._session_pnl_usd <= -self._daily_loss_limit:
                 self._session_halted = True
@@ -899,6 +963,10 @@ class RiskManager:
         net = self.day_realized_pnl()
         self._session_pnl_usd = net   # keep the in-memory mirror truthful
         breached = net <= -self._daily_loss_limit
+        if self._paper_box():
+            # r151 (CAP.11): a PAPER box records the would-be trip and keeps trading (the operator, 2026-11-22: "there's
+            # no harm in letting paper run & we can just note if the breaker would have popped"). A live box goes on.
+            return self._record_only(net, breached)
         # r181: an episode that ended (back under the limit) is closed on the
         # stamp too - including one paged by a process that has since restarted.
         if not breached and (self._session_halted or self._cap_episode_open()):

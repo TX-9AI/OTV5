@@ -1,5 +1,6 @@
 """
-execution/entry_engine.py  v5.10
+execution/entry_engine.py  v5.11
+v5.11 2026-11-22  OTV5 r151 (CAP.11) — _book_fill writes after_cap = 1 on a PAPER entry (this engine's paper_trading True, not the walled PaperWallEntry) when risk_manager.after_cap_tag() says the daily catastrophic cap, counted as cash would count it, stands tripped: on a paper box the cap is record only (the operator, 2026-11-22: "there's no harm in letting paper run & we can just note if the breaker would have popped"), so paper keeps trading and the row says cash would not have opened it. Nothing else in the record changes; an untagged row carries no after_cap key at all (NULL), so every entry before a would-be trip is the r150 row. A live entry and a walled entry never read it. Never raises (a failed read leaves the row untagged).
 v5.10  2026-11-22  OTV5 r150 (OGAP.5) — _book_fill skips the cap counterfactual (risk_manager.note_entry_risk, a study of
       the CASH cap) when the engine is execution/paper_wall's PaperWallEntry (PAPER_WALL True: OGAP on a live box, booked
       paper at the mark). Read as getattr(self, "PAPER_WALL", False) is True, so this engine and any stand-in behave as
@@ -479,6 +480,15 @@ class EntryEngine:
                         record.get("tape_vol_at_level", "n/a"),
                         record.get("tape_buy_frac_at_level", "n/a"))
 
+        # r151 (CAP.11): a PAPER box's cap is record only. A paper entry opened while it stands tripped (counted as cash
+        # would count it) is tagged after_cap = 1; any other row carries no key (NULL), exactly the r150 record.
+        if self.paper_trading is True and getattr(self, "PAPER_WALL", False) is not True:
+            try:
+                from risk.risk_manager import get_risk_manager as _grm_ac
+                if _grm_ac().after_cap_tag() is True:
+                    record["after_cap"] = 1
+            except Exception as _ace:                           # noqa: BLE001
+                logger.warning("after_cap tag skipped: %s", _ace)
         self._trade_logger.log_entry(record)
         try:                                                    # r208 (CAP.4): log-only, never affects the entry
             if getattr(self, "PAPER_WALL", False) is not True:  # r150 (OGAP.5): a walled paper row is not the cash cap's

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-tests/check_cap_page_once.py  v5.3
+tests/check_cap_page_once.py  v5.4
+v5.4  2026-11-22  OTV5 r151 (CAP.11) — the risk manager under test is a LIVE box's (paper_trading=False): from r151 (CAP.11) a paper box pages nothing (record only; tests/check_paper_cap_record.py), so the once-per-episode page this gate pins is the cash page, unchanged. Same checks.
 v5.3  2026-11-15  OTV5 r123 (HYG.27) — OT_RESTING_DB leaves the scratch env (r118 deleted execution/resting_orders.py, its only reader).
 v5.2  2026-11-14  OTV5 r113 (AM.8) — P10 the episode day is utils.time_utils.now_et()'s date (21:30 ET on 11-13 is 11-13, not the UTC 11-14); P11 an unreadable ET clock gives "" (never the UTC date), so no stamp matches. Born red on r108 at P10 and P11.
 v5.1  2026-10-26  OTV5 r38 (HYG.18) — scratch no longer names dir="/var/tmp": mkdtemp honours TMPDIR, which boot_sweep and land.sh point
@@ -117,7 +118,7 @@ def stamp():
 
 
 def fresh():
-    return RiskManager(risk_per_trade=1050.0, paper_trading=True)
+    return RiskManager(risk_per_trade=1050.0, paper_trading=False)
 
 
 TODAY = RiskManager._et_date() if hasattr(RiskManager, "_et_date") else "?"
