@@ -1,6 +1,11 @@
 #!/usr/bin/env python3
 """
-tests/check_ogap_all_boxes.py  v5.3
+tests/check_ogap_all_boxes.py  v5.4
+v5.4  2026-11-24  OTV5 r155 (BOXF.2, M4) — RE-POINTED (WA 38.4): set_flags() built its stand-in Flags with ONLY the values
+      it was handed, which with a schema key present (r155: `park`, default on) left `park` unset, so PARK read DORMANT
+      (fails closed) and A4's cousin digest moved. A real load always carries every SCHEMA key at its default; the
+      stand-in now does the same (the schema defaults, then the values handed). What each check pins is unchanged; A4's
+      digest is the r152 one, as before.
 v5.3  2026-11-23  OTV5 r153 (TRIM.2) — RE-POINTED (WA 38.4): OGAP and the Hunt are RETIRED (DORMANT, no switch; the box
       flag `ogap` is gone from utils/box_flags.SCHEMA). The operator, 2026-11-23: "The hunt & OGAP are trash. Retire them
       both after this session today." OGAP's code is KEPT until the purge, so what this gate pins turns around where it
@@ -162,8 +167,10 @@ def main():
     def set_flags(values, status="ok", problems=()):
         if BF is None:
             return
+        vals = {k: r.default for k, r in BF.SCHEMA.items()}         # r155: a real load carries every schema key
+        vals.update(values)
         BF._EFFECTIVE["flags"] = BF.Flags("QQQ", BF.FLAGS_REL + "/QQQ" if status != "missing" else "none (defaults)",
-                                          "-", status, dict(values), tuple(problems))
+                                          "-", status, vals, tuple(problems))
 
     # ── A1 every box ────────────────────────────────────────────────────────
     fx = json.load(open(FIX))

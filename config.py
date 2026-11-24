@@ -1,5 +1,6 @@
 """
-config.py  v5.32
+config.py  v5.33
+v5.33  2026-11-24  OTV5 r155 (BOXF.2, M4) — PARK_MODE, PARK_ENV_REFUSED AND _pk_raw GO (OT_PARK is no longer read): whether PARK runs on a box is its box flag `park` (utils/box_flags.SCHEMA, default on; deploy/box_flags/<SYM> `park = off` turns it off on that box), read in one place, strategy/plan_state. The operator, 2026-11-24: "Yes" (the design's M4). A stale OT_PARK in a unit is named IGNORED on the [flags] start line (utils/box_flags.REPLACED_ENV, presence only). Every PARK number is unchanged; no new key.
 v5.32  2026-11-22  OTV5 r150 (OGAP.5) — COMMENT ONLY: the OGAP block says OGAP is paper on every box, a live box booking it on the walled paper book (execution/paper_wall); r149's "dormant on a live box" is gone. Every value unchanged; no new key.
 v5.31  2026-11-22  OTV5 r149 (OGAP.4) — OGAP_SYMBOLS GOES: OGAP is asked on every box (the operator, 2026-11-22: "I honestly want it paper Trading on all of them"). Whether it runs is the box flag `ogap` (utils/box_flags.SCHEMA, default on) and the paper/live rule in strategy/plan_state (dormant on a live box); no module reads a symbol list for OGAP. Every OGAP number is unchanged.
 v5.30  2026-11-22  OTV5 r145 (HALF.1) — HALF_DAY_ENTRY_LEAD_MIN GOES: on a 13:00 half day nothing opens at all (utils/time_utils.no_entries_today, read by entries_open and risk/session_guard.can_enter), so the 90-minute lead that clipped entries at 11:30 has no reader. The operator, 2026-11-22: "Yes, just treat them as bank holidays. No trading." The RUNAWAY_END comment says so. Every other value unchanged; no new key.
@@ -965,18 +966,10 @@ else:
 # ── r288 (PARK.1) — PARK: THE 11:00 FIRST-HOUR CONTINUATION ──────────────────
 # The operator's friend's strategy (CONT11), renamed PARK. The operator, 2026-10-17
 # 18:21 ET: "Trade it, don't just log it. Paper is free. Call it PARK (named after my
-# friend)"; on SPX: "Use our actual numbers, trade it—don't log it". trade | log |
-# off, UNSET = trade. log: the plan runs and a would-be fire is written to
-# data/counterfactual/park_signal.jsonl, never ordered; off: not asked. A refused
-# value reads as log and is named.
-PARK_ENV_REFUSED = ""
-_pk_raw = os.environ.get("OT_PARK", "").strip().lower()
-if _pk_raw in ("off", "log", "trade"):
-    PARK_MODE = _pk_raw
-else:
-    PARK_MODE = "log" if _pk_raw else "trade"
-    if _pk_raw:
-        PARK_ENV_REFUSED = _pk_raw
+# friend)"; on SPX: "Use our actual numbers, trade it—don't log it".
+# r155 (BOXF.2, M4): ON or OFF PER BOX IS ITS BOX FLAG `park` (utils/box_flags.SCHEMA,
+# default on), read by strategy/plan_state alone. OT_PARK, PARK_MODE and its log mode
+# are gone; a stale OT_PARK in a unit is named IGNORED on the [flags] start line.
 # The read, frozen from /var/tmp/sat_1017/cont11/PREREG_CONT11.md (C0) and PARK.X
 # (/var/tmp/sat_1017/park, picks sha 85dca420): first-hour move = the 10:30 1m bar's
 # close against the 09:30 1m bar's open, |move| >= 0.20%; GATE-G - never against the

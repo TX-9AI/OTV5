@@ -1,5 +1,15 @@
 """
-strategy/plan_state.py  v5.12
+strategy/plan_state.py  v5.13
+v5.13  2026-11-24  OTV5 r155 (BOXF.2, M4) — PARK'S STATE COMES FROM ITS BOX FLAG, IN ONE PLACE. The operator, 2026-11-24:
+      "Yes" (the design's M4: PARK switchable OFF per box before the C5 equity boxes go live with Runaway only). PARK's
+      row is ("", FLAG, HOUR): the default lives in utils/box_flags.SCHEMA (`park`, default on) and nowhere here, and
+      state("PARK") is ACTIVE when the box's effective `park` is on, DORMANT otherwise (never asked, writes nothing; the
+      [plans] line names "PARK dormant: box flag park=off"). The PARK special case that read config.PARK_MODE is deleted
+      with PARK_MODE itself, and main._attempt_park's own `PARK_MODE == "off"` return is gone (it asks this module), so
+      the switch is decided once. OT_PARK is no longer read (a unit line is named IGNORED on the [flags] start line).
+      PARK has no LOG state any more (the flag values are on / off; the operator's rule is fix, not log-only). Fails
+      CLOSED like every flagged plan: an unreadable flag reads DORMANT. An open PARK row is still managed to its exit (a
+      /manage plan is ACTIVE, the exit engine reads no plan state). Every other row unchanged.
 v5.12  2026-11-23  OTV5 r153 (TRIM.2) — THE HUNT AND OGAP ARE RETIRED: DORMANT, WITH NO SWITCH, ON EVERY BOX. The operator,
       2026-11-23: "The hunt & OGAP are trash. Retire them both after this session today. And include them in the coming
       purge. I think we're going to stick with the runaway & park going forward". Breakout's r110 pattern: LiquidityHunt's
@@ -63,8 +73,8 @@ THE THREE STATES
 THE SWITCH. Each plan keeps the env key it already had; the values are active | log | off. The old spellings
 keep their meaning: "1" (and "trade") = active; for a default-OFF trade anything but active/log stays dormant,
 exactly as "only the literal 1" did; for a default-ON plan "0" / "off" = dormant. A value nobody recognises
-leaves the plan at its DEFAULT state and is named (refused()), never silently obeyed. PARK keeps
-config.PARK_MODE (trade -> active, log -> log, off -> dormant). The config flags (ORCS_ENABLED,
+leaves the plan at its DEFAULT state and is named (refused()), never silently obeyed. r149: a FLAG row's state
+is its box flag (utils/box_flags; r155: PARK's `park`, on -> active, off -> dormant). The config flags (ORCS_ENABLED,
 SWEEP_CS_ENABLED, TREND_CREDIT_ACTIVE, ATP_BUTTERFLY_ENABLED, GEX_BUTTERFLY_ENABLED) still decide ACTIVE, so a
 checker that flips one still flips the trade; "log" is read from the same key at call time.
 
@@ -100,7 +110,7 @@ TABLE: Dict[str, Tuple[str, str, str]] = {
     "RunawayContinuation":      ("OT_RUNAWAY",        ACTIVE,  HOUR),
     "Breakout":                 ("",                  DORMANT, HOUR),        # r110 (WS.3 TRIM): off the roster
     "LiquidityHunt":            ("",                  DORMANT, HOUR),        # r153 (TRIM.2): retired, no switch
-    "PARK":                     ("OT_PARK",           ACTIVE,  HOUR),
+    "PARK":                     ("",                  FLAG,    HOUR),        # r155 (M4): box flag `park` (default on)
     "OGAP":                     ("",                  DORMANT, HOUR),        # r153 (TRIM.2): retired, no flag key
     "IronCondorStrategy":       ("",                  DORMANT, CONDITION),   # no entry of its own (r249)
     "CondorManagement":         ("",                  ACTIVE,  CONDITION),
@@ -204,9 +214,6 @@ def state(name: str) -> str:
             return _flagged_state(n)
         if not key:
             return dflt
-        if n == "PARK":
-            import config as _c
-            return {"trade": ACTIVE, "log": LOG, "off": DORMANT}.get(str(getattr(_c, "PARK_MODE", "trade")), ACTIVE)
         raw = _raw(key)
         if raw == "log":
             return LOG

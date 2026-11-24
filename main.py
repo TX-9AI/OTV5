@@ -1,5 +1,14 @@
 """
-main.py  v5.39
+main.py  v5.40
+v5.40  2026-11-24  OTV5 r155 (BOXF.2, M4) — PARK IS SWITCHED IN ONE PLACE, ITS BOX FLAG. The operator, 2026-11-24: "Yes" (the
+      design's M4). _attempt_park's `PARK_MODE == "off"` return is deleted with config.PARK_MODE: it now returns FIRST when
+      strategy/plan_state reads PARK DORMANT (utils/box_flags `park = off` on this box), before the one-per-session read
+      and any chain fetch (r97's rule; _safe_strategy checks the same state again), so a PARK-off box never asks PARK and
+      writes no PARK row. The Service line's park= token is read from plan_state: "park=trade" when ACTIVE (unchanged on
+      every box with no line), "park=off (box flag)" when DORMANT; the "(OT_PARK=... REFUSED)" tail goes.
+      _announce_box_flags names a stale OT_PARK in the unit as IGNORED on the [flags] line (presence only, the value is
+      never read) and pages it once, as a refused line. An OPEN PARK row is still recovered and managed to its exit (exits
+      read no plan state). Runaway and every other setup dispatch exactly as before.
 v5.39  2026-11-23  OTV5 r153 (TRIM.2) — THE HUNT AND OGAP ARE RETIRED (strategy/plan_state v5.12: DORMANT, no switch). The
       operator, 2026-11-23: "The hunt & OGAP are trash. Retire them both after this session today. And include them in
       the coming purge." _safe_strategy already returns before a DORMANT name; _attempt_hunt and _attempt_ogap now return
@@ -4760,7 +4769,8 @@ def attempt_new_entry(ctx: dict, ms: MarketState, state: BotState):
 
 
 def _retired_dormant(name: str) -> bool:
-    """r153 (TRIM.2) — True when plan_state reads `name` DORMANT (the Hunt and OGAP are retired: always). An unreadable
+    """r153 (TRIM.2) — True when plan_state reads `name` DORMANT (the Hunt and OGAP are retired: always; r155: PARK when
+    its box flag `park` is off). An unreadable
     state reads False, so the caller falls through to _safe_strategy, which checks the state again (r97's butterfly
     rule). Never raises."""
     try:
@@ -4819,9 +4829,9 @@ def _attempt_park(ctx, ms, state, chain=None) -> None:
     """r288 (PARK.1) — ask PARK (its plan is dormant outside 11:01-11:03) and, on a fire, execute it ADDITIVE.
     Called from the normal dispatch only (r137 CAP.10: PARK is under the daily catastrophic cap both ways; the capped
     branch asks nothing). One per session on this box, DB-backed (fails closed).
-    OT_PARK=off: never asked. OT_PARK=log: asked, the would-be fire recorded by the strategy, nothing executed."""
-    from config import PARK_MODE
-    if PARK_MODE == "off":
+    r155 (BOXF.2): a DORMANT PARK (box flag `park = off`, strategy/plan_state) returns first: no trades.db read, no chain
+    fetch, no row. An open PARK is still managed to its exit."""
+    if _retired_dormant("PARK"):
         return
     if _one_per_session_used("PARK"):
         _plan_skip("PARK", "one per session on this box — already traded today", gate="tries_per_session")
@@ -5161,11 +5171,15 @@ def _banner_dials() -> str:
     brk += f" · brk_stop={'5m' if BRK_STOP5M_MODE == 'trade' else '1m'}({BRK_STOP5M_MODE})"   # r284 (BRK.11)
     if BRK_STOP5M_ENV_REFUSED:
         brk += f" (OT_BRK_STOP5M={BRK_STOP5M_ENV_REFUSED!r} REFUSED)"
-    from config import BRK_DFLOOR_MODE, BRK_DFLOOR_ENV_REFUSED, PARK_MODE, PARK_ENV_REFUSED   # r288
+    from config import BRK_DFLOOR_MODE, BRK_DFLOOR_ENV_REFUSED            # r288
     brk += f" · brk_dfloor={BRK_DFLOOR_MODE}"                              # r288 (BRK.13)
     if BRK_DFLOOR_ENV_REFUSED:
         brk += f" (OT_BRK_DFLOOR={BRK_DFLOOR_ENV_REFUSED!r} REFUSED)"
-    brk += f" · park={PARK_MODE}"                                          # r288 (PARK.1)
+    try:                                                                   # r155 (BOXF.2): plan_state decides
+        from strategy import plan_state as _ps_pk
+        brk += " · park=trade" if _ps_pk.state("PARK") == _ps_pk.ACTIVE else " · park=off (box flag)"
+    except Exception:                                                      # noqa: BLE001
+        brk += " · park=?"
     try:                                                                   # r149 (OGAP.4): plan_state decides
         from strategy import plan_state as _ps_og
         _ret = getattr(_ps_og, "RETIRED", {})                             # r153 (TRIM.2): the retired setups
@@ -5179,8 +5193,6 @@ def _banner_dials() -> str:
             brk += " · ogap=off (box flag)"
     except Exception:                                                      # noqa: BLE001
         brk += " · ogap=?"
-    if PARK_ENV_REFUSED:
-        brk += f" (OT_PARK={PARK_ENV_REFUSED!r} REFUSED)"
     # r293 (DIAL.2) — the three dials whose refusal was recorded by config and read by NOTHING: a typo on
     # OT_HUNT_STOP5M moved every Hunt back to the 1m boundary with no line anywhere (audit 10-18 G2).
     from config import (HUNT_STOP5M_MODE, HUNT_STOP5M_ENV_REFUSED, BRK_REARM_MODE, BRK_REARM_ENV_REFUSED,
@@ -5221,12 +5233,14 @@ def _announce_box_flags() -> None:
     try:
         from utils import box_flags as _bf
         _f = _bf.effective()
-        _line = _bf.start_line(_f, _bf.commit())
-        if _f.problems:
+        _stale = _bf.stale_env()                                # r155: a replaced env key in the unit (presence only)
+        _line = _bf.start_line(_f, _bf.commit(), _stale)
+        _refused = tuple(_f.problems) + _bf.ignored_notes(_stale)
+        if _refused:
             logger.warning(_line)
             try:
                 get_alert_manager()._send(
-                    f"\u26A0\uFE0F {INSTRUMENT} box flags REFUSED at start: " + "; ".join(_f.problems)
+                    f"\u26A0\uFE0F {INSTRUMENT} box flags REFUSED at start: " + "; ".join(_refused)
                     + " | the bot started; a refused setup reads off | " + fmt_et_short(), code="MSG")
             except Exception as _pg:                            # noqa: BLE001
                 logger.warning("[flags] page NOT sent (%s: %s)", type(_pg).__name__, _pg)

@@ -1,5 +1,13 @@
 """
-utils/box_flags.py  v5.2
+utils/box_flags.py  v5.3
+v5.3  2026-11-24  OTV5 r155 (BOXF.2, M4) — THE `park` KEY: setup PARK, on / off, DEFAULT ON (so no box changes when this
+      lands; a box differs only through its own file line `park = off`). The operator, 2026-11-24: "Yes" (the design's M4,
+      ahead of the C5 equity boxes going live with Runaway only). strategy/plan_state reads PARK's state from it (on ->
+      ACTIVE, anything else -> DORMANT: never asked, writes nothing; an open PARK row is still managed to its exit, exits
+      read no flag). OT_PARK is no longer read anywhere (config.PARK_MODE / PARK_ENV_REFUSED are deleted): REPLACED_ENV
+      names it, and stale_env() reports only that the key is PRESENT in the process environment (its value is never
+      read), which start_line() names as IGNORED on the [flags] line and main pages once. Schema v1 keeps its number: a
+      key added, none changed.
 v5.2  2026-11-23  OTV5 r153 (TRIM.2) — THE `ogap` KEY GOES: OGAP is retired (strategy/plan_state: DORMANT, no switch). The
       operator, 2026-11-23: "The hunt & OGAP are trash. Retire them both after this session today." SCHEMA is empty
       again (schema v1: no keys, r148's shape), so a box file line `ogap = ...` is an UNKNOWN KEY: ignored, named on the
@@ -76,8 +84,14 @@ class Key:
 
 
 # THE ROSTER. r148 (BOXF.1): empty; each key joins in its own land. r149 (OGAP.4): ogap, default on.
-# r153 (TRIM.2): ogap removed with OGAP's retirement; empty again.
-SCHEMA: Dict[str, Key] = {}
+# r153 (TRIM.2): ogap removed with OGAP's retirement; empty again. r155 (BOXF.2, M4): park, default on.
+SCHEMA: Dict[str, Key] = {
+    "park": Key("park", "PARK", VALUES, ON),     # r155: on every box unless its file says off (the operator, 2026-11-24)
+}
+
+# r155 (M4) — the env keys a schema key replaced. NOT READ: only their presence in the process environment is reported
+# (stale_env), so a stale unit line is named on the [flags] start line instead of being thought obeyed.
+REPLACED_ENV: Dict[str, str] = {"OT_PARK": "park"}
 
 
 @dataclass(frozen=True)
@@ -213,15 +227,33 @@ def commit() -> str:
         return "unknown"
 
 
-def start_line(flags: Flags, commit_id: str) -> str:
-    """The one [flags] start line (tests/check_box_flags.py F10 pins its shape)."""
+def stale_env(environ=None) -> Tuple[str, ...]:
+    """r155 — the REPLACED_ENV keys PRESENT in `environ` (default: this process's), sorted. Presence only: the value is
+    never read, so no env key can decide anything a schema key decides. Never raises."""
+    try:
+        env = os.environ if environ is None else environ
+        return tuple(k for k in sorted(REPLACED_ENV) if k in env)
+    except Exception:                                           # noqa: BLE001
+        return ()
+
+
+def ignored_notes(names) -> Tuple[str, ...]:
+    """r155 — the REFUSED text for each stale env key: "OT_PARK in the unit is IGNORED (deploy/box_flags decides park)"."""
+    return tuple("%s in the unit is IGNORED (deploy/box_flags decides %s)" % (k, REPLACED_ENV.get(k, "?"))
+                 for k in names)
+
+
+def start_line(flags: Flags, commit_id: str, ignored=()) -> str:
+    """The one [flags] start line (tests/check_box_flags.py F10 pins its shape). `ignored` (r155): stale env keys
+    (stale_env()), named after the file's own problems in the REFUSED part."""
     head = "[flags] %s source=%s sha256=%s commit=%s" % (flags.symbol or "?", flags.source, flags.sha256,
                                                         commit_id or "unknown")
     keys = sorted(flags.values)
     vals = " ".join("%s=%s" % (k, flags.values[k]) for k in keys) if keys else "schema v%d: no keys" % SCHEMA_VERSION
     line = "%s · %s · differs: %s" % (head, vals, ", ".join(flags.differs) or "none")
-    if flags.problems:
-        line += " · REFUSED: " + "; ".join(flags.problems)
+    refused = tuple(flags.problems) + ignored_notes(ignored or ())
+    if refused:
+        line += " · REFUSED: " + "; ".join(refused)
     return line
 
 

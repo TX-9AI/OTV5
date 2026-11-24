@@ -1,5 +1,6 @@
 # OTV5 — Autonomous Day Trading Bot with Telegram Notifications and embedded Claude Code agent
 
+**`README.md` v5.4 · 2026-11-24 (OTV5 r155, BOXF.2) — the PARK row's switch is its box flag `park` (default on; `park = off` in `deploy/box_flags/SYM` stops it on that box); `OT_PARK` and its log mode are gone.**
 **`README.md` v5.3 · 2026-11-24 (OTV5 r154, DOC.38) — DOCS ONLY: the trades table lists the two live setups, Runaway and PARK, and marks Breakout DORMANT (r110), the Liquidity hunt and OGAP RETIRED (r153, TRIM.2); the GEX pin butterfly row goes (its code was removed at r103).**
 **`README.md` v5.2 · 2026-11-08 (OTV5 r88, RETIRE.3) — the trades table lists only the live trades: the TCS (r88) and the trades removed in r76 (ORCS, ATP butterfly, VOLT, the ORB trade, the sweep) leave it, as does the handoff grant (execution/handoff.py, r76).**
 **v5.1 · 2026-10-25 (OTV5 r16) — what this repo is, how it is laid out, how work lands.**
@@ -31,7 +32,7 @@ The roster as it runs is `docs/TRADES.md` §0, pinned to `config.py` by `tests/c
 | trade | state | plan | strategy | spec |
 |---|---|---|---|---|
 | Runaway (momentum, entries 09:35–10:30) | ON | `strategy/runaway_plan.py` | `strategy/runaway_continuation.py` | PLAN_SPEC §30 |
-| PARK (the 11:00 first-hour continuation, entries 11:01–11:03) | ON (`OT_PARK=log` records only, `off` stops it) | `strategy/park_plan.py` | `strategy/park.py` | TRADES §9 |
+| PARK (the 11:00 first-hour continuation, entries 11:01–11:03) | ON (box flag `park`, default on; `park = off` stops it on that box, r155) | `strategy/park_plan.py` | `strategy/park.py` | TRADES §9 |
 | Breakout | DORMANT since r110 (never asked, no switch; code kept) | `strategy/breakout_plan.py` | `strategy/breakout.py` (the spec) | TRADES §7 |
 | Liquidity hunt | RETIRED r153 (dormant, no switch; code kept until the purge) | `strategy/liquidity_hunt.py` | same file | PLAN_SPEC §37 |
 | OGAP | RETIRED r153 (dormant, no switch; code kept until the purge) | `strategy/ogap_plan.py` | `strategy/ogap.py` | TRADES §10 |

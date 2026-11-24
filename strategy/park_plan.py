@@ -1,5 +1,9 @@
 """
-strategy/park_plan.py  v5.7
+strategy/park_plan.py  v5.8
+v5.8  2026-11-24  OTV5 r155 (BOXF.2, M4) — _record_would_fire and ParkPreparation.record_would_fire GO with config.PARK_MODE:
+      their one caller, strategy/park.py's OT_PARK=log branch, is deleted (PARK is on / off per box by its box flag
+      `park`), so data/counterfactual/park_signal.jsonl is no longer written. The operator, 2026-11-24: "Yes". Every gate,
+      the strike, the size and the entry are unchanged.
 v5.7  2026-11-08  OTV5 r93 (C8.1) — PARK SKIPS AN ENTRY THE FIRST HOUR HAS ALREADY OUTRUN. The operator, 2026-11-08: "Yes,
       to both" (C8 passed its blind test, ~/reviews/studies/web_setups_1108, FROZEN 18:57 UTC). first_hour_extended(): a
       call is skipped when the 10:59 1m bar's CLOSE is ABOVE the highest high of the 09:30-10:29 1m bars, a put when it
@@ -547,25 +551,6 @@ def commitment_read(t, cond, *, symbol: str, day, direction: str) -> bool:
     return True
 
 
-def _record_would_fire(prep) -> None:
-    """PARK_MODE=log: what PARK would have bought. data/counterfactual/park_signal.jsonl. Never raises."""
-    try:
-        import json, os, time
-        d = os.environ.get("OT_COUNTERFACTUAL_DIR") or os.path.join(
-            os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "counterfactual")
-        os.makedirs(d, exist_ok=True)
-        c = prep.contract
-        row = {"ts_epoch": time.time(), "rule": "park_signal", "mode": config.PARK_MODE,
-               "direction": prep.direction, "move_pct": prep.move_pct, "gap": prep.gap,
-               "strike": float(getattr(c, "strike", 0) or 0), "side": prep.side,
-               "streamer_symbol": getattr(c, "streamer_symbol", ""), "ask": prep.ask,
-               "bid": prep.bid, "mark": prep.premium, "spot_1100": prep.spot}
-        with open(os.path.join(d, "park_signal.jsonl"), "a") as fh:
-            fh.write(json.dumps(row) + "\n")
-    except Exception as exc:                                    # noqa: BLE001
-        logger.warning("[park] signal counterfactual row NOT written: %s", exc)
-
-
 class ParkPreparation:
     """What the search found. `ready` is True ONLY when every bar cleared."""
 
@@ -596,9 +581,6 @@ class ParkPreparation:
                 f"+{config.PARK_LOCK_FLOOR:.0%}, |delta| <= {config.PARK_DELTA_FLOOR:.2f} from "
                 f"{config.PARK_DELTA_FROM_ET[0]:02d}:{config.PARK_DELTA_FROM_ET[1]:02d}, else "
                 f"{config.PARK_CLOSE_ET[0]:02d}:{config.PARK_CLOSE_ET[1]:02d}")
-
-    def record_would_fire(self) -> None:
-        _record_would_fire(self)
 
     def emit(self, strategy_name: str):
         """Build the signal from what the PLAN selected. The strategy picks nothing."""

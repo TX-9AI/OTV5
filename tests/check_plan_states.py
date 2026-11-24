@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 """
-tests/check_plan_states.py  v5.14
+tests/check_plan_states.py  v5.15
+v5.15  2026-11-24  OTV5 r155 (BOXF.2, M4) — RE-POINTED (WA 38.4): PARK's state is its box flag `park` (utils/box_flags,
+      default on) and OT_PARK is no longer read, so S3's two OT_PARK cases ("off", "log") read active: no env value moves
+      PARK (the flag file's cases are gated in tests/check_park_flag.py P3 and tests/check_box_flags.py F7). What each
+      check pins is unchanged.
 v5.14  2026-11-23  OTV5 r153 (TRIM.2) — RE-POINTED (WA 38.4): the Hunt and OGAP are RETIRED (DORMANT, no switch), so S1's
       ruled roster moves both to dormant; S3's OT_HUNT cases read dormant for "true", "1", "active" and "off" (no env
       turns it back on, as OT_BREAKOUT at r110) and the unknown value is named on OT_RUNAWAY ("true" keeps it active);
@@ -187,7 +191,7 @@ def main():
              ("LiquidityHunt", {"OT_HUNT": "active"}, "dormant"),
              ("LiquidityHunt", {"OT_HUNT": "off"}, "dormant"),
              ("RunawayContinuation", {"OT_RUNAWAY": "true"}, "active"),   # r153: the unknown value, named
-             ("PARK", {"OT_PARK": "off"}, "dormant"), ("PARK", {"OT_PARK": "log"}, "log"),
+             ("PARK", {"OT_PARK": "off"}, "active"), ("PARK", {"OT_PARK": "log"}, "active"),   # r155: not read
              ("RunawayContinuation", {"OT_RUNAWAY": "off"}, "dormant"),
              ("RunawayContinuation", {"OT_RUNAWAY": "log"}, "log")]      # r88: the TCS rows removed with it
     got = [(n, e, fresh(probe % n, e)) for n, e, _w in cases]

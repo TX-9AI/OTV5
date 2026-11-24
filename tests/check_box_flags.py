@@ -1,6 +1,16 @@
 #!/usr/bin/env python3
 """
-tests/check_box_flags.py  v5.0
+tests/check_box_flags.py  v5.1
+v5.1  2026-11-24  OTV5 r155 (BOXF.2, M4) — THE `park` KEY. The operator, 2026-11-24: "Yes" (the design's M4). F7 gains the
+      real schema's park cases (missing -> on; `park = off` -> off, nothing refused; `park = of`, a duplicate `park` and
+      `park = paper_only` -> off, named; a stray `ogap = on` -> ignored, named, park untouched); NEW F8b (no module
+      outside tests/ reads a REPLACED_ENV key - r155: OT_PARK - by os.environ.get / getenv / [] / "in"; every REPLACED_ENV
+      key names a SCHEMA key); F10 gains the stale-env case (start_line names "OT_PARK in the unit is IGNORED (deploy/
+      box_flags decides park)" in its REFUSED part; main._announce_box_flags with OT_PARK in the env logs ONE WARNING
+      [flags] line and pages ONCE, code MSG, naming it); NEW F12 (SCHEMA["park"] = park / PARK / on, off / default on, and
+      every schema key's setup is a strategy/plan_state TABLE row whose default is FLAG, so the default has no second
+      copy). OT_PARK is popped from this checker's env so F10's INFO case never depends on the caller. Every other check
+      unchanged.
 v5.0  2026-11-22  OTV5 r148 (BOXF.1) — new. THE BOX FLAG FILES AND THEIR ONE LOADER. The operator, 2026-11-22: "Design it
       smartly. I don't want redundant gates blocking common use settings by having to track them in multiple places."
       So this gate validates the ONE file per box and the ONE loader, and NEVER compares a setting with another copy of
@@ -17,7 +27,8 @@ v5.0  2026-11-22  OTV5 r148 (BOXF.1) — new. THE BOX FLAG FILES AND THEIR ONE L
       refused, off; an unreadable file (a directory in its place) -> EVERY setup off; each case named; never raises;
       effective() loads once and returns the same object (a later change on disk is not seen)
   F8  only utils/box_flags.py names the folder (deploy/box_flags) or its FLAGS_DIR in code: no other module opens it.
-      (F8b, "no module reads OT_RUNAWAY / OT_HUNT / OT_PARK", arrives with M2-M4, which move those three keys here.)
+  F8b (r155) no module outside tests/ reads a utils/box_flags.REPLACED_ENV key (OT_PARK; OT_RUNAWAY joins with M3), and
+      each REPLACED_ENV key names a SCHEMA key
   F9  nothing writes the folder: no installer, menu or deploy script (configure.sh, setup_ec2.sh, devtools.sh,
       bootstrap.example.sh, deploy/*, tools/*.sh) names it, and the show tool and the loader hold no write call; when
       ~/day_trader_pro is present, no dtp line names the folder AND writes (a fixture or a docstring that only names it
@@ -27,8 +38,10 @@ v5.0  2026-11-22  OTV5 r148 (BOXF.1) — new. THE BOX FLAG FILES AND THEIR ONE L
       on the start path, WARNING plus ONE page (code MSG) when a line is refused, INFO and no page otherwise
   F11 tools/box_flags_show.py (run as `python3 -I`) prints the same effective values as the loader, as JSON, reading
       no env key
+  F12 (r155) SCHEMA["park"] is (park, PARK, (on, off), on); every SCHEMA key's setup is a strategy/plan_state TABLE row
+      whose default is FLAG (the schema is the one copy of the default)
 Born red on r146 (df51252): utils/box_flags.py, tools/box_flags_show.py and main._announce_box_flags do not exist
-(F7-F11 red; F1-F6 green on an absent folder). 11 mutants red.
+(F7-F11 red; F1-F6 green on an absent folder). 11 mutants red. v5.1 is red on r154 (b8f21c1) at F7, F8b, F10 and F12.
 Run:  python3 tests/check_box_flags.py
 """
 import ast
@@ -45,6 +58,7 @@ import tempfile
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 os.environ.setdefault("OT_INSTRUMENT", "QQQ")
+os.environ.pop("OT_PARK", None)                 # r155: F10's INFO case must not depend on the caller's env
 _TD = tempfile.mkdtemp(prefix="check_box_flags_")
 for _k, _f in (("OT_TRADES_DB", "t.db"), ("OT_DERIVED_DB", "d.db"), ("OT_FEED_DB", "f.db"),
                ("OT_LOG_FILE", "bot.log"), ("OT_SIGNAL_JOURNAL_DIR", "sj"), ("OT_COUNTERFACTUAL_DIR", "cf"),
@@ -189,6 +203,27 @@ def main():
                                and "UNREADABLE" in " ".join(unr.problems)),
                 "empty schema": nul.values == {} and "unknown key 'alpha'" in " ".join(nul.problems),
             }
+            # r155 (M4): the real schema's park key
+            if "park" in BF.SCHEMA:
+                r_miss = BF.load("QQQ", path=os.path.join(td, "NOPE"))
+                r_off = BF.load("QQQ", path=put("RO", "park = off  # C5\n"))
+                r_typo = BF.load("QQQ", path=put("RT", "park = of\n"))
+                r_dup = BF.load("QQQ", path=put("RD", "park = off\npark = off\n"))
+                r_pap = BF.load("QQQ", path=put("RP", "park = paper_only\n"))
+                r_ogap = BF.load("QQQ", path=put("RG", "ogap = on\n"))
+                checks.update({
+                    "park missing": r_miss.values.get("park") == "on" and not r_miss.problems,
+                    "park off": (r_off.values.get("park") == "off" and not r_off.problems
+                                 and r_off.differs == ("park(off, default on)",)),
+                    "park typo": r_typo.values.get("park") == "off" and "'of'" in " ".join(r_typo.problems),
+                    "park duplicate": r_dup.values.get("park") == "off" and "duplicate" in " ".join(r_dup.problems),
+                    "park paper_only": (r_pap.values.get("park") == "off"
+                                        and "paper_only" in " ".join(r_pap.problems)),
+                    "stray ogap": (r_ogap.values.get("park") == "on"
+                                   and "unknown key 'ogap'" in " ".join(r_ogap.problems)),
+                })
+            else:
+                checks["park key"] = False
             BF.reset()
             e1 = BF.effective()
             e2 = BF.effective()
@@ -227,6 +262,32 @@ def main():
         elif "box_flags/" in src:
             bad8.append(f"{rel} names the folder")
     check("F8", BF is not None and not bad8, f"other readers: {bad8}" if BF is not None else "no loader")
+
+    # ── F8b no module reads a replaced env key (r155) ───────────────────────
+    rep = dict(getattr(BF, "REPLACED_ENV", {}) or {}) if BF else {}
+    bad8b = []
+    if "OT_PARK" not in rep:
+        bad8b.append(f"REPLACED_ENV lacks OT_PARK: {rep}")
+    bad8b += [f"REPLACED_ENV {k} -> {v} is not a SCHEMA key" for k, v in rep.items() if v not in schema]
+    for rel in _code_files():
+        if not rel.endswith(".py") or rel.startswith("tests/"):
+            continue
+        try:
+            tree = ast.parse(open(os.path.join(ROOT, rel), encoding="utf-8", errors="replace").read())
+        except (OSError, SyntaxError):
+            continue
+        for node in ast.walk(tree):
+            key = None
+            if isinstance(node, ast.Call) and node.args and isinstance(node.func, ast.Attribute) \
+                    and node.func.attr in ("get", "getenv", "pop", "setdefault"):
+                key = node.args[0]
+            elif isinstance(node, ast.Subscript):
+                key = node.slice
+            elif isinstance(node, ast.Compare):
+                key = node.left
+            if isinstance(key, ast.Constant) and key.value in rep:
+                bad8b.append(f"{rel}:{node.lineno} reads {key.value}")
+    check("F8b", BF is not None and not bad8b, f"{bad8b}")
 
     # ── F9 nothing writes it ────────────────────────────────────────────────
     bad9 = []
@@ -300,6 +361,17 @@ def main():
                 MN._announce_box_flags()
                 r1 = [r for r in cap.recs if "[flags]" in r.getMessage()]
                 p1 = pages[len(p0):]
+                # r155: a stale OT_PARK in the unit (presence only) is named and paged once
+                BF.reset()
+                cap.recs.clear()
+                n_before = len(pages)
+                os.environ["OT_PARK"] = "off"
+                try:
+                    MN._announce_box_flags()
+                finally:
+                    os.environ.pop("OT_PARK", None)
+                r2 = [r for r in cap.recs if "[flags]" in r.getMessage()]
+                p2 = pages[n_before:]
             finally:
                 MN.get_alert_manager = s_am
                 MN.logger.removeHandler(cap)
@@ -308,11 +380,20 @@ def main():
             src = open(os.path.join(ROOT, "main.py"), encoding="utf-8").read()
             i_f, i_p = src.find("    _announce_box_flags()  "), src.find("    _announce_plan_states()  ")
             order = 0 < i_f < i_p and src.count("    _announce_box_flags()  ") == 1
-            ok10 = (shapes and len(r0) == 1 and r0[0].levelno == logging.INFO and r0[0].getMessage() == want0
+            ign = "OT_PARK in the unit is IGNORED (deploy/box_flags decides park)"
+            l_ign = BF.start_line(BF.Flags("UNH", "deploy/box_flags/UNH", "0123456789ab", "ok", {"park": "off"}, (),
+                                           ("park(off, default on)",)), "abc", ("OT_PARK",))
+            stale = (l_ign == ("[flags] UNH source=deploy/box_flags/UNH sha256=0123456789ab commit=abc · park=off · "
+                               "differs: park(off, default on) · REFUSED: " + ign)
+                     and LINE_RX.match(l_ign) is not None
+                     and len(r2) == 1 and r2[0].levelno == logging.WARNING and r2[0].getMessage().endswith(ign)
+                     and len(p2) == 1 and p2[0][0] == "MSG" and "OT_PARK" in p2[0][1])
+            ok10 = (shapes and stale and len(r0) == 1 and r0[0].levelno == logging.INFO and r0[0].getMessage() == want0
                     and LINE_RX.match(want0) is not None and p0 == []
                     and len(r1) == 1 and r1[0].levelno == logging.WARNING and "REFUSED: line 1 unknown key" in
                     r1[0].getMessage() and len(p1) == 1 and p1[0][0] == "MSG" and "breakout" in p1[0][1] and order)
-            d10 = (f"shapes={shapes} r0={[r.getMessage() for r in r0]} want0={want0!r} p0={p0} "
+            d10 = (f"stale={stale} l_ign={l_ign!r} r2={[(r.levelno, r.getMessage()[-90:]) for r in r2]} p2={p2} "
+                   f"shapes={shapes} r0={[r.getMessage() for r in r0]} want0={want0!r} p0={p0} "
                    f"r1={[(r.levelno, r.getMessage()[:80]) for r in r1]} p1={p1} order={order}")
         except Exception as exc:                                # noqa: BLE001
             d10 = f"{type(exc).__name__}: {exc}"
@@ -337,11 +418,28 @@ def main():
             d11 = f"{type(exc).__name__}: {exc}"
     check("F11", ok11, d11)
 
+    # ── F12 the park row; the default has one copy (r155) ───────────────────
+    ok12, d12 = False, "no loader"
+    if BF is not None:
+        try:
+            from strategy import plan_state as PS
+            pk = BF.SCHEMA.get("park")
+            row_ok = pk is not None and (pk.key, pk.setup, tuple(pk.allowed), pk.default) == ("park", "PARK",
+                                                                                             ("on", "off"), "on")
+            flag = getattr(PS, "FLAG", "flag")
+            bad12 = [f"{k} -> {r.setup}: TABLE {PS.TABLE.get(r.setup)}" for k, r in BF.SCHEMA.items()
+                     if r.key != k or PS.TABLE.get(r.setup, ("", "", ""))[1] != flag]
+            ok12 = row_ok and not bad12
+            d12 = f"park={pk} not-flag rows={bad12}"
+        except Exception as exc:                                # noqa: BLE001
+            d12 = f"{type(exc).__name__}: {exc}"
+    check("F12", ok12, d12)
+
     shutil.rmtree(_TD, ignore_errors=True)
     if FAILED:
         print(f"RED — {len(FAILED)} failed: {' '.join(FAILED)}")
         return 1
-    print("GREEN — the box flag files parse, restate no default, and one loader reads them (F1-F11)")
+    print("GREEN — the box flag files parse, restate no default, and one loader reads them (F1-F12)")
     return 0
 
 

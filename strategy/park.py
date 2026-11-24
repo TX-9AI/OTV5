@@ -1,5 +1,9 @@
 """
-strategy/park.py  v5.4
+strategy/park.py  v5.5
+v5.5  2026-11-24  OTV5 r155 (BOXF.2, M4) — THE LOG BRANCH GOES WITH config.PARK_MODE: PARK is on or off per box by its box
+      flag `park` (utils/box_flags, read by strategy/plan_state: off = DORMANT, never asked), so generate_signal has no
+      "OT_PARK=log" door and writes no park_signal.jsonl row. The operator, 2026-11-24: "Yes" (the design's M4; the
+      flag values are on / off, fix not log-only). A READY trigger fires exactly as before.
 v5.4  2026-11-21  OTV5 r137 (CAP.10 + LOCK.1) — TEXT ONLY, two lines of the v1.0 spec below are superseded: PARK is no longer
       outside the catastrophic cap (its closes count toward it and the cap refuses its entry, config v5.26), and the
       +60% / +20% lock reads the MARK, not the bid (execution/exit_engine v5.25). The operator, 2026-11-21: "both trades
@@ -123,10 +127,8 @@ class Park:
         return self._plan.prepare(spec=self, **kw)
 
     def generate_signal(self, **kw):
-        """CONFIRM the plan's trigger on this tick, then fire it. Picks nothing.
-
-        PARK_MODE=log: the would-be fire is recorded (plan row + data/counterfactual/park_signal.jsonl) and
-        nothing is returned to execute."""
+        """CONFIRM the plan's trigger on this tick, then fire it. Picks nothing. (r155: no log mode; an off box never
+        asks this.)"""
         prep = self.prepare(**kw)
         if prep is None:
             return None
@@ -136,8 +138,4 @@ class Park:
         bid, ask = getattr(c, "bid", None), getattr(c, "ask", None)
         if not (bid is not None and ask is not None and float(ask) >= float(bid) > 0):
             return prep.tick.hold("trigger incomplete — the contract's quote is not two-sided on this tick")
-        if config.PARK_MODE == "log":
-            prep.record_would_fire()
-            from strategy import observe as _observe
-            return prep.tick.hold("OT_PARK=log — would take " + prep.trade_line(), verdict=_observe.LOG_ONLY)
         return prep.emit(self.name)

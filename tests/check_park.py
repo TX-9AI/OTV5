@@ -1,6 +1,12 @@
 #!/usr/bin/env python3
 """
-tests/check_park.py  v5.6
+tests/check_park.py  v5.7
+v5.7  2026-11-24  OTV5 r155 (BOXF.2, M4) — RE-POINTED (WA 38.4): config.PARK_MODE and its log mode are gone (PARK is on / off
+      per box by its box flag `park`, gated in tests/check_park_flag.py). K8 (was "OT_PARK=log: nothing to execute, one
+      park_signal.jsonl row") now pins that the log door is gone: a READY trigger fires the same signal whatever OT_PARK
+      says and writes no park_signal.jsonl row. K12 (was "OT_PARK unset -> trade; log / OFF honoured") now pins that
+      config reads no OT_PARK (no PARK_MODE / PARK_ENV_REFUSED with it unset, log, OFF or yes) and the window is
+      11:01-11:03. ask() no longer sets config.PARK_MODE. Every other check unchanged.
 v5.6  2026-11-21  OTV5 r137 (CAP.10 + LOCK.1) — THE LOCK IS ON THE MARK AND PARK IS UNDER THE CAP. The operator,
       2026-11-21: "both trades should fall under the catastrophic cap & any profit locks need to be on mark". K10a: mark
       1.21 holds; mark 1.60 (bid 1.50) ARMS; armed, mark 1.22 (bid 1.18, under the floor) HOLDS; mark 1.20 (bid 1.15)
@@ -49,7 +55,7 @@ v1.0  2026-10-18  OTV4TEST r288. The operator, 2026-10-17 18:21 ET: "Trade it, d
   K6  a missing bar (no 11:00 1m bar yet) is STARVED - no signal; the prior close falls back to the caller only
       when the store has no prior session
   K7  the contract: ask < 0.50 refused; a one-sided quote (bid 0) refused
-  K8  OT_PARK=log: generate_signal returns NOTHING to execute and writes one park_signal.jsonl row
+  K8  r155: no log door - with OT_PARK=log set, a READY trigger still returns the signal and no park_signal.jsonl row
   K9  the size is the box's own risk, flat: $1,050 at premium 1.62 -> 6; $2,500 at ask 9.00 -> 2 (RiskManager.size_for)
   K10 exits (the REAL ExitEngine.evaluate routes PARK to _evaluate_park):
       a. the lock (r137: on the MARK): 1.21 x entry before arming HOLDS; after mark >= 1.60 x entry, mark 1.20 x entry
@@ -61,7 +67,7 @@ v1.0  2026-10-18  OTV4TEST r288. The operator, 2026-10-17 18:21 ET: "Trade it, d
       f. one park_exit.jsonl row per trade
   K11 (r137) under the cap: the admission rule is NOT cap-exempt, one try, window 11:01-11:03; the cap's day P&L counts
       PARK (a -2,000 PARK close and a -500 Breakout close -> -2,500), as the displays' realized P&L does (-2,500)
-  K12 config: OT_PARK unset -> trade; log / OFF honoured; junk -> log, refused named; ENTRY_WINDOWS["PARK"] = 11:01-11:03
+  K12 r155: config reads no OT_PARK (no PARK_MODE / PARK_ENV_REFUSED, unset / log / OFF / yes); ENTRY_WINDOWS["PARK"] = 11:01-11:03
   K13 main: PARK is declared long_debit, PIN_EXEMPT names it, and (r137) the capped branch asks nothing
   K14 THE SPLIT: strategy/park.py reads no store and no chain; the plan registers on construction
   K15 the pin gate's COUNTERFACTUAL on every PARK entry (the operator, 2026-10-17 20:06 ET: "I want a counterfactual
@@ -158,8 +164,7 @@ def main():
         return 1
     P = Park()
 
-    def ask(now="11:01", chain=None, prior=None, mode="trade"):
-        config.PARK_MODE = mode
+    def ask(now="11:01", chain=None, prior=None):
         return P.generate_signal(price_now=702.4, now_et=now, chain=chain or Chain(), prior_close=prior,
                                  day=DAY, symbol=SYM)
 
@@ -211,14 +216,17 @@ def main():
           not p7a.ready and p7a.unmet == ["contract"] and not p7b.ready and p7b.unmet == ["contract"],
           f"{p7a.unmet} {p7b.unmet}")
 
-    s8 = ask(mode="log")
+    os.environ["OT_PARK"] = "log"                                # r155: inert - nothing reads it
+    try:
+        s8 = ask()
+    finally:
+        os.environ.pop("OT_PARK", None)
     f8 = os.path.join(CF, "park_signal.jsonl")
-    r8 = [json.loads(x) for x in open(f8)] if os.path.exists(f8) else []
-    check("K8 OT_PARK=log: nothing to execute, one park_signal.jsonl row (call 702, ask 1.62, mark 1.60)",
-          s8 is None and len(r8) == 1 and r8[0]["side"] == "call" and r8[0]["strike"] == 702 and r8[0]["ask"] == 1.62
-          and abs(float(r8[0].get("mark") or 0) - 1.60) < 1e-9,
-          f"{s8} {r8}")
-    config.PARK_MODE = "trade"
+    check("K8 no log door (r155): OT_PARK=log set, the READY trigger still fires the same CALL 702 @ 1.60, and no "
+          "park_signal.jsonl row is written",
+          s8 is not None and s8.strategy_name == "PARK" and float(s8.strike) == 702
+          and abs(s8.entry_premium - 1.60) < 1e-9 and not os.path.exists(f8) and not hasattr(config, "PARK_MODE"),
+          f"{s8 and (s8.strategy_name, s8.strike, s8.entry_premium)} row file={os.path.exists(f8)}")
 
     from risk.risk_manager import RiskManager
     z1 = RiskManager(risk_per_trade=1050.0, paper_trading=True).size_for("long_debit", premium=1.62, grade="UNGRADED")
@@ -349,14 +357,13 @@ def main():
     def probe(env):
         e = {k: v for k, v in os.environ.items() if k != "OT_PARK"}
         e.update(env)
-        code = ("import config,json;print(json.dumps([config.PARK_MODE, config.PARK_ENV_REFUSED, "
+        code = ("import config,json;print(json.dumps([hasattr(config, 'PARK_MODE'), hasattr(config, 'PARK_ENV_REFUSED'), "
                 "config.ENTRY_WINDOWS['PARK']]))")
         p = subprocess.run([sys.executable, "-c", code], cwd=ROOT, env=e, capture_output=True, text=True, timeout=120)
         return json.loads(p.stdout.strip().splitlines()[-1]) if p.returncode == 0 and p.stdout.strip() else p.stderr[-300:]
     m = [probe({}), probe({"OT_PARK": "log"}), probe({"OT_PARK": "OFF"}), probe({"OT_PARK": "yes"})]
-    check("K12 OT_PARK: unset -> trade; log / OFF honoured; 'yes' -> log, refused named; window 11:01-11:03",
-          m[0] == ["trade", "", [[11, 1], [11, 3]]] and m[1][0] == "log" and m[2][0] == "off"
-          and m[3][:2] == ["log", "yes"], f"{m}")
+    check("K12 config reads no OT_PARK (r155): no PARK_MODE / PARK_ENV_REFUSED with it unset, log, OFF or yes; "
+          "window 11:01-11:03", all(x == [False, False, [[11, 1], [11, 3]]] for x in m), f"{m}")
 
     src = open(os.path.join(ROOT, "main.py")).read()
     capped = src[src.index("    if _cap_hit:\n        if not _adm_ok:"):]
