@@ -1,5 +1,7 @@
 # TRADES — the specs
 
+**`TRADES.md` v5.37 · 2026-11-24 · r154 (DOC.38) — DOCS ONLY, code-identical (no .py changed): sections 0, 1, 6 and 9 now say what the code does for the two live setups, Runaway and PARK (the operator, 2026-11-24: "Yes", to the drift the 2026-11-23 nightly studies found, WS.34 and WS.35). Section 1: Runaway's entry end is 10:30 (`config.RUNAWAY_END`), not 11:30; its strike is `gamma_leverage_pick` inside the strength band, not the ATR-to-delta map (the map now only says whether the tape can reach a strike); it is one per session on the box (the r179 cap, enforced since OTV4TEST r281), not "retired"; the 20% premium floor and the +100% target close it, not "no premium stop". Section 9: PARK's C8 skip (r93) is listed; the live entry walk posts rung after rung inside the tick (r133), not one a tick; with no expiry today the chain takes the nearest listed one; its exits walk (r144). Section 0: the commitment gate refuses on a live box too (r112) and, of the live setups, reads Runaway only; PARK has no premium stop; the blind hold, the box-flag note and the stops name no retired setup as asked. Section 6: the floor stop is Runaway's 20% or a single leg's 25% and steps to MARKET (r139); the debit close is 15:50 / 15:55 (r149); a walk posts many rungs a tick (r133).**
+
 **`TRADES.md` v5.36 · 2026-11-23 · r153 (TRIM.2) — section 0, sections 9 and 10: THE HUNT AND OGAP ARE RETIRED, DORMANT with no switch on every box, paper or live (`strategy/plan_state.py`; `OT_HUNT` is no longer read; the box flag `ogap` is gone, so a box file line `ogap = ...` is refused as an unknown key). The operator, 2026-11-23: "The hunt & OGAP are trash. Retire them both after this session today. And include them in the coming purge. I think we're going to stick with the runaway & park going forward". Never asked, they write nothing; an open Hunt or OGAP row found at start is still managed to its exit. Their code (and the paper wall) is kept until the purge (BACKLOG TRIM.2 holds the map); the roster rows stay (OFF) while their ENTRY_WINDOWS rows do. Runaway and PARK are unchanged.**
 
 **`TRADES.md` v5.35 · 2026-11-22 · r151 (CAP.11) — the day, sections 9 and 10: on a PAPER box the daily catastrophic cap is RECORD ONLY. The operator, 2026-11-22: "Is there any way we can make the catastrophic cap only apply to cash? As in, there's no harm in letting paper run & we can just note if the breaker would have popped." and "Yes". A paper box writes one "breaker would have popped" record at the would-be trip, keeps trading and tags every trade opened while the cap stands tripped `after_cap = 1`; a live box halts its cash entries as at r150. Every number, every exit and every live rule unchanged.**
@@ -100,7 +102,7 @@ RETIRE.1), the trend credit spread with its shadow (r88, RETIRE.3) and the GEX p
 range is checked against the official print. The condor is a management plan with no entry
 of its own; with every credit entry removed it has nothing to manage.
 
-**Box flags (r148, BOXF.1; `utils/box_flags.py`, `deploy/box_flags/<SYM>`).** Each box may keep ONE saved settings file, named for its symbol, holding only the lines where that box differs from the default (`key = value  # reason`). The keys, their allowed values (`on` / `off`) and their defaults live in one place, `utils/box_flags.SCHEMA`, which is the fleet roster; a file never restates a default (tests/check_box_flags.py F6). The file is read once at the bot's start and named on one `[flags]` line (the values, the file's sha256, the commit); it changes only through a land and reaches a box with the fleet update. A bad value turns that setup off, an unreadable file turns every setup off, an unknown key is ignored; each is named and paged once, and the bot still starts. r148 ships the schema EMPTY (schema v1, no keys): the switch column below is unchanged. The keys arrive one land at a time (OGAP first, then the Hunt, Runaway and PARK, whose env keys move here).
+**Box flags (r148, BOXF.1; `utils/box_flags.py`, `deploy/box_flags/<SYM>`).** Each box may keep ONE saved settings file, named for its symbol, holding only the lines where that box differs from the default (`key = value  # reason`). The keys, their allowed values (`on` / `off`) and their defaults live in one place, `utils/box_flags.SCHEMA`, which is the fleet roster; a file never restates a default (tests/check_box_flags.py F6). The file is read once at the bot's start and named on one `[flags]` line (the values, the file's sha256, the commit); it changes only through a land and reaches a box with the fleet update. A bad value turns that setup off, an unreadable file turns every setup off, an unknown key is ignored; each is named and paged once, and the bot still starts. r148 ships the schema EMPTY (schema v1, no keys): the switch column below is unchanged. The keys arrive one land at a time: OGAP's key came at r149 and went with OGAP at r153 (TRIM.2), so the schema is empty again; Runaway's and PARK's env keys are the ones still to move here.
 
 **Plan states (r303, PSTATE.1; `strategy/plan_state.py`).** Every plan is ACTIVE (evaluated, written, trades), LOG
 (evaluated and written, every fire recorded LOG-ONLY and never executed) or DORMANT (never asked, writes nothing: no
@@ -116,7 +118,7 @@ condition-gated plan writes NOTHING while its condition is absent - no "nothing 
 the moment a position of its own is open (the operator, 2026-10-19 09:54 ET: "Yes"). The
 start logs one `[plans] states` line and writes `data/plan_states.json`, which the devtools plans panel reads.
 
-**After a blind episode (r146, BLND.1; PLAN_SPEC section 45).** While the bot is blind (no price or no 5m bars: a FeedBlind tick) nothing is asked and open positions are managed from REST marks (r74). On the tick that first sees again nothing OPENS on any setup - Runaway, the Hunt, PARK, OGAP. From the next tick entries are eligible and a plan fires only if it still qualifies on current data (the operator, 2026-11-22: "Does it really need a full minute if the plans refresh every 15 second tick? I think 1 full tick after a restore should be eligible for a fire if the entry still qualifies."). One condition: the tick's 1m frame must hold the last completed minute as its newest closed bar (the feed has filled the blind gap), normally already true by the next tick. Example, 2026-09-29: the feed dead 09:30:10-09:37:52, sight on the 09:38:04 tick: an entry on that tick is refused; the 09:38:19 tick, with the 09:37 bar in the frame, is eligible. Each held tick gives every plan one plan_check row at gate `blind_reacquire` and one "[entry-gate] ... entries HELD - reacquiring" line; exits are never held; no broker call, no switch. Partial: a plan that latched an armed state before or during the episode can still fire on the first eligible tick if it still qualifies (BACKLOG BLND.1).
+**After a blind episode (r146, BLND.1; PLAN_SPEC section 45).** While the bot is blind (no price or no 5m bars: a FeedBlind tick) nothing is asked and open positions are managed from REST marks (r74). On the tick that first sees again nothing OPENS on any setup - Runaway or PARK (the Hunt and OGAP are retired and never asked, r153). From the next tick entries are eligible and a plan fires only if it still qualifies on current data (the operator, 2026-11-22: "Does it really need a full minute if the plans refresh every 15 second tick? I think 1 full tick after a restore should be eligible for a fire if the entry still qualifies."). One condition: the tick's 1m frame must hold the last completed minute as its newest closed bar (the feed has filled the blind gap), normally already true by the next tick. Example, 2026-09-29: the feed dead 09:30:10-09:37:52, sight on the 09:38:04 tick: an entry on that tick is refused; the 09:38:19 tick, with the 09:37 bar in the frame, is eligible. Each held tick gives every plan one plan_check row at gate `blind_reacquire` and one "[entry-gate] ... entries HELD - reacquiring" line; exits are never held; no broker call, no switch. Partial: a plan that latched an armed state before or during the episode can still fire on the first eligible tick if it still qualifies (BACKLOG BLND.1).
 
 **The close (`config.EOD_SCHEDULE`).** No new entry at or after **15:40**. Anything with
 a short leg rests a best-case close from **15:45**. Everything else walks the mark ladder
@@ -129,10 +131,10 @@ records data as on any session; the 11:30 entry clip of r268 is gone (deliberate
 above as EOD_SCHEDULE).
 
 **The stops that are one number in `config.py`.** Runaway: a **20%** premium floor
-(`RUNAWAY_MAX_LOSS_PCT`). Hunt: NO premium stop - it RECORDS the same floor
+(`RUNAWAY_MAX_LOSS_PCT`). Hunt (retired r153; these exits manage an open row found at start): NO premium stop - it RECORDS the same floor
 (`HUNT_MAX_LOSS_PCT`, also used to pick its contract) and the exit engine HOLDS through it,
 logging "would-have-floored" (r209; corrected r227 - r226 wrote this line as if it stopped).
-Other single legs: **25%** (`MAX_LOSS_PCT`). (The butterfly stop constant was deleted at r115; nothing had read it
+Other single legs: **25%** (`MAX_LOSS_PCT`). PARK has no premium stop at all (`stop_loss_pct` 1.0 in `strategy/park_plan.py`, so its `stop_premium` is 0; section 9). (The butterfly stop constant was deleted at r115; nothing had read it
 since r107 removed the butterfly exits.) Every other exit rule lives in `strategy/management.py` and
 `execution/exit_engine.py`, not in a number that can be quoted here.
 
@@ -152,8 +154,9 @@ it" is REMOVED at r142 (HUNT.16; Breakout is dormant, so it could only hold a Hu
 data/counterfactual/breakout_refire.jsonl.
 
 **The commitment state (r272, COMMIT.1/2/3).** Every closed 1m bar each side is COMMITTED, NEUTRAL or ABANDONED
-(analysis/commitment.py). A directional entry whose side is ABANDONED is not placed (`OT_COMMIT_GATE`, unset = trade on
-paper; a live box only logs); the caution size after the session's first directional loss is logged, never applied
+(analysis/commitment.py). A directional entry whose side is ABANDONED is not placed (`OT_COMMIT_GATE`, unset = trade, on a paper
+and a live box alike since r112, AM.3; of the live setups it reads Runaway only, `analysis/commitment.DIRECTIONAL`, and
+PARK never asks it); the caution size after the session's first directional loss is logged, never applied
 (`OT_CAUTION_SIZE`). Rows in data/counterfactual/.
 
 **The day.** New entries stop while the day's net loss is at or past the daily catastrophic
@@ -197,6 +200,30 @@ under it must never validate a tight threshold.**
 
 ## 1. Runaway Continuation — `runaway_continuation.py`
 
+**AS RUNNING (r154, DOC.38, 2026-11-24) — read from the code; this block and `docs/PLAN_SPEC.md` section 30 (its AS
+RUNNING block carries every file:line) govern the older text below wherever they differ.**
+- **Window:** 09:35-10:30, the last entry 10:29 (`config.RUNAWAY_END` = (10, 30), no key; OTV4TEST r187, fixed at r68).
+  From 10:30 to the 15:40 entries stop it is asked and recorded LOG-ONLY, never executed (OTV4TEST r254, `strategy/observe.py`).
+- **Arm:** the ORB's 50 ACCEPTED (a 1m close beyond it, held at the next close) and still held now (the last closed 1m
+  close and the live price beyond it); the direction is the break's.
+- **Limits:** one Runaway per session on the box (`main._one_per_session_used`, read from trades.db, fails closed; the
+  r179 cap, gating since OTV4TEST r281) and, inside it, one per break with re-validation on actual.
+- **Feasibility:** the 5m ATR at or above 0.08% of price (a hard veto below 0.05%). The ATR-to-delta map
+  (`target_delta`, DELTA_NEAR 0.25 / DELTA_DEEP 0.40) only answers whether a strike is reachable; its delta is not read.
+- **Strike:** `gamma_leverage_pick` (`strategy/runaway_continuation.py`) over `run x band` - the run from the ORB boundary,
+  the band 0.5 / 1.0 / 1.5 for a strength below 0.40 / in between / at or above 0.70, measured once at acceptance. Every
+  OTM contract on the move's side with a premium above 0.05 and a delta; its 20% floor must clear its own bid/ask
+  spread; scored (delta x R + 0.5 x gamma x R squared) / premium; the best inside R of spot, else the chain's first OTM
+  strike if it survived, else no trade. Today's expiry, else the nearest listed after today (PM-settled only).
+- **Entry and size:** bought at the mark (paper books it; live walks the section 6 ladder, never above it), sized FLAT:
+  floor(`OT_RISK_USD` / (mark x 100)), no ramp. The plan's R (strict vetoes) prices the risk as 20% of the ask.
+- **Exits, first that fires:** the 20% premium floor (`RUNAWAY_MAX_LOSS_PCT`; priced as a stop); the +100% target
+  (`target_hit`; walks); the end of day (the 15:50 ladder, the 15:55 cross); the rejected-pool handoff; thesis dead (a
+  1m close back through the 50 beyond a band of one median 1m wick over 60 bars); the fizzle (two events, or an event
+  and a dial); the structure backstop (a 1m close through the ORB boundary); theta bleed; the trail (the FVG trail from
+  +20%, the percent trail from +50% at entry plus half the gain). The handoff, thesis dead and the backstop are priced
+  as stops (r144); the rest walk. The peak-decay stop never reads Runaway.
+
 **The ORB ran to its 50% TP and held. Buy the direction that already proved
 itself.**
 
@@ -211,9 +238,11 @@ follows is the pre-fork text, kept for its measurements; where they disagree
 §30 wins: the trigger is the engine's `fifty_accepted` latch (the same event
 that now invalidates the ORB), strength is measured once at acceptance and
 sets the strike band, one per break on ANY exit with re-validation on actual,
-the r179 session cap is retired, and there is NO premium stop — the position
-HOLDS while price is beyond the 50 and exits on the rejection handoff, a close
-back through the 50, the fizzle read, the trail, or a close through the
+under the r179 one-per-session cap (r3 called it retired; it has gated since
+OTV4TEST r281), and r3's "NO premium stop" was reversed at OTV4TEST r209
+(RUN.10): the 20% floor closes it. Otherwise the position HOLDS while price
+is beyond the 50 and exits on the rejection handoff, a close back through
+the 50, the fizzle read, the trail, the +100% target, or a close through the
 boundary. The relaxed 14:00 extension below was removed at r176.
 
 **FOUNDATIONAL**
@@ -223,16 +252,19 @@ boundary. The relaxed 14:00 extension below was removed at r176.
 · firing **disarms the retest**: the runaway *is* the evidence price never came
   back for it.
 
-**SELECTION** — cutoff 11:30 (the 14:00 relaxed extension is gone).
+**SELECTION** — cutoff 10:30, the last entry 10:29 (`config.RUNAWAY_END`; OTV4TEST r187, fixed r68; it was 11:30
+before r187; the 14:00 relaxed extension is gone).
 
-**FEASIBILITY** — the ATR floor and the ATR→delta map. Below **0.05% ATR the
+**FEASIBILITY** — the ATR floor (the ATR→delta map below now answers only whether a strike is reachable; its delta is
+not read). Below **0.05% ATR the
 required move was reached on 0% of 5,517 measured bars.**
 
-**Strike** — ATR-mapped: 0.20–0.35 delta at ≥0.12% ATR (60% reachable),
+**Strike (the pre-r165 rule, RETIRED; kept for its measurement - the strike is `gamma_leverage_pick`, the AS RUNNING
+block above)** — ATR-mapped: 0.20–0.35 delta at ≥0.12% ATR (60% reachable),
 0.35–0.50 at ≥0.20% (85%). **ADX is not used and that is a measurement** — every
 band from 0-15 to 40-100 produced the same median excursion.
 
-**Exit** — trailing stop. `orb_trail_stop` 96% / 85 trades / **+$30,696**, worst
+**Exit (the v3 measurement; the exits in force are the AS RUNNING block above)** — trailing stop. `orb_trail_stop` 96% / 85 trades / **+$30,696**, worst
 −$16. `bos_exit` 34% / 217 / **−$7,085** with the largest single loss in the v3
 book, so **BOS is not used.**
 
@@ -568,7 +600,7 @@ price it.
 | condor roll | full walk |
 | inverted butterfly | full walk |
 | structural / profit-side close | full walk |
-| **15% floor stop** | **escalate straight to MARK**, reprice at mark each tick |
+| **premium floor stop** (Runaway's 20%, a single leg's 25%) | **the mark, the mark, the bid, then MARKET** (r139 EXIT.15: `LIVE_STOP_AT_BID_AFTER` 2, `LIVE_STOP_MARKET_AFTER` 3) |
 | **thesis-invalidated close** (r144) | **as the floor stop** - the thesis line, the structure backstop, the rejected-pool handoff |
 
 **WIRED r104 (entries) / r105 (exits, roll).** Debit hard close KEEPS the cross:
@@ -579,14 +611,16 @@ premium. Credits take the nickel or take assignment, and never cross. The roll's
 open half walks WITHIN its call: by the time it runs the old untested vertical is
 already closed, so `check_and_execute_roll` sees `len(legs) != 2` next tick and
 never re-enters — an unfilled rung would strand the position half-rolled.
-| **debit hard close (15:40)** | the existing flatten ladder |
+| **debit hard close** (r149: from 15:50, then the 15:55 cross) | the flatten ladder, then the cross |
 | **credit hard close (15:45)** | nickel close, else **ASSIGNMENT** |
 
-⚠️ **THE 15% FLOOR DOES NOT WALK.** It is thesis-invalidated; spending six ticks
+⚠️ **THE PREMIUM FLOOR DOES NOT WALK.** It is thesis-invalidated; spending six ticks
 hunting a better fill while price runs is turning a stop into a negotiation. It
-goes to mark and re-prices there until filled.
+goes to mark and re-prices there (r139: after two unfilled attempts at the mark it posts at the bid, after three at
+MARKET).
 
-⚠️ **NOTHING EVER CROSSES THE SPREAD.** Operator: *"I'll take assignment over a
+⚠️ **SUPERSEDED (r149 EOD.1, r139 EXIT.15): whatever is still open crosses at 15:55, and a live stop goes to MARKET on
+its fourth attempt. The r105 text, kept:** **NOTHING EVER CROSSES THE SPREAD.** Operator: *"I'll take assignment over a
 shitty market order fill."* This REVERSES `hard_close_order_mode`, which returns
 `'market'` from 15:45 — *"the position MUST close; cross and be done."* Two call
 sites act on it (`exit_engine.py:2029`, `:2364`).
@@ -602,8 +636,9 @@ as the 15:45 preference; it is unreachable intraday because 15:45 arrives first.
 
 ### Ladder state
 
-`LadderState` carries the ratchet, so it must persist ACROSS ticks — one rung
-per tick means the walk IS multi-tick. Keyed per open order intent; cleared on
+`LadderState` carries the ratchet, so it must persist ACROSS ticks: since r133 a live walk posts rung
+after rung inside one tick (the walk above), and a walk the tick's budget or a refused mark rung ends resumes
+on the next tick. Keyed per open order intent; cleared on
 fill or abandon. **Lost on restart**, which costs at most one re-offer of an
 already-refused price. Recorded here rather than defended: it does not ride a
 column, and WORKING_AGREEMENT 22 says state that must survive a restart does.
@@ -779,10 +814,16 @@ the contract and builds the signal.
   trade, paged as FAILED CLOSED. QQQ's 1m bars are a health row on the equity box's manifold (RED in RTH
   from 09:31 when missing or stale), and never leave the box (the warehouse push ships only the box's own
   symbol);
-- the strike nearest the 11:00 1m close, today's expiry, two-sided, ask >= 0.50, bought AT THE MARK
+- **C8, the first hour already outrun (r93 C8.1; index and equity alike):** a call is skipped when the 10:59 1m close
+  is above the 09:30-10:29 1m high, a put when it is below their low (equal is not extended; a missing bar fails open):
+  plan_check `c8_first_hour_extended` and one `[park] SKIP` line (`strategy/park_plan.py` first_hour_extended, c8_read).
+  Blind-tested 2026-11-08 (18 sealed days): it skipped 13 of 77 fires, +$4,074 [+982, +7,924];
+- the strike nearest the 11:00 1m close, today's expiry (none listed today: the nearest listed after it, PM-settled only,
+  `data/options_chain.py`), two-sided, ask >= 0.50, bought AT THE MARK
   ((bid + ask) / 2, floored to the cent; r60 PARK.4, the operator 2026-10-30: "we ladder in from
-  aggressive to mark & never worse than mark"). Paper books the mark; live walks the entry ladder from
-  25% in off the bid toward the mark, one increment a tick, never above it - unfilled by 11:03 is no trade;
+  aggressive to mark & never worse than mark"). Paper books the mark; live walks the section 6 entry ladder
+  from 25% in off the bid toward the mark, rung after rung about 5 s apart inside the tick (r133), never above it -
+  unfilled when the window ends at 11:03 is no trade;
 - sized flat on the box's own risk, floor(OT_RISK_USD / (mark x 100)) - `config.RISK_PER_TRADE_USD`, set per box
   by configure item 2 (an unaffordable contract is no trade: AMD 11-03/11-05 at $1,050). No scaling, no pin-proximity gate (PIN_EXEMPT); what the gate would have said is a
   counterfactual row on every PARK entry, `data/counterfactual/pin_gate.jsonl`.
@@ -796,7 +837,10 @@ box (r151 CAP.11) the cap is record only: the 11:01 PARK still fires and is tagg
 walked the bid) - armed once the mark reaches +60% of the booked entry, out when the mark falls to +20% (after
 a restart the persisted best mark, `max_premium_seen`, re-arms it once - r291, now the same basis); the delta floor - |delta| <= 0.30 from 11:30 (unread delta
 holds); the close at 15:45. No premium stop, no trail. Every exit writes
-`data/counterfactual/park_exit.jsonl` so Saturday prices what holding to 15:45 would have done.
+`data/counterfactual/park_exit.jsonl` so Saturday prices what holding to 15:45 would have done. Pricing (r144): the
+lock, the delta floor and the 15:45 close walk the exit ladder (none is in `ExitEngine._FLOOR_REASONS`); paper books
+the mark. The peak-decay stop never reads PARK (`config._DECAY_EXEMPT_DEFAULT`), and the r63 late-day shadow only
+records.
 
 **LOG ONLY, never deciding (OTV5 r90, SHADOW.1).** Every PARK tick that reached a direction records the daily SMA 50
 slope's verdict (keep / would_skip / unknown) as plan_check `shadow_park_sma50` - the S4 equity pick, logged by the

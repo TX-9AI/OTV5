@@ -1,5 +1,7 @@
 # PLAN_SPEC.md — every strategy declares its intent BEFORE the trigger
 
+**`PLAN_SPEC.md` v5.15 · 2026-11-24 · r154 (DOC.38) — DOCS ONLY, code-identical (no .py changed): §30, the Runaway's contract, says what the code does (the operator, 2026-11-24: "Yes", to the drift the 2026-11-23 nightly studies WS.34 and WS.35 found). NEW §30 AS RUNNING block, every line cited file:line at r153 20030ef. §30.2: the window is 09:35-10:30 (`config.RUNAWAY_END`), not 11:30, and LOG-ONLY to 15:40 after it (OTV4TEST r254); the limit is one per session on the box (the r179 cap, gating since OTV4TEST r281) with one per break inside it, not "the r179 session cap is retired"; the ATR-to-delta map only says whether a strike is reachable. §30.4: the exits as they run, in order - the 20% premium floor (enforced since OTV4TEST r209, RUN.10; the "no premium stop" bullet is reversed), the +100% target, the 15:50 / 15:55 end of day (not 15:45), the thesis band. §4.2 is marked superseded by §30.**
+
 **`PLAN_SPEC.md` v5.14 · 2026-11-23 · r153 (TRIM.2) — §37 (the Hunt) and §44 (OGAP) carry a RETIRED r153 line: both are DORMANT with no switch on every box (`strategy/plan_state.py`), never asked, write nothing; their contracts describe kept code until the purge (BACKLOG TRIM.2). The operator, 2026-11-23: "The hunt & OGAP are trash. Retire them both after this session today. And include them in the coming purge. I think we're going to stick with the runaway & park going forward".**
 
 **`PLAN_SPEC.md` v5.13 · 2026-11-22 · r150 (OGAP.5) — OGAP's section: a live box no longer reads OGAP DORMANT; it is asked as on paper and books on the walled paper book (execution/paper_wall); at a tripped cash cap a live box still asks it (one plan row of its own verdict, never `catastrophic_cap`). The operator, 2026-11-22: "I want it paper trading even on the cash boxes. It's under evaluation. Why the fuck would I want to stop evaluating it?"**
@@ -191,6 +193,9 @@ refusing. A working thing does not get rewritten to match a document.
 Strike selection is a **later, separate** fine-tune and is out of scope here.
 
 ### 4.2 RUNAWAY CONTINUATION — `RunawayContinuation` (DEBIT)
+**SUPERSEDED - §30 is the Runaway's contract (r154, DOC.38):** the trigger is the 50 accepted and held, the strike
+`gamma_leverage_pick` inside the strength band, the window 09:35-10:30 (`config.RUNAWAY_END`). The lines below are the
+2026-08-25 design, kept as history.
 - **declare when** ORB has broken and gone `runaway` (no retest)
 - **trigger** ⟨PRIOR⟩ close beyond `orb_break_price + 0.25 × ATR` — the
   continuation confirming, not the break itself
@@ -1174,6 +1179,40 @@ v1.1 and `check_plan_prepares` v1.5 — each born red 2 at HEAD.
 
 Intent, his words: *"catch an early high velocity move from the market open where there's a lot of participation and a lot of volume and we just wanna participate in it and when it fizzles out … we want out of it."* Starting at the 50.
 
+**AS RUNNING (OTV5 r154, DOC.38, 2026-11-24) — read from the code at r153 20030ef; this block governs §4.2, §14, §17,
+§20, §22, §25 and §30.2-§30.4 wherever they differ.**
+
+| part | the code |
+|---|---|
+| window | 09:35-10:30, the last entry 10:29: `ENTRY_WINDOWS["RunawayContinuation"]` = ((9, 35), `RUNAWAY_END`) (config.py:1179), `RUNAWAY_END` = (10, 30), no env key (config.py:890; OTV4TEST r187, fixed r68). Before 09:35 dormant; from 10:30 to the 15:40 entries stop asked and recorded LOG-ONLY, never executed (strategy/runaway_plan.py:272-287, strategy/observe.py:42, execution/position_manager.py:850) |
+| arm | the ORB engine's `fifty_accepted` latch AND the 50 held now - the last closed 1m close and the live price beyond it (strategy/runaway_plan.py:350, :378); the direction is the break's |
+| limits | one Runaway per session on the box, read from trades.db, fails closed (main.py:4582, the r179 cap, gating since OTV4TEST r281); inside it one per break, any exit, with re-validation on actual (strategy/runaway_plan.py:339-347) |
+| feasibility | the 5m ATR at or above 0.08% of price, a hard veto below 0.05% (config.py:1518-1519). `target_delta` (strategy/runaway_continuation.py:263) returns DELTA_NEAR 0.25 / DELTA_DEEP 0.40, but the plan reads only whether it is None (strategy/runaway_plan.py:298): the map no longer picks a strike |
+| strike | `gamma_leverage_pick` (strategy/runaway_continuation.py:407) over `run x band` (strategy/runaway_plan.py:317): the run from the ORB boundary; the band 0.5 / 1.0 / 1.5 for a strength below 0.40 / between / at or above 0.70 (config.py:1523-1526), measured once at acceptance and frozen. Candidates: OTM on the move's side, premium (the ask, else the mark) above 0.05, a delta, a 20% floor wider than the bid/ask spread. Score (delta x R + 0.5 x gamma x R squared) / premium; the best within R of spot (ties to the nearer), else the chain's own first OTM strike if it survived the filters, else no trade |
+| expiry | today's, else the nearest listed after today; AM-settled contracts are dropped (data/options_chain.py:332-359) |
+| R | gain over the run / (20% of the ask) (strategy/runaway_plan.py:423-430); strict vetoes it, relaxed records it |
+| entry | the signal's premium is the contract's mark (strategy/runaway_continuation.py:547): paper books the mark; live walks the TRADES §6 ladder, never above it. The commitment gate applies (analysis/commitment.py:52, paper and live alike since r112) |
+| size | FLAT: floor(`RISK_PER_TRADE_USD` / (mark x 100)), `OT_RISK_USD` (risk/risk_manager.py:654; only Breakout is on the ramp, main.py:5117) |
+
+**Exits, as they run (the management plan first, then its calculator, the exit engine's ORB evaluator; first that fires):**
+1. **the 20% premium floor** - mark at or below `stop_premium` = entry x (1 - `RUNAWAY_MAX_LOSS_PCT` 0.20) (config.py:1496,
+   strategy/management.py:672-680, again at execution/exit_engine.py:2211-2229). Priced as a stop.
+2. **the +100% target** - mark at or above `target_premium` = entry x 2 (`tp_pct` 1.0, strategy/base_strategy.py:156, :385),
+   `target_hit` (strategy/management.py:763-764). Walks.
+3. **the end of day** - the mark ladder from 15:50, the cross at 15:55 (a long single has no assignment risk;
+   execution/exit_engine.py:1106, `config.EOD_SCHEDULE`).
+4. **the rejected-pool handoff** (execution/exit_engine.py:2196-2201, :2477).
+5. **thesis dead** - a 1m close back through the 50 beyond a band of `THESIS_BAND_WICKS` (1.0) x the median 1m wick over
+   `THESIS_BAND_LOOKBACK` (60) bars (config.py:1444-1445, execution/exit_engine.py:2512-2577).
+6. **the fizzle** - two events, or one event and one dial, on the closed bars since entry, from four bars (exit_engine.py:2580-2661).
+7. **the structure backstop** - a 1m close through the ORB boundary (exit_engine.py:2662-2671).
+8. **theta bleed** (exit_engine.py:2699).
+9. **the trail** - the FVG trail from +20% (`FVG_TRAIL_ARM_PCT`, at most 90% of the mark), the percent trail from +50%
+   (`TRAIL_ACTIVATION_PCT`) at entry plus `TRAIL_GAIN_LOCK` (half) of the gain, only ratcheting (config.py:1460, :2187, :2199).
+Pricing (r144, `ExitEngine._FLOOR_REASONS`, exit_engine.py:4585): the floor, the handoff, thesis dead and the backstop post
+at the mark and escalate - the mark, the mark, the bid, then MARKET (config.py:2604-2605); the target, the fizzle, theta
+bleed and the trail walk the exit ladder. The peak-decay stop never reads Runaway (config.py:1167). Paper books the mark.
+
 ### 30.1 The rejection fact — one primitive, four consumers
 
 Before r3 the only thing that could see a wick through a pool was the sweep strategy's private rule; `derived/levels.py` read the 5m close and never a high or a low. Now the level engine, on every CLOSED 1m bar, for every live support/resistance level:
@@ -1193,9 +1232,9 @@ Written to `level_event` (never purged), read by `DerivedStore.latest_rejection(
 | setup | the ORB's range and impulsive candle; the third consequence — the 50 reached with no retest |
 | **arm** | the 50% level **ACCEPTED**: a 1m close beyond it, held at the next close. The engine's own latch (`fifty_accepted`), which is now also what invalidates the ORB (orb_engine v4.13). A wick to the 50 arms nothing, ends nothing |
 | direction | the break's |
-| window | 09:35–11:30, no relaxed extension; outside it the plan observes and does not write |
-| feasibility | the ATR floor (0.08%, veto 0.05%) — kept by ruling |
-| limits | **one per break, any exit**, keyed (direction, boundary). The r179 session cap is retired: a new break is a new trade. **Re-validation on actual:** after any exit the standing state never re-fires; the break trades again only when the 50 was LOST on a close and then ACCEPTED again |
+| window | 09:35–10:30, the last entry 10:29 (`config.RUNAWAY_END`; r3 wrote 11:30, cut to 10:30 at OTV4TEST r187), no relaxed extension; before it the plan observes and does not write, after it it is asked and recorded LOG-ONLY to 15:40 (OTV4TEST r254) |
+| feasibility | the ATR floor (0.08%, veto 0.05%) — kept by ruling; the ATR-to-delta map answers only whether a strike is reachable |
+| limits | **one per session on the box** (the r179 cap: r3 retired it, and it has gated again since OTV4TEST r281, `main._one_per_session_used`), and inside it **one per break, any exit**, keyed (direction, boundary). **Re-validation on actual:** after any exit the standing state never re-fires; the break trades again only when the 50 was LOST on a close and then ACCEPTED again |
 
 ### 30.3 What the plan provides — before the accepting close
 
@@ -1205,15 +1244,19 @@ Written to `level_event` (never purged), read by `DerivedStore.latest_rejection(
 
 ### 30.4 Exits — the negation of the entry, in order
 
-1. 15:45 hard close
+**As they run, the AS RUNNING block above governs: the 20% floor and the +100% target are asked first (the management
+plan), the end of day is the 15:50 ladder and the 15:55 cross (r149), and thesis dead carries a one-wick band. The r3
+list, kept:**
+
+1. 15:45 hard close (r149: the 15:50 ladder, the 15:55 cross)
 2. **REJECTED handoff** — a pool on the trade's side rejected on a close → "sweep owns it"
-3. **thesis dead** — a 1m close back through the 50
+3. **thesis dead** — a 1m close back through the 50 (beyond a band of one median 1m wick over 60 bars)
 4. **fizzle** — the entry's evidence decaying on the bars since entry. EVENTS (no threshold): higher-low broken (short: lower-high), VWAP recrossed (when the frame carries volume). DIALS (self-referenced): acceptance decaying (`acc_delta` < 0 with `acc_recent` < 0.5), range contracting (< 0.5× the first bars), premium diverging (a new underlying extreme without a new premium high). **Exit on two events, or one event plus one dial.** Every read lands on the record.
 5. trail (unchanged)
 6. theta bleed (kept)
 7. **structure backstop** — a 1m close through the ORB boundary itself
 - **Live pricing (r144, EXIT.19).** 2, 3 and 7 are priced as a stop: the mark, the mark, the bid, then MARKET (TRADES §6). 4, 5 and 6 walk the exit ladder. 1 is the end of day.
-- **No premium stop.** *"If we're going to immediately open another momentum trade the second the preceding one stops out, then why not just HOLD?"* What a 20% floor would have done is recorded (`would_have_floored`) — a question for the first sessions, not a bar. Velocity stall is off the runaway too (ORB.3 closed).
+- **REVERSED: the 20% premium floor is enforced (OTV4TEST r209, RUN.10; the operator, 2026-10-03, on the replay: "runaway, concur").** The management plan closes at `stop_premium` (strategy/management.py:672-680) and `would_have_floored` is the Hunt's alone. The r3 bullet, kept: *"If we're going to immediately open another momentum trade the second the preceding one stops out, then why not just HOLD?"* What a 20% floor would have done is recorded (`would_have_floored`) — a question for the first sessions, not a bar. Velocity stall is off the runaway too (ORB.3 closed).
 
 ### 30.5 The interaction, named
 

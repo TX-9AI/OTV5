@@ -1,5 +1,6 @@
 # OTV5 — Autonomous Day Trading Bot with Telegram Notifications and embedded Claude Code agent
 
+**`README.md` v5.3 · 2026-11-24 (OTV5 r154, DOC.38) — DOCS ONLY: the trades table lists the two live setups, Runaway and PARK, and marks Breakout DORMANT (r110), the Liquidity hunt and OGAP RETIRED (r153, TRIM.2); the GEX pin butterfly row goes (its code was removed at r103).**
 **`README.md` v5.2 · 2026-11-08 (OTV5 r88, RETIRE.3) — the trades table lists only the live trades: the TCS (r88) and the trades removed in r76 (ORCS, ATP butterfly, VOLT, the ORB trade, the sweep) leave it, as does the handoff grant (execution/handoff.py, r76).**
 **v5.1 · 2026-10-25 (OTV5 r16) — what this repo is, how it is laid out, how work lands.**
 **v5.0 · 2026-10-25 · OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...**
@@ -25,15 +26,15 @@ it runs is `docs/TRADES.md` §0 (pinned to `config.py` by a check).
 
 ## The trades
 
-The roster as it runs is `docs/TRADES.md` §0, pinned to `config.py` by `tests/check_docs_roster.py`; this table mirrors it as of r3 and defers to it.
+The roster as it runs is `docs/TRADES.md` §0, pinned to `config.py` by `tests/check_docs_roster.py`; this table mirrors it as of r154 and defers to it. Two setups trade: Runaway and PARK.
 
 | trade | state | plan | strategy | spec |
 |---|---|---|---|---|
-| Runaway (momentum) | ON | `strategy/runaway_plan.py` | `strategy/runaway_continuation.py` | PLAN_SPEC §30 |
-| Breakout | ON | `strategy/breakout_plan.py` | `strategy/breakout.py` (the spec) | TRADES §7 |
-| Liquidity hunt | ON | `strategy/liquidity_hunt.py` | same file | PLAN_SPEC §37 |
-| GEX pin butterfly | ON | inside `strategy/gex_pin_butterfly.py` | same file | PLAN_SPEC §32 |
-| PARK (a short midday observation, 11:01–11:03) | ON (`OT_PARK=log` records only, `off` stops it) | `strategy/park_plan.py` | `strategy/park.py` | TRADES §9 |
+| Runaway (momentum, entries 09:35–10:30) | ON | `strategy/runaway_plan.py` | `strategy/runaway_continuation.py` | PLAN_SPEC §30 |
+| PARK (the 11:00 first-hour continuation, entries 11:01–11:03) | ON (`OT_PARK=log` records only, `off` stops it) | `strategy/park_plan.py` | `strategy/park.py` | TRADES §9 |
+| Breakout | DORMANT since r110 (never asked, no switch; code kept) | `strategy/breakout_plan.py` | `strategy/breakout.py` (the spec) | TRADES §7 |
+| Liquidity hunt | RETIRED r153 (dormant, no switch; code kept until the purge) | `strategy/liquidity_hunt.py` | same file | PLAN_SPEC §37 |
+| OGAP | RETIRED r153 (dormant, no switch; code kept until the purge) | `strategy/ogap_plan.py` | `strategy/ogap.py` | TRADES §10 |
 | Condor (a management plan, not an entry) | moot: no credit entry exists (the retired ones were removed in r76 / r88) | `strategy/iron_condor_strategy.py::manage` + `strategy/condor_roll.py` | | PLAN_SPEC §35 |
 
 Two primitives the plans share: **the rejection fact** (`derived/levels.py` emits
