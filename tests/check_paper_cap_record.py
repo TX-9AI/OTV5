@@ -1,6 +1,18 @@
 #!/usr/bin/env python3
 """
-tests/check_paper_cap_record.py  v5.1
+tests/check_paper_cap_record.py  v5.2
+v5.2  2026-11-25  OTV5 r158 (GATE.10) — EVERY CLOCK THE PATH READS IS THE TEST CLOCK, SO THE RESULT NO LONGER DEPENDS ON
+      THE DATE THE GATE RUNS. v5.1 faked only time_utils.now_et / now_utc, and TradeLogger.count_today (the one-per-session
+      gate behind tries_per_session, main._one_per_session_used) reads `datetime.now(ET)` through a FUNCTION-LOCAL
+      `from datetime import datetime` (database/trade_logger.py:768-769), which no module-attribute swap reaches. Its
+      session cut was the REAL ET midnight while every entry_time was stamped on the test day, Tue 2026-11-24: on a real
+      date up to 11-24 the 09:40 Runaway booking counted and Runaway was refused at 10:20 and 11:01 (tries_per_session),
+      the pinned digest; from Wed 2026-11-25 00:00 ET on it never counted, Runaway was asked, and K6 read
+      488e725855815eb1 at every hour of every later day (K1-K5 do not depend on it). Now, for the run only and restored
+      after: the datetime module's `datetime` attribute (what a function-local import binds), every module-level
+      `datetime` name a bot module bound, and `time.time` (the time module's attribute and any `from time import time`
+      binding) all read the test clock; time.time advances from it with the monotonic clock, so no wait can stall.
+      NEVER_DIGEST_EX_RETIRED is unchanged (it is the 11-24 day as the bot would see it on 11-24). No production change.
 v5.1  2026-11-23  OTV5 r153 (TRIM.2) — RE-POINTED (WA 38.4): the Hunt and OGAP are retired (DORMANT, never asked). drive()
       leaves the two retired names out of what it reports asked and of the plan gates it collects (on any tree), so K2's
       "keeps admitting entries" reads PARK at 11:01 (OGAP is no longer asked at 10:20; neither instant writes a
@@ -157,9 +169,40 @@ def main():
                if m is not None and getattr(m, n, None) is real[n]]
     for m, n in swapped:
         setattr(m, n, fake[n])
+    # v5.2 (r158, GATE.10): the clocks now_et / now_utc do not cover. A function-local `from datetime import datetime`
+    # (TradeLogger.count_today) binds the datetime MODULE's attribute at call time, so that attribute is the test clock
+    # for the run; so is every module-level `datetime` / `time` name a bot module bound, and time.time itself.
+    import datetime as _dtmod
+    import time as _tmod
+    real_dt, real_time, real_mono = _dtmod.datetime, _tmod.time, _tmod.monotonic
+    clock["mono"] = real_mono()
+
+    class _ClockDT(real_dt):
+        @classmethod
+        def now(cls, tz=None):
+            return clock["t"].astimezone(tz) if tz is not None else clock["t"].astimezone().replace(tzinfo=None)
+
+        @classmethod
+        def utcnow(cls):
+            return clock["t"].astimezone(timezone.utc).replace(tzinfo=None)
+
+        @classmethod
+        def today(cls):
+            return cls.now()
+
+    def _clock_time():
+        return clock["t"].timestamp() + (real_mono() - clock["mono"])
+    bound = [(m, a, v) for m in list(sys.modules.values())
+             if m is not None and (getattr(m, "__file__", None) or "").startswith(ROOT + os.sep)
+             and os.sep + "tests" + os.sep not in m.__file__
+             for a, v in list(vars(m).items()) if v is real_dt or v is real_time]
+    for m, a, v in bound:
+        setattr(m, a, _ClockDT if v is real_dt else _clock_time)
+    _dtmod.datetime, _tmod.time = _ClockDT, _clock_time
 
     def at(hh, mm):
         clock["t"] = datetime(2026, 11, 24, hh, mm, 5, tzinfo=ET)
+        clock["mono"] = real_mono()
 
     state = {}
 
@@ -380,6 +423,9 @@ def main():
         import traceback
         check("K0 the gate ran", False, f"{type(exc).__name__}: {exc} {traceback.format_exc()[-900:]}")
     finally:
+        _dtmod.datetime, _tmod.time = real_dt, real_time
+        for m, a, v in bound:
+            setattr(m, a, v)
         for m, n in swapped:
             setattr(m, n, real[n])
         RM.RiskManager.is_halted = _ih
