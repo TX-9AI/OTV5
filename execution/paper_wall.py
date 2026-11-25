@@ -1,5 +1,15 @@
 """
-execution/paper_wall.py  v5.1
+execution/paper_wall.py  v5.2
+v5.2  2026-11-26  OTV5 r161 (LANE.1) — THE WALL IS GENERIC AND THE ROUTER DECIDES WHO IS ON IT. The operator, 2026-11-25:
+      "I want park paperwalled until we enable it on the cash side, which is potentially January, if ever"; "There
+      should be a clean routing map between paper orders & live orders that is cleanly separated." WALLED (the constant
+      ("OGAP",)) is gone: walled() and asked_past_cap() are execution/order_router's (route() PAPER on a live box: a
+      setup whose box flag is paper_only, plus order_router.PAPER_ALWAYS = OGAP), kept here as thin names for main.
+      WallTradeLogger owns every OPEN paper_trade = 1 row on a live box (order_router.route_close: an open position
+      finishes in the lane it opened in, whatever the flag says now), so a walled PARK row resumed after a restart -
+      or after a land that changed the flag - is managed and closed here, paper, at the mark. Every wall W1-W6 below
+      holds for PARK exactly as it did for OGAP; PARK's own exits (park_lock, park_delta_floor, park_close 15:45) run
+      in this book's paper ExitEngine (exit_engine._evaluate_park). This module imports no broker client.
 v5.1  2026-11-23  OTV5 r153 (TRIM.2) — OGAP IS RETIRED (strategy/plan_state: DORMANT, no switch), so no new entry reaches
       this wall: main never asks a DORMANT OGAP (and _ask_walled_past_cap skips it). The code is KEPT until the purge
       (BACKLOG TRIM.2 lists it) so recover() still resumes an OPEN walled row left on a live box and _paper_wall_pass /
@@ -58,35 +68,32 @@ from database.trade_logger import TradeLogger, TradeRecord, get_trade_logger
 from execution.entry_engine import EntryEngine
 from execution.exit_engine import ExitEngine
 from execution.position_manager import PositionManager
+from execution import order_router as _router
 
 logger = logging.getLogger(__name__)
 
 GATES = {}        # WA section 36: this file owns no gate constant
 
-# The setups that book paper on EVERY box (the operator, 2026-11-22). A name here is never sent to the broker.
-WALLED = ("OGAP",)
+# r161 (LANE.1): who is walled is execution/order_router's (route PAPER on a live box); these are its names for main.
 
 
 def asked_past_cap(paper_box) -> bool:
-    """W4 — True on a LIVE box: a tripped cash cap does not stop the walled setups (the operator, 2026-11-22: "The cap
-    on a live box is for live trades only. Full stop."). False on a paper box (r137 CAP.10: OGAP is inside the cap)."""
-    return paper_box is not True
+    """W4 — order_router.asked_past_cap: True on a LIVE box (the cash cap does not stop the walled setups)."""
+    return _router.asked_past_cap(paper_box)
 
 
 def walled(strategy, paper_box) -> bool:
-    """True when `strategy` books on this walled paper book: a LIVE box (paper_box is not True) and a WALLED setup.
-    A paper box is never walled (its own engines are already paper). An unreadable mode counts as live (walled):
-    the walled path makes no broker call, so the wrong answer here can only ever be paper."""
-    return paper_box is not True and str(strategy or "") in WALLED
+    """order_router.walled: True when an opening order of `strategy` goes through this wall (a live box, route PAPER)."""
+    return _router.walled(strategy, paper_box)
 
 
 class WallTradeLogger(TradeLogger):
-    """The paper-mode logger, narrowed to the WALLED setups: on a live box the only paper_trade = 1 rows the bot writes
-    are walled ones (configure.sh item 3 starts the live trades.db empty), and this keeps any other paper row out of
-    this book even if one was left behind. Writes are trade_id-keyed and shared with TradeLogger."""
+    """The paper-mode logger (paper_trade = 1 rows): on a live box every open paper row closes on this wall
+    (order_router.route_close - the lane it opened in; configure.sh item 3 starts the live trades.db empty, so the
+    only paper rows a live box holds are walled ones). Writes are trade_id-keyed and shared with TradeLogger."""
 
     def get_open_trades(self) -> List[TradeRecord]:
-        return [r for r in super().get_open_trades() if str(r.get("strategy") or "") in WALLED]
+        return [r for r in super().get_open_trades() if _router.route_close(r, False) == _router.PAPER]
 
 
 class PaperWallEntry(EntryEngine):

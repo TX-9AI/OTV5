@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """
-tests/check_ogap_all_boxes.py  v5.4
+tests/check_ogap_all_boxes.py  v5.5
+v5.5  2026-11-26  OTV5 r161 (LANE.1) — A2's "never walled" reads OGAP's own token: the Service line may now say
+      "park=paper_only (walled on a live box)" (deploy/box_flags/QQQ, which this probe's fresh interpreters read), so A2
+      refuses the r150 OGAP phrase "ogap=on (paper, walled" instead of any "walled" on the line. What A2 pins is unchanged.
 v5.4  2026-11-24  OTV5 r155 (BOXF.2, M4) — RE-POINTED (WA 38.4): set_flags() built its stand-in Flags with ONLY the values
       it was handed, which with a schema key present (r155: `park`, default on) left `park` unset, so PARK read DORMANT
       (fails closed) and A4's cousin digest moved. A real load always carries every SCHEMA key at its default; the
@@ -200,7 +203,7 @@ def main():
            and lv.get("asked") == 0 and " · ogap=retired (dormant r153)" in lv.get("banner", "")
            and pp.get("paper") is True and pp.get("state") == "dormant" and pp.get("asked") == 0
            and " · ogap=retired (dormant r153)" in pp.get("banner", "")
-           and "walled" not in lv.get("banner", "") + pp.get("banner", ""))
+           and "ogap=on (paper, walled" not in lv.get("banner", "") + pp.get("banner", ""))   # r161: OGAP's token
     check("A2 (r153) a LIVE box and a paper box: OGAP DORMANT, never asked, the Service line says retired",
           ok2, f"live={lv} paper={ {k: v for k, v in pp.items() if k != 'banner'} }")
 

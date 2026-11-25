@@ -1,3 +1,3 @@
-# QQQ is a cash box from Mon 2026-11-30, Runaway only (the operator, 2026-11-25: "keep it off until January and we will see if runaway can carry the book on its own"; "Yes").
-# PARK off until January; a paper-walled PARK lane is planned to replace this line. OTV5 r160 (BOXF.5).
-park = off  # cash QQQ: Runaway only, PARK off until January
+# QQQ is a cash box from Mon 2026-11-30: Runaway trades the cash account; PARK keeps paper-trading behind the paper wall (the operator, 2026-11-25: "I want park paperwalled until we enable it on the cash side, which is potentially January, if ever").
+# On timing (the operator, 2026-11-25): "today is Wednesday and we trade again on Monday. That's hardly 'rushing'". Replaces r160's park = off. OTV5 r161 (LANE.1); docs/ROUTING.md.
+park = paper_only  # cash QQQ: PARK paper on the wall (zero broker calls, outside the cash cap) until the operator enables it

@@ -1,5 +1,7 @@
 # TRADES — the specs
 
+**`TRADES.md` v5.39 · 2026-11-26 · r161 (LANE.1) — section 0: PARK's box flag `park` is a LANE, on / off / paper_only. `paper_only` on a paper box trades exactly as `on`; on a LIVE box PARK paper-trades behind the paper wall (`execution/paper_wall.py`: a paper fill at the mark, `paper_trade = 1`, its own exits — park_lock, park_delta_floor, the 15:45 close — in the wall's paper exit engine at the mark; zero broker calls; outside reconcile, the startup cancel, the order guard, buying power and the 15:55 live cross; the cash cap counts live trades only and a tripped cash cap does not stop it). QQQ carries `park = paper_only` from its first cash session (Mon 2026-11-30). Which engine takes every order is `execution/order_router.py`, mapped in `docs/ROUTING.md`; an open position always finishes in the lane it opened in. The operator, 2026-11-25: "I want park paperwalled until we enable it on the cash side, which is potentially January, if ever".**
+
 **`TRADES.md` v5.38 · 2026-11-24 · r155 (BOXF.2, M4) — section 0: PARK is ON or OFF PER BOX by its box flag `park` (`utils/box_flags.py` SCHEMA, default on; a box file `deploy/box_flags/SYM` line `park = off` makes it DORMANT on that box: never asked, writes nothing; an open PARK is still managed to its exit). `OT_PARK` is no longer read (a unit that sets it is named IGNORED on the `[flags]` start line) and PARK has no log mode. The operator, 2026-11-24: "Yes" (the box-flags design's M4).**
 
 **`TRADES.md` v5.37 · 2026-11-24 · r154 (DOC.38) — DOCS ONLY, code-identical (no .py changed): sections 0, 1, 6 and 9 now say what the code does for the two live setups, Runaway and PARK (the operator, 2026-11-24: "Yes", to the drift the 2026-11-23 nightly studies found, WS.34 and WS.35). Section 1: Runaway's entry end is 10:30 (`config.RUNAWAY_END`), not 11:30; its strike is `gamma_leverage_pick` inside the strength band, not the ATR-to-delta map (the map now only says whether the tape can reach a strike); it is one per session on the box (the r179 cap, enforced since OTV4TEST r281), not "retired"; the 20% premium floor and the +100% target close it, not "no premium stop". Section 9: PARK's C8 skip (r93) is listed; the live entry walk posts rung after rung inside the tick (r133), not one a tick; with no expiry today the chain takes the nearest listed one; its exits walk (r144). Section 0: the commitment gate refuses on a live box too (r112) and, of the live setups, reads Runaway only; PARK has no premium stop; the blind hold, the box-flag note and the stops name no retired setup as asked. Section 6: the floor stop is Runaway's 20% or a single leg's 25% and steps to MARKET (r139); the debit close is 15:50 / 15:55 (r149); a walk posts many rungs a tick (r133).**
@@ -95,7 +97,7 @@ is its `docs/PLAN_SPEC.md` section.
 |---|---|---|---|---|---|
 | Runaway | `RunawayContinuation` | ON | none (its end is fixed; r68) | 09:35-10:30 | PLAN_SPEC §30 |
 | Liquidity hunt | `LiquidityHunt` | OFF | none (RETIRED r153, TRIM.2: dormant, `OT_HUNT` not read) | 09:35-10:30 | PLAN_SPEC §37 |
-| PARK | `PARK` | ON | box flag `park` (default on; `park = off` in `deploy/box_flags/SYM` stops it on that box, r155) | 11:01-11:03 | section 9 below |
+| PARK | `PARK` | ON | box flag `park` (default on; `park = off` in `deploy/box_flags/SYM` stops it on that box, r155; `park = paper_only` paper-walls it on a live box, r161 — QQQ carries it; `docs/ROUTING.md`) | 11:01-11:03 | section 9 below |
 | OGAP | `OGAP` | OFF | none (RETIRED r153, TRIM.2: dormant; the box flag `ogap` is gone) | 09:46-10:32 | section 10 below |
 
 A window's end is exclusive: 10:30 means the last entry is 10:29. A switch is ACTIVE at
@@ -112,7 +114,7 @@ plan_tick / plan_check / plan_ledger / plan_heartbeat row, not on the `[plans]` 
 plans should not write to the ledger, unless we are studying them as 'log only' - I would like each plan to have 3 states".
 Each switch takes `active` | `log` | `off` (`1` still = active; for an OFF-by-default trade anything else stays dormant;
 a value nobody recognises keeps the default and is named at start). Runaway gained a switch
-(`OT_RUNAWAY`, unset = active; Breakout's `OT_BREAKOUT` is no longer read, dormant r110; the Hunt's `OT_HUNT` is no longer read, retired r153); PARK's switch is its box flag `park` (on / off, default on; `OT_PARK` is no longer read, r155). Unset, every plan is in
+(`OT_RUNAWAY`, unset = active; Breakout's `OT_BREAKOUT` is no longer read, dormant r110; the Hunt's `OT_HUNT` is no longer read, retired r153); PARK's switch is its box flag `park` (on / off / paper_only, default on; `OT_PARK` is no longer read, r155; paper_only r161, `docs/ROUTING.md`). Unset, every plan is in
 the state the table above shows: no decision changed. Each plan is also HOUR-gated (asked only in its window - every
 row above) or CONDITION-gated (the management plans, while their own position is open; CondorManagement and
 CreditRoll, while a credit position is open, and off the `[plans]` line otherwise; the condor, which has no entry). A

@@ -1,5 +1,8 @@
 """
-execution/entry_engine.py  v5.11
+execution/entry_engine.py  v5.12
+v5.12 2026-11-26  OTV5 r161 (LANE.1) — _book_fill asks execution/order_router.is_wall (the one reading of PAPER_WALL)
+      whether this engine is the paper wall's (no after_cap tag, no cap counterfactual for a walled row). The same answer
+      as before at both seams; no decision changes.
 v5.11 2026-11-22  OTV5 r151 (CAP.11) — _book_fill writes after_cap = 1 on a PAPER entry (this engine's paper_trading True, not the walled PaperWallEntry) when risk_manager.after_cap_tag() says the daily catastrophic cap, counted as cash would count it, stands tripped: on a paper box the cap is record only (the operator, 2026-11-22: "there's no harm in letting paper run & we can just note if the breaker would have popped"), so paper keeps trading and the row says cash would not have opened it. Nothing else in the record changes; an untagged row carries no after_cap key at all (NULL), so every entry before a would-be trip is the r150 row. A live entry and a walled entry never read it. Never raises (a failed read leaves the row untagged).
 v5.10  2026-11-22  OTV5 r150 (OGAP.5) — _book_fill skips the cap counterfactual (risk_manager.note_entry_risk, a study of
       the CASH cap) when the engine is execution/paper_wall's PaperWallEntry (PAPER_WALL True: OGAP on a live box, booked
@@ -252,6 +255,7 @@ from database.trade_logger import TradeRecord, make_record, get_trade_logger
 from data.tasty_client import get_session, get_account, TastyClientError, sdk_result
 from execution import order_guard as _guard                          # B2
 from execution import buying_power as _bp                            # F5
+from execution import order_router as _router                       # r161 (LANE.1): the one paper / live decision
 from config import (
     PAPER_TRADING, PAPER_FILL_SLIPPAGE_PCT,
     CONTRACT_MULTIPLIER, INSTRUMENT,
@@ -482,7 +486,7 @@ class EntryEngine:
 
         # r151 (CAP.11): a PAPER box's cap is record only. A paper entry opened while it stands tripped (counted as cash
         # would count it) is tagged after_cap = 1; any other row carries no key (NULL), exactly the r150 record.
-        if self.paper_trading is True and getattr(self, "PAPER_WALL", False) is not True:
+        if self.paper_trading is True and not _router.is_wall(self):
             try:
                 from risk.risk_manager import get_risk_manager as _grm_ac
                 if _grm_ac().after_cap_tag() is True:
@@ -491,7 +495,7 @@ class EntryEngine:
                 logger.warning("after_cap tag skipped: %s", _ace)
         self._trade_logger.log_entry(record)
         try:                                                    # r208 (CAP.4): log-only, never affects the entry
-            if getattr(self, "PAPER_WALL", False) is not True:  # r150 (OGAP.5): a walled paper row is not the cash cap's
+            if not _router.is_wall(self):                       # r150 (OGAP.5): a walled paper row is not the cash cap's
                 from risk.risk_manager import get_risk_manager as _grm
                 _grm().note_entry_risk(record)
         except Exception as _cfe:                               # noqa: BLE001

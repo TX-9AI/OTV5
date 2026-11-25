@@ -1,6 +1,11 @@
 #!/usr/bin/env python3
 """
-tests/check_box_flags.py  v5.1
+tests/check_box_flags.py  v5.2
+v5.2  2026-11-26  OTV5 r161 (LANE.1) — paper_only IS A LANE: F4 allows it for every real key (utils/box_flags.LANES);
+      F7's real-schema case `park = paper_only` now reads paper_only with nothing refused and differs
+      "park(paper_only, default on)" and the start line keeps its pinned shape (" · park=paper_only · "; the stand-in
+      on/off key still refuses it, so a narrowed Key still works); F12's park row is (park, PARK, (on, off,
+      paper_only), on). The operator, 2026-11-25: "I want park paperwalled until we enable it on the cash side".
 v5.1  2026-11-24  OTV5 r155 (BOXF.2, M4) — THE `park` KEY. The operator, 2026-11-24: "Yes" (the design's M4). F7 gains the
       real schema's park cases (missing -> on; `park = off` -> off, nothing refused; `park = of`, a duplicate `park` and
       `park = paper_only` -> off, named; a stray `ogap = on` -> ignored, named, park untouched); NEW F8b (no module
@@ -19,7 +24,7 @@ v5.0  2026-11-22  OTV5 r148 (BOXF.1) — new. THE BOX FLAG FILES AND THEIR ONE L
   F1  every file in deploy/box_flags (README aside) is named for a listed symbol (config.STRIKE_INCREMENTS)
   F2  every line of every file parses (blank, "# comment" or "key = value  # reason")
   F3  every key is in utils/box_flags.SCHEMA
-  F4  every value is allowed for its key (until delivery P: on / off; "paper_only" is refused)
+  F4  every value is allowed for its key (r161: on / off / paper_only, utils/box_flags.LANES)
   F5  no file sets a key twice
   F6  NO LINE RESTATES THE DEFAULT (so a default changed in SCHEMA reaches every box)
   F7  the loader, on fixtures with a stand-in schema: a missing file -> the defaults, source "none (defaults)"; a bad
@@ -217,8 +222,9 @@ def main():
                                  and r_off.differs == ("park(off, default on)",)),
                     "park typo": r_typo.values.get("park") == "off" and "'of'" in " ".join(r_typo.problems),
                     "park duplicate": r_dup.values.get("park") == "off" and "duplicate" in " ".join(r_dup.problems),
-                    "park paper_only": (r_pap.values.get("park") == "off"
-                                        and "paper_only" in " ".join(r_pap.problems)),
+                    "park paper_only": (r_pap.values.get("park") == "paper_only" and not r_pap.problems   # r161
+                                        and r_pap.differs == ("park(paper_only, default on)",)
+                                        and " · park=paper_only · " in BF.start_line(r_pap, "c")),
                     "stray ogap": (r_ogap.values.get("park") == "on"
                                    and "unknown key 'ogap'" in " ".join(r_ogap.problems)),
                 })
@@ -425,7 +431,7 @@ def main():
             from strategy import plan_state as PS
             pk = BF.SCHEMA.get("park")
             row_ok = pk is not None and (pk.key, pk.setup, tuple(pk.allowed), pk.default) == ("park", "PARK",
-                                                                                             ("on", "off"), "on")
+                                                                                             ("on", "off", "paper_only"), "on")
             flag = getattr(PS, "FLAG", "flag")
             bad12 = [f"{k} -> {r.setup}: TABLE {PS.TABLE.get(r.setup)}" for k, r in BF.SCHEMA.items()
                      if r.key != k or PS.TABLE.get(r.setup, ("", "", ""))[1] != flag]

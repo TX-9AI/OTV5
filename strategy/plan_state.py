@@ -1,5 +1,8 @@
 """
-strategy/plan_state.py  v5.13
+strategy/plan_state.py  v5.14
+v5.14  2026-11-26  OTV5 r161 (LANE.1) — A FLAGGED PLAN IS ACTIVE ON `on` AND ON `paper_only`: plan_state answers only
+      "is this plan asked" (ACTIVE / DORMANT); WHICH LANE its order takes (the box's account or the paper wall) is
+      execution/order_router's, never this module's. off, a bad value or an unreadable flag still read DORMANT.
 v5.13  2026-11-24  OTV5 r155 (BOXF.2, M4) — PARK'S STATE COMES FROM ITS BOX FLAG, IN ONE PLACE. The operator, 2026-11-24:
       "Yes" (the design's M4: PARK switchable OFF per box before the C5 equity boxes go live with Runaway only). PARK's
       row is ("", FLAG, HOUR): the default lives in utils/box_flags.SCHEMA (`park`, default on) and nowhere here, and
@@ -148,7 +151,7 @@ def _flagged_state(name: str) -> str:
         from utils import box_flags as _bf
         key = _flag_key(name)
         v = _bf.value(key) if key else ""
-        if v == _bf.ON:
+        if v in (_bf.ON, getattr(_bf, "PAPER_ONLY", _bf.ON)):    # r161 (LANE.1): paper_only is asked; the router walls it
             _WHY.pop(name, None)
             return ACTIVE
         _WHY[name] = "box flag %s=%s" % (key or "?", v or "unset")

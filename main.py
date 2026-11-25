@@ -1,5 +1,20 @@
 """
-main.py  v5.40
+main.py  v5.41
+v5.41  2026-11-26  OTV5 r161 (LANE.1) — PAPER ORDERS AND LIVE ORDERS ARE ROUTED IN ONE PLACE, AND PARK CAN BE PAPER-WALLED
+      ON A LIVE BOX. The operator, 2026-11-25: "I want park paperwalled until we enable it on the cash side, which is
+      potentially January, if ever"; "There should be a clean routing map between paper orders & live orders that is
+      cleanly separated"; "Be deliberate. We should be able to switch between paper & live anytime we are fielding a new
+      strategy for a few weeks." Every per-setup paper / live choice here reads execution/order_router (docs/ROUTING.md):
+      _execute_entry_signal takes its engine and its book from order_router.route (LIVE: the box's engines; PAPER on a
+      live box: the paper wall; DORMANT: refused, one line and a gate_block:dormant_lane disposition - unreachable for
+      an asked plan, plan_state never asks it); attempt_new_entry's cap-wall flag and its catastrophic_cap rows read
+      order_router.asked_past_cap / walled; _ask_walled_past_cap asks order_router.walled_setups() through each setup's
+      own door (_PAST_CAP_DOORS: PARK -> _attempt_park, OGAP -> _attempt_ogap), so at a tripped CASH cap a walled PARK is
+      still asked and books paper ("The cap on a live box is for live trades only. Full stop."). The Service line's park
+      token reads "park=paper_only (walled on a live box)" when its flag is paper_only, and _announce_box_flags logs one
+      "[route] <SYM> <paper|LIVE> box: park=<lane> -> <ROUTE> ..." line after the [flags] line (whose shape is
+      unchanged: dtp's daily recap parses it). With no paper_only flag every
+      route is the r160 one (a paper box: PAPER; a live box: LIVE; OGAP: PAPER) and nothing changes.
 v5.40  2026-11-24  OTV5 r155 (BOXF.2, M4) — PARK IS SWITCHED IN ONE PLACE, ITS BOX FLAG. The operator, 2026-11-24: "Yes" (the
       design's M4). _attempt_park's `PARK_MODE == "off"` return is deleted with config.PARK_MODE: it now returns FIRST when
       strategy/plan_state reads PARK DORMANT (utils/box_flags `park = off` on this box), before the one-per-session read
@@ -1781,7 +1796,8 @@ from risk.session_guard import get_session_guard
 from execution.entry_engine import get_entry_engine
 from execution.entry_engine import freeze_contract as _freeze_contract   # r133 D3
 from execution.position_manager import get_position_manager
-from execution import paper_wall as _paper_wall                      # r150 (OGAP.5): OGAP's paper book on a live box
+from execution import paper_wall as _paper_wall                      # r150 (OGAP.5): the paper book on a live box
+from execution import order_router as _router                        # r161 (LANE.1): the one paper / live decision
 
 from database.trade_logger import get_trade_logger
 from utils.blindness_latch import BlindnessLatch, ALERT as _BLIND_ALERT, \
@@ -4165,7 +4181,7 @@ def attempt_new_entry(ctx: dict, ms: MarketState, state: BotState):
     _adm_ok = False
     # r150 (OGAP.5) — W4: on a LIVE box the cap is for live trades only (the operator, 2026-11-22: "The cap on a live box
     # is for live trades only. Full stop."): the walled paper OGAP is asked past it below. Paper box: False, as r137.
-    _cap_wall = bool(_cap_hit) and _paper_wall.asked_past_cap(getattr(state, "paper_trading", True))
+    _cap_wall = bool(_cap_hit) and _router.asked_past_cap(getattr(state, "paper_trading", True))   # r161: the router
     if _cap_hit:
         logger.info("Entry blocked: DAILY CATASTROPHIC LOSS CAP reached — no new entries "
                     "until the realized loss is back under the limit (every strategy, "
@@ -4307,7 +4323,7 @@ def attempt_new_entry(ctx: dict, ms: MarketState, state: BotState):
         # episode; anything else declares itself), and parsing a sentence to
         # recover a gate name is how that rule would silently stop working.
         for _nm, (_ok, _gate, _why) in _state.items():
-            if _cap_wall and _gate == "catastrophic_cap" and _paper_wall.walled(_nm, state.paper_trading):
+            if _cap_wall and _gate == "catastrophic_cap" and _router.walled(_nm, state.paper_trading):
                 continue                             # r150: _ask_walled_past_cap writes this plan's own row
             if not _ok and _nm not in _obs:          # r254: an observed plan writes its own rows
                 _plan_skip(_nm, f"inactive — {_gate}: {_why}", gate=_gate)
@@ -4827,8 +4843,9 @@ def _release_unfilled_hunt(sig, state) -> None:
 
 def _attempt_park(ctx, ms, state, chain=None) -> None:
     """r288 (PARK.1) — ask PARK (its plan is dormant outside 11:01-11:03) and, on a fire, execute it ADDITIVE.
-    Called from the normal dispatch only (r137 CAP.10: PARK is under the daily catastrophic cap both ways; the capped
-    branch asks nothing). One per session on this box, DB-backed (fails closed).
+    Called from the normal dispatch (r137 CAP.10: a cash PARK is under the daily catastrophic cap; the capped branch
+    asks nothing) and, r161 (LANE.1), from _ask_walled_past_cap when PARK is walled on a live box (box flag paper_only:
+    the cash cap is for live trades only). One per session on this box, DB-backed (fails closed; counts every row).
     r155 (BOXF.2): a DORMANT PARK (box flag `park = off`, strategy/plan_state) returns first: no trades.db read, no chain
     fetch, no row. An open PARK is still managed to its exit."""
     if _retired_dormant("PARK"):
@@ -4894,8 +4911,12 @@ def _ask_walled_past_cap(ctx, ms, state, pm, now, orb_d, tries) -> None:
     the admission table's verdict with the cap intact (window, tries, the hard close) and ONE plan row when refused;
     admitted, it is asked through _attempt_ogap exactly as in the normal dispatch. Called after every cash refusal is
     written, so it can never come before a cash decision. Never raises."""
-    for name in _paper_wall.WALLED:
+    for name in _router.walled_setups(getattr(state, "paper_trading", True)):   # r161 (LANE.1): the router's list
         if _retired_dormant(name):                               # r153 (TRIM.2): no row, no chain fetch
+            continue
+        _door = _PAST_CAP_DOORS.get(name)
+        if _door is None:                                        # r161: a walled setup with no door of its own
+            _plan_skip(name, "walled, but no past-cap door - not asked at the cash cap", gate="catastrophic_cap")
             continue
         try:
             from utils.time_utils import close_anchored as _ca
@@ -4914,10 +4935,15 @@ def _ask_walled_past_cap(ctx, ms, state, pm, now, orb_d, tries) -> None:
             if chain is None:
                 _plan_skip(name, "no options chain this tick", gate="no_chain")
                 continue
-            if name == "OGAP":
-                _attempt_ogap(ctx, ms, state, chain=chain)
+            globals()[_door](ctx, ms, state, chain=chain)        # r161: its own door (read at call time)
         except Exception as exc:                                # noqa: BLE001
             logger.warning("[paper-wall] %s past the cash cap skipped (%s: %s)", name, type(exc).__name__, exc)
+
+
+# r161 (LANE.1) — the past-cap door of each walled setup, by NAME of main's own function (resolved at call time, so a
+# stand-in installed on the module is the one asked). A setup that later gets a box-flag key and is set paper_only
+# joins _ask_walled_past_cap by its entry here; every other wall guarantee needs nothing more than its schema key.
+_PAST_CAP_DOORS = {"PARK": "_attempt_park", "OGAP": "_attempt_ogap"}
 
 
 def _paper_wall_pass(ctx, state) -> None:
@@ -5177,7 +5203,8 @@ def _banner_dials() -> str:
         brk += f" (OT_BRK_DFLOOR={BRK_DFLOOR_ENV_REFUSED!r} REFUSED)"
     try:                                                                   # r155 (BOXF.2): plan_state decides
         from strategy import plan_state as _ps_pk
-        brk += " · park=trade" if _ps_pk.state("PARK") == _ps_pk.ACTIVE else " · park=off (box flag)"
+        brk += ((" · park=" + _router.describe("PARK", PAPER_TRADING)) if _ps_pk.state("PARK") == _ps_pk.ACTIVE
+                else " · park=off (box flag)")                             # r161 (LANE.1): the lane is named
     except Exception:                                                      # noqa: BLE001
         brk += " · park=?"
     try:                                                                   # r149 (OGAP.4): plan_state decides
@@ -5246,6 +5273,16 @@ def _announce_box_flags() -> None:
                 logger.warning("[flags] page NOT sent (%s: %s)", type(_pg).__name__, _pg)
         else:
             logger.info(_line)
+        try:                                                    # r161 (LANE.1): what each lane means on THIS box
+            _lanes = []
+            for _k, _row in sorted(_bf.SCHEMA.items()):
+                _v = _f.value(_k)
+                _lanes.append("%s=%s -> %s%s" % (_k, _v or "?", _router.route(_row.setup, PAPER_TRADING),
+                                                 " (walled on a live box)" if _v == _bf.PAPER_ONLY else ""))
+            logger.info("[route] %s %s box: %s (execution/order_router; docs/ROUTING.md)", INSTRUMENT,
+                        "paper" if PAPER_TRADING is True else "LIVE", " · ".join(_lanes) or "no lane keys")
+        except Exception as _rx:                                # noqa: BLE001
+            logger.warning("[route] lanes not announced (%s: %s)", type(_rx).__name__, _rx)
     except Exception as exc:                                    # noqa: BLE001
         logger.warning("[flags] box flags not announced (%s: %s)", type(exc).__name__, exc)
 
@@ -5316,7 +5353,19 @@ def _execute_entry_signal(signal, ctx, ms, state, _sigj=None, *, additive: bool 
     risk_mgr = get_risk_manager()
     # r150 (OGAP.5) — W1: on a LIVE box a walled setup (OGAP) books on the paper wall: a paper engine, a paper row, no
     # broker call. A paper box is never walled, so everything below is as it was.
-    _walled = _paper_wall.walled(getattr(signal, "strategy_name", ""), getattr(state, "paper_trading", True))
+    # r161 (LANE.1): THE ROUTER DECIDES (execution/order_router, docs/ROUTING.md): LIVE -> the box's engines; PAPER on a
+    # live box -> the wall (a paper box's PAPER is its own engines); DORMANT -> refused here (never asked upstream).
+    _route = _router.route(getattr(signal, "strategy_name", ""), getattr(state, "paper_trading", True))
+    if _route == _router.DORMANT:
+        logger.warning("[route] %s is DORMANT on this box (box flag %s) - entry refused, no order",
+                       getattr(signal, "strategy_name", "?"), _router.lane(getattr(signal, "strategy_name", "")) or "?")
+        if _sigj is not None:
+            try:
+                _sigj.journal("disposition", outcome="gate_block:dormant_lane", signal=_sigj.signal_ctx(signal))
+            except Exception:                                  # noqa: BLE001
+                pass
+        return
+    _walled = _route == _router.PAPER and getattr(state, "paper_trading", True) is not True
     entry_eng = _paper_wall.entry_engine() if _walled else get_entry_engine(state.paper_trading)
     if not signal.is_valid:
         logger.warning(f"Invalid signal from {signal.strategy_name}")

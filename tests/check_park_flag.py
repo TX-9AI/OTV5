@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """
-tests/check_park_flag.py  v5.0
+tests/check_park_flag.py  v5.1
+v5.1  2026-11-26  OTV5 r161 (LANE.1) — P1's roster row follows the lanes: SCHEMA["park"] allows on / off / paper_only
+      (utils/box_flags.LANES; the operator, 2026-11-25: "I want park paperwalled until we enable it on the cash side").
+      Every other check unchanged; paper_only's own behaviour is tests/check_park_paper_wall.py's.
 v5.0  2026-11-24  OTV5 r155 (BOXF.2, M4) — new. PARK IS ON OR OFF PER BOX BY ITS BOX FLAG `park`, DECIDED IN ONE PLACE. The
       operator, 2026-11-24: "Yes" (the box-flags design's M4, ~/reviews/design/BOX_FLAGS_20261122/DESIGN.md), so that a
       C5 equity box (Runaway only) can carry `park = off` before it goes live. Default on: with no file line, nothing on
@@ -175,13 +178,13 @@ def main():
         dflt = PS.default("PARK")
     finally:
         BF.reset()
-    p1 = {"key": k is not None and (k.key, k.setup, tuple(k.allowed), k.default) == ("park", "PARK", ("on", "off"), "on"),
+    p1 = {"key": k is not None and (k.key, k.setup, tuple(k.allowed), k.default) == ("park", "PARK", ("on", "off", "paper_only"), "on"),
           "row": list(PS.TABLE.get("PARK", ())) == ["", getattr(PS, "FLAG", "flag"), PS.HOUR],
           "default": dflt == PS.ACTIVE, "switch": PS.switch("PARK") == "",
           "config": not hasattr(config, "PARK_MODE") and not hasattr(config, "PARK_ENV_REFUSED"),
           "plan_state": "PARK_MODE" not in ps_src and 'n == "PARK"' not in ps_src,
           "attempt_park": "PARK_MODE" not in ap}
-    check("P1 the roster: SCHEMA park (PARK, on/off, default on); plan_state PARK row ('', flag, hour), no switch; no "
+    check("P1 the roster: SCHEMA park (PARK, on/off/paper_only, default on); plan_state PARK row ('', flag, hour), no switch; no "
           "config.PARK_MODE; no second decision point in plan_state or main._attempt_park",
           all(p1.values()), f"{p1} key={k} row={PS.TABLE.get('PARK')}")
 

@@ -1,5 +1,8 @@
 """
-execution/position_manager.py  v5.43
+execution/position_manager.py  v5.44
+v5.44  2026-11-26  OTV5 r161 (LANE.1) — WHICH BOOK A CLOSE BELONGS TO IS ASKED OF execution/order_router.is_wall (the one
+      reading of PAPER_WALL), at the three seams r150 put here (_manage_one's and _execute_exit's close engine, the risk
+      tally / PAPER exit-alert label). The same answer as before at every call; no decision changes.
 v5.43  2026-11-22  OTV5 r150 (OGAP.5) — THE PAPER-WALL SEAM (execution/paper_wall.PaperWallBook: OGAP on a live box, booked
       paper). _manage_one and _execute_exit call get_exit_engine(self.paper_trading) exactly as before unless self is the
       wall book (PAPER_WALL True), which closes through its own _exit_engine(), a paper ExitEngine (the singleton is
@@ -365,6 +368,7 @@ from strategy.structure import (is_credit_vertical as _is_credit_vertical,
                                 is_tent as _is_tent,
                                 has_assignment_risk as _has_assignment_risk)   # r149
 from execution.exit_engine import get_exit_engine, ExitDecision
+from execution import order_router as _router      # r161 (LANE.1): the one paper / live routing decision
 from execution import fill_observers as _fo        # r270 (PMAP.1 + FILL.2): record-only observers
 from data.tasty_client import get_client, TastyClientError, sdk_result
 from risk.risk_manager import get_risk_manager
@@ -1135,7 +1139,7 @@ class PositionManager:
         # r270 (PMAP.1, RECORD ONLY) — one premium-map row per position per minute; decides nothing, never raises.
         _fo.observe_map(record, current_premium, getattr(chain, "spot_price", None))
 
-        exit_eng = (self._exit_engine() if getattr(self, "PAPER_WALL", False) is True    # r150 (OGAP.5): the wall's own
+        exit_eng = (self._exit_engine() if _router.is_wall(self)    # r150 (OGAP.5): the wall's own
                     else get_exit_engine(self.paper_trading))
         # r113 (AM.7): the excursion sees this tick even when the plan closes on it (evaluate() would never run).
         try:
@@ -1517,7 +1521,7 @@ class PositionManager:
         """
         trade_id = record["trade_id"]
 
-        exit_eng = (self._exit_engine() if getattr(self, "PAPER_WALL", False) is True    # r150 (OGAP.5): the wall's own
+        exit_eng = (self._exit_engine() if _router.is_wall(self)    # r150 (OGAP.5): the wall's own
                     else get_exit_engine(self.paper_trading))
         _pend = _BOOK_PENDING.get(trade_id)
         if _pend is not None:
@@ -1613,7 +1617,7 @@ class PositionManager:
 
         # r128 (MC.1): the row is BOOKED from here — a raise below must not leave the record managed (the next pass
         # would post a fresh close for a position that is gone). Each step logs its failure and the close stands.
-        _walled = getattr(self, "PAPER_WALL", False) is True    # r150 (OGAP.5): a walled paper close
+        _walled = _router.is_wall(self)    # r150 (OGAP.5): a walled paper close
         try:
             if not _walled:                                       # the cash cap's tally counts cash only
                 risk_mgr = get_risk_manager()

@@ -1,6 +1,16 @@
 """
-utils/box_flags.py  v5.3
-v5.3  2026-11-24  OTV5 r155 (BOXF.2, M4) — THE `park` KEY: setup PARK, on / off, DEFAULT ON (so no box changes when this
+utils/box_flags.py  v5.4
+v5.4  2026-11-26  OTV5 r161 (LANE.1) — EVERY SCHEMA KEY IS A LANE: on | off | paper_only. The operator, 2026-11-25: "I want
+      park paperwalled until we enable it on the cash side, which is potentially January, if ever"; "Be deliberate. We
+      should be able to switch between paper & live anytime we are fielding a new strategy for a few weeks." The value
+      paper_only (refused since r148, "until delivery P") is now ALLOWED for every key (LANES; Key.allowed defaults to
+      it), so a setup that has - or later gets - a key can be set on / off / paper_only per box with no other change.
+      What a value MEANS for an order is decided in ONE place, execution/order_router (on: the box's own account; on a
+      paper box paper, on a live box live; paper_only: paper on every box - on a live box through the paper wall,
+      execution/paper_wall, zero broker calls; off: DORMANT, never asked). Nothing here decides a route.
+      start_line() keeps its pinned shape (F10; dtp's daily recap parses it): a paper_only key reads "park=paper_only";
+      main's [route] start line and the Service line say what it means ("walled on a live box"). Schema v1 keeps its number: a value added to the keys, none changed; a stand-in Key can still narrow its
+      own allowed values (tests/check_box_flags F7's on/off fixture still refuses paper_only).v5.3  2026-11-24  OTV5 r155 (BOXF.2, M4) — THE `park` KEY: setup PARK, on / off, DEFAULT ON (so no box changes when this
       lands; a box differs only through its own file line `park = off`). The operator, 2026-11-24: "Yes" (the design's M4,
       ahead of the C5 equity boxes going live with Runaway only). strategy/plan_state reads PARK's state from it (on ->
       ACTIVE, anything else -> DORMANT: never asked, writes nothing; an open PARK row is still managed to its exit, exits
@@ -65,8 +75,9 @@ from typing import Dict, Optional, Tuple
 GATES = {}      # WA §36: this file owns no gate constant
 
 SCHEMA_VERSION = 1
-ON, OFF = "on", "off"
-VALUES = (ON, OFF)                         # until delivery P; "paper_only" is refused until then
+ON, OFF, PAPER_ONLY = "on", "off", "paper_only"
+LANES = (ON, OFF, PAPER_ONLY)              # r161 (LANE.1): every key's values; execution/order_router reads them
+VALUES = LANES                             # r161: was (ON, OFF) "until delivery P"
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 FLAGS_REL = "deploy/box_flags"
 FLAGS_DIR = os.path.join(ROOT, *FLAGS_REL.split("/"))
@@ -86,7 +97,8 @@ class Key:
 # THE ROSTER. r148 (BOXF.1): empty; each key joins in its own land. r149 (OGAP.4): ogap, default on.
 # r153 (TRIM.2): ogap removed with OGAP's retirement; empty again. r155 (BOXF.2, M4): park, default on.
 SCHEMA: Dict[str, Key] = {
-    "park": Key("park", "PARK", VALUES, ON),     # r155: on every box unless its file says off (the operator, 2026-11-24)
+    "park": Key("park", "PARK", LANES, ON),      # r155: on every box unless its file says off (the operator, 2026-11-24)
+                                                 # r161 (LANE.1): or paper_only (the paper wall on a live box)
 }
 
 # r155 (M4) — the env keys a schema key replaced. NOT READ: only their presence in the process environment is reported
