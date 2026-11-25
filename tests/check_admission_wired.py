@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 """
-tests/check_admission_wired.py  v5.5
+tests/check_admission_wired.py  v5.6
+v5.6  2026-11-25  OTV5 r160 (BOXF.5) — the probes run on DEFAULT box flags: with deploy/box_flags/QQQ `park = off` and the
+      lander's OT_INSTRUMENT=QQQ, PARK read DORMANT from the real file, so A1/A4 (which probe PARK) went red for the flag,
+      not the funnel. utils/box_flags._EFFECTIVE is pinned to a missing file (defaults) before main is imported, as
+      check_park_flag does. What every check pins is unchanged.
 v5.5  2026-11-23  OTV5 r153 (TRIM.2) — A1, A2 and A4 probe PARK (a live plan in the table) where they probed the Hunt (retired,
       DORMANT from r153, so never asked by ruling); A2's other admitted name is RunawayContinuation. What they pin is unchanged.
 v5.4  2026-11-14  OTV5 r110 (WS.3 TRIM) — A3 RE-POINTED (WA 38.4): Breakout is DORMANT (never asked by ruling), so A3's live label is RunawayContinuation; what A3 pins is unchanged.
@@ -75,6 +79,8 @@ def main():
     src = open(os.path.join(ROOT, "main.py"), encoding="utf-8").read()
 
     # ── A1/A2 — the funnel consults admission, and a refusal never runs fn ──
+    from utils import box_flags as BF                         # r160: defaults, never this box's real flag file
+    BF._EFFECTIVE["flags"] = BF.load("QQQ", path=os.path.join(tempfile.mkdtemp(), "NO_FLAGS"))
     import main as M
 
     def probe(name, admitted):

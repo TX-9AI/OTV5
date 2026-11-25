@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """
-tests/check_no_parc.py  v5.7
+tests/check_no_parc.py  v5.8
+v5.8  2026-11-25  OTV5 r160 (BOXF.5) — N1-N3's fresh interpreters and N5's probe run on DEFAULT box flags
+      (utils/box_flags._EFFECTIVE pinned to a missing file, as check_park_flag does): with deploy/box_flags/QQQ `park = off`
+      N5 read PARK DORMANT from the real file and its golden (PARK active) went red. What N1-N5 pin is unchanged.
 v5.7  2026-11-21  OTV5 r137 (CAP.10) — RE-POINTED (WA section 38.4), the two cap facts only: N1 pins CAP_EXCLUDED_STRATEGIES == () (PARK and OGAP are under the cap; the operator, 2026-11-21: "both trades should fall under the catastrophic cap"); N5 flips exactly the golden's admission cap_exempt and cap_excludes_park from True to False (after asserting they were True) and the rest must still equal 93c7f93's. Every PARC assertion unchanged.
 v5.6  2026-11-15  OTV5 r125 (HYG.28) — the ramp TOP's key is OT_BREAKOUT_BUDGET_USD (was OT_ORB_BUDGET_USD); the scratch env sets the new key. Same value.
 v5.5  2026-11-15  OTV5 r123 (HYG.27) — OT_RESTING_DB leaves the scratch env (r118 deleted execution/resting_orders.py, its only reader).
@@ -59,6 +62,8 @@ def probe():
     from datetime import date, datetime
     from zoneinfo import ZoneInfo
     sys.path.insert(0, ROOT)
+    from utils import box_flags as BF   # r160 (BOXF.5): DEFAULT box flags, never this box's real deploy/box_flags file
+    BF._EFFECTIVE["flags"] = BF.load("QQQ", path=os.path.join(tempfile.mkdtemp(), "NO_FLAGS"))
     td = tempfile.mkdtemp(prefix="check_no_parc_")
     for k, v in {"OT_TRADES_DB": "t.db", "OT_DERIVED_DB": "d.db", "OT_FEED_DB": "f.db", "OT_LOG_FILE": "bot.log",
                  "OT_SIGNAL_JOURNAL_DIR": "sj", "OT_RESTING_STOP_STATE": "rs.json",
@@ -159,7 +164,9 @@ def probe():
 def _fresh(code):
     env = {k: v for k, v in os.environ.items() if not k.startswith("OT_")}
     env["OT_INSTRUMENT"] = "QQQ"
-    r = subprocess.run([sys.executable, "-c", code], cwd=ROOT, env=env, capture_output=True, text=True, timeout=120)
+    pin = ("import os, tempfile\nfrom utils import box_flags as BF\n"     # r160 (BOXF.5): DEFAULT box flags
+           "BF._EFFECTIVE['flags'] = BF.load('QQQ', path=os.path.join(tempfile.mkdtemp(), 'NO_FLAGS'))\n")
+    r = subprocess.run([sys.executable, "-c", pin + code], cwd=ROOT, env=env, capture_output=True, text=True, timeout=120)
     try:
         return json.loads(r.stdout.strip().splitlines()[-1])
     except Exception:                                           # noqa: BLE001

@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 """
-tests/check_paper_cap_record.py  v5.2
+tests/check_paper_cap_record.py  v5.3
+v5.3  2026-11-25  OTV5 r160 (BOXF.5) — DEFAULT BOX FLAGS: deploy/box_flags/QQQ reads `park = off` (the
+      operator 2026-11-25: QQQ is a cash box from Mon 2026-11-30, Runaway only), so this run pins utils/box_flags._EFFECTIVE
+      to a missing file (DEFAULTS) as check_park_flag does: the fixture never reads the real deploy/box_flags/<SYM>. What
+      each check pins is unchanged.
 v5.2  2026-11-25  OTV5 r158 (GATE.10) — EVERY CLOCK THE PATH READS IS THE TEST CLOCK, SO THE RESULT NO LONGER DEPENDS ON
       THE DATE THE GATE RUNS. v5.1 faked only time_utils.now_et / now_utc, and TradeLogger.count_today (the one-per-session
       gate behind tries_per_session, main._one_per_session_used) reads `datetime.now(ET)` through a FUNCTION-LOCAL
@@ -66,6 +70,10 @@ from zoneinfo import ZoneInfo
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 os.environ["OT_INSTRUMENT"] = "QQQ"
+import tempfile as _r160_tf  # noqa: E402
+from utils import box_flags as _r160_bf  # noqa: E402  r160 (BOXF.5): DEFAULT box flags, never this box's real file
+_r160_bf._EFFECTIVE["flags"] = _r160_bf.load(os.environ.get("OT_INSTRUMENT", "QQQ"),
+                                             path=os.path.join(_r160_tf.mkdtemp(), "NO_FLAGS"))
 _TD = tempfile.mkdtemp(prefix="check_paper_cap_record_")
 for _k, _f in (("OT_TRADES_DB", "t.db"), ("OT_DERIVED_DB", "d.db"), ("OT_FEED_DB", "f.db"),
                ("OT_LOG_FILE", "bot.log"), ("OT_SIGNAL_JOURNAL_DIR", "sj"), ("OT_COUNTERFACTUAL_DIR", "cf"),

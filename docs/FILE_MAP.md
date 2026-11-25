@@ -63,8 +63,8 @@ Change these with the most care; a break here reaches everything downstream.
 | `main.py` | 52 | check_admission_wired.py, check_adx_stamp.py, check_atm_iv_stored.py, check_blind_reacquire.py |
 | `execution/position_manager.py` | 49 | check_admission.py, check_admission_wired.py, check_blind_reacquire.py, check_blind_stays_up.py |
 | `execution/__init__.py` | 46 | check_admission_wired.py, check_boot_order_sweep.py, check_breakout_exit_line.py, check_buyback_side.py |
+| `utils/__init__.py` | 44 | box_flags_show.py, candle_feed.py, check_admission_wired.py, check_bar_final_grace.py |
 | `data/derived_store.py` | 37 | anchors.py, breakout_plan.py, check_breakout_rearm.py, check_derived_layer.py |
-| `utils/__init__.py` | 36 | box_flags_show.py, candle_feed.py, check_bar_final_grace.py, check_blind_reacquire.py |
 | `data/candle_feed.py` | 35 | breakout_plan.py, candle_logger.py, check_audit_20260823.py, check_bar_referee.py |
 
 ## Every module
@@ -542,7 +542,7 @@ Change these with the most care; a break here reaches everything downstream.
 - **called by:** (not imported) — referenced in `docs/BACKLOG.md`
 
 ### `tests/check_admission_wired.py`
-- **calls:** `execution/__init__.py`, `execution/position_manager.py`, `main.py`
+- **calls:** `execution/__init__.py`, `execution/position_manager.py`, `main.py`, `utils/__init__.py`, `utils/box_flags.py`
 - **called by:** (not imported) — referenced in `docs/BACKLOG.md`
 
 ### `tests/check_adx_stamp.py`
@@ -718,7 +718,7 @@ Change these with the most care; a break here reaches everything downstream.
 - **called by:** (nothing — no importer and no mention in any script, unit or doc here)
 
 ### `tests/check_chain_ordering.py`
-- **calls:** `derived/character_engine.py`, `derived/plans.py`, `main.py`, `strategy/__init__.py`, `strategy/park.py`, `strategy/plan.py`, `strategy/runaway_continuation.py`
+- **calls:** `derived/character_engine.py`, `derived/plans.py`, `main.py`, `strategy/__init__.py`, `strategy/park.py`, `strategy/plan.py`, `strategy/runaway_continuation.py`, `utils/__init__.py`, `utils/box_flags.py`
 - **called by:** (not imported) — referenced in `docs/BACKLOG.md`, `docs/ENV.md`
 
 ### `tests/check_claude_boot.py`
@@ -1322,7 +1322,7 @@ Change these with the most care; a break here reaches everything downstream.
 - **called by:** (not imported) — referenced in `deploy/install_midnight_halt.sh`
 
 ### `tests/check_missed_inert.py`
-- **calls:** `derived/plan_ledger.py`
+- **calls:** `derived/plan_ledger.py`, `utils/__init__.py`, `utils/box_flags.py`
 - **called by:** (not imported) — referenced in `docs/BACKLOG.md`, `docs/ENV.md`, `docs/WORKING_AGREEMENT.md`
 
 ### `tests/check_nearer_stop.py`
@@ -1346,7 +1346,7 @@ Change these with the most care; a break here reaches everything downstream.
 - **called by:** (not imported) — referenced in `docs/BACKLOG.md`
 
 ### `tests/check_no_parc.py`
-- **calls:** `config.py`, `execution/__init__.py`, `execution/position_manager.py`, `risk/risk_manager.py`, `strategy/__init__.py`, `strategy/park.py`, `strategy/plan_state.py`
+- **calls:** `config.py`, `execution/__init__.py`, `execution/position_manager.py`, `risk/risk_manager.py`, `strategy/__init__.py`, `strategy/park.py`, `strategy/plan_state.py`, `utils/__init__.py`, `utils/box_flags.py`
 - **called by:** (not imported) — referenced in `configure.sh`, `docs/BACKLOG.md`, `docs/ENV.md`
 
 ### `tests/check_no_stray_duplicates.py`
@@ -1374,7 +1374,7 @@ Change these with the most care; a break here reaches everything downstream.
 - **called by:** (nothing — no importer and no mention in any script, unit or doc here)
 
 ### `tests/check_not_asked_reasons.py`
-- **calls:** `strategy/__init__.py`, `strategy/plan.py`
+- **calls:** `strategy/__init__.py`, `strategy/plan.py`, `utils/__init__.py`, `utils/box_flags.py`
 - **called by:** (not imported) — referenced in `docs/BACKLOG.md`, `docs/ENV.md`
 
 ### `tests/check_note_label.py`
@@ -1502,7 +1502,7 @@ Change these with the most care; a break here reaches everything downstream.
 - **called by:** (nothing — no importer and no mention in any script, unit or doc here)
 
 ### `tests/check_paper_cap_record.py`
-- **calls:** `analysis/orb_engine.py`, `database/trade_logger.py`, `execution/entry_engine.py`, `execution/paper_wall.py`, `execution/position_manager.py`, `main.py`, `notifications/alert_manager.py`, `risk/risk_manager.py`, `strategy/base_strategy.py`, `utils/time_utils.py`
+- **calls:** `analysis/orb_engine.py`, `database/trade_logger.py`, `execution/entry_engine.py`, `execution/paper_wall.py`, `execution/position_manager.py`, `main.py`, `notifications/alert_manager.py`, `risk/risk_manager.py`, `strategy/base_strategy.py`, `utils/__init__.py`, `utils/box_flags.py`, `utils/time_utils.py`
 - **called by:** (not imported) — referenced in `docs/BACKLOG.md`, `docs/ENV.md`
 
 ### `tests/check_park.py`
@@ -1554,7 +1554,7 @@ Change these with the most care; a break here reaches everything downstream.
 - **called by:** (not imported) — referenced in `docs/BACKLOG.md`
 
 ### `tests/check_plan_lifecycle.py`
-- **calls:** `config.py`, `derived/plan_ledger.py`, `strategy/__init__.py`, `strategy/plan_state.py`
+- **calls:** `config.py`, `derived/plan_ledger.py`, `strategy/__init__.py`, `strategy/plan_state.py`, `utils/__init__.py`, `utils/box_flags.py`
 - **called by:** (not imported) — referenced in `docs/BACKLOG.md`, `docs/ENV.md`
 
 ### `tests/check_plan_observe.py`
@@ -1574,7 +1574,7 @@ Change these with the most care; a break here reaches everything downstream.
 - **called by:** (not imported) — referenced in `docs/BACKLOG.md`
 
 ### `tests/check_plan_states.py`
-- **calls:** `data/derived_store.py`, `derived/plan_ledger.py`, `main.py`, `query.py`, `strategy/__init__.py`, `strategy/plan.py`, `strategy/plan_state.py`
+- **calls:** `data/derived_store.py`, `derived/plan_ledger.py`, `main.py`, `query.py`, `strategy/__init__.py`, `strategy/plan.py`, `strategy/plan_state.py`, `utils/__init__.py`, `utils/box_flags.py`
 - **called by:** (not imported) — referenced in `docs/BACKLOG.md`, `docs/ENV.md`, `docs/PLAN_SPEC.md`
 
 ### `tests/check_plan_status.py`
@@ -2203,7 +2203,7 @@ Change these with the most care; a break here reaches everything downstream.
 
 ### `utils/__init__.py`
 - **calls:** (none)
-- **called by:** `analysis/signal_journal.py`, `data/candle_feed.py`, `derived/level_book.py`, `execution/entry_engine.py`, `main.py`, `risk/risk_manager.py`, `risk/session_guard.py`, `strategy/plan.py`, `strategy/plan_state.py`, `tests/check_bar_final_grace.py`, `tests/check_blind_reacquire.py`, `tests/check_box_flags.py`, `tests/check_claude_boot.py`, `tests/check_eod_schedule.py`, `tests/check_half_day.py`, `tests/check_half_day_rth.py`, `tests/check_holiday_aware.py`, `tests/check_hunt_ogap_retired.py`, `tests/check_instrument_unset.py`, `tests/check_level_tape.py`, `tests/check_low_price_symbols.py`, `tests/check_market_calendar.py`, `tests/check_no_half_day_entries.py`, `tests/check_ogap_all_boxes.py`, `tests/check_ogap_paper_on_live.py`, `tests/check_park_flag.py`, `tests/check_rebuild_1m.py`, `tests/check_shutdown_cause.py`, `tests/check_store_paths.py`, `tests/check_tick_read_times.py`, `tests/check_time_parse.py`, `tools/box_flags_show.py`, `tools/prime_ramp.py`, `tools/rebuild_1m_from_last_trade.py`, `tools/seed_candles_from_warehouse.py`, `utils/time_utils.py`
+- **called by:** `analysis/signal_journal.py`, `data/candle_feed.py`, `derived/level_book.py`, `execution/entry_engine.py`, `main.py`, `risk/risk_manager.py`, `risk/session_guard.py`, `strategy/plan.py`, `strategy/plan_state.py`, `tests/check_admission_wired.py`, `tests/check_bar_final_grace.py`, `tests/check_blind_reacquire.py`, `tests/check_box_flags.py`, `tests/check_chain_ordering.py`, `tests/check_claude_boot.py`, `tests/check_eod_schedule.py`, `tests/check_half_day.py`, `tests/check_half_day_rth.py`, `tests/check_holiday_aware.py`, `tests/check_hunt_ogap_retired.py`, `tests/check_instrument_unset.py`, `tests/check_level_tape.py`, `tests/check_low_price_symbols.py`, `tests/check_market_calendar.py`, `tests/check_missed_inert.py`, `tests/check_no_half_day_entries.py`, `tests/check_no_parc.py`, `tests/check_not_asked_reasons.py`, `tests/check_ogap_all_boxes.py`, `tests/check_ogap_paper_on_live.py`, `tests/check_paper_cap_record.py`, `tests/check_park_flag.py`, `tests/check_plan_lifecycle.py`, `tests/check_plan_states.py`, `tests/check_rebuild_1m.py`, `tests/check_shutdown_cause.py`, `tests/check_store_paths.py`, `tests/check_tick_read_times.py`, `tests/check_time_parse.py`, `tools/box_flags_show.py`, `tools/prime_ramp.py`, `tools/rebuild_1m_from_last_trade.py`, `tools/seed_candles_from_warehouse.py`, `utils/time_utils.py`
 
 ### `utils/agent_status.py`
 - **calls:** (none)
@@ -2219,7 +2219,7 @@ Change these with the most care; a break here reaches everything downstream.
 
 ### `utils/box_flags.py`
 - **calls:** `config.py`
-- **called by:** `main.py`, `strategy/plan_state.py`, `tests/check_box_flags.py`, `tests/check_hunt_ogap_retired.py`, `tests/check_ogap_all_boxes.py`, `tests/check_ogap_paper_on_live.py`, `tests/check_park_flag.py`, `tools/box_flags_show.py`
+- **called by:** `main.py`, `strategy/plan_state.py`, `tests/check_admission_wired.py`, `tests/check_box_flags.py`, `tests/check_chain_ordering.py`, `tests/check_hunt_ogap_retired.py`, `tests/check_missed_inert.py`, `tests/check_no_parc.py`, `tests/check_not_asked_reasons.py`, `tests/check_ogap_all_boxes.py`, `tests/check_ogap_paper_on_live.py`, `tests/check_paper_cap_record.py`, `tests/check_park_flag.py`, `tests/check_plan_lifecycle.py`, `tests/check_plan_states.py`, `tools/box_flags_show.py`
 
 ### `utils/check_sdk.py`
 - **calls:** (none)

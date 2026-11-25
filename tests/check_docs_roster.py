@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """
-tests/check_docs_roster.py  v5.5
+tests/check_docs_roster.py  v5.6
+v5.6  2026-11-25  OTV5 r160 (BOXF.5) — the config probe runs on DEFAULT box flags (utils/box_flags._EFFECTIVE pinned to a
+      missing file, as check_park_flag does): with deploy/box_flags/QQQ `park = off` R3 read PARK OFF from the real file and
+      TRADES section 0's PARK row (the fleet default, ON) went red. What R1-R5 pin is unchanged.
 v5.5  2026-11-23  OTV5 r153 (TRIM.2) — R3: a row with no switch wants its plan's state (ON when plan_state reads it ACTIVE),
       not "always ON": the Hunt and OGAP are retired (DORMANT with no switch) and still hold ENTRY_WINDOWS rows until the
       purge, so their TRADES rows read OFF. Every row with a switch is checked as before; R1, R2, R4, R5 unchanged.
@@ -39,6 +42,9 @@ FAILED = []
 _PROBE = r'''
 import json, os, sys
 sys.path.insert(0, sys.argv[1])
+import tempfile
+from utils import box_flags as BF   # r160 (BOXF.5): DEFAULT box flags, never this box's real deploy/box_flags file
+BF._EFFECTIVE["flags"] = BF.load("QQQ", path=os.path.join(tempfile.mkdtemp(), "NO_FLAGS"))
 import config as c
 src = lambda p: open(os.path.join(sys.argv[1], p)).read()
 out = {

@@ -1,6 +1,11 @@
 #!/usr/bin/env python3
 """
-tests/check_hunt_ogap_retired.py  v5.0
+tests/check_hunt_ogap_retired.py  v5.1
+v5.1  2026-11-25  OTV5 r160 (BOXF.5) — DEFAULT BOX FLAGS: deploy/box_flags/QQQ reads `park = off` (the
+      operator 2026-11-25: QQQ is a cash box from Mon 2026-11-30, Runaway only), so this run pins utils/box_flags._EFFECTIVE
+      to a missing file (DEFAULTS) at import, in T1's fresh interpreters and again after T2's BF.reset(), as
+      check_park_flag does: the fixture never reads the real deploy/box_flags/<SYM> (T2's scan of the tree's files is
+      unchanged). What each check pins is unchanged.
 v5.0  2026-11-23  OTV5 r153 (TRIM.2) — new. THE HUNT AND OGAP ARE RETIRED: DORMANT ON EVERY BOX, PAPER OR LIVE, WITH NO
       SWITCH AND NO FLAG. The operator, 2026-11-23: "The hunt & OGAP are trash. Retire them both after this session today.
       And include them in the coming purge. I think we're going to stick with the runaway & park going forward". The
@@ -49,6 +54,10 @@ from zoneinfo import ZoneInfo
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 os.environ["OT_INSTRUMENT"] = "QQQ"
+import tempfile as _r160_tf  # noqa: E402
+from utils import box_flags as _r160_bf  # noqa: E402  r160 (BOXF.5): DEFAULT box flags, never this box's real file
+_r160_bf._EFFECTIVE["flags"] = _r160_bf.load(os.environ.get("OT_INSTRUMENT", "QQQ"),
+                                             path=os.path.join(_r160_tf.mkdtemp(), "NO_FLAGS"))
 _TD = tempfile.mkdtemp(prefix="check_hunt_ogap_retired_")
 for _k, _f in (("OT_TRADES_DB", "t.db"), ("OT_DERIVED_DB", "d.db"), ("OT_FEED_DB", "f.db"),
                ("OT_LOG_FILE", "bot.log"), ("OT_SIGNAL_JOURNAL_DIR", "sj"), ("OT_COUNTERFACTUAL_DIR", "cf"),
@@ -74,6 +83,9 @@ def check(name, ok, detail=""):
 PROBE = r'''
 import json, os, sys
 sys.path.insert(0, %(root)r)
+import tempfile
+from utils import box_flags as BF   # r160 (BOXF.5): DEFAULT box flags, never this box's real deploy/box_flags file
+BF._EFFECTIVE["flags"] = BF.load("QQQ", path=os.path.join(tempfile.mkdtemp(), "NO_FLAGS"))
 import config
 from strategy import plan_state as S
 import main as MN
@@ -169,6 +181,7 @@ def main():
             st_on = PS.state("OGAP")
         finally:
             BF.reset()
+            BF._EFFECTIVE["flags"] = BF.load("QQQ", path=os.path.join(_TD, "NO_FLAGS"))   # r160: back to DEFAULTS
         lines_in_tree = []
         for sym in BF.files():
             txt = open(BF.path_for(sym), encoding="utf-8").read()

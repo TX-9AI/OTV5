@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 """
-tests/check_plan_states.py  v5.15
+tests/check_plan_states.py  v5.16
+v5.16  2026-11-25  OTV5 r160 (BOXF.5) — DEFAULT BOX FLAGS: deploy/box_flags/QQQ reads `park = off` (the
+      operator 2026-11-25: QQQ is a cash box from Mon 2026-11-30, Runaway only), so this run pins utils/box_flags._EFFECTIVE
+      to a missing file (DEFAULTS) at import and in every fresh() interpreter, as check_park_flag does: the fixture never
+      reads the real deploy/box_flags/<SYM>. What each check pins is unchanged.
 v5.15  2026-11-24  OTV5 r155 (BOXF.2, M4) — RE-POINTED (WA 38.4): PARK's state is its box flag `park` (utils/box_flags,
       default on) and OT_PARK is no longer read, so S3's two OT_PARK cases ("off", "log") read active: no env value moves
       PARK (the flag file's cases are gated in tests/check_park_flag.py P3 and tests/check_box_flags.py F7). What each
@@ -98,6 +102,10 @@ for _k, _v in (("OT_TRADES_DB", "t.db"), ("OT_DERIVED_DB", "d.db"), ("OT_FEED_DB
                ("OT_WAREHOUSE_STATE", "ws"), ("OT_PLAN_STATES_FILE", "plan_states.json")):
     os.environ[_k] = os.path.join(_TD, _v)
 os.environ.setdefault("OT_INSTRUMENT", "QQQ")
+import tempfile as _r160_tf  # noqa: E402
+from utils import box_flags as _r160_bf  # noqa: E402  r160 (BOXF.5): DEFAULT box flags, never this box's real file
+_r160_bf._EFFECTIVE["flags"] = _r160_bf.load(os.environ.get("OT_INSTRUMENT", "QQQ"),
+                                             path=os.path.join(_r160_tf.mkdtemp(), "NO_FLAGS"))
 SWITCHES = ("OT_GEX_BUTTERFLY", "OT_PARK", "OT_RUNAWAY", "OT_BREAKOUT", "OT_HUNT")
 for _k in SWITCHES:
     os.environ.pop(_k, None)
@@ -117,7 +125,9 @@ def fresh(code, env_extra=None):
     """Run `code` in a fresh interpreter with every switch unset (plus env_extra); its last stdout line, JSON."""
     env = {k: v for k, v in os.environ.items() if k not in SWITCHES}
     env.update(env_extra or {})
-    p = subprocess.run([PY, "-c", "import sys; sys.path.insert(0, %r)\n%s" % (ROOT, code)],
+    pin = ("import os, tempfile\nfrom utils import box_flags as BF\n"     # r160 (BOXF.5): DEFAULT box flags
+           "BF._EFFECTIVE['flags'] = BF.load('QQQ', path=os.path.join(tempfile.mkdtemp(), 'NO_FLAGS'))\n")
+    p = subprocess.run([PY, "-c", "import sys; sys.path.insert(0, %r)\n%s%s" % (ROOT, pin, code)],
                        capture_output=True, text=True, env=env, cwd=ROOT, timeout=120)
     out = (p.stdout or "").strip().splitlines()
     try:

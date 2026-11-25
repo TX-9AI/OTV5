@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 """
-tests/check_ogap_paper_on_live.py  v5.2
+tests/check_ogap_paper_on_live.py  v5.3
+v5.3  2026-11-25  OTV5 r160 (BOXF.5) — DEFAULT BOX FLAGS: deploy/box_flags/QQQ reads `park = off` (the
+      operator 2026-11-25: QQQ is a cash box from Mon 2026-11-30, Runaway only), so this run pins utils/box_flags._EFFECTIVE
+      to a missing file (DEFAULTS) at import and again after its BF.reset(), as check_park_flag does: the fixture never
+      reads the real deploy/box_flags/<SYM>. What each check pins is unchanged.
 v5.2  2026-11-23  OTV5 r153 (TRIM.2) — RE-POINTED (WA 38.4): OGAP and the Hunt are RETIRED (DORMANT, no switch; the
       operator, 2026-11-23: "The hunt & OGAP are trash. Retire them both after this session today."). The paper wall's
       code is KEPT until the purge, so P2-P4 and P7-P10 still drive it directly (an OGAP row already open on a live box is
@@ -77,6 +81,10 @@ from zoneinfo import ZoneInfo
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 os.environ["OT_INSTRUMENT"] = "QQQ"
+import tempfile as _r160_tf  # noqa: E402
+from utils import box_flags as _r160_bf  # noqa: E402  r160 (BOXF.5): DEFAULT box flags, never this box's real file
+_r160_bf._EFFECTIVE["flags"] = _r160_bf.load(os.environ.get("OT_INSTRUMENT", "QQQ"),
+                                             path=os.path.join(_r160_tf.mkdtemp(), "NO_FLAGS"))
 _TD = tempfile.mkdtemp(prefix="check_ogap_paper_on_live_")
 for _k, _f in (("OT_TRADES_DB", "t.db"), ("OT_DERIVED_DB", "d.db"), ("OT_FEED_DB", "f.db"),
                ("OT_LOG_FILE", "bot.log"), ("OT_SIGNAL_JOURNAL_DIR", "sj"), ("OT_COUNTERFACTUAL_DIR", "cf"),
@@ -321,6 +329,7 @@ def main():
         return Chain(d, strike, round(mark - 0.01, 2), round(mark + 0.01, 2))
 
     BF.reset()
+    BF._EFFECTIVE["flags"] = BF.load("QQQ", path=os.path.join(tempfile.mkdtemp(), "NO_FLAGS"))   # r160: DEFAULTS
 
     # ── P1 plan state ───────────────────────────────────────────────────────
     ok1, d1 = False, ""

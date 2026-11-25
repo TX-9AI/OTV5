@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """
-tests/check_brk_delta_floor.py  v5.1
+tests/check_brk_delta_floor.py  v5.2
+v5.2  2026-11-25  OTV5 r160 (BOXF.5) — D12's child runs on DEFAULT box flags (utils/box_flags._EFFECTIVE pinned to a missing
+      file before main is imported, as check_park_flag does): with deploy/box_flags/QQQ `park = off` and the lander's
+      OT_INSTRUMENT=QQQ the Service line read park=off from the real file. What D12 pins is unchanged.
 v5.1  2026-11-15  OTV5 r123 (HYG.27) — OT_RESTING_DB leaves the scratch env (r118 deleted execution/resting_orders.py, its only reader).
 v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 BREAKOUT'S DELTA FLOOR (BRK.13).
@@ -155,7 +158,11 @@ def main():
           m[0] == ["trade", ""] and m[1] == ["log", ""] and m[2] == ["off", ""] and m[3] == ["log", "yes"], f"{m}")
 
     e = dict(os.environ, OT_BRK_DFLOOR="log", OT_PARK="trade", OT_INSTRUMENT=os.environ.get("OT_INSTRUMENT", "QQQ"))
-    p = subprocess.run([sys.executable, "-c", "import main;print(main._banner_dials())"], cwd=ROOT, env=e,
+    # r160 (BOXF.5): the child runs on DEFAULT box flags, never this box's real deploy/box_flags file
+    pin = ("import os, tempfile\nfrom utils import box_flags as BF\n"
+           "BF._EFFECTIVE['flags'] = BF.load(%r, path=os.path.join(tempfile.mkdtemp(), 'NO_FLAGS'))\n"
+           % e["OT_INSTRUMENT"])
+    p = subprocess.run([sys.executable, "-c", pin + "import main;print(main._banner_dials())"], cwd=ROOT, env=e,
                        capture_output=True, text=True, timeout=240)
     out = (p.stdout.strip().splitlines() or [""])[-1]
     check("D12 the Service mode line names 'brk_dfloor=log' and 'park=trade' (the REAL main._banner_dials)",

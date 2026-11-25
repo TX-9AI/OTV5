@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""check_chain_ordering.py — v5.4
+"""check_chain_ordering.py — v5.5
+v5.5  2026-11-25  OTV5 r160 (BOXF.5) — DEFAULT BOX FLAGS: deploy/box_flags/QQQ reads `park = off` (the
+      operator 2026-11-25: QQQ is a cash box from Mon 2026-11-30, Runaway only), so this run pins utils/box_flags._EFFECTIVE
+      to a missing file (DEFAULTS) as check_park_flag does: the fixture never reads the real deploy/box_flags/<SYM>. What
+      each check pins is unchanged.
 v5.4  2026-11-23  OTV5 r153 (TRIM.2) — C9/C10 use PARK as the second registered plan (the Hunt is retired, DORMANT from r153,
       and a dormant plan writes no plan_tick row by rule). What C9/C10 pin is unchanged.
 v5.3  2026-11-15  OTV5 r123 (HYG.27) — OT_RESTING_DB leaves the scratch env (r118 deleted execution/resting_orders.py, its only reader).
@@ -42,6 +46,10 @@ import sys
 
 _root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, _root)
+import tempfile as _r160_tf  # noqa: E402
+from utils import box_flags as _r160_bf  # noqa: E402  r160 (BOXF.5): DEFAULT box flags, never this box's real file
+_r160_bf._EFFECTIVE["flags"] = _r160_bf.load(os.environ.get("OT_INSTRUMENT", "QQQ"),
+                                             path=os.path.join(_r160_tf.mkdtemp(), "NO_FLAGS"))
 os.environ["OT_SWEEP_CS"] = "1"   # r303: the subject writes (check_plan_states pins dormant)
 _fails = []
 

@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""tests/check_ramp_top_label.py — v5.1
+"""tests/check_ramp_top_label.py — v5.2
+v5.2  2026-11-25  OTV5 r160 (BOXF.5) — the R4/R5 child runs on DEFAULT box flags (utils/box_flags._EFFECTIVE pinned to a
+      missing file, as check_park_flag does): with deploy/box_flags/QQQ `park = off` R4 read PARK DORMANT from the real file.
+      What R1-R6 pin is unchanged.
 v5.1  2026-11-23  OTV5 r153 (TRIM.2) — R4 RE-POINTED (WA 38.4): the Hunt and OGAP are retired (DORMANT, no switch), so R4's
       live setups are Runaway and PARK (ACTIVE) and the Hunt and OGAP read DORMANT; R1-R3, R5, R6 unchanged.
 v5.0  2026-11-21  OTV5 r141 (RAMP.1; the Saturday brief 2026-11-21 R5a, section 5 item 2) — THE RAMP TOP SIZES ONLY
@@ -118,6 +121,9 @@ check("R3 only strategy/breakout_plan.py sets sizes_on_geometry = True",
 PROG = r"""
 import json, os, sys
 sys.path.insert(0, os.getcwd())
+import tempfile
+from utils import box_flags as BF   # r160 (BOXF.5): DEFAULT box flags, never this box's real deploy/box_flags file
+BF._EFFECTIVE["flags"] = BF.load(os.environ.get("OT_INSTRUMENT", "QQQ"), path=os.path.join(tempfile.mkdtemp(), "NO_FLAGS"))
 from strategy import plan_state as ps
 from risk.risk_manager import RiskManager
 import config
