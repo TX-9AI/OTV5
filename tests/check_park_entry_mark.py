@@ -1,6 +1,11 @@
 #!/usr/bin/env python3
 """
-tests/check_park_entry_mark.py  v5.2
+tests/check_park_entry_mark.py  v5.3
+v5.3  2026-11-26  OTV5 r162 (FILL.4) — RE-POINTED, NOT CHANGED: the live first rung is now priced on the streamed quote
+      (entry_engine v5.13), so M5 writes the 235C's chain_marks row (the same 0.97 / 1.56) before it walks; M6's
+      no-usable-quote contract carries no streamer symbol (the r132 shape, where the tick's quote is still the one priced)
+      and still posts the fallback at the mark 1.26. NEW M6b: the same contract WITH its streamer symbol and no streamed
+      row posts nothing (the walk's rule when no fresh quote is there). M1-M8 assert exactly what they did.
 v5.2  2026-11-15  OTV5 r123 (HYG.27) — OT_RESTING_DB leaves the scratch env (r118 deleted execution/resting_orders.py, its only reader).
 v5.1  2026-11-03  OTV5 r72 (PARK.5) — RE-POINTED, NOT CHANGED: CVX is an equity, so PARK now also reads the commitment
       gate (park_plan v5.4), and the four-bar fixture starved it ("no signal; the rest cannot run"). _committed_tape()
@@ -23,6 +28,7 @@ v5.0  2026-10-30  OTV5 r60 (PARK.4) — new. PARK IS BOUGHT AT THE MARK, NEVER W
       ever above the mark 1.265, and the walk ends at the mark snapped in our favour (1.26) - never the ask
   M6  LIVE, no usable quote at post time: the fallback price is limit_at_mark(signal.entry_premium) - the mark
       1.26, never above 1.265 (it was the ask 1.56)
+  M6b LIVE, a streamer symbol and no fresh streamed row (r162 FILL.4): nothing posts - never the tick's quote
   M7  the window ends the walk: at 11:03 PARK is dormant (no signal), so an unfilled ladder is no trade - nothing
       is ever posted worse than the mark to "get it done"
   M8  the feasibility bar is unchanged: a 0.40 / 0.45 quote (ask < PARK_MIN_ASK 0.50) is still refused
@@ -203,6 +209,14 @@ def main():
     EE._bp.affordable = lambda *a, **k: (True, "")
     EE.EntryEngine._page_if_working = staticmethod(lambda *a, **k: None)
     LR.clear(LR.intent_key(sig.contract.symbol, "open", "single"))
+    import time as _t                                            # v5.3 (r162 FILL.4): the stream's row, the same quote
+    _c = sqlite3.connect(FEED)
+    _c.execute("CREATE TABLE IF NOT EXISTS chain_marks (streamer_symbol TEXT PRIMARY KEY, bid REAL, ask REAL, "
+               "delta REAL, gamma REAL, theta REAL, vega REAL, iv REAL, updated_epoch REAL NOT NULL)")
+    _c.execute("INSERT OR REPLACE INTO chain_marks (streamer_symbol, bid, ask, updated_epoch) VALUES (?,?,?,?)",
+               (sig.contract.streamer_symbol, BID, ASK, _t.time()))
+    _c.commit()
+    _c.close()
     live = EE.EntryEngine(paper_trading=False)
     res = [live._place_single_leg(sig, 8) for _ in range(40)]
     above = [p for p in posted if p > MARK + 1e-9]
@@ -213,7 +227,8 @@ def main():
           f"rungs {posted[:3]}..{posted[-2:]} above-mark {above} first-8 ticks {posted[:8]}")
 
     posted.clear()
-    bad = SimpleNamespace(**{**vars(sig.contract), "bid": 0.0, "ask": 0.0, "symbol": sig.contract.symbol + "X"})
+    bad = SimpleNamespace(**{**vars(sig.contract), "bid": 0.0, "ask": 0.0, "symbol": sig.contract.symbol + "X",
+                             "streamer_symbol": ""})              # v5.3: the r132 shape (no stream to re-read)
     _c, sig.contract = sig.contract, bad
     try:
         live._place_single_leg(sig, 8)
@@ -221,6 +236,17 @@ def main():
         sig.contract = _c
     check("M6 LIVE with no usable quote posts the fallback at the mark 1.26, never above 1.265 (was the ask 1.56)",
           len(posted) == 1 and posted[0] <= MARK + 1e-9, f"posted {posted}")
+
+    posted.clear()                                               # v5.3 (r162 FILL.4): M6b
+    nofresh = SimpleNamespace(**{**vars(sig.contract), "symbol": sig.contract.symbol + "Y",
+                                 "streamer_symbol": sig.contract.streamer_symbol + "9"})
+    _c, sig.contract = sig.contract, nofresh
+    try:
+        r6b = live._place_single_leg(sig, 8)
+    finally:
+        sig.contract = _c
+    check("M6b LIVE with a streamer symbol and no fresh streamed row posts nothing (never the tick's quote)",
+          posted == [] and r6b == (None, "", 0), f"posted {posted} ret {r6b}")
 
     s7 = P.generate_signal(price_now=235.33, now_et="11:03", chain=Chain(), prior_close=None, day=DAY, symbol=SYM)
     check("M7 the window ends the walk: at 11:03 PARK is dormant (no signal) - an unfilled ladder is no trade",
@@ -234,7 +260,7 @@ def main():
     if FAILED:
         print(f"\nRED — {len(FAILED)} failed: {', '.join(FAILED)}")
         return 1
-    print("\nGREEN — 8 of 8")
+    print("\nGREEN — 9 of 9")
     return 0
 
 

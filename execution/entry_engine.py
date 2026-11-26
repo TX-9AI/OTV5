@@ -1,5 +1,18 @@
 """
-execution/entry_engine.py  v5.12
+execution/entry_engine.py  v5.13
+v5.13 2026-11-26  OTV5 r162 (FILL.4; the before-cash audit 2026-11-22 F4, the cash-readiness review 2026-11-25; live only)
+      — THE FIRST RUNG OF EVERY LIVE CALL IS PRICED ON THE STREAMED QUOTE AS IT STANDS AT POSTING, NOT THE TICK'S COPY.
+      _place_single_leg priced its first rung from the contract's own bid / ask, copied when the tick built its chain
+      and 2-6 s old by posting on every QQQ / SPX entry of 2026-11-25 (SPX PARK 7010P priced on 29.7 / 29.9 against a
+      streamed 29.2 / 29.5: the rung was marketable and paid the 29.50 ask over the 29.35 mark; QQQ Runaway 606P on
+      3.54 / 3.56 against 3.63 / 3.66: the rung could not fill and cost a rung deadline). It now re-reads _fresh_quote
+      (feed_store.db chain_marks through OptionsChainFetcher._read_marks, the read the walk's later rungs already make;
+      local, no broker call, its OT_CHAIN_STALE_S floor unchanged) immediately before the first rung and the whole walk
+      (the rung table, the mark cap, the mark-rung stop) is built on it. No fresh streamed quote -> nothing posts this
+      call and the next tick offers it again (the walk's own rule after a refusal, unchanged). A contract with no
+      streamer symbol keeps the tick's quote (the r132 shape). The ladder rules, sizing, paper and the wall
+      (paper_trading returns first) are unchanged. The first rung's [ladder] line names the quote's age and the tick's
+      quote. Gate tests/check_entry_fresh_rung1.py.
 v5.12 2026-11-26  OTV5 r161 (LANE.1) — _book_fill asks execution/order_router.is_wall (the one reading of PAPER_WALL)
       whether this engine is the paper wall's (no after_cap tag, no cap counterfactual for a walled row). The same answer
       as before at both seams; no decision changes.
@@ -281,6 +294,9 @@ logger = logging.getLogger(__name__)
 _PINS: dict = {}
 # A pin with no rung posted for three ticks (3 x POLL_INTERVAL_SECONDS) is a walk the strategy stopped asking for.
 PIN_IDLE_S = 45.0
+# r162 (FILL.4) — streamer symbol -> the chain_marks updated_epoch of the last quote _fresh_quote returned for it (0.0
+# unknown). Read only by the first rung's [ladder] line (its quote age); nothing decides on it.
+_FRESH_EPOCH: dict = {}
 
 
 def _pin_id(signal) -> tuple:
@@ -656,12 +672,23 @@ class EntryEngine:
             if q is None:
                 return None
             b, a = float(q.bid_price or 0.0), float(q.ask_price or 0.0)
+            ep = float(getattr(q, "updated_epoch", 0.0) or 0.0)        # r162 (FILL.4): for the age line only
         except Exception as exc:                               # noqa: BLE001
             logger.debug("[ladder] streamed quote unreadable for %s: %s", sym, exc)
             return None
         if a <= 0 or b < 0 or a < b:
             return None
+        _FRESH_EPOCH[sym] = ep
         return b, a
+
+    @staticmethod
+    def _age_txt(epoch) -> str:
+        """r162 (FILL.4) — '1.2 s old' from a chain_marks updated_epoch, 'age unknown' for 0 / unreadable. Log text only."""
+        try:
+            ep = float(epoch or 0.0)
+            return f"{max(0.0, time.time() - ep):.1f} s old" if ep > 0 else "age unknown"
+        except (TypeError, ValueError):
+            return "age unknown"
 
     @staticmethod
     def _window_open(strategy_name) -> Tuple[bool, str]:
@@ -744,6 +771,25 @@ class EntryEngine:
             # so the next tick resumes it rather than restarting at rung 1.
             from execution import ladder_registry as _lr
             _bid, _ask = self._quote_of(signal.contract)
+            # 🔴 r162 (FILL.4; the before-cash audit F4) — THE TICK'S QUOTE IS 2-6 s OLD BY NOW. It was copied when the
+            # tick built its chain; the strategies, sizing and the gates ran since. A book that moved down made this
+            # rung marketable above the current mark (SPX 7010P 2026-11-25: 29.70 on a 29.2 / 29.5 book, filled at the
+            # 29.50 ask); one that moved up made it unfillable. Re-read the streamed store (the read every later rung
+            # already makes; local, no broker call) and build the walk on it. None: nothing posts this call - the
+            # walk's own rule when a fresh quote is missing after a refusal. No streamer symbol: the tick's (r132).
+            _sym = str(getattr(signal.contract, "streamer_symbol", "") or "")
+            if _sym:
+                _tq = (_bid, _ask, self._age_txt(getattr(signal.contract, "quote_epoch", 0.0)))
+                _q = self._fresh_quote(signal.contract)
+                if _q is None:
+                    logger.info("[ladder] %s BUY not posted — no fresh streamed quote (the tick's %.2f / %.2f, %s, "
+                                "is not priced on); the next tick offers it again", symbol, _tq[0], _tq[1], _tq[2])
+                    return None, "", 0
+                _bid, _ask = _q
+                mid = round((_bid + _ask) / 2.0, 4)
+                logger.info("[ladder] %s first rung priced on the streamed quote %.2f / %.2f (%s; the tick's "
+                            "%.2f / %.2f, %s)", symbol, _bid, _ask, self._age_txt(_FRESH_EPOCH.get(_sym)),
+                            _tq[0], _tq[1], _tq[2])
             _key = _lr.intent_key(symbol, "open", "single")
             _pid = _pin_id(signal)                                      # r133 D3
             _booking = self._suspect_booking(signal, contracts, symbol, _key, _pid)   # r135 GUARD.1

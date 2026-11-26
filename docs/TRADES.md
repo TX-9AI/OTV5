@@ -1,5 +1,7 @@
 # TRADES — the specs
 
+**`TRADES.md` v5.40 · 2026-11-26 · r162 (FILL.4) — "The walk": a live call's FIRST rung is priced on the streamed quote re-read at posting (`EntryEngine._fresh_quote`, the read every later rung already makes; local, no broker call), not the tick's chain copy (2-6 s old at every QQQ / SPX entry on 2026-11-25). No fresh streamed quote: nothing posts that call and the next tick offers it again; a contract with no streamer symbol keeps the tick's quote. The ladder's rules are unchanged; paper and the wall are unchanged.**
+
 **`TRADES.md` v5.39 · 2026-11-26 · r161 (LANE.1) — section 0: PARK's box flag `park` is a LANE, on / off / paper_only. `paper_only` on a paper box trades exactly as `on`; on a LIVE box PARK paper-trades behind the paper wall (`execution/paper_wall.py`: a paper fill at the mark, `paper_trade = 1`, its own exits — park_lock, park_delta_floor, the 15:45 close — in the wall's paper exit engine at the mark; zero broker calls; outside reconcile, the startup cancel, the order guard, buying power and the 15:55 live cross; the cash cap counts live trades only and a tripped cash cap does not stop it). QQQ carries `park = paper_only` from its first cash session (Mon 2026-11-30). Which engine takes every order is `execution/order_router.py`, mapped in `docs/ROUTING.md`; an open position always finishes in the lane it opened in. The operator, 2026-11-25: "I want park paperwalled until we enable it on the cash side, which is potentially January, if ever".**
 
 **`TRADES.md` v5.38 · 2026-11-24 · r155 (BOXF.2, M4) — section 0: PARK is ON or OFF PER BOX by its box flag `park` (`utils/box_flags.py` SCHEMA, default on; a box file `deploy/box_flags/SYM` line `park = off` makes it DORMANT on that box: never asked, writes nothing; an open PARK is still managed to its exit). `OT_PARK` is no longer read (a unit that sets it is named IGNORED on the `[flags]` start line) and PARK has no log mode. The operator, 2026-11-24: "Yes" (the box-flags design's M4).**
@@ -563,6 +565,13 @@ price it.
   walk is cleared), no fresh quote, an unconfirmed cancel (the order guard holds
   the intent), or one tick's budget (15 s: no rung starts whose rest would end
   past it). Paper is unchanged (it books the mark at once).
+· **THE FIRST RUNG IS PRICED ON THE STREAM TOO** (r162 FILL.4; the before-cash
+  audit F4). The tick's own copy of the quote is seconds old by the time it posts
+  (2026-11-25: SPX 7010P on 29.7 / 29.9 against a streamed 29.2 / 29.5 — the rung
+  was marketable and paid the ask over the mark). Each live call re-reads the
+  streamed store immediately before its first rung and builds the walk on it;
+  with no fresh streamed quote nothing posts and the next tick offers it again.
+  The first rung's `[ladder]` line names the quote's age and the tick's quote.
 · **THE CONTRACT IS FROZEN FOR THE WALK** (r133 D3): a strategy that re-picks its
   strike mid-walk is put back on the contract it is walking before sizing; the
   freeze lapses on a fill, the window's end, or 45 s with no rung posted. A
