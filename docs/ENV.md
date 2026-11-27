@@ -203,7 +203,7 @@ Unit `Environment=` lines set these; NEVER print a unit's Environment block to r
 | `OT_ROUTE_SELFTEST` | '0' | `tests/test_candle_routing.py:114` |
 | `OT_SEED_TOOL` | (none) | `tests/check_seed_candles.py:62` |
 | `OT_SWEEP_CS` | (set here) | `tests/check_chain_ordering.py:53`, `tests/check_missed_inert.py:63`, `tests/check_not_asked_reasons.py:66`, `tests/check_plan_lifecycle.py:61` |
-| `OT_SWEEP_MIN_FREE_MB` | '180' | `tools/boot_sweep.py:133` |
-| `OT_SWEEP_NESTED` | (none) | `tools/boot_sweep.py:259` |
-| `OT_SWEEP_RESULT_DIR` | (none) | `tools/boot_sweep.py:122` |
-| `OT_SWEEP_TIMEOUT_S` | '300' | `tools/boot_sweep.py:134` |
+| `OT_SWEEP_MIN_FREE_MB` | '180' | `tools/boot_sweep.py:151` |
+| `OT_SWEEP_NESTED` | (none) | `tools/boot_sweep.py:356` |
+| `OT_SWEEP_RESULT_DIR` | (none) | `tools/boot_sweep.py:140` |
+| `OT_SWEEP_TIMEOUT_S` | '300' | `tools/boot_sweep.py:152` |

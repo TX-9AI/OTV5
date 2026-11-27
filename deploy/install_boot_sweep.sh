@@ -1,5 +1,14 @@
 #!/usr/bin/env bash
-# deploy/install_boot_sweep.sh  v5.0
+# deploy/install_boot_sweep.sh  v5.1
+# v5.1  2026-11-27  OTV5 r163 (SWEEP.8) — TimeoutStartSec 900 -> 1800. The fleet's boot sweeps now take 700-886 s (the
+#   checker set has grown since the 5.5-minute measure below), so the unit's 900 s ceiling killed them: SOFI 11-07, 11-09 and
+#   11-27, QQQ and others 11-21 and 11-24; a killed sweep wrote nothing, so data/SWEEP_RESULT stayed the previous day's and
+#   read fresh (tools/boot_sweep.py v5.4 now stamps STARTED first). 1800 s is twice the slowest measured run. Nothing orders
+#   on this unit or waits for it (no Before=, no unit names it in After=/Requires=/Wants=; the bot and the feed start before
+#   it regardless); the one waiter is multi-user.target's own completion (cloud-final.service orders after it), which the
+#   sweep already held for its whole run. Everything else is unchanged. Gate check_boot_sweep B10/B10b. The operator,
+#   2026-11-27: "Agree on the boot sweep" (REC-20261127-6). Reaches a box only when this installer is RE-RUN there (a bake
+#   is a git reset; it installs no unit): `bash ~/options-trader/deploy/install_boot_sweep.sh`.
 # v5.0  2026-10-25  OTV5 r7 (SPLIT.1) — HEADER RESET AT THE LINEAGE SPLIT. Every entry below this line is the predecessor's history (cited by its own prefix); from here each change to this file counts v5.1, v5.2, ...
 #
 # v1.1  2026-09-25  OTV4TEST r138 — NO `Wants=optionsbot.service`. In systemd, Wants=
@@ -47,7 +56,8 @@ sudo tee /etc/systemd/system/optbot-boot-sweep.service >/dev/null <<UNIT
 #
 # ⚠️ ORDERED AFTER THE BOT AND THE FEED, NEVER BEFORE. A sweep that delayed the
 # 08:00 start would make itself load-bearing for trading (§29), and r68 bounded
-# its own raiser at 45s for the same reason — this takes ~5.5 minutes.
+# its own raiser at 45s for the same reason — this took ~5.5 minutes at r86 and
+# 700-886 s on the fleet by 2026-11 (r163).
 # ⚠️ \`After=\` ORDERS, IT DOES NOT WAIT FOR READY. That is deliberate and the
 # memory guard is what actually protects the bot: boot_sweep reads
 # MemAvailable and SKIPS itself below OT_SWEEP_MIN_FREE_MB rather than
@@ -67,7 +77,9 @@ IOSchedulingClass=idle
 # ⚠️ the tool ALWAYS exits 0; belt-and-braces so an interpreter crash cannot
 # leave a red in \`systemctl status\` for a finding that is not an infra fault.
 SuccessExitStatus=0 1
-TimeoutStartSec=900
+# ⚠️ OTV5 r163 (SWEEP.8): 900 s killed the 700-886 s fleet sweeps, and a killed
+# sweep wrote no result. 1800 s = twice the slowest measured run.
+TimeoutStartSec=1800
 
 [Install]
 WantedBy=multi-user.target

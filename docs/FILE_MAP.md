@@ -619,7 +619,7 @@ Change these with the most care; a break here reaches everything downstream.
 
 ### `tests/check_boot_sweep.py`
 - **calls:** (none)
-- **called by:** (not imported) — referenced in `docs/BACKLOG.md`
+- **called by:** (not imported) — referenced in `deploy/install_boot_sweep.sh`, `docs/BACKLOG.md`
 
 ### `tests/check_bootstrap.py`
 - **calls:** (none)

@@ -1,5 +1,16 @@
 #!/usr/bin/env python3
-"""tools/boot_sweep.py — v5.3
+"""tools/boot_sweep.py — v5.4
+v5.4  2026-11-27  OTV5 r163 (SWEEP.8) — A KILLED SWEEP READS "DID NOT FINISH", NOT YESTERDAY'S RESULT. The unit's 900 s
+TimeoutStartSec killed the 700-886 s fleet sweeps (SOFI 11-07, 11-09, 11-27; QQQ and others 11-21, 11-24), and the result was
+written only at the very end, so data/SWEEP_RESULT stayed the previous day's and read fresh. main() now writes SWEEP_RESULT
+FIRST, before any checker runs, as a STARTED stamp (date, ET time, commit, pid), rewritten after every checker with how far it
+got (done / total, the last checker, the reds so far), and replaces it with the finished result at the end; every write is
+atomic (temp + rename). The previous FINISHED result goes to SWEEP_PREV at the start, so the NEW / FIXED diff of the next
+finished run still compares against the last run that finished, and a run that finds a STARTED stamp records it as
+previous_unfinished. The one reader, --show, now prints a verdict line first: "DID NOT FINISH (started HH:MM ET ...)" for a
+stamp whose process is gone, "RUNNING" while it lives, "RAN ..." for a finished run (old results without the new fields read
+as before), then the JSON as before. The unit's timeout is 1800 s (deploy/install_boot_sweep.sh v5.1). check_boot_sweep
+B10-B13.
 v5.3  2026-11-15  OTV5 r123 (HYG.27) — OT_RESTING_DB IS NO LONGER SET: r118 (HYG.23) deleted execution/resting_orders.py,
 the only reader of the key, so a scratch path for it isolates nothing. check_boot_sweep B3/B3b.
 v5.2  2026-10-31  OTV5 r68 (CFG.5) — OT_RESTING_STOP_STATE IS NO LONGER SET: the resting stop and its state file are deleted
@@ -110,6 +121,13 @@ import subprocess
 import sys
 import tempfile
 import time
+from datetime import datetime
+
+try:
+    from zoneinfo import ZoneInfo
+    _ET = ZoneInfo("America/New_York")
+except Exception:                                               # noqa: BLE001
+    _ET = None
 
 _root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # ⚠️ THE RESULT ARTIFACT GETS THE SAME SCRATCH DISCIPLINE AS THE STORES, AND
@@ -191,8 +209,9 @@ def _load(path: str) -> dict:
         return {}
 
 
-def sweep(dry: bool = False, only: str = "") -> dict:
-    """Run every checker. Returns the result dict; never raises."""
+def sweep(dry: bool = False, only: str = "", progress=None) -> dict:
+    """Run every checker. Returns the result dict; never raises.
+    v5.4: progress(done, total, name, failed) is called after every checker (main rewrites the STARTED stamp with it)."""
     started = time.time()
     names = _checkers()
     if only:
@@ -221,9 +240,11 @@ def sweep(dry: bool = False, only: str = "") -> dict:
                 "at": started, "free_mb": free}
 
     failed = []
-    for n in names:
+    for i, n in enumerate(names, 1):
         if not run_one(n):
             failed.append(n)
+        if progress is not None:
+            progress(i, len(names), n, failed)
     return {"state": "RAN", "at": started, "secs": round(time.time() - started, 1),
             "total": len(names), "failed": sorted(failed), "free_mb": free}
 
@@ -234,6 +255,80 @@ def diff(now: dict, prev: dict) -> dict:
         return {"new": [], "fixed": [], "baseline": False}
     a, b = set(prev.get("failed") or []), set(now.get("failed") or [])
     return {"new": sorted(b - a), "fixed": sorted(a - b), "baseline": True}
+
+
+# ── v5.4 (SWEEP.8): the STARTED stamp, the atomic writes, and the one reader ──────────────────────────────────────────
+def _clock(t: float) -> dict:
+    """date + ET time of an epoch (the box clock is UTC; every reader thinks in ET)."""
+    try:
+        d = datetime.fromtimestamp(float(t), _ET) if _ET else datetime.fromtimestamp(float(t))
+        return {"date": d.strftime("%Y-%m-%d"), "time": d.strftime("%H:%M:%S") + (" ET" if _ET else "")}
+    except (TypeError, ValueError, OverflowError, OSError):
+        return {"date": "?", "time": "?"}
+
+
+def _commit() -> str:
+    """HEAD of the tree the sweep runs, short; '?' when git cannot say (never raises)."""
+    try:
+        p = subprocess.run(["git", "-C", _root, "rev-parse", "--short", "HEAD"],
+                           capture_output=True, text=True, timeout=15)
+        return p.stdout.strip() or "?"
+    except (OSError, subprocess.SubprocessError):
+        return "?"
+
+
+def _write(path: str, obj: dict) -> None:
+    """Atomic: a kill mid-write leaves the old file whole, never a truncated one (_load would read it as {})."""
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    tmp = f"{path}.{os.getpid()}.tmp"
+    with open(tmp, "w") as fh:
+        json.dump(obj, fh, indent=1)
+    os.replace(tmp, path)
+
+
+def _alive(pid) -> bool:
+    """True if pid is a live boot_sweep process (a pid reused by something else after a reboot is not)."""
+    try:
+        with open(f"/proc/{int(pid)}/cmdline", "rb") as fh:
+            return b"boot_sweep" in fh.read()
+    except (OSError, TypeError, ValueError):
+        return False
+
+
+def _unfinished(stamp: dict) -> dict:
+    """The few fields of a STARTED stamp worth carrying into the next result."""
+    return {k: stamp.get(k) for k in ("date", "time", "commit", "at", "done", "total", "last")}
+
+
+def describe(r: dict) -> str:
+    """One verdict line for a SWEEP_RESULT, old format or new. The ONE place the stamp is read."""
+    if not r:
+        return "boot_sweep: no sweep result recorded"
+    st = r.get("state")
+    c = r if r.get("time") else {**r, **_clock(r.get("at"))}       # pre-v5.4 results carry only `at`
+    when = f"{c.get('date', '?')} {c.get('time', '?')}" + (f" at {r['commit']}" if r.get("commit") else "")
+    if st == "STARTED":
+        got = f"{r.get('done', 0)}/{r.get('total', '?')} checkers"
+        if _alive(r.get("pid")):
+            return f"boot_sweep: RUNNING (started {when}; {got} so far, pid {r.get('pid')})"
+        last = f", last {r['last']}" if r.get("last") else ""
+        red = f", {len(r.get('failed') or [])} red so far" if r.get("done") else ""
+        return (f"boot_sweep: DID NOT FINISH (started {when}; reached {got}{last}{red}) - killed before it could write "
+                f"a result (the unit's TimeoutStartSec, a shutdown or a crash); the last finished run is in SWEEP_PREV")
+    if st == "RAN":
+        d = r.get("diff") or {}
+        line = (f"boot_sweep: RAN {when}: {r.get('total', 0) - len(r.get('failed') or [])}/{r.get('total', 0)} pass "
+                f"in {r.get('secs', '?')}s; {len(r.get('failed') or [])} red")
+        if d.get("new"):
+            line += f"; NEW: {', '.join(d['new'])}"
+        if d.get("fixed"):
+            line += f"; fixed: {', '.join(d['fixed'])}"
+    else:
+        line = f"boot_sweep: {st} {when} - {r.get('why')}"
+    pu = r.get("previous_unfinished")
+    if pu:
+        line += f" (the run before DID NOT FINISH: started {pu.get('date')} {pu.get('time')}, reached {pu.get('done')}/{pu.get('total')})"
+    return line
 
 
 def main(argv=None) -> int:
@@ -253,23 +348,49 @@ def main(argv=None) -> int:
 
     if a.show:
         r = _load(RESULT)
-        print(json.dumps(r, indent=2) if r else "no sweep result recorded")
+        print(describe(r))                                      # v5.4: the verdict first, then the record as before
+        if r:
+            print(json.dumps(r, indent=2))
         return 0
 
     if os.environ.get("OT_SWEEP_NESTED") == "1":
         # 🔴 r257 — a sweep inside a sweep recursed without bound (SPX-TEST, 10-06).
         print("boot_sweep: NESTED inside another sweep's checker - refusing; nothing run, no result written")
         return 0
-    prev = _load(RESULT)
-    now = sweep(dry=a.dry_run, only=a.only)
+    # 🔴 v5.4 (SWEEP.8) — THE STAMP GOES DOWN BEFORE ANY CHECKER RUNS. A sweep the unit's timeout killed wrote nothing,
+    # so yesterday's result sat in SWEEP_RESULT and read as today's. Now a killed run leaves a STARTED stamp, which the
+    # reader names as "did not finish"; the previous FINISHED result moves to SWEEP_PREV first and stays the baseline.
+    last = _load(RESULT)
+    if last.get("state") == "STARTED":
+        prev, unfinished = _load(PREV), _unfinished(last)      # the run before was killed: PREV is the last finished
+    else:
+        prev, unfinished = last, None
+    t0 = time.time()
+    stamp = {"state": "STARTED", "at": t0, **_clock(t0), "commit": _commit(), "pid": os.getpid(),
+             "done": 0, "total": None, "last": None, "failed": []}
+    if unfinished:
+        stamp["previous_unfinished"] = unfinished
+    try:
+        if last and last.get("state") != "STARTED":
+            _write(PREV, last)
+        _write(RESULT, stamp)
+    except OSError as exc:
+        print(f"boot_sweep: could not record the STARTED stamp: {exc}", file=sys.stderr)
+
+    def _progress(done, total, name, failed):
+        stamp.update(done=done, total=total, last=name, failed=sorted(failed))
+        try:
+            _write(RESULT, stamp)
+        except OSError:
+            pass
+
+    now = sweep(dry=a.dry_run, only=a.only, progress=_progress)
+    now.update({**_clock(t0), "commit": stamp["commit"]})
+    if unfinished:
+        now["previous_unfinished"] = unfinished
     now["diff"] = diff(now, prev)
     try:
-        os.makedirs(os.path.dirname(RESULT), exist_ok=True)
-        if prev:
-            with open(PREV, "w") as fh:
-                json.dump(prev, fh)
-        with open(RESULT, "w") as fh:
-            json.dump(now, fh, indent=1)
+        _write(RESULT, now)
     except OSError as exc:
         print(f"boot_sweep: could not record result: {exc}", file=sys.stderr)
 
